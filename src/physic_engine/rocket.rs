@@ -1,10 +1,11 @@
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    types::{Color, Vec2, NB_PARTICLES_PER_EXPLOSION, NB_PARTICLES_PER_TRAIL},
+    types::{NB_PARTICLES_PER_EXPLOSION, NB_PARTICLES_PER_TRAIL},
 };
 use rand::Rng;
 // use std::sync::atomic::AtomicU64;
+use glam::{Vec2, Vec4 as Color};
 
 // static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -46,7 +47,7 @@ impl Rocket {
             pos: Vec2::default(),
             prev_pos: Vec2::default(),
             vel: Vec2::default(),
-            color: Color::WHITE,
+            color: Color::ONE,
             exploded: false,
             active: false,
             explosion_particles: [Particle::default(); NB_PARTICLES_PER_EXPLOSION],
@@ -62,18 +63,12 @@ impl Rocket {
             return;
         }
 
-        let gravity = Vec2 {
-            x: 0.0,
-            y: -200.0,
-            ..Default::default()
-        };
+        let gravity = Vec2 { x: 0.0, y: -200.0 };
         let mut rng = rand::rng();
 
         // Movement
-        self.vel.x += gravity.x * dt;
-        self.vel.y += gravity.y * dt;
-        self.pos.x += self.vel.x * dt;
-        self.pos.y += self.vel.y * dt;
+        self.vel += gravity * dt;
+        self.pos += self.vel * dt;
 
         // === TRAIL ===
         // La distance entre deux particules consécutives est définie par `trail_spacing`.
@@ -83,38 +78,31 @@ impl Rocket {
         // Ce code utilise une interpolation linéaire (lerp) entre la dernière position
         // de trail (`last_trail_pos`) et la position actuelle de la rocket (`pos`) pour
         // calculer les positions exactes des particules.
-        let trail_spacing = 2.0; // distance minimale entre deux particules
+        const TRAIL_SPACING: f32 = 2.0; // distance minimale entre deux particules
 
         // Calcul du vecteur de déplacement depuis la dernière particule
-        let movement = Vec2 {
-            x: self.pos.x - self.last_trail_pos.x,
-            y: self.pos.y - self.last_trail_pos.y,
-            ..Default::default()
-        };
+        let movement = self.pos - self.last_trail_pos;
 
         // Calcul de la distance euclidienne parcourue depuis la dernière particule
-        let dist = (movement.x * movement.x + movement.y * movement.y).sqrt();
+        let dist = movement.length();
 
         if !self.exploded {
             // Distance restante à couvrir pour générer des particules
             let mut remaining_dist = dist;
 
             // Tant qu'il reste suffisamment de distance pour une nouvelle particule
-            while remaining_dist >= trail_spacing {
+            while remaining_dist >= TRAIL_SPACING {
                 // Ratio le long du segment [last_trail_pos, pos] pour placer la particule
-                let t = trail_spacing / dist;
+                let t = TRAIL_SPACING / dist;
 
                 // Interpolation linéaire (lerp) pour trouver la position de la nouvelle particule
-                let new_pos = Vec2 {
-                    x: self.last_trail_pos.x * (1.0 - t) + self.pos.x * t,
-                    y: self.last_trail_pos.y * (1.0 - t) + self.pos.y * t,
-                    ..Default::default()
-                };
+                let new_pos = self.last_trail_pos * (1.0 - t) + self.pos * t;
 
                 // Indice circulaire dans le tableau préalloué de particules de trail
                 let i = self.trail_index % NB_PARTICLES_PER_TRAIL;
 
                 // Création de la particule de trail
+                // TODO: paramétrer aussi ces settings (life, max_life, size)
                 self.trail_particles[i] = Particle {
                     pos: new_pos,
                     vel: Vec2::ZERO, // pas de vitesse initiale
@@ -132,7 +120,7 @@ impl Rocket {
                 self.last_trail_pos = new_pos;
 
                 // Consommation de la distance utilisée pour cette particule
-                remaining_dist -= trail_spacing;
+                remaining_dist -= TRAIL_SPACING;
             }
         }
 
@@ -144,7 +132,6 @@ impl Rocket {
                 let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
                 let speed = rng.random_range(60.0..200.0);
                 // Durée de vie de l'explosion
-                // let life = rng.random_range(1.5..3.0);
                 let life = rng.random_range(0.75..1.5);
 
                 *p = Particle {
@@ -152,14 +139,13 @@ impl Rocket {
                     vel: Vec2 {
                         x: angle.cos() * speed,
                         y: angle.sin() * speed,
-                        ..Default::default()
                     },
-                    color: Color {
-                        r: rng.random_range(0.5..1.0),
-                        g: rng.random_range(0.5..1.0),
-                        b: rng.random_range(0.5..1.0),
-                        ..Default::default()
-                    },
+                    color: Color::new(
+                        rng.random_range(0.5..1.0),
+                        rng.random_range(0.5..1.0),
+                        rng.random_range(0.5..1.0),
+                        1.0,
+                    ),
                     life,
                     max_life: life,
                     size: rng.random_range(3.0..6.0),
@@ -179,8 +165,7 @@ impl Rocket {
         // === Update explosions ===
         for p in self.explosion_particles.iter_mut().filter(|p| p.active) {
             p.vel.y += gravity.y * dt;
-            p.pos.x += p.vel.x * dt;
-            p.pos.y += p.vel.y * dt;
+            p.pos += p.vel * dt;
             p.life -= dt;
             p.active = p.life > 0.0;
         }

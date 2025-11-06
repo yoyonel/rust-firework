@@ -251,9 +251,9 @@ impl Renderer {
                 gpu_slice[i] = ParticleGPU {
                     pos_x: p.pos.x,
                     pos_y: p.pos.y,
-                    col_r: p.color.r,
-                    col_g: p.color.g,
-                    col_b: p.color.b,
+                    col_r: p.color.x,
+                    col_g: p.color.y,
+                    col_b: p.color.z,
                     life: p.life,
                     max_life: p.max_life,
                     size: p.size,

@@ -1,4 +1,4 @@
-use crate::physic_engine::types::{Color, Vec2};
+use glam::{Vec2, Vec4 as Color};
 
 #[repr(C, align(16))]
 #[derive(Debug, Clone, Copy, Default)]

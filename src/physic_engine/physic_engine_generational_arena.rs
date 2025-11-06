@@ -6,12 +6,9 @@ use std::cmp::max;
 use generational_arena::{Arena, Index};
 
 use crate::physic_engine::{
-    config::PhysicConfig,
-    particle::Particle,
-    rocket::Rocket,
-    types::{Color, UpdateResult, Vec2},
-    PhysicEngine,
+    config::PhysicConfig, particle::Particle, rocket::Rocket, types::UpdateResult, PhysicEngine,
 };
+use glam::{Vec2, Vec4 as Color};
 
 #[derive(Debug)]
 pub struct PhysicEngineFireworks {
@@ -136,17 +133,21 @@ impl PhysicEngineFireworks {
         if let Some(r) = self.rockets.get_mut(idx) {
             //
             *r = Rocket {
-                pos: Vec2::new(cx, 0.0),
-                vel: Vec2::new(angle.cos() * speed, angle.sin() * speed),
+                pos: Vec2 { x: cx, y: 0.0 },
+                vel: Vec2 {
+                    x: angle.cos() * speed,
+                    y: angle.sin() * speed,
+                },
                 color: Color::new(
                     self.rng.random_range(0.5..=1.0),
                     self.rng.random_range(0.5..=1.0),
                     self.rng.random_range(0.5..=1.0),
+                    1.0,
                 ),
                 active: true,
                 exploded: false,
                 trail_index: 0,
-                last_trail_pos: Vec2::new(cx, 0.0),
+                last_trail_pos: Vec2 { x: cx, y: 0.0 },
                 ..Default::default()
             };
         }
