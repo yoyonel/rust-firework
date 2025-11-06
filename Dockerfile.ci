@@ -1,0 +1,35 @@
+# ========================
+# Dockerfile.ci
+# ========================
+
+# Base image
+FROM ubuntu:22.04
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    curl git cmake pkg-config build-essential \
+    libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev \
+    libasound2-dev alsa-utils alsa-oss \
+    pulseaudio pulseaudio-utils \
+    ffmpeg xvfb x11-apps x11-utils imagemagick \
+    libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Set working dir
+WORKDIR /app
+
+# Copy project
+COPY . .
+
+# Build project in release mode
+RUN cargo build --release
+
+# Ensure scripts are executable
+RUN chmod +x .github/scripts/test_integration.sh
+
+# Default command
+CMD [".github/scripts/test_integration.sh"]

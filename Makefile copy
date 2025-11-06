@@ -1,0 +1,67 @@
+.PHONY: build run test lint clean benches
+
+# Build the project
+build:
+	cargo build
+
+# Build the project in release mode
+build-release:
+	cargo build --release
+
+# Run the project
+run:
+	cargo run
+
+# Run the project in release mode
+run-release:
+	cargo run --release
+
+# Profiling with Valgrind
+valgrind-callgrind: ./target/release/fireworks_sim
+	valgrind --tool=callgrind ./target/release/fireworks_sim
+	callgrind_annotate $(ls -tr | grep callgrind.out | tail -1) | grep -e "fireworks_sim::"
+
+# Profiling with Heaptrack
+heaptrack: ./target/release/fireworks_sim
+	heaptrack ./target/release/fireworks_sim
+
+# Run the tests
+# https://doc.rust-lang.org/cargo/commands/cargo-test.html
+test:	
+	RUST_MIN_STACK=16777216 \
+	xvfb-run -a \
+		cargo test --lib --bins --tests -- --test-threads=1
+
+test-nocapture:
+	cargo test -- --nocapture
+	
+# Run the tests for the library
+test-lib:
+	cargo test --lib
+
+# Lint the code
+lint:
+	cargo fmt -- --check
+	cargo clippy -- -D warnings
+
+# Format the code
+fmt:
+	cargo fmt
+
+# Run the benchmarks
+benches:
+	cargo bench --no-default-features --features no_simd
+	cargo bench --no-default-features --features simd
+
+# Run cargo-shear for removing unused dependencies
+remove-unused-dependencies:
+	cargo shear --fix
+
+# Clean the project
+clean:
+	cargo clean
+	rm -rf *.zst
+	rm -rf heaptrack*
+	rm -rf callgrind.out*
+	rm -rf perf.data
+	rm -rf build.log
