@@ -1,0 +1,10 @@
+# Ignore everything
+*
+
+# Include source files
+!src/
+!Cargo.toml
+!Cargo.lock
+
+# Include assets
+!assets/

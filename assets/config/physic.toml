@@ -1,0 +1,26 @@
+max_rockets = 8192
+particles_per_explosion = 256
+particles_per_trail = 64
+rocket_interval_mean = 0.025
+rocket_interval_variation = 0.01875
+rocket_max_next_interval = 0.025
+#
+# max_rockets = 8192
+# particles_per_explosion = 256
+# particles_per_trail = 64
+# rocket_interval_mean = 0.0010
+# rocket_interval_variation = 0.0075
+# rocket_max_next_interval = 0.001
+
+# default values
+spawn_rocket_margin = 50.0
+spawn_rocket_vertical_angle = 1.570796327
+spawn_rocket_angle_variation = 0.3
+spawn_rocket_min_speed = 350.0
+spawn_rocket_max_speed = 500.0
+
+gravity = -200.0
+initial_rocket_speed = 100.0
+nb_particles_per_explosion = 256
+explosion_min_vel = 100.0
+explosion_max_vel = 300.0

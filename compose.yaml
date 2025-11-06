@@ -1,0 +1,11 @@
+services:
+  fireworks_ci:
+    build:
+      context: .
+      # dockerfile: Dockerfile.ci
+      dockerfile: Dockerfile
+    container_name: fireworks_ci
+    stdin_open: true
+    tty: true
+    volumes:
+      - .:/app

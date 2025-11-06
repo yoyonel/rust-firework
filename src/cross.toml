@@ -1,0 +1,29 @@
+# cross.toml
+# Configuration multi-plateforme pour Fireworks Simulator
+
+[build]
+# Compilation par défaut : Linux (tu peux changer)
+default-target = "x86_64-unknown-linux-gnu"
+
+# ---------- LINUX ----------
+[target.x86_64-unknown-linux-gnu]
+# Paquets système nécessaires (GLFW, OpenAL, audio ALSA/Pulse)
+pre-build = [
+  "apt-get update",
+  "apt-get install -y libasound2-dev libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxcursor-dev libxinerama-dev pkg-config",
+]
+
+# ---------- WINDOWS ----------
+[target.x86_64-pc-windows-gnu]
+# MinGW et dépendances OpenGL
+pre-build = [
+  "apt-get update",
+  "apt-get install -y mingw-w64",
+]
+# Optionnel : linker spécifique
+env = {"CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER" = "x86_64-w64-mingw32-gcc"}
+
+# ---------- MACOS ----------
+[target.x86_64-apple-darwin]
+# macOS nécessite le SDK Apple (Cross utilise un conteneur avec osxcross)
+image = "ghcr.io/cross-rs/x86_64-apple-darwin:latest"
