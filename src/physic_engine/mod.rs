@@ -2,7 +2,7 @@ pub mod r#trait;
 pub use r#trait::PhysicEngine;
 
 pub mod types;
-pub use self::types::{Color, UpdateResult, Vec2};
+pub use self::types::UpdateResult;
 
 pub mod rocket;
 pub use self::rocket::Rocket;
