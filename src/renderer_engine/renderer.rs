@@ -1,25 +1,26 @@
 use crate::RendererEngine;
 use crate::{log_metrics_and_fps, profiler::Profiler};
 use anyhow::{anyhow, Result};
-use glfw::{Action, Context, Key};
+use glfw::{Action, Context, Key, WindowMode};
 use log::{debug, info};
 use std::ffi::CString;
 use std::time::Instant;
 
 use crate::audio_engine::AudioEngine;
-use crate::physic_engine::config::PhysicConfig;
-use crate::physic_engine::PhysicEngine;
-use crate::renderer_engine::tools::{
-    compile_shader_program, print_context_info, setup_opengl_debug,
+use crate::physic_engine::{config::PhysicConfig, PhysicEngine};
+use crate::renderer_engine::{
+    tools::{compile_shader_program, print_context_info, setup_opengl_debug},
+    types::ParticleGPU,
+    utils::glfw_window::Fullscreen,
 };
-use crate::renderer_engine::types::ParticleGPU;
 
-use crate::audio_engine::DopplerEvent;
+// use crate::audio_engine::DopplerEvent;
 use crate::utils::human_bytes::HumanBytes;
-use crossbeam::channel::Sender;
+// use crossbeam::channel::Sender;
 
 pub struct Renderer {
     pub glfw: glfw::Glfw,
+    // pub window: Option<glfw::Window>,
     pub window: Option<glfw::PWindow>,
     pub events: Option<glfw::GlfwReceiver<(f64, glfw::WindowEvent)>>,
 
@@ -33,12 +34,16 @@ pub struct Renderer {
 
     frames: u32,
     last_time: Instant,
-    width: f32,
-    height: f32,
 
-    loc_w: i32,
-    loc_h: i32,
-    _doppler_sender: Option<Sender<DopplerEvent>>, // option pour compatibilité si non fourni
+    // Window management
+    window_size: (i32, i32),
+    window_size_f32: (f32, f32),
+    window_last_pos: (i32, i32),
+    window_last_size: (i32, i32),
+
+    // Shader
+    loc_size: i32,
+    // _doppler_sender: Option<Sender<DopplerEvent>>, // option pour compatibilité si non fourni
 }
 
 // ---------------------------------------------------------
@@ -67,11 +72,11 @@ pub struct Renderer {
 //   dans le binaire, ce qui peut augmenter légèrement la taille du code.
 impl Renderer {
     pub fn new(
-        width: u32,
-        height: u32,
+        width: i32,
+        height: i32,
         title: &str,
         max_particles_on_gpu: usize,
-        doppler_sender: Option<Sender<DopplerEvent>>,
+        // doppler_sender: Option<Sender<DopplerEvent>>,
     ) -> Result<Self> {
         let _ = env_logger::builder().is_test(true).try_init();
 
@@ -84,9 +89,17 @@ impl Renderer {
             glfw::OpenGlProfileHint::Core,
         ));
 
+        // let (mut window, events) = glfw
+        //     .create_window(width, height, title, glfw::WindowMode::Windowed)
+        //     .ok_or_else(|| anyhow!("Erreur: impossible de créer la fenêtre GLFW"))?;
         let (mut window, events) = glfw
-            .create_window(width, height, title, glfw::WindowMode::Windowed)
-            .ok_or_else(|| anyhow!("Erreur: impossible de créer la fenêtre GLFW"))?;
+            .create_window(
+                width as u32,
+                height as u32,
+                title,
+                glfw::WindowMode::Windowed,
+            )
+            .expect("Erreur création fenêtre GLFW");
 
         window.make_current();
         window.set_key_polling(true);
@@ -120,12 +133,11 @@ impl Renderer {
             out vec3 vertexColor;
             out float alpha;
 
-            uniform float uWidth;
-            uniform float uHeight;
+            uniform vec2 uSize;
 
             void main() {
-                float x = aPos.x / uWidth * 2.0 - 1.0;
-                float y = aPos.y / uHeight * 2.0 - 1.0;
+                float x = aPos.x / uSize.x * 2.0 - 1.0;
+                float y = aPos.y / uSize.y * 2.0 - 1.0;
                 gl_Position = vec4(x, y, 0.0, 1.0);
 
                 alpha = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
@@ -163,15 +175,15 @@ impl Renderer {
         "#;
 
         let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
-        let (loc_w, loc_h) = unsafe {
-            (
-                gl::GetUniformLocation(shader_program, CString::new("uWidth").unwrap().as_ptr()),
-                gl::GetUniformLocation(shader_program, CString::new("uHeight").unwrap().as_ptr()),
-            )
+        let loc_size = unsafe {
+            gl::GetUniformLocation(shader_program, CString::new("uSize").unwrap().as_ptr())
         };
 
         // // VAO/VBO setup
         // let (mut vao, mut vbo) = (0u32, 0u32);
+
+        let window_last_pos = window.get_pos();
+        let window_last_size = window.get_size();
 
         unsafe {
             let (vao, vbo, mapped_ptr, buffer_size) = setup_gpu_buffers(max_particles_on_gpu);
@@ -190,11 +202,12 @@ impl Renderer {
                 buffer_size,
                 frames: 0,
                 last_time: Instant::now(),
-                width: width as f32,
-                height: height as f32,
-                loc_w,
-                loc_h,
-                _doppler_sender: doppler_sender,
+                window_size: (width, height),
+                window_size_f32: (width as f32, height as f32),
+                window_last_pos,
+                window_last_size,
+                loc_size,
+                // _doppler_sender: doppler_sender,
             })
         }
     }
@@ -306,8 +319,11 @@ impl Renderer {
             gl::UseProgram(self.shader_program);
 
             // Envoie les dimensions de la fenêtre au shader (uniforms)
-            gl::Uniform1f(self.loc_w, self.width);
-            gl::Uniform1f(self.loc_h, self.height);
+            gl::Uniform2f(
+                self.loc_size,
+                self.window_size_f32.0,
+                self.window_size_f32.1,
+            );
 
             // Dessine les particules sous forme de points
             gl::DrawArrays(gl::POINTS, 0, count as i32);
@@ -350,7 +366,7 @@ impl Renderer {
         let log_interval = std::time::Duration::from_secs(5); // toutes les 5 secondes
                                                               // let mut next_doppler_update = Instant::now();
 
-        audio.set_listener_position((self.width / 2.0, 0.0));
+        audio.set_listener_position((self.window_size_f32.0 / 2.0, 0.0));
 
         while let Some(window) = &mut self.window {
             if window.should_close() {
@@ -404,16 +420,58 @@ impl Renderer {
                         match event {
                             glfw::WindowEvent::FramebufferSize(w, h) => unsafe {
                                 gl::Viewport(0, 0, w, h);
-                                self.width = w as f32;
-                                self.height = h as f32;
+                                self.window_size_f32 = (w as f32, h as f32);
                                 physic.set_window_width(w as f32);
-                                audio.set_listener_position((w as f32 / 2.0, 0.0));
+                                audio.set_listener_position(((w / 2) as f32, 0.0));
                             },
                             glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                                 window.set_should_close(true);
                             }
                             glfw::WindowEvent::Key(Key::R, _, Action::Press, _) => {
                                 reload_config = true;
+                            }
+                            glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
+                                if window.is_fullscreen() {
+                                    window.set_monitor(
+                                        WindowMode::Windowed,
+                                        self.window_last_pos.0,
+                                        self.window_last_pos.1,
+                                        self.window_last_size.0 as u32,
+                                        self.window_last_size.1 as u32,
+                                        None,
+                                    );
+                                    self.window_size = self.window_last_size;
+                                    self.window_size_f32 = (
+                                        self.window_last_size.0 as f32,
+                                        self.window_last_size.1 as f32,
+                                    );
+                                    info!(
+                                        "🖥️ Window resized: {} x {}",
+                                        self.window_size.0, self.window_size.1
+                                    );
+                                } else {
+                                    self.window_last_pos = window.get_pos();
+                                    self.window_last_size = window.get_size();
+
+                                    let mut glfw = window.glfw.clone();
+                                    glfw.with_primary_monitor(|_, monitor| {
+                                        if let Some(monitor) = monitor {
+                                            window.set_fullscreen(monitor);
+                                            self.window_size = (
+                                                monitor.get_video_mode().unwrap().width as i32,
+                                                monitor.get_video_mode().unwrap().height as i32,
+                                            );
+                                            self.window_size_f32 = (
+                                                self.window_last_size.0 as f32,
+                                                self.window_last_size.1 as f32,
+                                            );
+                                            info!(
+                                                "🖥️ Fullscreen: {} x {}",
+                                                self.window_size.0, self.window_size.1
+                                            );
+                                        }
+                                    });
+                                }
                             }
                             _ => {}
                         }
