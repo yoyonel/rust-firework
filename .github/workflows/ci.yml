@@ -1,0 +1,71 @@
+name: Rust CI with Coverage
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    env:
+      DISPLAY: :99
+
+    steps:
+      # --- Étape 1 : Checkout du code ---
+      - uses: actions/checkout@v3
+
+      # --- Étape 2 : Installer Rust ---
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: 1.90.0
+          target: x86_64-unknown-linux-gnu
+          override: true
+          components: rust-src
+
+      # --- Étape 3 : Installer les outils système ---
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential cmake g++ \
+            libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev \
+            libxrandr-dev libxinerama-dev libglu1-mesa-dev \
+            libasound2-dev alsa-utils alsa-oss \
+            pulseaudio pulseaudio-utils \
+            xvfb xauth pkg-config make git ca-certificates curl
+
+      # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
+      - name: Install coverage tools
+        run: |
+          cargo install cargo-llvm-cov
+          rustup component add llvm-tools-preview --toolchain 1.90.0-x86_64-unknown-linux-gnu
+
+      # --- Étape 5 : Build du projet ---
+      - name: Build project
+        run: cargo build --release
+
+      # --- Étape 6 : Lancer Xvfb pour les tests graphiques ---
+      - name: Start virtual display
+        run: |
+          rm -f /tmp/.X99-lock
+          Xvfb :99 -screen 0 1024x768x24 & 
+          sleep 2
+
+      # --- Étape 7 : Compiler tests instrumentés pour coverage ---
+      - name: Prepare instrumented binaries
+        run: cargo llvm-cov --workspace --no-run
+
+      # --- Étape 8 : Lancer les tests avec coverage ---
+      - name: Run tests with coverage
+        run: cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
+
+      # --- Étape 9 : Publier le coverage (optionnel) ---
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: target/debug/coverage/*.profdata
+          flags: unittests

@@ -19,16 +19,34 @@ RUN mkdir src && echo "fn main() {}" > src/main.rs && cargo fetch
 # --- Copie réelle du projet ---
 COPY . .
 
-RUN cargo build --release && cargo test --no-run
+# --- tests sans exécution ---
+RUN cargo test --no-run
 
+# --- Installer cargo-llvm-cov et LLVM tools ---
+RUN cargo install cargo-llvm-cov
+RUN rustup component add llvm-tools-preview --toolchain 1.90.0-x86_64-unknown-linux-gnu
+
+# --- Étape 2 : Image finale pour exécution des tests ---
 FROM builder AS tester
 WORKDIR /app
+
+# Configurer Xvfb
 ENV DISPLAY=:99
 
+# Persister le target pour éviter recompilation
+VOLUME /app/target
+
+# Entrypoint pour exécuter les tests avec coverage
 CMD ["bash", "-c", "\
-    Xvfb :99 -screen 0 1280x720x24 & \
+    # Nettoyer les éventuels locks X11 \
+    rm -f /tmp/.X99-lock && \
+    # Lancer Xvfb en background \
+    Xvfb :99 -screen 0 1024x768x24 & \
     sleep 2 && \
     echo '🧪 Running functional tests with virtual display...' && \
-    cargo test --no-run && cargo test -- --nocapture --test-threads=1 && \
+    # Préparer les binaires instrumentés (sans exécuter tests) \
+    cargo llvm-cov --workspace --no-run && \
+    # Lancer les tests avec coverage et capture du rapport \
+    cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1 && \
     echo '✅ Tests completed successfully.' \
     "]
