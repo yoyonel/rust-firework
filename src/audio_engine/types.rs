@@ -1,6 +1,6 @@
-use crate::audio_engine::DopplerEvent;
+// use crate::audio_engine::DopplerEvent;
 use crate::AudioEngineSettings;
-use crossbeam::channel::Receiver;
+// use crossbeam::channel::Receiver;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
@@ -127,6 +127,6 @@ pub struct FireworksAudioConfig {
     pub block_size: usize,
     pub max_voices: usize,
     pub settings: AudioEngineSettings,
-    pub doppler_receiver: Option<Receiver<DopplerEvent>>,
-    pub doppler_states: Vec<DopplerState>,
+    // pub doppler_receiver: Option<Receiver<DopplerEvent>>,
+    // pub doppler_states: Vec<DopplerState>,
 }

@@ -1,13 +1,22 @@
 use crate::audio_engine::types::{
-    DopplerState, FireworksAudioConfig, PlayRequest, RocketAudioState, Voice,
+    // DopplerState,
+    FireworksAudioConfig,
+    PlayRequest,
+    RocketAudioState,
+    Voice,
 };
 use crate::audio_engine::{
-    binauralize_mono, load_audio, resample_linear, AudioEngine, DopplerEvent,
+    binauralize_mono,
+    load_audio,
+    resample_linear,
+    AudioEngine,
+    // DopplerEvent,
 };
 use crate::AudioEngineSettings;
 use crate::{log_metrics, profiler::Profiler};
-use cpal::traits::{DeviceTrait, HostTrait, StreamTrait}; // CPAL: cross-platform audio API
-use crossbeam::channel::Receiver;
+// CPAL: cross-platform audio API
+use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+// use crossbeam::channel::Receiver;
 use hound::WavReader; // WAV file loader
 use log::{debug, info};
 use std::collections::HashMap;
@@ -26,8 +35,8 @@ pub struct FireworksAudio3D {
     play_queue: Arc<Mutex<VecDeque<PlayRequest>>>,
     settings: AudioEngineSettings,
     running_pair: Arc<(Mutex<bool>, Condvar)>,
-    doppler_receiver: Option<Receiver<DopplerEvent>>,
-    doppler_states: Vec<DopplerState>,
+    // doppler_receiver: Option<Receiver<DopplerEvent>>,
+    // doppler_states: Vec<DopplerState>,
 }
 
 impl FireworksAudio3D {
@@ -63,8 +72,8 @@ impl FireworksAudio3D {
             play_queue: Arc::new(Mutex::new(VecDeque::new())),
             settings: config.settings,
             running_pair: Arc::new((Mutex::new(true), Condvar::new())),
-            doppler_receiver: config.doppler_receiver,
-            doppler_states: config.doppler_states,
+            // doppler_receiver: config.doppler_receiver,
+            // doppler_states: config.doppler_states,
         }
     }
 
@@ -153,7 +162,6 @@ impl FireworksAudio3D {
 
         let queue = self.play_queue.clone();
         let voices = Arc::new(Mutex::new(self.voices.clone()));
-        let doppler_states_arc = Arc::new(Mutex::new(self.doppler_states.clone()));
         let sr = self.sample_rate;
         let block_size = self.block_size;
         let global_gain = self.settings.global_gain();
@@ -165,8 +173,10 @@ impl FireworksAudio3D {
         let mut last_log = Instant::now();
         let log_interval = std::time::Duration::from_secs(4); // toutes les 4 secondes
 
+        // let doppler_states_arc = Arc::new(Mutex::new(self.doppler_states.clone()));
         // clone the doppler receiver into the audio thread
-        let _doppler_receiver = self.doppler_receiver.clone();
+        // let _doppler_receiver = self.doppler_receiver.clone();
+
         // Prépare les données audio à partager avec le thread audio
         let _rocket_data_ref = Arc::new(self.rocket_data.clone()); // Ce qui est zéro copie (le Arc clone est O(1)).
         let _settings = self.settings.clone();
@@ -185,7 +195,7 @@ impl FireworksAudio3D {
             };
 
             let voices_clone = voices.clone();
-            let _doppler_clone = doppler_states_arc.clone();
+            // let _doppler_clone = doppler_states_arc.clone();
 
             // Preallocate buffers
             let mut acc = Vec::with_capacity(block_size);
@@ -444,7 +454,7 @@ impl AudioEngine for FireworksAudio3D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::audio_engine::audio_event::doppler_queue::DopplerQueue;
+    // use crate::audio_engine::audio_event::doppler_queue::DopplerQueue;
     use crate::audio_engine::binaural_processing::binauralize_mono;
     use crate::audio_engine::settings::AudioEngineSettingsBuilder;
 
@@ -477,7 +487,7 @@ mod tests {
     }
 
     fn build_engine() -> FireworksAudio3D {
-        let doppler_queue = DopplerQueue::new();
+        // let doppler_queue = DopplerQueue::new();
         FireworksAudio3D::new(FireworksAudioConfig {
             rocket_path: "assets/sounds/rocket.wav".into(),
             explosion_path: "assets/sounds/explosion.wav".into(),
@@ -486,8 +496,8 @@ mod tests {
             block_size: 1024,
             max_voices: 16,
             settings: AudioEngineSettings::default(),
-            doppler_receiver: Some(doppler_queue.receiver.clone()),
-            doppler_states: Vec::new(),
+            // doppler_receiver: Some(doppler_queue.receiver.clone()),
+            // doppler_states: Vec::new(),
         })
     }
 
