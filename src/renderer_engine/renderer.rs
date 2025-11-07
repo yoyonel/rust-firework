@@ -11,7 +11,10 @@ use crate::physic_engine::{config::PhysicConfig, PhysicEngine};
 use crate::renderer_engine::{
     tools::{compile_shader_program, print_context_info, setup_opengl_debug},
     types::ParticleGPU,
-    utils::glfw_window::Fullscreen,
+    utils::{
+        adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler},
+        glfw_window::Fullscreen,
+    },
 };
 
 // use crate::audio_engine::DopplerEvent;
@@ -363,10 +366,22 @@ impl Renderer {
         // Partagé entre moteurs
         let profiler = Profiler::new(200);
         let mut last_log = Instant::now();
-        let log_interval = std::time::Duration::from_secs(5); // toutes les 5 secondes
-                                                              // let mut next_doppler_update = Instant::now();
+        let log_interval = std::time::Duration::from_secs(5);
+        // let mut next_doppler_update = Instant::now();
+
+        // 🔹 Initialisation de l’échantillonneur adaptatif
+        let target_samples = 200;
+        let mut sampler = AdaptiveSampler::new(log_interval, target_samples, 60.0);
+        let mut sampled_fps: Vec<f32> = Vec::with_capacity(target_samples);
 
         audio.set_listener_position((self.window_size_f32.0 / 2.0, 0.0));
+
+        // moyenne pondérée EMA
+        let alpha = 0.15;
+        let mut fps_avg = 0.0;
+        // moyenne simple itérative
+        let n_frames = 100;
+        let mut fps_avg_iter = 0.0;
 
         while let Some(window) = &mut self.window {
             if window.should_close() {
@@ -380,6 +395,14 @@ impl Renderer {
             let delta = now.duration_since(self.last_time).as_secs_f32();
             self.last_time = now;
             self.frames += 1;
+
+            // 🔹 Calcul FPS instantané
+            let fps = if delta > 0.0 { 1.0 / delta } else { 0.0 };
+
+            // 🔹 On demande à l’échantillonneur s’il faut enregistrer ce FPS
+            if sampler.should_sample(delta) {
+                sampled_fps.push(fps);
+            }
 
             let update_result = profiler.profile_block("physic - update", || physic.update(delta));
 
@@ -400,9 +423,43 @@ impl Renderer {
             let particles_rendered = self.render_frame(physic);
             profiler.record_metric("total particles drawn", particles_rendered);
 
+            // FPSmoyenne​ ← α⋅FPSinstant ​+ (1 − α)⋅FPSmoyenne​
+            fps_avg = alpha * fps + (1.0 - alpha) * fps_avg;
+            // xˉn−1 ​= FPS moyenne des frames 1 aˋ n-1
+            // xˉn​ = n(n − 1)⋅xˉn−1​ + xn​​
+            fps_avg_iter = (fps_avg_iter * (n_frames - 1) as f32 + fps) / n_frames as f32;
+
             // affichage périodique
             if last_log.elapsed() >= log_interval {
                 log_metrics_and_fps!(&profiler);
+
+                if !sampler.samples.is_empty() {
+                    // Moyenne des FPS mesurés
+                    let avg_fps: f32 = sampler.samples.iter().map(|(_, fps)| *fps).sum::<f32>()
+                        / sampler.samples.len() as f32;
+
+                    // 🔹 Graph ASCII coloré selon FPS
+                    let graph = ascii_sample_timeline(
+                        &sampler.samples,
+                        log_interval.as_secs_f32(),
+                        50,
+                        avg_fps,
+                    );
+
+                    info!("Graphe - Sample Timeline\n{}", graph);
+                    info!(
+                        "Samples: {} / {} | Moyenne FPS: {:.2}\n",
+                        sampler.samples.len(),
+                        sampler.target_samples,
+                        avg_fps
+                    );
+
+                    sampler.reset();
+
+                    info!("FPS moyen (EMA): {:.2}", fps_avg);
+                    info!("FPS moyen (iter): {:.2}", fps_avg_iter);
+                }
+
                 last_log = Instant::now();
             }
 

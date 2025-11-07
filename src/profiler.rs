@@ -284,7 +284,10 @@ impl Profiler {
     /// Log toutes les métriques scalaires vers l’info log avec un target spécifique
     pub fn log_metrics_for_target(&self, target: &str, show_fps: bool) {
         if show_fps {
-            info!(target: target, "{:.2} FPS", self.fps());
+            info!(target: target, "FPS moyen (sur les {} premières frames): {:.2} FPS",
+                self.inner.read().unwrap().total_frame_times.len(),
+                self.fps()
+            );
         }
         // Lecture des métriques de temps
         for (label, (avg, min, max)) in self.summary() {
