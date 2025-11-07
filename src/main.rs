@@ -2,7 +2,7 @@
 use anyhow::Result;
 use log::info;
 
-use fireworks_sim::audio_engine::audio_event::doppler_queue::DopplerQueue;
+// use fireworks_sim::audio_engine::audio_event::doppler_queue::DopplerQueue;
 use fireworks_sim::audio_engine::settings::AudioEngineSettings;
 use fireworks_sim::audio_engine::{FireworksAudio3D, FireworksAudioConfig};
 use fireworks_sim::physic_engine::config::PhysicConfig;
@@ -25,7 +25,7 @@ fn main() -> Result<()> {
     // --------------------------
     // Paramètres audio par défaut
     let audio_settings = AudioEngineSettings::default();
-    let doppler_queue = DopplerQueue::new();
+    // let doppler_queue = DopplerQueue::new();
     let audio_config = FireworksAudioConfig {
         // TODO: meilleur gestion des chemins (assets), avec une lib (python) style pathlib
         rocket_path: "assets/sounds/rocket.wav".into(),
@@ -39,8 +39,8 @@ fn main() -> Result<()> {
         // limité à 32 voix, si MAX_ROCKETS "grand", évite le bordel sonore (effet mitraille très désagréable)
         max_voices: cmp::min(32, physic_config.max_rockets),
         settings: audio_settings.clone(),
-        doppler_receiver: Some(doppler_queue.receiver.clone()),
-        doppler_states: Vec::new(),
+        // doppler_receiver: Some(doppler_queue.receiver.clone()),
+        // doppler_states: Vec::new(),
     };
     let audio_engine = FireworksAudio3D::new(audio_config);
 
@@ -53,7 +53,7 @@ fn main() -> Result<()> {
         800,
         "Fireworks Simulator",
         physic_engine.max_particles(),
-        Some(doppler_queue.sender.clone()),
+        // Some(doppler_queue.sender.clone()),
     )?;
 
     // ----------------------------
