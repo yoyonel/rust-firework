@@ -9,7 +9,7 @@ fn test_renderer_run_loop_one_frame() {
     let mut physic = DummyPhysic;
 
     let mut renderer =
-        Renderer::new(800, 600, "Test Renderer", 0, None).expect("Failed to create Renderer");
+        Renderer::new(800, 600, "Test Renderer", 0).expect("Failed to create Renderer");
 
     // Force la fermeture de la fenêtre après 1 frame
     renderer
