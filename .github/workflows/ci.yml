@@ -17,31 +17,20 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DISPLAY: :99
+      RUST_VERSION: 1.90.0
+      RUSTC_WRAPPER: sccache
+      CARGO_TERM_COLOR: always
 
     steps:
       # --- Étape 1 : Checkout du code ---
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      # --- Étape 2 : Installer Rust ---
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      # 🦀 2. Installation de Rust toolchain
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: 1.90.0
-          target: x86_64-unknown-linux-gnu
-          override: true
-          components: rust-src
-
-      # ⚡ Cache Cargo registry, index et target
-      - name: Cache Cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-      
+          toolchain: ${{ env.RUST_VERSION }}
+          components: llvm-tools-preview
 
       # --- Étape 3 : Installer les outils système ---
       - name: Install system dependencies
@@ -55,39 +44,75 @@ jobs:
             pulseaudio pulseaudio-utils \
             xvfb xauth pkg-config make git ca-certificates curl
 
-      # ⚡ Cacher la toolchain et les composants LLVM
-      - name: Cache Rust toolchain and LLVM tools
+      # 🧰 3. Cache rustup + toolchain LLVM
+      - name: Cache Rustup and LLVM tools
         uses: actions/cache@v4
         with:
           path: |
             ~/.rustup/toolchains
             ~/.rustup/components
-          key: ${{ runner.os }}-rustup-${{ hashFiles('rust-toolchain.toml') }}
+          key: ${{ runner.os }}-rustup-${{ env.RUST_VERSION }}
           restore-keys: |
             ${{ runner.os }}-rustup-
       
-      # ⚡ Rust supporte un cache binaire plus puissant que Cargo : sccache
-      # Il fonctionne comme ccache pour le compilateur Rust.
-      - name: Install sccache
-        run: cargo install sccache
+      # ⚡ 4. Cache Cargo registry & git & bin (téléchargement dépendances)
+      - name: Cache Cargo registry & git & bin
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
 
-      - name: Configure sccache
+      # 🧱 5. Cache du répertoire target (artefacts compilés)
+      - name: Cache Cargo target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-
+            ${{ runner.os }}-cargo-target-
+      
+      # --- Installation ultra rapide de sccache (binaire précompilé) ---
+      - name: Install sccache (binary)
         run: |
-          export RUSTC_WRAPPER=$(which sccache)
-          sccache --start-server
+          SCCACHE_VERSION="0.7.4"
+          curl -L "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o sccache.tar.gz
+          tar xzf sccache.tar.gz
+          sudo mv sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache /usr/local/bin/
+          sccache --version
+          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
+      
+      - name: SCCache start server
+        run: sccache --start-server
 
-      - name: Build with sccache
-        run: cargo build --release
-
+       # 💾 7. Cache sccache binaire (stocke les artefacts compilés)
+      - name: Cache sccache binaries
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/sccache
+          key: ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-
+            ${{ runner.os }}-sccache-
+      
       # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
-      - name: Install coverage tools
+      - name: Install cargo-llvm-cov
         run: |
-          cargo install cargo-llvm-cov
-          rustup component add llvm-tools-preview --toolchain 1.90.0-x86_64-unknown-linux-gnu
+          if ! command -v cargo-llvm-cov &> /dev/null; then
+            cargo install cargo-llvm-cov --locked
+          else
+            echo "cargo-llvm-cov already installed, skipping..."
+          fi
 
       # --- Étape 5 : Build du projet ---
       - name: Build project
-        run: cargo build --release
+        run: |
+          cargo build --release
 
       # --- Étape 6 : Lancer Xvfb pour les tests graphiques ---
       - name: Start virtual display
@@ -95,26 +120,13 @@ jobs:
           rm -f /tmp/.X99-lock
           Xvfb :99 -screen 0 1024x768x24 & 
           sleep 2
-
-      # ⚡ Cacher les artefacts de coverage
-      - name: Cache LLVM coverage data
-        uses: actions/cache@v4
-        with:
-          path: target/llvm-cov
-          key: ${{ runner.os }}-llvmcov-${{ hashFiles('Cargo.lock') }}
-
-      # --- Étape 7 : Compiler tests instrumentés pour coverage ---
-      - name: Prepare instrumented binaries
-        run: cargo llvm-cov --workspace
-
+    
       # --- Étape 8 : Lancer les tests avec coverage ---
       - name: Run tests with coverage
-        run: cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
-      
-      # # --- Étape 9 : Publier le coverage (optionnel) ---
-      # - name: Upload coverage to Codecov
-      #   uses: codecov/codecov-action@v3
-      #   with:
-      #     token: ${{ secrets.CODECOV_TOKEN }}
-      #     files: target/debug/coverage/*.profdata
-      #     flags: unittests
+        run: |
+          cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
+
+      - name: SCCache stop server
+        run: |
+          sccache --show-stats
+          sccache --stop-server
