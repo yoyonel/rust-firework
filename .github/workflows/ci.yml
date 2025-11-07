@@ -1,10 +1,16 @@
 name: Rust CI with Coverage
 
 on:
-  push:
+  push:           # sur chaque push
     branches:
       - main
-  pull_request:
+      - develop
+  pull_request:   # sur chaque pull request
+    branches:
+      - main
+  workflow_dispatch:  # permet le lancement manuellement du workflow
+  schedule:
+    - cron: '0 0 * * *' # tous les jours à minuit
 
 jobs:
   build-and-test:
@@ -56,16 +62,16 @@ jobs:
 
       # --- Étape 7 : Compiler tests instrumentés pour coverage ---
       - name: Prepare instrumented binaries
-        run: cargo llvm-cov --workspace --no-run
+        run: cargo llvm-cov --workspace
 
       # --- Étape 8 : Lancer les tests avec coverage ---
       - name: Run tests with coverage
         run: cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
-
-      # --- Étape 9 : Publier le coverage (optionnel) ---
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v3
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: target/debug/coverage/*.profdata
-          flags: unittests
+      
+      # # --- Étape 9 : Publier le coverage (optionnel) ---
+      # - name: Upload coverage to Codecov
+      #   uses: codecov/codecov-action@v3
+      #   with:
+      #     token: ${{ secrets.CODECOV_TOKEN }}
+      #     files: target/debug/coverage/*.profdata
+      #     flags: unittests
