@@ -31,6 +31,18 @@ jobs:
           override: true
           components: rust-src
 
+      # ⚡ Cache Cargo registry, index et target
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-      
+
       # --- Étape 3 : Installer les outils système ---
       - name: Install system dependencies
         run: |
@@ -42,6 +54,30 @@ jobs:
             libasound2-dev alsa-utils alsa-oss \
             pulseaudio pulseaudio-utils \
             xvfb xauth pkg-config make git ca-certificates curl
+
+      # ⚡ Cacher la toolchain et les composants LLVM
+      - name: Cache Rust toolchain and LLVM tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.rustup/toolchains
+            ~/.rustup/components
+          key: ${{ runner.os }}-rustup-${{ hashFiles('rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-rustup-
+      
+      # ⚡ Rust supporte un cache binaire plus puissant que Cargo : sccache
+      # Il fonctionne comme ccache pour le compilateur Rust.
+      - name: Install sccache
+        run: cargo install sccache
+
+      - name: Configure sccache
+        run: |
+          export RUSTC_WRAPPER=$(which sccache)
+          sccache --start-server
+
+      - name: Build with sccache
+        run: cargo build --release
 
       # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
       - name: Install coverage tools
@@ -59,6 +95,13 @@ jobs:
           rm -f /tmp/.X99-lock
           Xvfb :99 -screen 0 1024x768x24 & 
           sleep 2
+
+      # ⚡ Cacher les artefacts de coverage
+      - name: Cache LLVM coverage data
+        uses: actions/cache@v4
+        with:
+          path: target/llvm-cov
+          key: ${{ runner.os }}-llvmcov-${{ hashFiles('Cargo.lock') }}
 
       # --- Étape 7 : Compiler tests instrumentés pour coverage ---
       - name: Prepare instrumented binaries
