@@ -3,66 +3,80 @@ name: 🧨 Fireworks Integration Tests
 on:
   # 1️⃣ Déclenche automatiquement après le workflow CI
   workflow_run:
-    workflows: ["Rust CI with Coverage"]   # remplace par le nom exact de ton workflow de build
+    workflows: [ "Rust CI with Coverage" ] # remplace par le nom exact de ton workflow de build
     types:
-      - completed
+    - completed
   # 2️⃣ Déclenche manuellement depuis GitHub Actions
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *' # tous les jours à minuit
+  - cron: '0 0 * * *' # tous les jours à minuit
 
 jobs:
   integration-test:
     if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
-  
+
     steps:
-      # 1️⃣ Checkout du code source
-      - name: 🛎️ Checkout repository
-        uses: actions/checkout@v4
+    # 1️⃣ Checkout du code source
+    - name: 🛎️ Checkout repository
+      uses: actions/checkout@v4
 
-      # 2️⃣ Setup Docker buildx (pour cache efficace)
-      - name: 🧱 Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+    # 2️⃣ Setup Docker buildx (pour cache efficace)
+    - name: 🧱 Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
 
-      # # 3️⃣ Cache Docker layers (Cargo + apt cache)
-      # - name: 💾 Cache Docker layers
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: /tmp/.buildx-cache
-      #     key: ${{ runner.os }}-fireworks-ci-${{ github.sha }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-fireworks-ci-
+    # 4️⃣ Build Docker image with inline cache ---
+    - name: 🔨 Build Docker image (with cache)
+      run: |
+        docker build \
+          --build-arg USER_ID=$(id -u) \
+          --build-arg GROUP_ID=$(id -g) \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          -t fireworks-ci_integration \
+          -f Dockerfile.ci .
 
-      # 4️⃣ Build Docker image with inline cache ---
-      - name: 🔨 Build Docker image (with cache)
-        run: |
-          docker build \
-            --build-arg USER_ID=$(id -u) \
-            --build-arg GROUP_ID=$(id -g) \
-            --build-arg BUILDKIT_INLINE_CACHE=1 \
-            -t fireworks-ci_integration \
-            -f Dockerfile.ci .
+    # 5️⃣ Exécution du test d’intégration
+    - name: 🚀 Run integration test
+      run: |
+        mkdir -p output
+        docker run --rm \
+          -v ${{ github.workspace }}/output:/app/output \
+          fireworks-ci_integration
 
-      # 5️⃣ Exécution du test d’intégration
-      - name: 🚀 Run integration test
-        run: |
-          mkdir -p output
-          docker run --rm \
-            -v ${{ github.workspace }}/output:/app/output \
-            fireworks-ci_integration
+    # 5️⃣ Setup Python + cache UV (gestionnaire de dépendances)
+    - name: 🧩 Setup Python environment
+      run: |
+        pip install uv
 
-      # 6️⃣ Upload des artifacts de sortie (logs, screenshots, audio…)
-      - name: 📦 Upload output artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: fireworks-output
-          path: output/
-          retention-days: 7
+    - name: ♻️ Cache UV dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-uv-
 
-      # # 7️⃣ Sauvegarde du cache Docker
-      # - name: ♻️ Save Docker cache
-      #   if: always()
-      #   run: |
-      #     rm -rf /tmp/.buildx-cache
-      #     mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+    # 6️⃣ Run Fireworks Analysis (post-processing)
+    - name: 📊 Run Fireworks Analysis
+      run: |
+        echo "📈 Running Fireworks post-analysis..."
+        cd integration/visual_test
+        uv run main.py ../../output/
+      env:
+        PYTHONUNBUFFERED: 1
+
+    # 6️⃣ Upload des artifacts de sortie (logs, screenshots, audio…)
+    - name: 📦 Upload output artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: fireworks-output
+        path: output/
+        retention-days: 7
+
+    # 8️⃣ Publish HTML report to GitHub Pages
+    - name: 🌐 Publish report to GitHub Pages
+      uses: peaceiris/actions-gh-pages@v4
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./output
+        publish_branch: gh-pages

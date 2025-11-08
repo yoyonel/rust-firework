@@ -31,9 +31,9 @@ RUST_LOG=fireworks_sim=INFO \
 SIM_PID=$!
 
 # --- Capture multiple screenshots (1 per second) ---
-echo "📸 Capturing 1 screenshot per second for 5 seconds..."
-for i in $(seq 1 5); do
-  sleep 1
+echo "📸 Capturing 5 screenshot per second for 5 seconds..."
+for i in $(seq 1 25); do
+  sleep 0.2
   filename=$(printf "output/screenshot_%02d.png" "$i")
   if xwd -root -silent | convert xwd:- png:"$filename"; then
     echo "✅ Saved $filename"
@@ -41,7 +41,7 @@ for i in $(seq 1 5); do
     echo "⚠️ Failed to save $filename"
   fi
 done
-
+  
 # --- Cleanup ---
 echo "🧹 Cleaning up..."
 if ps -p "${SIM_PID:-}" >/dev/null 2>&1; then kill "$SIM_PID"; fi

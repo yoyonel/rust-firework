@@ -1,10 +1,17 @@
+# max_rockets = 1024
+# particles_per_explosion = 256
+# particles_per_trail = 64
+# rocket_interval_mean = 1.0
+# rocket_interval_variation = 0.75
+# rocket_max_next_interval = 0.5
+#
 max_rockets = 8192
 particles_per_explosion = 256
 particles_per_trail = 64
 rocket_interval_mean = 0.025
 rocket_interval_variation = 0.01875
 rocket_max_next_interval = 0.025
-#
+# 
 # max_rockets = 8192
 # particles_per_explosion = 256
 # particles_per_trail = 64
