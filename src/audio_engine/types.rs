@@ -129,4 +129,5 @@ pub struct FireworksAudioConfig {
     pub settings: AudioEngineSettings,
     // pub doppler_receiver: Option<Receiver<DopplerEvent>>,
     // pub doppler_states: Vec<DopplerState>,
+    // pub export_in_wav: bool,
 }

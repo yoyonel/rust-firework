@@ -383,6 +383,8 @@ impl Renderer {
         let n_frames = 100;
         let mut fps_avg_iter = 0.0;
 
+        let mut first_frame = true;
+
         while let Some(window) = &mut self.window {
             if window.should_close() {
                 break;
@@ -448,7 +450,7 @@ impl Renderer {
 
                     info!("Graphe - Sample Timeline\n{}", graph);
                     info!(
-                        "Samples: {} / {} | Moyenne FPS: {:.2}\n",
+                        "Samples: {} / {} | Moyenne FPS: {:.2}",
                         sampler.samples.len(),
                         sampler.target_samples,
                         avg_fps
@@ -469,6 +471,11 @@ impl Renderer {
             if let Some(window) = &mut self.window {
                 window.swap_buffers();
                 drop(_render_guard);
+
+                if first_frame {
+                    info!("🚀 First frame rendered");
+                    first_frame = false;
+                }
 
                 self.glfw.poll_events();
 

@@ -550,6 +550,7 @@ dependencies = [
  "cpal",
  "criterion",
  "crossbeam",
+ "crossbeam-channel",
  "derive_builder",
  "env_logger",
  "generational-arena",

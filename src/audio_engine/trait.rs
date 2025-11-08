@@ -1,7 +1,7 @@
 pub trait AudioEngine {
     fn play_rocket(&self, pos: (f32, f32), gain: f32);
     fn play_explosion(&self, pos: (f32, f32), gain: f32);
-    fn start_audio_thread(&mut self);
+    fn start_audio_thread(&mut self, export_path: Option<&str>);
     fn stop_audio_thread(&mut self);
 
     // Getter/Setter

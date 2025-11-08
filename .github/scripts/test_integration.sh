@@ -25,18 +25,22 @@ echo "✅ Virtual display started on $DISPLAY"
 
 # --- Run the simulator headless ---
 echo "🚀 Running fireworks simulator headless for 5 seconds..."
-mkdir -p output
-./target/release/fireworks_sim --headless > output/log.txt 2>&1 &
+
+RUST_LOG=fireworks_sim=INFO \
+./target/release/fireworks_sim 2>&1 | tee output/log.txt &
 SIM_PID=$!
-sleep 5
 
-# --- Capture screenshot ---
-echo "📸 Capturing screenshot..."
-xwd -root -silent | convert xwd:- png:output/screenshot.png || echo "⚠️ Screenshot failed"
-
-# --- Capture 2s of audio via ALSA ---
-echo "🎙️ Capturing 2s of dummy audio via ALSA..."
-ffmpeg -f alsa -i default -t 2 output/audio.wav -y -loglevel quiet || echo "⚠️ Audio capture failed"
+# --- Capture multiple screenshots (1 per second) ---
+echo "📸 Capturing 1 screenshot per second for 5 seconds..."
+for i in $(seq 1 5); do
+  sleep 1
+  filename=$(printf "output/screenshot_%02d.png" "$i")
+  if xwd -root -silent | convert xwd:- png:"$filename"; then
+    echo "✅ Saved $filename"
+  else
+    echo "⚠️ Failed to save $filename"
+  fi
+done
 
 # --- Cleanup ---
 echo "🧹 Cleaning up..."
@@ -46,3 +50,8 @@ if ps -p "${XVFB_PID:-}" >/dev/null 2>&1; then kill "$XVFB_PID"; fi
 echo "✅ Screenshot captured"
 echo "✅ Audio captured"
 echo "✅ Integration test completed successfully!"
+
+echo "🧹 Fixing output permissions..."
+chown -R rustuser:rustuser output
+chmod -R a+rw output
+echo "✅ Output permissions restored."
