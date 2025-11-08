@@ -27,8 +27,8 @@ where
         }
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
-        self.audio_engine.start_audio_thread();
+    pub fn run(&mut self, export_path: Option<&str>) -> anyhow::Result<()> {
+        self.audio_engine.start_audio_thread(export_path);
 
         // On passe les références mutables des moteurs au Renderer
         self.renderer_engine

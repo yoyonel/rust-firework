@@ -8,3 +8,6 @@
 
 # Include assets
 !assets/
+
+# github
+!.github/

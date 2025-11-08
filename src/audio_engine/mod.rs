@@ -22,3 +22,6 @@ pub use binaural_processing::binauralize_mono;
 
 pub mod audio_event;
 pub use audio_event::DopplerEvent;
+
+pub mod safewavwriter;
+pub use safewavwriter::{AudioBlock, SafeWavWriter};

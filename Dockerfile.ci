@@ -1,11 +1,12 @@
 # ========================
 # Dockerfile.ci
+# Multi-stage build with Cargo cache
 # ========================
 
-# Base image
-FROM ubuntu:22.04
+# ---------- STAGE 1: Build ----------
+FROM ubuntu:22.04 AS builder
 
-# Install dependencies
+# Install build dependencies
 RUN apt-get update && apt-get install -y \
     curl git cmake pkg-config build-essential \
     libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev \
@@ -15,21 +16,55 @@ RUN apt-get update && apt-get install -y \
     libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Rust
+# Install Rust (latest stable)
 RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Set working dir
+# Set working directory
 WORKDIR /app
 
-# Copy project
+# --- CACHE DEPENDENCIES ---
+# Copy Cargo files only (so dependencies are cached)
+COPY Cargo.toml Cargo.lock ./
+RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+RUN cargo build --release
+RUN rm -rf src
+
+# Copy full project now
 COPY . .
 
-# Build project in release mode
+# Build final release binary
 RUN cargo build --release
 
-# Ensure scripts are executable
+# ---------- STAGE 2: Runtime ----------
+FROM ubuntu:22.04 AS runtime
+
+# Install runtime dependencies (only what's needed to run/test)
+RUN apt-get update && apt-get install -y \
+    libglfw3 libgl1-mesa-glx libglu1-mesa \
+    libasound2 alsa-utils alsa-oss \
+    pulseaudio pulseaudio-utils \
+    ffmpeg xvfb x11-apps x11-utils imagemagick \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/fireworks_sim ./target/release/fireworks_sim
+
+# Copy scripts and assets
+COPY .github/scripts/test_integration.sh ./.github/scripts/test_integration.sh
+COPY assets ./assets
+
+# Ensure script executable
 RUN chmod +x .github/scripts/test_integration.sh
+
+# --- Create runtime user (mapped dynamically at runtime) ---
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN groupadd -g ${GROUP_ID} rustuser && \
+    useradd -m -u ${USER_ID} -g ${GROUP_ID} rustuser && \
+    chown -R rustuser:rustuser /app
 
 # Default command
 CMD [".github/scripts/test_integration.sh"]

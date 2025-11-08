@@ -31,6 +31,7 @@ toml = "0.9.8"
 itertools = "0.14.0"
 generational-arena = "0.2.9"
 glam = "0.30.9"
+crossbeam-channel = "0.5.15"
 
 [dev-dependencies]
 criterion = "0.7.0"

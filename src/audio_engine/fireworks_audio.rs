@@ -9,8 +9,10 @@ use crate::audio_engine::{
     binauralize_mono,
     load_audio,
     resample_linear,
+    AudioBlock,
     AudioEngine,
     // DopplerEvent,
+    SafeWavWriter,
 };
 use crate::AudioEngineSettings;
 use crate::{log_metrics, profiler::Profiler};
@@ -21,6 +23,7 @@ use hound::WavReader; // WAV file loader
 use log::{debug, info};
 use std::collections::HashMap;
 use std::collections::VecDeque; // Queue for pending sound events
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex}; // Thread-safe shared state
 use std::thread;
 use std::time::{Duration, Instant};
@@ -154,10 +157,7 @@ impl FireworksAudio3D {
         self.enqueue_sound(&self.explosion_data, pos, gain);
     }
 
-    // =========================
-    // Start Audio Thread
-    // =========================
-    pub fn start_audio_thread(&mut self) {
+    pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
         info!("🚀 Starting Audio Engine ...");
 
         let queue = self.play_queue.clone();
@@ -173,14 +173,17 @@ impl FireworksAudio3D {
         let mut last_log = Instant::now();
         let log_interval = std::time::Duration::from_secs(4); // toutes les 4 secondes
 
-        // let doppler_states_arc = Arc::new(Mutex::new(self.doppler_states.clone()));
-        // clone the doppler receiver into the audio thread
-        // let _doppler_receiver = self.doppler_receiver.clone();
-
         // Prépare les données audio à partager avec le thread audio
         let _rocket_data_ref = Arc::new(self.rocket_data.clone()); // Ce qui est zéro copie (le Arc clone est O(1)).
         let _settings = self.settings.clone();
         let _listener_pos_clone = self.listener_pos; // utile dans prepare_voice_with_doppler
+
+        let export_writer_arc: Option<Arc<Mutex<SafeWavWriter>>> = if let Some(path) = export_path {
+            let writer = Arc::new(Mutex::new(SafeWavWriter::new(path, sr)));
+            Some(writer)
+        } else {
+            None
+        };
 
         thread::spawn(move || {
             // local state inside audio thread
@@ -195,13 +198,15 @@ impl FireworksAudio3D {
             };
 
             let voices_clone = voices.clone();
-            // let _doppler_clone = doppler_states_arc.clone();
 
             // Preallocate buffers
-            let mut acc = Vec::with_capacity(block_size);
-            acc.resize(block_size, [0.0; 2]);
-            let mut chunk = Vec::with_capacity(block_size);
-            chunk.resize(block_size, [0.0; 2]);
+            let mut acc = vec![[0.0; 2]; block_size];
+            let mut chunk = vec![[0.0; 2]; block_size];
+
+            let export_writer_callback = export_writer_arc.clone(); // clone pour usage dans le callback
+
+            // Déclarer un compteur global pour les blocs audio
+            let block_index = Arc::new(AtomicU64::new(0));
 
             let stream = device
                 .build_output_stream(
@@ -211,8 +216,8 @@ impl FireworksAudio3D {
                         let _audio_frame_guard = profiler.measure("audio_frame");
 
                         let frames = data.len() / 2;
-                        // Fix: Redimensionne dynamiquement les buffers dans le callback
-                        // pour éviter des erreurs du type: range end index 766 out of range for slice of length 512
+
+                        // Redimensionnement dynamique
                         if acc.len() < frames {
                             debug!(
                                 "Audio buffer resized: acc.len={} → frames={}",
@@ -230,73 +235,30 @@ impl FireworksAudio3D {
                             chunk.resize(frames, [0.0; 2]);
                         }
 
-                        // Remplir le buffer avec du silence par défaut
-                        // for sample in data.iter_mut() {
-                        //     *sample = 0.0;
-                        // }
-                        //
-                        // ▸ 2️⃣ Reset accumulator (plus rapide que fill + iter_mut)
-                        // TODO: à vérifier !
-                        /*
-                        Méthode:        unsafe { write_bytes(...) }
-                        Sécurité:       ⚠️ Unsafe
-                        Performances:   Très rapide, memset-like, zéro overhead
-                        Notes:          Doit être exactement 0, et T doit être “plain old data”
-                         */
+                        // Reset accumulator
                         unsafe {
                             std::ptr::write_bytes(acc.as_mut_ptr(), 0, frames);
                         }
 
-                        // Reset accumulator
                         for f in acc.iter_mut().take(frames) {
                             f[0] = 0.0;
                             f[1] = 0.0;
                         }
 
-                        // Enqueue penddoppler_locking sounds
+                        // Enqueue pending sounds
                         {
-                            // let _guard = profiler.measure("enqueue_pending_sounds");
-                            let mut q: std::sync::MutexGuard<'_, VecDeque<PlayRequest>> =
-                                queue.lock().unwrap();
+                            let mut q = queue.lock().unwrap();
                             let mut voices_lock = voices_clone.lock().unwrap();
                             while let Some(req) = q.pop_front() {
                                 if let Some(v) = voices_lock.iter_mut().find(|v| !v.active) {
                                     v.reset_from_request(&req);
-                                    // info!("Nouvelle voix en attente: {:?}", v.id);
-                                    // calcul la "latence" entre l'envoi de la requête (pour jouer un son) coté renderer
-                                    // pour arriver et être traitée dans l'engine audio
                                     let latency = Instant::now().duration_since(req.sent_at);
                                     profiler.record_metric("audio latency", latency);
                                 }
                             }
-                            let nb_actives_voices =
-                                voices_lock.iter_mut().filter(|v| v.active).count();
+                            let nb_actives_voices = voices_lock.iter().filter(|v| v.active).count();
                             profiler.record_metric("nb_actives_voices", nb_actives_voices);
                         }
-
-                        // {
-                        //     let _doppler_guard = profiler.measure("update_doppler");
-                        //     let mut doppler_lock = doppler_clone.lock().unwrap();
-
-                        //     let dt = block_size as f32 / sr as f32; // durée du bloc audio
-                        //     for state in doppler_lock.iter_mut() {
-                        //         // Met à jour la position et vitesse simulée de la rocket
-                        //         state.pos.0 += state.vel.0 * dt;
-                        //         state.pos.1 += state.vel.1 * dt;
-
-                        //         // Calcul Doppler simplifié
-                        //         let dx = state.pos.0 - listener_pos_clone.0;
-                        //         let dy = state.pos.1 - listener_pos_clone.1;
-                        //         let distance = (dx * dx + dy * dy).sqrt();
-
-                        //         // Approche simple : facteur de pitch Doppler = (c / (c - v_r))
-                        //         // v_r = vitesse relative vers l’auditeur sur l’axe ligne de visée
-                        //         let relative_velocity =
-                        //             (state.vel.0 * dx + state.vel.1 * dy) / distance;
-                        //         let c = 343.0; // m/s
-                        //         state.doppler_factor = c / (c - relative_velocity);
-                        //     }
-                        // }
 
                         // Process each active voice
                         {
@@ -315,25 +277,9 @@ impl FireworksAudio3D {
                                     continue;
                                 }
 
-                                // let n = (total_len - start).min(frames);
                                 let n = (total_len - start).min(frames).min(chunk.len());
                                 chunk[..n]
                                     .copy_from_slice(&v.data.as_ref().unwrap()[start..start + n]);
-
-                                // // Si cette voix est associée à un DopplerState
-                                // // Si un DopplerState correspond
-                                // if let Some(doppler) = doppler_clone
-                                //     .lock()
-                                //     .unwrap()
-                                //     .iter()
-                                //     .find(|d| d.voice_index == v.id)
-                                // {
-                                //     apply_doppler_to_chunk(
-                                //         v,
-                                //         doppler.doppler_factor,
-                                //         &mut chunk[..n],
-                                //     );
-                                // }
 
                                 // Apply fade-in/fade-out
                                 for (i, item) in chunk.iter_mut().enumerate().take(n) {
@@ -378,14 +324,28 @@ impl FireworksAudio3D {
 
                         // Write to CPAL buffer with global gain and soft clipping
                         profiler.profile_block("write_cpal_buffer", || {
-                            for i in 0..frames.min(acc.len()) {
-                                data[2 * i] = (acc[i][0] * global_gain).tanh();
-                                data[2 * i + 1] = (acc[i][1] * global_gain).tanh();
+                            for (i, sample) in acc.iter_mut().take(frames).enumerate() {
+                                data[2 * i] = (sample[0] * global_gain).tanh();
+                                data[2 * i + 1] = (sample[1] * global_gain).tanh();
                             }
                         });
 
+                        if let Some(writer_arc) = &export_writer_callback {
+                            // 🔹 Reuse 'data' instead of recalculating
+                            let mut frames_vec = Vec::with_capacity(frames);
+                            for i in 0..frames {
+                                frames_vec.push([data[2 * i], data[2 * i + 1]]);
+                            }
+
+                            let block_number = block_index.fetch_add(1, Ordering::Relaxed);
+                            let block = AudioBlock {
+                                index: block_number,
+                                frames: frames_vec,
+                            };
+                            writer_arc.lock().unwrap().push_block(block);
+                        }
+
                         drop(_audio_frame_guard);
-                        // 🔸 end global frame
 
                         // affichage périodique
                         if last_log.elapsed() >= log_interval {
@@ -399,17 +359,37 @@ impl FireworksAudio3D {
                 .unwrap();
             stream.play().unwrap();
 
+            // 🔊 Thread audio: attente jusqu’à signal de stop
             let (lock, cvar) = &*running_pair_clone;
             let mut running = lock.lock().unwrap();
             info!("🔊 Thread audio: en attente ...");
             while *running {
-                // attend sur la Condvar, timeout optionnel pour éviter deadlock
                 let result = cvar
                     .wait_timeout(running, Duration::from_millis(500))
                     .unwrap();
                 running = result.0;
             }
+
+            // ▸ Push final silence pour éviter ALSA underrun
+            {
+                if let Some(writer_arc) = &export_writer_arc {
+                    let silence_block = vec![[0.0; 2]; block_size];
+                    let block = AudioBlock {
+                        index: 0,
+                        frames: silence_block,
+                    };
+                    writer_arc.lock().unwrap().push_block(block);
+                }
+            }
+
+            // Drop du stream pour fermer CPAL proprement
+            drop(stream);
             info!("🔇 Thread audio: terminé");
+
+            // 🔹 Stop et flush final du writer
+            if let Some(writer_arc) = export_writer_arc {
+                writer_arc.lock().unwrap().stop();
+            }
         });
     }
 
@@ -433,8 +413,8 @@ impl AudioEngine for FireworksAudio3D {
         self.play_explosion(pos, gain)
     }
 
-    fn start_audio_thread(&mut self) {
-        self.start_audio_thread()
+    fn start_audio_thread(&mut self, _export_path: Option<&str>) {
+        self.start_audio_thread(_export_path)
     }
 
     fn stop_audio_thread(&mut self) {
@@ -493,7 +473,7 @@ mod tests {
             explosion_path: "assets/sounds/explosion.wav".into(),
             listener_pos: (0.0, 0.0),
             sample_rate: 1000,
-            block_size: 1024,
+            block_size: 1024 * 4,
             max_voices: 16,
             settings: AudioEngineSettings::default(),
             // doppler_receiver: Some(doppler_queue.receiver.clone()),
