@@ -13,7 +13,7 @@ impl AudioEngine for DummyAudio {
     fn set_listener_position(&mut self, _pos: (f32, f32)) {}
     fn play_rocket(&self, _pos: (f32, f32), _gain: f32) {}
     fn play_explosion(&self, _pos: (f32, f32), _gain: f32) {}
-    fn start_audio_thread(&mut self) {}
+    fn start_audio_thread(&mut self, _export_path: Option<&str>) {}
     fn stop_audio_thread(&mut self) {}
 }
 
@@ -114,7 +114,7 @@ impl fireworks_sim::audio_engine::AudioEngine for LoggingAudio {
         self.log.borrow_mut().push("play_explosion called".into());
     }
 
-    fn start_audio_thread(&mut self) {
+    fn start_audio_thread(&mut self, _export_path: Option<&str>) {
         self.log
             .borrow_mut()
             .push("start_audio_thread called".into());

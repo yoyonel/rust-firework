@@ -19,7 +19,7 @@ fn test_renderer_error_triggers_proper_cleanup() {
         log: Rc<RefCell<Vec<String>>>,
     }
     impl AudioEngine for ErrorAudio {
-        fn start_audio_thread(&mut self) {
+        fn start_audio_thread(&mut self, _export_path: Option<&str>) {
             self.log.borrow_mut().push("audio.start".into());
         }
         fn stop_audio_thread(&mut self) {
@@ -89,7 +89,7 @@ fn test_renderer_error_triggers_proper_cleanup() {
     let mut sim = Simulator::new(renderer, physic, audio);
 
     // --- Simulation d'une exécution échouée ---
-    let run_result = sim.run();
+    let run_result = sim.run(None);
     assert!(run_result.is_err(), "Expected renderer to fail");
 
     // Même en cas d’erreur, on appelle `close()` explicitement

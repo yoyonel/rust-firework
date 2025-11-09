@@ -1,4 +1,4 @@
-name: 🧨 CI Pipeline
+name: Rust CI with Coverage
 
 on:
   push:           # sur chaque push

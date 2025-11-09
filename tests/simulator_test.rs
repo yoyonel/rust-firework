@@ -17,7 +17,7 @@ fn test_simulator_with_dummy_engines() -> anyhow::Result<()> {
     let audio = DummyAudio;
     let physic = DummyPhysic;
     let mut simulator = Simulator::new(renderer, physic, audio);
-    simulator.run().unwrap();
+    simulator.run(None).unwrap();
     simulator.close();
     println!("Simulator closed.");
 
@@ -31,7 +31,7 @@ fn test_renderer_called_by_simulator() {
     let physic = DummyPhysic;
 
     let mut sim = Simulator::new(renderer, physic, audio);
-    sim.run().unwrap();
+    sim.run(None).unwrap();
     sim.close();
 
     assert_eq!(
@@ -49,7 +49,7 @@ fn test_audio_called_by_renderer() {
     let physic = LoggingPhysic { log: vec![] };
 
     let mut sim = Simulator::new(renderer, physic, audio);
-    sim.run().unwrap();
+    sim.run(None).unwrap();
     sim.close();
 
     // On vérifie que le Renderer a bien appelé start_audio_thread
@@ -72,7 +72,7 @@ fn test_physic_called_by_renderer() {
     let physic = LoggingPhysic { log: vec![] };
 
     let mut sim = Simulator::new(renderer, physic, audio);
-    sim.run().unwrap();
+    sim.run(None).unwrap();
     sim.close();
 
     // On vérifie que le Renderer a bien appelé update et set_width
@@ -93,7 +93,7 @@ fn test_call_order_in_simulator_run_and_close() -> anyhow::Result<()> {
         log: Rc<RefCell<Vec<String>>>,
     }
     impl AudioEngine for OrderedAudio {
-        fn start_audio_thread(&mut self) {
+        fn start_audio_thread(&mut self, _export_path: Option<&str>) {
             self.log.borrow_mut().push("audio.start".into());
         }
         fn stop_audio_thread(&mut self) {
@@ -166,7 +166,7 @@ fn test_call_order_in_simulator_run_and_close() -> anyhow::Result<()> {
     let mut sim = Simulator::new(renderer, physic, audio);
 
     // --- Exécution du simulateur ---
-    sim.run()?;
+    sim.run(None)?;
     sim.close();
 
     // --- Vérification de l’ordre des appels ---
