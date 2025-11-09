@@ -26,7 +26,7 @@ fn run_failure_test(failure: EngineFailure) {
         fail: bool,
     }
     impl AudioEngine for MockAudio {
-        fn start_audio_thread(&mut self) {
+        fn start_audio_thread(&mut self, _export_path: Option<&str>) {
             self.log.borrow_mut().push("audio.start".into());
             if self.fail {
                 panic!("AudioEngine failed at start_audio_thread");
@@ -117,7 +117,7 @@ fn run_failure_test(failure: EngineFailure) {
     let mut sim = Simulator::new(renderer, physic, audio);
 
     // --- Exécution & vérification ---
-    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sim.run()));
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sim.run(None)));
 
     // On tolère deux cas :
     // - panic (p.ex. Audio/Physic)
