@@ -72,11 +72,10 @@ jobs:
         name: fireworks-output
         path: output/
         retention-days: 7
-
-    # 8️⃣ Publish HTML report to GitHub Pages
-    - name: 🌐 Publish report to GitHub Pages
-      uses: peaceiris/actions-gh-pages@v4
-      with:
-        github_token: ${{ secrets.GITHUB_TOKEN }}
-        publish_dir: ./output
-        publish_branch: gh-pages
+    # # 8️⃣ Publish HTML report to GitHub Pages
+    # - name: 🌐 Publish report to GitHub Pages
+    #   uses: peaceiris/actions-gh-pages@v4
+    #   with:
+    #     github_token: ${{ secrets.GITHUB_TOKEN }}
+    #     publish_dir: ./output
+    #     publish_branch: gh-pages
