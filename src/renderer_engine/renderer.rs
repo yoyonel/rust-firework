@@ -251,7 +251,41 @@ impl Renderer {
         self.max_particles_on_gpu = new_max;
     }
 
-    /// Remplit le buffer GPU directement
+    /// Remplit directement le buffer GPU avec les données des particules actives.
+    ///
+    /// Cette méthode copie les données de toutes les particules actives fournies par
+    /// le moteur physique `physic` dans le buffer GPU mappé en mémoire CPU (`self.mapped_ptr`),
+    /// jusqu'à un maximum défini par `self.max_particles_on_gpu`.
+    ///
+    /// # Fonctionnalité
+    /// - Chaque particule physique active est convertie en `ParticleGPU` via `Particle::to_particle_gpu()`.
+    /// - Les données sont écrites directement dans le slice mappé `gpu_slice`, garantissant que
+    ///   la mémoire GPU est correctement mise à jour.
+    /// - La méthode renvoie le nombre de particules copiées dans le buffer GPU (`count`),
+    ///   ce qui peut être utilisé pour des opérations ultérieures (par exemple le rendu).
+    /// - Après avoir rempli le slice, un flush explicite est effectué via
+    ///   `gl::FlushMappedBufferRange` pour que le GPU prenne en compte les modifications.
+    ///
+    /// # Sécurité et `unsafe`
+    /// - La méthode utilise un bloc `unsafe` car elle crée un slice Rust mutable (`gpu_slice`)
+    ///   à partir d'un pointeur brut mappé sur la mémoire GPU (`self.mapped_ptr`).
+    /// - Les garanties suivantes sont respectées pour que cette opération soit sûre :
+    ///   1. `self.mapped_ptr` pointe vers une mémoire valide et correctement alignée
+    ///      pour `ParticleGPU`.
+    ///   2. Le slice a une longueur exacte de `self.max_particles_on_gpu`, garantissant
+    ///      que l’on n’accède jamais hors limites.
+    ///   3. La boucle `for` itère en parallèle sur le slice GPU et les particules actives via `zip`,
+    ///      donc aucune écriture ne dépasse la capacité du slice.
+    /// - Chaque élément du slice est écrit **en place** (`*dst = …`), et le flush est effectué
+    ///   après toutes les écritures pour synchroniser le GPU.
+    ///
+    /// # Remarques
+    /// - Il est important de **ne pas utiliser de `map()` ou `collect()` ici**, car la mémoire
+    ///   mappée GPU requiert des écritures en place. Les transformations fonctionnelles pourraient
+    ///   entraîner des écritures incorrectes ou hors ordre, rendant le GPU incapable de lire les
+    ///   données correctement.
+    /// - Cette méthode est conçue pour être rapide et sûre, tout en restant compatible avec
+    ///   des milliers de particules dans un buffer mappé CPU ↔ GPU.
     pub fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
         let mut count = 0;
 
@@ -259,22 +293,19 @@ impl Renderer {
             // Crée un slice Rust sûr sur le buffer GPU
             let gpu_slice =
                 std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
+
             // Itère en parallèle sur les particules physiques actives et les slots GPU disponibles
             // le zip se fait (dans l'ordre) du slice gpu vers les particules actives,
             // donc la taille max du slice gpu ne pourra (implicitement) jamais être dépassée.
-            for (dst, src) in gpu_slice.iter_mut().zip(physic.active_particles()) {
-                *dst = ParticleGPU {
-                    pos_x: src.pos.x,
-                    pos_y: src.pos.y,
-                    col_r: src.color.x,
-                    col_g: src.color.y,
-                    col_b: src.color.z,
-                    life: src.life,
-                    max_life: src.max_life,
-                    size: src.size,
-                };
-                count += 1;
+            for (i, (dst, src)) in gpu_slice
+                .iter_mut()
+                .zip(physic.active_particles())
+                .enumerate()
+            {
+                *dst = src.to_particle_gpu();
+                count = i + 1;
             }
+
             // Flush explicite de la zone modifiée pour que le GPU voit les changements
             let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
             gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
