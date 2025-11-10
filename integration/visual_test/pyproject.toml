@@ -1,11 +1,13 @@
 [project]
-name = "visual-test"
-version = "0.1.0"
+dependencies = [
+  "matplotlib>=3.10.7",
+  "numpy>=2.3.4",
+  "opencv-python-headless>=4.11.0.86",
+  "pydantic>=2.12.4",
+  "typer[all]>=0.20.0",
+]
 description = "Add your description here"
+name = "visual-test"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = [
-    "matplotlib>=3.10.7",
-    "numpy>=2.3.4",
-    "opencv-python-headless>=4.11.0.86",
-]
+version = "0.1.0"

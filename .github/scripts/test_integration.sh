@@ -32,15 +32,20 @@ SIM_PID=$!
 
 # --- Capture multiple screenshots (1 per second) ---
 echo "📸 Capturing 5 screenshot per second for 5 seconds..."
-for i in $(seq 1 25); do
-  sleep 0.2
-  filename=$(printf "output/screenshot_%02d.png" "$i")
+# for i in $(seq 1 25); do
+for i in $(seq -w 0 299); do
+  filename="output/screenshot_${i}.png"
   if xwd -root -silent | convert xwd:- png:"$filename"; then
     echo "✅ Saved $filename"
   else
     echo "⚠️ Failed to save $filename"
   fi
+  sleep 0.016   # ~60fps
 done
+
+ffmpeg -framerate 60 -pattern_type glob -i 'output/screenshot_*.png' \
+  -c:v libx264 -pix_fmt yuv420p -preset veryfast -flags2 +export_mvs \
+  output/output.mp4
   
 # --- Cleanup ---
 echo "🧹 Cleaning up..."
