@@ -2,33 +2,87 @@ use crate::physic_engine::{config::PhysicConfig, particle::Particle};
 use glam::{Vec2, Vec4 as Color};
 use log::debug;
 use rand::Rng;
-use std::sync::atomic::AtomicU64;
-use std::sync::atomic::Ordering;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 // TODO: revoir la stratégie autour du compteur atomique, si c'est vraiment utile et si c'est au bon endroit !
+/// Compteur global pour générer des ID uniques pour les rockets
 pub static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub const NB_PARTICLES_PER_EXPLOSION: usize = 256;
 pub const NB_PARTICLES_PER_TRAIL: usize = 64;
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct Rocket {
-    // Public
-    pub id: u64,
-    pub pos: Vec2,      // position actuelle
-    pub prev_pos: Vec2, // position précédente
+/// Gestion globale des particules d’explosion.
+/// Chaque rocket ne possède plus directement ses `explosion_particles`.
+/// Elle garde seulement une référence (via indices) dans le manager.
+#[derive(Debug, Clone)]
+pub struct ParticlesManager {
+    /// Tableau global de particules
+    particles: Vec<Particle>,
 
-    // TODO
+    /// Nombre de particules par explosion
+    per_explosion: usize,
+}
+
+impl ParticlesManager {
+    /// Crée un nouveau manager avec `max_explosions` et `per_explosion` particules par explosion
+    pub fn new(max_explosions: usize, per_explosion: usize) -> Self {
+        Self {
+            particles: vec![Particle::default(); max_explosions * per_explosion],
+            per_explosion,
+        }
+    }
+
+    /// Alloue un bloc de particules pour une explosion et retourne le range associé
+    pub fn allocate_explosion(&mut self) -> Option<std::ops::Range<usize>> {
+        let total = self.particles.len();
+        let per_block = self.per_explosion;
+
+        for start in (0..total).step_by(per_block) {
+            let end = start + per_block;
+            if self.particles[start..end].iter().all(|p| !p.active) {
+                return Some(start..end);
+            }
+        }
+
+        None
+    }
+
+    /// Renvoie un slice immuable pour un bloc donné
+    pub fn get_particles(&self, range: &std::ops::Range<usize>) -> &[Particle] {
+        &self.particles[range.clone()]
+    }
+
+    /// Renvoie un slice mutable pour un bloc donné
+    pub fn get_particles_mut(&mut self, range: &std::ops::Range<usize>) -> &mut [Particle] {
+        &mut self.particles[range.clone()]
+    }
+}
+
+/// Représentation d’une fusée
+#[repr(C)]
+#[derive(Debug, Clone)]
+pub struct Rocket {
+    /// ID unique de la rocket
+    pub id: u64,
+
+    /// Position actuelle et précédente
+    pub pos: Vec2,
+    pub prev_pos: Vec2,
+
+    /// Vitesse et couleur
     pub vel: Vec2,
     pub color: Color,
+
+    /// État de la fusée
     pub exploded: bool,
     pub active: bool,
 
-    pub explosion_particles: [Particle; NB_PARTICLES_PER_EXPLOSION],
+    /// Indices dans le `ParticlesManager` pour les particules d’explosion
+    pub explosion_particle_indices: Option<std::ops::Range<usize>>,
+
+    /// Particules de trail (toujours gérées localement)
     pub trail_particles: [Particle; NB_PARTICLES_PER_TRAIL],
     pub trail_index: usize,
-
     pub trail_accum: f32,
     pub last_trail_pos: Vec2,
 }
@@ -40,10 +94,8 @@ impl Default for Rocket {
 }
 
 impl Rocket {
-    pub fn new(config: &PhysicConfig) -> Self {
-        assert!(config.particles_per_explosion <= NB_PARTICLES_PER_EXPLOSION);
-        assert!(config.particles_per_trail <= NB_PARTICLES_PER_TRAIL);
-
+    /// Crée une nouvelle fusée (non active)
+    pub fn new(_config: &PhysicConfig) -> Self {
         Self {
             id: ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             pos: Vec2::default(),
@@ -52,7 +104,7 @@ impl Rocket {
             color: Color::ONE,
             exploded: false,
             active: false,
-            explosion_particles: [Particle::default(); NB_PARTICLES_PER_EXPLOSION],
+            explosion_particle_indices: None,
             trail_particles: [Particle::default(); NB_PARTICLES_PER_TRAIL],
             trail_index: 0,
             trail_accum: 0.0,
@@ -60,41 +112,50 @@ impl Rocket {
         }
     }
 
-    pub fn active_particles(&self) -> impl Iterator<Item = &Particle> {
-        // self.trail_particles et self.explosion_particles sont alloués sur la heap (tailles statiques),
-        // donc le iter().filter(...) n'est pas si couteux, mais à vérifier !
-        self.trail_particles
-            .iter()
-            .filter(|p| p.active)
-            .chain(self.explosion_particles.iter().filter(|p| p.active))
+    /// Retourne un itérateur sur toutes les particules actives de la fusée
+    pub fn active_particles<'a>(
+        &'a self,
+        particles_manager: &'a ParticlesManager,
+    ) -> impl Iterator<Item = &'a Particle> {
+        let trails = self.trail_particles.iter().filter(|p| p.active);
+        let explosions = self
+            .explosion_particle_indices
+            .iter() // itère sur Option<&Range> directement
+            .flat_map(|range| particles_manager.get_particles(range)) // idem flatten
+            .filter(|p| p.active);
+        trails.chain(explosions)
     }
-}
 
-impl Rocket {
     /// Met à jour la fusée (mouvement, trails, explosions)
-    pub fn update(&mut self, mut rng: impl Rng, dt: f32) {
+    pub fn update(
+        &mut self,
+        rng: &mut impl Rng,
+        dt: f32,
+        particles_manager: &mut ParticlesManager,
+    ) {
         if !self.active {
             return;
         }
 
         const GRAVITY: Vec2 = Vec2::new(0.0, -200.0);
 
-        // === Movement ===
         self.update_movement(dt, GRAVITY);
-
-        // === Trails ===
         self.update_trails(dt, GRAVITY);
-
-        // === Explosions ===
-        self.update_explosions(dt, &mut rng, GRAVITY);
-
-        // === Inactive rocket check ===
-        self.remove_inactive_rockets();
+        self.update_explosions(dt, rng, GRAVITY, particles_manager);
+        self.remove_inactive_rockets(particles_manager);
     }
 
-    fn remove_inactive_rockets(&mut self) {
-        // === Rocket inactive once explosion finished ===
-        if self.exploded && self.explosion_particles.iter().all(|p| !p.active) {
+    fn remove_inactive_rockets(&mut self, particles_manager: &ParticlesManager) {
+        // La rocket devient inactive une fois toutes les particules d’explosion terminées
+        let exploded_done = match self.explosion_particle_indices {
+            Some(ref range) => particles_manager
+                .get_particles(range)
+                .iter()
+                .all(|p| !p.active),
+            None => true,
+        };
+
+        if self.exploded && exploded_done {
             debug!(
                 "Rocket {:?} inactive: all explosion particles are inactive",
                 self.id
@@ -103,7 +164,6 @@ impl Rocket {
         }
     }
 
-    /// Met à jour la position et la vitesse de la fusée
     fn update_movement(&mut self, dt: f32, gravity: Vec2) {
         self.vel += gravity * dt;
         self.pos += self.vel * dt;
@@ -170,26 +230,49 @@ impl Rocket {
         }
     }
 
-    /// Gère la génération et la mise à jour des particules d’explosion
-    fn update_explosions(&mut self, dt: f32, rng: &mut impl Rng, gravity: Vec2) {
+    fn update_explosions(
+        &mut self,
+        dt: f32,
+        rng: &mut impl Rng,
+        gravity: Vec2,
+        particles_manager: &mut ParticlesManager,
+    ) {
         if !self.exploded && self.vel.y <= 0.0 {
-            self.exploded = true;
+            self.trigger_explosion(rng, particles_manager);
+        }
 
-            for p in self.explosion_particles.iter_mut() {
+        if let Some(range) = &self.explosion_particle_indices {
+            let slice = particles_manager.get_particles_mut(range);
+            for p in slice.iter_mut().filter(|p| p.active) {
+                p.vel.y += gravity.y * dt;
+                p.pos += p.vel * dt;
+                p.life -= dt;
+                p.active = p.life > 0.0;
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn trigger_explosion(&mut self, rng: &mut impl Rng, particles_manager: &mut ParticlesManager) {
+        self.exploded = true;
+
+        // Alloue les particules dans le manager si nécessaire
+        if self.explosion_particle_indices.is_none() {
+            self.explosion_particle_indices = particles_manager.allocate_explosion();
+        }
+
+        // Update explosions particles
+        if let Some(range) = &self.explosion_particle_indices {
+            let slice = particles_manager.get_particles_mut(range);
+            for p in slice.iter_mut() {
                 let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
                 let speed = rng.random_range(60.0..200.0);
-                // Durée de vie de l'explosion
                 let life = rng.random_range(0.75..1.5);
 
                 *p = Particle {
                     pos: self.pos,
                     vel: Vec2::from_angle(angle) * speed,
-                    color: Color::new(
-                        rng.random_range(0.5..1.0),
-                        rng.random_range(0.5..1.0),
-                        rng.random_range(0.5..1.0),
-                        1.0,
-                    ),
+                    color: self.color,
                     life,
                     max_life: life,
                     size: rng.random_range(3.0..6.0),
@@ -197,22 +280,9 @@ impl Rocket {
                 };
             }
         }
-
-        // Update explosions
-        for p in self.explosion_particles.iter_mut().filter(|p| p.active) {
-            p.vel.y += gravity.y * dt;
-            p.pos += p.vel * dt;
-            p.life -= dt;
-            p.active = p.life > 0.0;
-        }
     }
-}
 
-impl Rocket {
-    /// Réinitialise une fusée inactive pour la réutiliser sans réallocation.
-    ///
-    /// # But
-    /// Évite d’allouer et de recréer des structures Rocket dans l’arène à chaque lancement.
+    /// Réinitialise une fusée inactive pour la réutiliser sans réallocation
     pub fn reset(
         &mut self,
         cfg: &PhysicConfig,
@@ -244,12 +314,9 @@ impl Rocket {
         self.trail_index = 0;
         self.active = true;
         self.exploded = false;
+        self.explosion_particle_indices = None;
 
-        // On ne recrée pas les buffers → on les vide logiquement
         for p in self.trail_particles.iter_mut() {
-            p.active = false;
-        }
-        for p in self.explosion_particles.iter_mut() {
             p.active = false;
         }
     }
