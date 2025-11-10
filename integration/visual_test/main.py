@@ -149,6 +149,13 @@ def compute_deltas(results):
     for i in range(1, len(results)):
         prev = results[i - 1]["img_data"]
         curr = results[i]["img_data"]
+        if (
+            abs(prev.shape[0] - curr.shape[0]) > 50
+            or abs(prev.shape[1] - curr.shape[1]) > 50
+        ):
+            print(f"⚠️ Skipping delta for frames {i - 1} and {i} (dimension mismatch)")
+            deltas.append(0.0)
+            continue
         deltas.append(np.mean(np.abs(curr - prev)))
     return deltas
 
