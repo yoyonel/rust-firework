@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    rocket::{Rocket, ROCKET_ID_COUNTER},
+    rocket::{ParticlesManager, Rocket, ROCKET_ID_COUNTER},
     types::UpdateResult,
     PhysicEngine,
 };
@@ -28,6 +28,8 @@ pub struct PhysicEngineFireworks {
     config: PhysicConfig,
     rocket_margin_min_x: f32,
     rocket_margin_max_x: f32,
+
+    particles_manager: ParticlesManager,
 }
 
 impl PhysicEngineFireworks {
@@ -59,6 +61,10 @@ impl PhysicEngineFireworks {
             config: config.clone(),
             rocket_margin_min_x: 0.0,
             rocket_margin_max_x: 0.0,
+            particles_manager: ParticlesManager::new(
+                config.max_rockets,
+                config.particles_per_explosion,
+            ),
         };
 
         engine.next_rocket_interval = engine.compute_next_interval();
@@ -148,7 +154,7 @@ impl PhysicEngineFireworks {
         if self.time_since_last_rocket >= self.next_rocket_interval {
             if let Some(r) = self.spawn_rocket() {
                 debug!("🚀 Rocket spawned at ({}, {})", r.pos.x, r.pos.y);
-                new_rocket = Some(*r);
+                new_rocket = Some(r.clone());
                 self.time_since_last_rocket = 0.0;
                 self.next_rocket_interval = self.compute_next_interval();
             }
@@ -161,7 +167,10 @@ impl PhysicEngineFireworks {
             if let Some(rocket) = self.rockets.get_mut(idx) {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
-                rocket.update(&mut self.rng, dt);
+
+                // rocket.update(&mut self.rng, dt);
+                rocket.update(&mut self.rng, dt, &mut self.particles_manager);
+
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
                 triggered_count += (!exploded_before && rocket.exploded) as usize;
@@ -202,7 +211,7 @@ impl PhysicEngine for PhysicEngineFireworks {
             self.active_indices
                 .iter()
                 .filter_map(|&idx| self.rockets.get(idx))
-                .flat_map(|r| r.active_particles()),
+                .flat_map(|r| r.active_particles(&self.particles_manager)),
         )
     }
 
