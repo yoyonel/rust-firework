@@ -5,7 +5,9 @@ use fireworks_sim::physic_engine::{particle::Particle, rocket::Rocket, types::Up
 use fireworks_sim::renderer_engine::RendererEngine;
 use std::cell::RefCell;
 
+#[allow(unused)]
 pub struct DummyAudio;
+
 impl AudioEngine for DummyAudio {
     fn get_listener_position(&self) -> (f32, f32) {
         (0.0, 0.0)
