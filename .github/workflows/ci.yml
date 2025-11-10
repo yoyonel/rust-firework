@@ -1,16 +1,19 @@
 name: Rust CI with Coverage
 
 on:
-  push:           # sur chaque push
+  push:
+    # sur chaque push
     branches:
-      - main
-      - develop
-  pull_request:   # sur chaque pull request
+    - master
+    - develop
+  pull_request:
+    # sur chaque pull request
     branches:
-      - main
-  workflow_dispatch:  # permet le lancement manuellement du workflow
+    - master
+    - develop
+  workflow_dispatch: # permet le lancement manuellement du workflow
   schedule:
-    - cron: '0 0 * * *' # tous les jours à minuit
+  - cron: '0 0 * * *' # tous les jours à minuit
 
 jobs:
   build-and-test:
@@ -22,111 +25,111 @@ jobs:
       CARGO_TERM_COLOR: always
 
     steps:
-      # --- Étape 1 : Checkout du code ---
-      - uses: actions/checkout@v4
+    # --- Étape 1 : Checkout du code ---
+    - uses: actions/checkout@v4
 
-      # 🦀 2. Installation de Rust toolchain
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: llvm-tools-preview
+    # 🦀 2. Installation de Rust toolchain
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: ${{ env.RUST_VERSION }}
+        components: llvm-tools-preview
 
-      # --- Étape 3 : Installer les outils système ---
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake g++ \
-            libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev \
-            libxrandr-dev libxinerama-dev libglu1-mesa-dev \
-            libasound2-dev alsa-utils alsa-oss \
-            pulseaudio pulseaudio-utils \
-            xvfb xauth pkg-config make git ca-certificates curl
+    # --- Étape 3 : Installer les outils système ---
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential cmake g++ \
+          libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev \
+          libxrandr-dev libxinerama-dev libglu1-mesa-dev \
+          libasound2-dev alsa-utils alsa-oss \
+          pulseaudio pulseaudio-utils \
+          xvfb xauth pkg-config make git ca-certificates curl
 
-      # 🧰 3. Cache rustup + toolchain LLVM
-      - name: Cache Rustup and LLVM tools
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.rustup/toolchains
-            ~/.rustup/components
-          key: ${{ runner.os }}-rustup-${{ env.RUST_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-rustup-
-      
-      # ⚡ 4. Cache Cargo registry & git & bin (téléchargement dépendances)
-      - name: Cache Cargo registry & git & bin
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
+    # 🧰 3. Cache rustup + toolchain LLVM
+    - name: Cache Rustup and LLVM tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.rustup/toolchains
+          ~/.rustup/components
+        key: ${{ runner.os }}-rustup-${{ env.RUST_VERSION }}
+        restore-keys: |
+          ${{ runner.os }}-rustup-
 
-      # 🧱 5. Cache du répertoire target (artefacts compilés)
-      - name: Cache Cargo target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-
-            ${{ runner.os }}-cargo-target-
-      
-      # --- Installation ultra rapide de sccache (binaire précompilé) ---
-      - name: Install sccache (binary)
-        run: |
-          SCCACHE_VERSION="0.7.4"
-          curl -L "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o sccache.tar.gz
-          tar xzf sccache.tar.gz
-          sudo mv sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache /usr/local/bin/
-          sccache --version
-          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
-      
-      - name: SCCache start server
-        run: sccache --start-server
+    # ⚡ 4. Cache Cargo registry & git & bin (téléchargement dépendances)
+    - name: Cache Cargo registry & git & bin
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ~/.cargo/bin
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-registry-
 
-       # 💾 7. Cache sccache binaire (stocke les artefacts compilés)
-      - name: Cache sccache binaries
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/sccache
-          key: ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-
-            ${{ runner.os }}-sccache-
-      
-      # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
-      - name: Install cargo-llvm-cov
-        run: |
-          if ! command -v cargo-llvm-cov &> /dev/null; then
-            cargo install cargo-llvm-cov --locked
-          else
-            echo "cargo-llvm-cov already installed, skipping..."
-          fi
+    # 🧱 5. Cache du répertoire target (artefacts compilés)
+    - name: Cache Cargo target directory
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-
+          ${{ runner.os }}-cargo-target-
 
-      # --- Étape 5 : Build du projet ---
-      - name: Build project
-        run: |
-          cargo build --release
+    # --- Installation ultra rapide de sccache (binaire précompilé) ---
+    - name: Install sccache (binary)
+      run: |
+        SCCACHE_VERSION="0.7.4"
+        curl -L "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o sccache.tar.gz
+        tar xzf sccache.tar.gz
+        sudo mv sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache /usr/local/bin/
+        sccache --version
+        echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
 
-      # --- Étape 6 : Lancer Xvfb pour les tests graphiques ---
-      - name: Start virtual display
-        run: |
-          rm -f /tmp/.X99-lock
-          Xvfb :99 -screen 0 1024x768x24 & 
-          sleep 2
-    
-      # --- Étape 8 : Lancer les tests avec coverage ---
-      - name: Run tests with coverage
-        run: |
-          cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
+    - name: SCCache start server
+      run: sccache --start-server
 
-      - name: SCCache stop server
-        run: |
-          sccache --show-stats
-          sccache --stop-server
+    # 💾 7. Cache sccache binaire (stocke les artefacts compilés)
+    - name: Cache sccache binaries
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/sccache
+        key: ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-
+          ${{ runner.os }}-sccache-
+
+    # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
+    - name: Install cargo-llvm-cov
+      run: |
+        if ! command -v cargo-llvm-cov &> /dev/null; then
+          cargo install cargo-llvm-cov --locked
+        else
+          echo "cargo-llvm-cov already installed, skipping..."
+        fi
+
+    # --- Étape 5 : Build du projet ---
+    - name: Build project
+      run: |
+        cargo build --release
+
+    # --- Étape 6 : Lancer Xvfb pour les tests graphiques ---
+    - name: Start virtual display
+      run: |
+        rm -f /tmp/.X99-lock
+        Xvfb :99 -screen 0 1024x768x24 & 
+        sleep 2
+
+    # --- Étape 8 : Lancer les tests avec coverage ---
+    - name: Run tests with coverage
+      run: |
+        cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
+
+    - name: SCCache stop server
+      run: |
+        sccache --show-stats
+        sccache --stop-server

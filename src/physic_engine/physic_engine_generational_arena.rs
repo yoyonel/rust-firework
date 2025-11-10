@@ -1,14 +1,17 @@
+use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::{debug, info};
 use rand::Rng;
 use std::cmp::max;
-
-use generational_arena::{Arena, Index};
+use std::sync::atomic::Ordering;
 
 use crate::physic_engine::{
-    config::PhysicConfig, particle::Particle, rocket::Rocket, types::UpdateResult, PhysicEngine,
+    config::PhysicConfig,
+    particle::Particle,
+    rocket::{Rocket, ROCKET_ID_COUNTER},
+    types::UpdateResult,
+    PhysicEngine,
 };
-use glam::{Vec2, Vec4 as Color};
 
 #[derive(Debug)]
 pub struct PhysicEngineFireworks {
@@ -19,7 +22,6 @@ pub struct PhysicEngineFireworks {
 
     time_since_last_rocket: f32,
     next_rocket_interval: f32,
-    // triggered_count: usize,
     window_width: f32,
     rng: rand::rngs::ThreadRng,
 
@@ -39,6 +41,10 @@ impl PhysicEngineFireworks {
             free_indices.push(idx);
         }
 
+        // reset counter for rocket
+        ROCKET_ID_COUNTER.store(0, Ordering::Relaxed);
+
+        // il y a autant d'explositions
         let triggered_explosions = vec![Particle::default(); config.max_rockets];
 
         let mut engine = Self {
@@ -48,7 +54,6 @@ impl PhysicEngineFireworks {
             triggered_explosions,
             time_since_last_rocket: 0.0,
             next_rocket_interval: 0.0,
-            // triggered_count: 0,
             window_width,
             rng: rand::rng(),
             config: config.clone(),
@@ -90,8 +95,6 @@ impl PhysicEngineFireworks {
 
     fn update_spawn_rocket_margin(&mut self) {
         let margin = self.config.spawn_rocket_margin;
-        // self.rocket_margin_min_x = margin;
-        // self.rocket_margin_max_x = self.window_width - margin;
         (self.rocket_margin_min_x, self.rocket_margin_max_x) = [margin, self.window_width - margin]
             .iter() // transforme en slice iterator
             .copied() // optionnel : pour obtenir f32 directement au lieu de &f32
@@ -109,47 +112,14 @@ impl PhysicEngineFireworks {
             .max(self.config.rocket_max_next_interval)
     }
 
-    // TODO: essayer de découper un peu spawn_rocket, car il borrow mut self tout le long
-    // en découpant on pourra, peut être, ne plus copier la Rocket mais utiliser plutot un indice
-    // vers l'arena pour pointer indirectement sur la rocket.
-    // Après c'est peut être beaucoup de gymnastique pour économiser une copie de structure par spawn de rocket ...
-    // ça n'arrive pas forcément à toute les frames ...
     pub fn spawn_rocket(&mut self) -> Option<&mut Rocket> {
-        let idx = self.free_indices.pop()?; // Prend un slot libre
+        let idx = self.free_indices.pop()?;
         let cfg = &self.config;
 
-        let angle = self.rng.random_range(
-            (cfg.spawn_rocket_vertical_angle - cfg.spawn_rocket_angle_variation)
-                ..=(cfg.spawn_rocket_vertical_angle + cfg.spawn_rocket_angle_variation),
-        );
-        let speed = self
-            .rng
-            .random_range(cfg.spawn_rocket_min_speed..=cfg.spawn_rocket_max_speed);
-        let cx = self
-            .rng
-            .random_range(self.rocket_margin_min_x..=self.rocket_margin_max_x);
-
-        // Initialise le rocket dans le slot
+        // --- [CHANGE 3] ---
         if let Some(r) = self.rockets.get_mut(idx) {
-            //
-            *r = Rocket {
-                pos: Vec2 { x: cx, y: 0.0 },
-                vel: Vec2 {
-                    x: angle.cos() * speed,
-                    y: angle.sin() * speed,
-                },
-                color: Color::new(
-                    self.rng.random_range(0.5..=1.0),
-                    self.rng.random_range(0.5..=1.0),
-                    self.rng.random_range(0.5..=1.0),
-                    1.0,
-                ),
-                active: true,
-                exploded: false,
-                trail_index: 0,
-                last_trail_pos: Vec2 { x: cx, y: 0.0 },
-                ..Default::default()
-            };
+            // Réutilisation sans recréer la structure complète
+            r.reset(cfg, &mut self.rng, self.window_width);
         }
 
         self.active_indices.push(idx);
@@ -185,39 +155,32 @@ impl PhysicEngineFireworks {
         }
 
         let mut to_deactivate = Vec::new();
-
+        // on parcourt la liste des id de rockets actives
         for &idx in &self.active_indices {
+            // si la rocket existe
             if let Some(rocket) = self.rockets.get_mut(idx) {
+                // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
-                rocket.update(dt);
-
-                if !exploded_before && rocket.exploded {
-                    let e = &mut self.triggered_explosions[triggered_count];
-                    *e = Particle {
-                        pos: rocket.pos,
-                        vel: Vec2::ZERO,
-                        color: rocket.color,
-                        life: 0.0,
-                        max_life: 0.0,
-                        size: 6.0,
-                        active: true,
-                    };
-                    triggered_count += 1;
-                }
-
+                rocket.update(&mut self.rng, dt);
+                // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
+                // on incrémente le compteur d'explosion
+                triggered_count += (!exploded_before && rocket.exploded) as usize;
+                // si la rocket n'est plus active, on place son ix dans la liste des rockets à déactiver.
+                // on le fait en déférer car on itère (actuellement) sur la liste (des id) des rockets actives.
                 if !rocket.active {
                     to_deactivate.push(idx);
                 }
             }
         }
-
+        // on désactive les rockets
         for idx in to_deactivate {
             self.deactivate_rocket(idx);
         }
 
         UpdateResult {
             new_rocket,
-            explosions: &self.triggered_explosions[..triggered_count],
+            // on renvoie le slice d'explosions déclenchées
+            triggered_explosions: &self.triggered_explosions[..triggered_count],
         }
     }
 
@@ -264,7 +227,6 @@ impl PhysicEngine for PhysicEngineFireworks {
         self.active_indices.clear();
         self.free_indices.clear();
         self.rockets.clear();
-        // self.triggered_count = 0;
         debug!("PhysicEngineFireworks closed and reset.");
     }
 

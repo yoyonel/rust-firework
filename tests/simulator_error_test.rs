@@ -42,7 +42,7 @@ fn test_renderer_error_triggers_proper_cleanup() {
             self.log.borrow_mut().push("physic.update".into());
             UpdateResult {
                 new_rocket: None,
-                explosions: &[],
+                triggered_explosions: &[],
             }
         }
         fn set_window_width(&mut self, _width: f32) {
