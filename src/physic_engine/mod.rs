@@ -7,6 +7,9 @@ pub use self::types::UpdateResult;
 pub mod rocket;
 pub use self::rocket::Rocket;
 
+pub mod particles_manager;
+pub use self::particles_manager::ParticlesManager;
+
 pub mod particle;
 pub use self::particle::Particle;
 

@@ -8,7 +8,8 @@ use std::sync::atomic::Ordering;
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    rocket::{ParticlesManager, Rocket, ROCKET_ID_COUNTER},
+    particles_manager::ParticlesManager,
+    rocket::{Rocket, ROCKET_ID_COUNTER},
     types::UpdateResult,
     PhysicEngine,
 };
@@ -122,7 +123,6 @@ impl PhysicEngineFireworks {
         let idx = self.free_indices.pop()?;
         let cfg = &self.config;
 
-        // --- [CHANGE 3] ---
         if let Some(r) = self.rockets.get_mut(idx) {
             // Réutilisation sans recréer la structure complète
             r.reset(cfg, &mut self.rng, self.window_width);
@@ -132,9 +132,20 @@ impl PhysicEngineFireworks {
         self.rockets.get_mut(idx)
     }
 
+    /// Désactive une fusée et libère ses ressources associées (particules, indices, etc.)
     fn deactivate_rocket(&mut self, idx: Index) {
         if let Some(r) = self.rockets.get_mut(idx) {
             r.active = false;
+
+            // Libère les particules d’explosion si présentes
+            if let Some(range) = r.explosion_particle_indices.take() {
+                self.particles_manager.free_block(range);
+            }
+
+            // Libère les particules de trail si présentes
+            if let Some(range) = r.trail_particle_indices.take() {
+                self.particles_manager.free_block(range);
+            }
         }
 
         // Retire de active_indices en O(1) grâce à swap_remove
