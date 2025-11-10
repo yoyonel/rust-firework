@@ -447,8 +447,10 @@ impl Renderer {
                         50,
                         avg_fps,
                     );
+                    info!("Graphe - Sample Timeline");
+                    // [Trait Iterator - for_each - Calls a closure on each element of an iterator.](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.for_each)
+                    graph.lines().for_each(|line| info!("{}", line));
 
-                    info!("Graphe - Sample Timeline\n{}", graph);
                     info!(
                         "Samples: {} / {} | Moyenne FPS: {:.2}",
                         sampler.samples.len(),
