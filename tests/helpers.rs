@@ -22,7 +22,7 @@ impl PhysicEngine for DummyPhysic {
     fn update(&mut self, _dt: f32) -> UpdateResult<'_> {
         UpdateResult {
             new_rocket: None,
-            explosions: &[],
+            triggered_explosions: &[],
         }
     }
     fn close(&mut self) {}
@@ -137,7 +137,7 @@ impl fireworks_sim::physic_engine::PhysicEngine for LoggingPhysic {
         self.log.push("update called".into());
         UpdateResult {
             new_rocket: None,
-            explosions: &[],
+            triggered_explosions: &[],
         }
     }
     fn close(&mut self) {
