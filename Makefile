@@ -12,6 +12,13 @@ XVFB = xvfb-run -a
 run-release:
 	cargo run --release
 
+run-release-with-hud:
+	env \
+	vblank_mode=0 \
+	__GL_SYNC_TO_VBLANK=0 \
+	GALLIUM_HUD_PERIOD=0.15 \
+	GALLIUM_HUD="cpu;fps;N vertices submitted" \
+	cargo run --release 2>&1
 # -----------------------------------------
 # 🧪 Tests unitaires + d'intégration
 # -----------------------------------------
