@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    particles_manager::{ParticlesPool, ParticlesPoolsForRockets},
+    particles_pools::{ParticlesPool, ParticlesPoolsForRockets},
 };
 use glam::{Vec2, Vec4 as Color};
 
@@ -36,10 +36,10 @@ pub struct Rocket {
     pub exploded: bool,
     pub active: bool,
 
-    /// Indices dans le `ParticlesManager` pour les particules d’explosion
+    /// Indices dans le pool des particules d'explosions
     pub explosion_particle_indices: Option<Range<usize>>,
 
-    /// Indices dans le `ParticlesManager` pour les particules de trail
+    /// Indices dans le pool des particules de trails
     pub trail_particle_indices: Option<Range<usize>>,
     pub trail_index: usize,
     pub last_trail_pos: Vec2,

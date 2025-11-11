@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    particles_manager::ParticlesPoolsForRockets,
+    particles_pools::ParticlesPoolsForRockets,
     rocket::{Rocket, ROCKET_ID_COUNTER},
     types::UpdateResult,
     PhysicEngine,

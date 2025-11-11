@@ -35,7 +35,7 @@ impl ParticlesPoolsForRockets {
 /// Gère toutes les particules globales du moteur (explosions et trails).
 ///
 /// # Rôle
-/// Le `ParticlesManager` maintient un gros vecteur unique de `Particle`,
+/// Le `ParticlesPool` maintient un gros vecteur unique de `Particle`,
 /// découpé en blocs de taille fixe (une explosion ou un trail = un bloc).
 ///
 /// Chaque fusée (`Rocket`) ne possède plus ses particules,
@@ -72,7 +72,7 @@ impl ParticlesPool {
 
         #[cfg(debug_assertions)]
         debug!(
-            "ParticlesManager initialized with {} particles ({} blocks × {} per block)",
+            "ParticlesPool initialized with {} particles ({} blocks × {} per block)",
             total_particles, max_blocks, per_block
         );
 
