@@ -5,7 +5,7 @@ use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::physic_engine::{
-    config::PhysicConfig, particle::Particle, particles_manager::ParticlesManager,
+    config::PhysicConfig, particle::Particle, particles_manager::ParticlesPool,
 };
 use glam::{Vec2, Vec4 as Color};
 
@@ -70,17 +70,19 @@ impl Rocket {
     /// Retourne un itérateur sur toutes les particules actives de la fusée
     pub fn active_particles<'a>(
         &'a self,
-        particles_manager: &'a ParticlesManager,
+        // particles_manager: &'a ParticlesManager,
+        particles_pool_for_explosions: &'a ParticlesPool,
+        particles_pool_for_trails: &'a ParticlesPool,
     ) -> impl Iterator<Item = &'a Particle> {
         let trails = self
             .trail_particle_indices
             .iter()
-            .flat_map(|range| particles_manager.get_particles(range))
+            .flat_map(|range| particles_pool_for_trails.get_particles(range))
             .filter(|p| p.active);
         let explosions = self
             .explosion_particle_indices
             .iter()
-            .flat_map(|range| particles_manager.get_particles(range))
+            .flat_map(|range| particles_pool_for_explosions.get_particles(range))
             .filter(|p| p.active);
         trails.chain(explosions)
     }
@@ -90,7 +92,9 @@ impl Rocket {
         &mut self,
         rng: &mut impl Rng,
         dt: f32,
-        particles_manager: &mut ParticlesManager,
+        // particles_manager: &mut ParticlesManager,
+        particles_pool_for_explosions: &mut ParticlesPool,
+        particles_pool_for_trails: &mut ParticlesPool,
     ) {
         if !self.active {
             return;
@@ -99,17 +103,21 @@ impl Rocket {
         const GRAVITY: Vec2 = Vec2::new(0.0, -200.0);
 
         self.update_movement(dt, GRAVITY);
-        self.update_trails(dt, GRAVITY, particles_manager);
-        self.update_explosions(dt, rng, GRAVITY, particles_manager);
-        self.remove_inactive_rockets(particles_manager);
+        self.update_trails(dt, GRAVITY, particles_pool_for_trails);
+        self.update_explosions(dt, rng, GRAVITY, particles_pool_for_explosions);
+        self.remove_inactive_rockets(particles_pool_for_explosions, particles_pool_for_trails);
     }
 
-    fn remove_inactive_rockets(&mut self, particles_manager: &ParticlesManager) {
+    fn remove_inactive_rockets(
+        &mut self,
+        particles_pool_for_explosions: &ParticlesPool,
+        particles_pool_for_trails: &ParticlesPool,
+    ) {
         let exploded_done = self
             .explosion_particle_indices
             .as_ref()
             .map(|range| {
-                particles_manager
+                particles_pool_for_explosions
                     .get_particles(range)
                     .iter()
                     .all(|p| !p.active)
@@ -119,7 +127,7 @@ impl Rocket {
             .trail_particle_indices
             .as_ref()
             .map(|range| {
-                particles_manager
+                particles_pool_for_trails
                     .get_particles(range)
                     .iter()
                     .all(|p| !p.active)
@@ -144,7 +152,7 @@ impl Rocket {
 
     /// Gère la génération et la mise à jour des particules de trail
     #[inline(always)]
-    fn update_trails(&mut self, dt: f32, gravity: Vec2, particles_manager: &mut ParticlesManager) {
+    fn update_trails(&mut self, dt: f32, gravity: Vec2, particles_manager: &mut ParticlesPool) {
         const TRAIL_SPACING: f32 = 2.0;
         let movement = self.pos - self.last_trail_pos;
         let dist = movement.length();
@@ -200,7 +208,7 @@ impl Rocket {
         dt: f32,
         rng: &mut impl Rng,
         gravity: Vec2,
-        particles_manager: &mut ParticlesManager,
+        particles_manager: &mut ParticlesPool,
     ) {
         if !self.exploded && self.vel.y <= 0.0 {
             self.trigger_explosion(rng, particles_manager);
@@ -221,7 +229,7 @@ impl Rocket {
     }
 
     #[inline(always)]
-    fn trigger_explosion(&mut self, rng: &mut impl Rng, particles_manager: &mut ParticlesManager) {
+    fn trigger_explosion(&mut self, rng: &mut impl Rng, particles_manager: &mut ParticlesPool) {
         self.exploded = true;
 
         if self.explosion_particle_indices.is_none() {
