@@ -5,6 +5,32 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use crate::physic_engine::particle::Particle;
+use crate::physic_engine::rocket::Rocket;
+
+#[derive(Debug)]
+pub struct ParticlesPoolsForRockets {
+    pub particles_pool_for_explosions: ParticlesPool,
+    pub particles_pool_for_trails: ParticlesPool,
+}
+
+impl ParticlesPoolsForRockets {
+    pub fn new(max_rockets: usize, per_explosion: usize, per_trail: usize) -> Self {
+        Self {
+            particles_pool_for_explosions: ParticlesPool::new(max_rockets, per_explosion),
+            particles_pool_for_trails: ParticlesPool::new(max_rockets, per_trail),
+        }
+    }
+
+    // TODO: Il faut refactorer pour éviter de take (mut) rocket -> 0-copy
+    pub fn free_blocks(&mut self, rocket: &mut Rocket) {
+        if let Some(range) = rocket.explosion_particle_indices.take() {
+            self.particles_pool_for_explosions.free_block(range);
+        }
+        if let Some(range) = rocket.trail_particle_indices.take() {
+            self.particles_pool_for_trails.free_block(range);
+        }
+    }
+}
 
 /// Gère toutes les particules globales du moteur (explosions et trails).
 ///

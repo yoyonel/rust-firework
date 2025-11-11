@@ -5,7 +5,9 @@ use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::physic_engine::{
-    config::PhysicConfig, particle::Particle, particles_manager::ParticlesPool,
+    config::PhysicConfig,
+    particle::Particle,
+    particles_manager::{ParticlesPool, ParticlesPoolsForRockets},
 };
 use glam::{Vec2, Vec4 as Color};
 
@@ -70,19 +72,25 @@ impl Rocket {
     /// Retourne un itérateur sur toutes les particules actives de la fusée
     pub fn active_particles<'a>(
         &'a self,
-        // particles_manager: &'a ParticlesManager,
-        particles_pool_for_explosions: &'a ParticlesPool,
-        particles_pool_for_trails: &'a ParticlesPool,
+        particles_pools: &'a ParticlesPoolsForRockets,
     ) -> impl Iterator<Item = &'a Particle> {
         let trails = self
             .trail_particle_indices
             .iter()
-            .flat_map(|range| particles_pool_for_trails.get_particles(range))
+            .flat_map(|range| {
+                particles_pools
+                    .particles_pool_for_trails
+                    .get_particles(range)
+            })
             .filter(|p| p.active);
         let explosions = self
             .explosion_particle_indices
             .iter()
-            .flat_map(|range| particles_pool_for_explosions.get_particles(range))
+            .flat_map(|range| {
+                particles_pools
+                    .particles_pool_for_explosions
+                    .get_particles(range)
+            })
             .filter(|p| p.active);
         trails.chain(explosions)
     }
@@ -92,9 +100,7 @@ impl Rocket {
         &mut self,
         rng: &mut impl Rng,
         dt: f32,
-        // particles_manager: &mut ParticlesManager,
-        particles_pool_for_explosions: &mut ParticlesPool,
-        particles_pool_for_trails: &mut ParticlesPool,
+        particles_pools: &mut ParticlesPoolsForRockets,
     ) {
         if !self.active {
             return;
@@ -103,21 +109,23 @@ impl Rocket {
         const GRAVITY: Vec2 = Vec2::new(0.0, -200.0);
 
         self.update_movement(dt, GRAVITY);
-        self.update_trails(dt, GRAVITY, particles_pool_for_trails);
-        self.update_explosions(dt, rng, GRAVITY, particles_pool_for_explosions);
-        self.remove_inactive_rockets(particles_pool_for_explosions, particles_pool_for_trails);
+        self.update_trails(dt, GRAVITY, &mut particles_pools.particles_pool_for_trails);
+        self.update_explosions(
+            dt,
+            rng,
+            GRAVITY,
+            &mut particles_pools.particles_pool_for_explosions,
+        );
+        self.remove_inactive_rockets(particles_pools);
     }
 
-    fn remove_inactive_rockets(
-        &mut self,
-        particles_pool_for_explosions: &ParticlesPool,
-        particles_pool_for_trails: &ParticlesPool,
-    ) {
+    fn remove_inactive_rockets(&mut self, particles_pools: &ParticlesPoolsForRockets) {
         let exploded_done = self
             .explosion_particle_indices
             .as_ref()
             .map(|range| {
-                particles_pool_for_explosions
+                particles_pools
+                    .particles_pool_for_explosions
                     .get_particles(range)
                     .iter()
                     .all(|p| !p.active)
@@ -127,7 +135,8 @@ impl Rocket {
             .trail_particle_indices
             .as_ref()
             .map(|range| {
-                particles_pool_for_trails
+                particles_pools
+                    .particles_pool_for_trails
                     .get_particles(range)
                     .iter()
                     .all(|p| !p.active)
@@ -152,18 +161,18 @@ impl Rocket {
 
     /// Gère la génération et la mise à jour des particules de trail
     #[inline(always)]
-    fn update_trails(&mut self, dt: f32, gravity: Vec2, particles_manager: &mut ParticlesPool) {
+    fn update_trails(&mut self, dt: f32, gravity: Vec2, particles_pool: &mut ParticlesPool) {
         const TRAIL_SPACING: f32 = 2.0;
         let movement = self.pos - self.last_trail_pos;
         let dist = movement.length();
 
         // Alloue un bloc si nécessaire
         if self.trail_particle_indices.is_none() {
-            self.trail_particle_indices = particles_manager.allocate_block();
+            self.trail_particle_indices = particles_pool.allocate_block();
         }
 
         if let Some(range) = &self.trail_particle_indices {
-            let slice = particles_manager.get_particles_mut(range);
+            let slice = particles_pool.get_particles_mut(range);
 
             if !self.exploded {
                 let mut remaining_dist = dist;
@@ -208,14 +217,14 @@ impl Rocket {
         dt: f32,
         rng: &mut impl Rng,
         gravity: Vec2,
-        particles_manager: &mut ParticlesPool,
+        particles_pool: &mut ParticlesPool,
     ) {
         if !self.exploded && self.vel.y <= 0.0 {
-            self.trigger_explosion(rng, particles_manager);
+            self.trigger_explosion(rng, particles_pool);
         }
 
         if let Some(range) = &self.explosion_particle_indices {
-            let slice = particles_manager.get_particles_mut(range);
+            let slice = particles_pool.get_particles_mut(range);
             for p in &mut slice[..] {
                 if !p.active {
                     continue;
@@ -229,15 +238,15 @@ impl Rocket {
     }
 
     #[inline(always)]
-    fn trigger_explosion(&mut self, rng: &mut impl Rng, particles_manager: &mut ParticlesPool) {
+    fn trigger_explosion(&mut self, rng: &mut impl Rng, particles_pool: &mut ParticlesPool) {
         self.exploded = true;
 
         if self.explosion_particle_indices.is_none() {
-            self.explosion_particle_indices = particles_manager.allocate_block();
+            self.explosion_particle_indices = particles_pool.allocate_block();
         }
 
         if let Some(range) = &self.explosion_particle_indices {
-            let slice = particles_manager.get_particles_mut(range);
+            let slice = particles_pool.get_particles_mut(range);
             for p in slice.iter_mut() {
                 let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
                 let speed = rng.random_range(60.0..200.0);
