@@ -8,7 +8,7 @@ use std::sync::atomic::Ordering;
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    particles_manager::ParticlesManager,
+    particles_manager::ParticlesPool,
     rocket::{Rocket, ROCKET_ID_COUNTER},
     types::UpdateResult,
     PhysicEngine,
@@ -30,7 +30,9 @@ pub struct PhysicEngineFireworks {
     rocket_margin_min_x: f32,
     rocket_margin_max_x: f32,
 
-    particles_manager: ParticlesManager,
+    // particles_manager: ParticlesManager,
+    particles_pool_for_explosions: ParticlesPool,
+    particles_pool_for_trails: ParticlesPool,
 }
 
 impl PhysicEngineFireworks {
@@ -62,9 +64,13 @@ impl PhysicEngineFireworks {
             config: config.clone(),
             rocket_margin_min_x: 0.0,
             rocket_margin_max_x: 0.0,
-            particles_manager: ParticlesManager::new(
+            particles_pool_for_explosions: ParticlesPool::new(
                 config.max_rockets,
                 config.particles_per_explosion,
+            ),
+            particles_pool_for_trails: ParticlesPool::new(
+                config.max_rockets,
+                config.particles_per_trail,
             ),
         };
 
@@ -139,12 +145,12 @@ impl PhysicEngineFireworks {
 
             // Libère les particules d’explosion si présentes
             if let Some(range) = r.explosion_particle_indices.take() {
-                self.particles_manager.free_block(range);
+                self.particles_pool_for_explosions.free_block(range);
             }
 
             // Libère les particules de trail si présentes
             if let Some(range) = r.trail_particle_indices.take() {
-                self.particles_manager.free_block(range);
+                self.particles_pool_for_trails.free_block(range);
             }
         }
 
@@ -180,7 +186,12 @@ impl PhysicEngineFireworks {
                 let exploded_before = rocket.exploded;
 
                 // rocket.update(&mut self.rng, dt);
-                rocket.update(&mut self.rng, dt, &mut self.particles_manager);
+                rocket.update(
+                    &mut self.rng,
+                    dt,
+                    &mut self.particles_pool_for_explosions,
+                    &mut self.particles_pool_for_trails,
+                );
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
@@ -218,12 +229,19 @@ impl PhysicEngineFireworks {
 // ==================================
 impl PhysicEngine for PhysicEngineFireworks {
     fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(
-            self.active_indices
-                .iter()
-                .filter_map(|&idx| self.rockets.get(idx))
-                .flat_map(|r| r.active_particles(&self.particles_manager)),
-        )
+        let mut out = Vec::new();
+
+        for &idx in &self.active_indices {
+            if let Some(r) = self.rockets.get(idx) {
+                // On collecte toutes les particules actives (trails + explosions)
+                out.extend(r.active_particles(
+                    &self.particles_pool_for_explosions,
+                    &self.particles_pool_for_trails,
+                ));
+            }
+        }
+
+        Box::new(out.into_iter())
     }
 
     fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {

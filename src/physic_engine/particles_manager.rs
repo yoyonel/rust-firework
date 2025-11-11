@@ -16,7 +16,7 @@ use crate::physic_engine::particle::Particle;
 /// mais détient un simple `Range<usize>` pointant vers une sous-section du tableau.
 /// Cette approche évite les copies et réduit la fragmentation mémoire.
 #[derive(Debug)]
-pub struct ParticlesManager {
+pub struct ParticlesPool {
     /// Stockage global de toutes les particules
     particles: Vec<Particle>,
 
@@ -27,7 +27,7 @@ pub struct ParticlesManager {
     free_blocks: Arc<Mutex<VecDeque<usize>>>,
 }
 
-impl ParticlesManager {
+impl ParticlesPool {
     /// Crée un nouveau gestionnaire de particules.
     ///
     /// # Arguments
