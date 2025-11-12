@@ -7,37 +7,21 @@ use std::time::Instant;
 
 use crate::audio_engine::AudioEngine;
 use crate::physic_engine::{config::PhysicConfig, PhysicEngine};
+use crate::renderer_engine::RendererGraphics;
 use crate::renderer_engine::{
-    tools::{compile_shader_program, print_context_info, setup_opengl_debug},
-    types::ParticleGPU,
+    tools::{setup_opengl_debug, show_opengl_context_info},
     utils::{
         adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler},
         glfw_window::Fullscreen,
-        texture::load_texture,
     },
 };
-
-use crate::utils::human_bytes::HumanBytes;
-
-macro_rules! cstr {
-    ($s:expr) => {
-        concat!($s, "\0").as_ptr() as *const i8
-    };
-}
 
 pub struct Renderer {
     pub glfw: glfw::Glfw,
     pub window: Option<glfw::PWindow>,
     pub events: Option<glfw::GlfwReceiver<(f64, glfw::WindowEvent)>>,
 
-    vao: u32,
-    vbo_particles: u32,
-    vbo_quad: u32,
-    mapped_ptr: *mut ParticleGPU,
-    shader_program: u32,
-
     max_particles_on_gpu: usize,
-    buffer_size: isize,
 
     frames: u32,
     last_time: Instant,
@@ -48,14 +32,7 @@ pub struct Renderer {
     window_last_pos: (i32, i32),
     window_last_size: (i32, i32),
 
-    // Shader
-    loc_size: i32,
-    loc_tex: i32,
-    loc_use: i32,
-    texture_id: u32,
-
-    // [POC] Instanced Quads
-    use_instanced_quads: bool,
+    graphics: RendererGraphics,
 }
 
 // ---------------------------------------------------------
@@ -87,7 +64,7 @@ impl Renderer {
         height: i32,
         title: &str,
         max_particles_on_gpu: usize,
-        use_instanced_quads: bool,
+        _use_instanced_quads: bool,
     ) -> Result<Self> {
         let _ = env_logger::builder().is_test(true).try_init();
 
@@ -121,61 +98,46 @@ impl Renderer {
 
         info!("✅ OpenGL context ready for '{}'", title);
 
+        // load OpenGL function pointers
         gl::load_with(|s| window.get_proc_address(s) as *const _);
-        print_context_info();
 
         unsafe {
+            show_opengl_context_info();
+
+            // activate OpenGL debug output
             setup_opengl_debug();
 
+            // set OpenGL states for the rendering
+            // but it's link to the renderer graphics
             gl::Enable(gl::PROGRAM_POINT_SIZE);
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        let (vertex_src, fragment_src) = if !use_instanced_quads {
-            src_shaders_particles()
-        } else {
-            src_shaders_instanced_quads()
-        };
-        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
+        // TODO: il faut utiliser un trait ici sur les renderer graphics pour
+        // pouvoir choisir l'implémentation qu'on souhaite.
+        // Par exemple, on peut vouloir choisir entre RendererGraphics et RendererGraphicsInstanced
+        // et du point de vue de l'interface, ils devraient être interchangeables.
+        //
+        // À terme, on pourrait vouloir utiliser plusieurs renderering graphics pendant la génération d'une frame.
+        // Par exemple, on pourrait vouloir conserver le renderer graphics à base de point rendering pour
+        // les rockets (trainées + explosions), et on pourrait vouloir ajouter des particules en quads instanciés,
+        // pour rendre des effets comme de la poussière/fumée/etc. au départ (de la trainée) et arrivée (explosion de la rocket).
+        let graphics = RendererGraphics::new(max_particles_on_gpu);
 
-        let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
-        let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
-        let loc_use = unsafe { gl::GetUniformLocation(shader_program, cstr!("uUseTexture")) };
-        let texture_id = load_texture("assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png");
-
-        // VAO/VBO setup
-
-        unsafe {
-            let (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size) =
-                setup_gpu_buffers(max_particles_on_gpu, use_instanced_quads);
-
-            // comme on stocke le pointeur mappé GPU,
-            // on doit renvoyer le résultat du constructeur de structure dans la partie unsafe
-            Ok(Self {
-                glfw,
-                window: Some(window),
-                events: Some(events),
-                vao,
-                vbo_particles,
-                vbo_quad,
-                mapped_ptr,
-                shader_program,
-                max_particles_on_gpu,
-                buffer_size,
-                frames: 0,
-                last_time: Instant::now(),
-                window_size: (width, height),
-                window_size_f32: (width as f32, height as f32),
-                window_last_pos,
-                window_last_size,
-                loc_size,
-                loc_tex,
-                loc_use,
-                texture_id,
-                use_instanced_quads,
-            })
-        }
+        Ok(Self {
+            glfw,
+            window: Some(window),
+            events: Some(events),
+            frames: 0,
+            last_time: Instant::now(),
+            window_size: (width, height),
+            window_size_f32: (width as f32, height as f32),
+            window_last_pos,
+            window_last_size,
+            graphics,
+            max_particles_on_gpu,
+        })
     }
 
     fn reload_config<P: PhysicEngine>(&mut self, physic: &mut P) {
@@ -193,147 +155,7 @@ impl Renderer {
                 self.max_particles_on_gpu, new_max
             );
             unsafe {
-                self.recreate_buffers(new_max);
-            }
-        }
-    }
-
-    unsafe fn recreate_buffers(&mut self, new_max: usize) {
-        // 1. Libérer les anciens buffers
-        gl::DeleteVertexArrays(1, &self.vao);
-        gl::DeleteBuffers(1, &self.vbo_particles);
-
-        // 2. Recréer avec la nouvelle taille
-        let (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size) =
-            setup_gpu_buffers(new_max, self.use_instanced_quads);
-
-        // 3. Mettre à jour les champs
-        self.vao = vao;
-        self.vbo_particles = vbo_particles;
-        self.vbo_quad = vbo_quad;
-        self.mapped_ptr = mapped_ptr;
-        self.buffer_size = buffer_size;
-        self.max_particles_on_gpu = new_max;
-    }
-
-    /// Remplit directement le buffer GPU avec les données des particules actives.
-    ///
-    /// Cette méthode copie les données de toutes les particules actives fournies par
-    /// le moteur physique `physic` dans le buffer GPU mappé en mémoire CPU (`self.mapped_ptr`),
-    /// jusqu'à un maximum défini par `self.max_particles_on_gpu`.
-    ///
-    /// # Fonctionnalité
-    /// - Chaque particule physique active est convertie en `ParticleGPU` via `Particle::to_particle_gpu()`.
-    /// - Les données sont écrites directement dans le slice mappé `gpu_slice`, garantissant que
-    ///   la mémoire GPU est correctement mise à jour.
-    /// - La méthode renvoie le nombre de particules copiées dans le buffer GPU (`count`),
-    ///   ce qui peut être utilisé pour des opérations ultérieures (par exemple le rendu).
-    /// - Après avoir rempli le slice, un flush explicite est effectué via
-    ///   `gl::FlushMappedBufferRange` pour que le GPU prenne en compte les modifications.
-    ///
-    /// # Sécurité et `unsafe`
-    /// - La méthode utilise un bloc `unsafe` car elle crée un slice Rust mutable (`gpu_slice`)
-    ///   à partir d'un pointeur brut mappé sur la mémoire GPU (`self.mapped_ptr`).
-    /// - Les garanties suivantes sont respectées pour que cette opération soit sûre :
-    ///   1. `self.mapped_ptr` pointe vers une mémoire valide et correctement alignée
-    ///      pour `ParticleGPU`.
-    ///   2. Le slice a une longueur exacte de `self.max_particles_on_gpu`, garantissant
-    ///      que l’on n’accède jamais hors limites.
-    ///   3. La boucle `for` itère en parallèle sur le slice GPU et les particules actives via `zip`,
-    ///      donc aucune écriture ne dépasse la capacité du slice.
-    /// - Chaque élément du slice est écrit **en place** (`*dst = …`), et le flush est effectué
-    ///   après toutes les écritures pour synchroniser le GPU.
-    ///
-    /// # Remarques
-    /// - Il est important de **ne pas utiliser de `map()` ou `collect()` ici**, car la mémoire
-    ///   mappée GPU requiert des écritures en place. Les transformations fonctionnelles pourraient
-    ///   entraîner des écritures incorrectes ou hors ordre, rendant le GPU incapable de lire les
-    ///   données correctement.
-    /// - Cette méthode est conçue pour être rapide et sûre, tout en restant compatible avec
-    ///   des milliers de particules dans un buffer mappé CPU ↔ GPU.
-    pub fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
-        let mut count = 0;
-
-        unsafe {
-            // Crée un slice Rust sûr sur le buffer GPU
-            let gpu_slice =
-                std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
-
-            // Itère en parallèle sur les particules physiques actives et les slots GPU disponibles
-            // le zip se fait (dans l'ordre) du slice gpu vers les particules actives,
-            // donc la taille max du slice gpu ne pourra (implicitement) jamais être dépassée.
-            for (i, (dst, src)) in gpu_slice
-                .iter_mut()
-                .zip(physic.active_particles())
-                .enumerate()
-            {
-                *dst = src.to_particle_gpu();
-                count = i + 1;
-            }
-
-            // Flush explicite de la zone modifiée pour que le GPU voit les changements
-            let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
-            gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
-        }
-
-        count
-    }
-
-    /// Envoie le slice de ParticleGPU au GPU et dessine.
-    /// Cette fonction est stateless vis-à-vis de `self` (sauf pour uniforms), et accepte le slice brut.
-    /// Rendu des particules via un buffer OpenGL persistant.
-    ///
-    /// Cette méthode lie les ressources GPU nécessaires, et dessine
-    /// les particules à l’écran sous forme de points (`GL_POINTS`).
-    ///
-    /// # Paramètres
-    /// - `count`: nombre de particules à afficher. Si `count` vaut 0, aucun rendu n’est effectué.
-    ///
-    /// # Détails techniques
-    /// - **Persistent Mapping** : Le VBO (Vertex Buffer Object) est mappé de manière
-    ///   persistante en mémoire GPU. Cela signifie que les données peuvent être modifiées
-    ///   directement via un pointeur mémoire (obtenu avec `glMapBufferRange`), sans devoir
-    ///   réappeler `glBufferSubData` à chaque frame.
-    /// - Le shader utilisé (`self.shader_program`) est supposé gérer le rendu de chaque
-    ///   particule via les attributs du VBO et les uniformes `width` et `height`.
-    ///
-    /// # Sécurité
-    /// Cette fonction utilise des appels `unsafe` à l’API OpenGL, car ces fonctions
-    /// manipulent directement des pointeurs mémoire GPU et des ressources système.
-    /// Il est de la responsabilité de l’appelant de garantir que le contexte OpenGL
-    /// est valide et que les ressources (`VAO`, `VBO`, shader, etc.) sont correctement initialisées.
-    fn render_particles_with_persistent_buffer(&self, count: usize) {
-        // Si aucune particule, on ne fait rien
-        if count == 0 {
-            return;
-        }
-
-        unsafe {
-            // Active le shader de rendu des particules
-            gl::UseProgram(self.shader_program);
-
-            // Envoie les dimensions de la fenêtre au shader (uniforms)
-            gl::Uniform2f(
-                self.loc_size,
-                self.window_size_f32.0,
-                self.window_size_f32.1,
-            );
-
-            // Lie le VAO et VBO correspondant aux particules
-            gl::BindVertexArray(self.vao);
-
-            if !self.use_instanced_quads {
-                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
-                // Dessine les particules sous forme de points
-                gl::DrawArrays(gl::POINTS, 0, count as i32);
-            } else {
-                gl::ActiveTexture(gl::TEXTURE0);
-                gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-                gl::Uniform1i(self.loc_tex, 0);
-                gl::Uniform1i(self.loc_use, 1); // 1 = activer la texture
-                                                //
-                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_quad);
-                gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
+                self.graphics.recreate_buffers(new_max);
             }
         }
     }
@@ -351,15 +173,18 @@ impl Renderer {
             // Efface l’écran (fond noir)
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
+
+            // Remplit le buffer GPU
+            let nb_particles_rendered = self.graphics.fill_particle_data_direct(physic);
+
+            // // Dessine les particules
+            self.graphics.render_particles_with_persistent_buffer(
+                nb_particles_rendered,
+                self.window_size_f32,
+            );
+
+            nb_particles_rendered
         }
-
-        // Remplit le buffer GPU
-        let nb_particles_rendered = self.fill_particle_data_direct(physic);
-
-        // // Dessine les particules
-        self.render_particles_with_persistent_buffer(nb_particles_rendered);
-
-        nb_particles_rendered
     }
 
     /// Boucle infinie (production) qui appelle `step_frame`
@@ -570,18 +395,7 @@ impl Renderer {
         info!("🧹 Fermeture du Renderer");
 
         unsafe {
-            if self.vbo_particles != 0 {
-                gl::DeleteBuffers(1, &self.vbo_particles);
-                self.vbo_particles = 0;
-            }
-            if self.vao != 0 {
-                gl::DeleteVertexArrays(1, &self.vao);
-                self.vao = 0;
-            }
-            if self.shader_program != 0 {
-                gl::DeleteProgram(self.shader_program);
-                self.shader_program = 0;
-            }
+            self.graphics.close();
         }
 
         if let Some(window) = self.window.take() {
@@ -590,6 +404,7 @@ impl Renderer {
     }
 }
 
+// Trait implementation
 impl RendererEngine for Renderer {
     fn run_loop<P: PhysicEngine, A: AudioEngine>(
         &mut self,
@@ -602,212 +417,4 @@ impl RendererEngine for Renderer {
     fn close(&mut self) {
         self.close();
     }
-}
-
-unsafe fn setup_gpu_buffers(
-    max_particles_on_gpu: usize,
-    use_instanced_quads: bool,
-) -> (u32, u32, u32, *mut ParticleGPU, isize) {
-    let (mut vao, mut vbo_quad, mut vbo_particles) = (0u32, 0u32, 0u32);
-
-    // === VAO ===
-    gl::GenVertexArrays(1, &mut vao);
-    gl::BindVertexArray(vao);
-
-    if use_instanced_quads {
-        // === 1️⃣ QuadVertexAttribPointer unité statique ===
-        const QUAD_VERTICES: [f32; 8] = [
-            -1.0, -1.0, // bottom-left
-            1.0, -1.0, // bottom-right
-            -1.0, 1.0, // top-left
-            1.0, 1.0, // top-right
-        ];
-
-        gl::GenBuffers(1, &mut vbo_quad);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
-        gl::BufferData(
-            gl::ARRAY_BUFFER,
-            (QUAD_VERTICES.len() * std::mem::size_of::<f32>()) as isize,
-            QUAD_VERTICES.as_ptr() as *const _,
-            gl::STATIC_DRAW,
-        );
-
-        // layout(location = 0): sommets du quad
-        gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(
-            0,
-            2,
-            gl::FLOAT,
-            gl::FALSE,
-            2 * std::mem::size_of::<f32>() as i32,
-            std::ptr::null(),
-        );
-        gl::VertexAttribDivisor(0, 0); // par sommet
-    }
-
-    // === 2️⃣ Particules persistantes ===
-    gl::GenBuffers(1, &mut vbo_particles);
-    gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
-
-    let buffer_size = (max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
-    info!(
-        "🎮 Allocating instanced particle buffer: {} particles → {}",
-        max_particles_on_gpu,
-        buffer_size.human_bytes()
-    );
-
-    // Allocation persistante
-    gl::BufferStorage(
-        gl::ARRAY_BUFFER,
-        buffer_size,
-        std::ptr::null(),
-        gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT,
-    );
-
-    // Mapping CPU → GPU
-    let mapped_ptr = gl::MapBufferRange(
-        gl::ARRAY_BUFFER,
-        0,
-        buffer_size,
-        gl::MAP_WRITE_BIT
-            | gl::MAP_PERSISTENT_BIT
-            | gl::MAP_COHERENT_BIT
-            | gl::MAP_FLUSH_EXPLICIT_BIT,
-    ) as *mut ParticleGPU;
-
-    // === Définition des attributs instanciés ===
-    if !use_instanced_quads {
-        ParticleGPU::setup_vertex_attribs();
-    } else {
-        ParticleGPU::setup_vertex_attribs_for_instanced_quad();
-    }
-    // === Nettoyage ===
-    gl::BindVertexArray(0);
-
-    (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
-}
-
-pub fn src_shaders_particles() -> (&'static str, &'static str) {
-    let vertex_src = r#"
-        #version 330 core
-        layout(location = 0) in vec2 aPos;
-        layout(location = 1) in vec3 aColor;
-        layout(location = 2) in float aLife;
-        layout(location = 3) in float aMaxLife;
-        layout(location = 4) in float aSize;
-
-        out vec3 vertexColor;
-        out float alpha;
-
-        uniform vec2 uSize;
-
-        void main() {
-            float a = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
-            alpha = a;
-            vertexColor = aColor;
-
-            float x = aPos.x / uSize.x * 2.0 - 1.0;
-            float y = aPos.y / uSize.y * 2.0 - 1.0;
-            gl_Position = vec4(x, y, 0.0, 1.0);
-
-            gl_PointSize = 2.0 + 5.0 * a;
-        }
-        "#;
-
-    let fragment_src = r#"
-        #version 330 core
-        in vec3 vertexColor;
-        in float alpha;
-        out vec4 FragColor;
-
-        void main() {
-            vec2 uv = gl_PointCoord - vec2(0.5);
-            float dist = dot(uv, uv);
-            if(dist > 0.25) discard;
-            float falloff = smoothstep(0.25, 0.0, dist);
-            FragColor = vec4(vertexColor, alpha * falloff);
-        }
-        "#;
-    (vertex_src, fragment_src)
-}
-
-fn src_shaders_instanced_quads() -> (&'static str, &'static str) {
-    let vertex_src = r#"
-        #version 330 core
-
-        // === Quad unité (4 sommets pour TRIANGLE_STRIP)
-        layout(location = 0) in vec2 aQuad;
-
-        // === Attributs instanciés (1 par particule)
-        layout(location = 1) in vec2 aPos;
-        layout(location = 2) in vec3 aColor;
-        layout(location = 3) in float aLife;
-        layout(location = 4) in float aMaxLife;
-        layout(location = 5) in float aSize;
-
-        out vec3 vColor;
-        out float vAlpha;
-        out vec2 vUV;
-
-        uniform vec2 uSize;
-
-        void main() {
-            // Ratio de vie (comme avant)
-            vAlpha = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
-            vColor = aColor;
-
-            // On reconstruit les coordonnées UV du quad (-0.5 → +0.5)
-            vUV = aQuad * 0.5 + 0.5;
-
-            // Position du sommet quad dans l’espace clip (avec taille)
-            vec2 world = aPos + aQuad * aSize * (2.0 + 5.0 * vAlpha);
-
-            float x = world.x / uSize.x * 2.0 - 1.0;
-            float y = world.y / uSize.y * 2.0 - 1.0;
-            gl_Position = vec4(x, y, 0.0, 1.0);
-        }
-        "#;
-
-    let fragment_src = r#"
-        #version 330 core
-
-        in vec3 vColor;
-        in float vAlpha;
-        in vec2 vUV;
-        out vec4 FragColor;
-
-        uniform sampler2D uTexture;
-        uniform bool uUseTexture;
-
-        void main() {
-            // Recrée le disque (comme avant)
-            vec2 uv = vUV - vec2(0.5);
-            float dist = dot(uv, uv);
-            if (dist > 0.25)
-                discard;
-
-            float falloff = smoothstep(0.25, 0.0, dist);
-
-            // Heat-color fade (identique)
-            vec3 heatColor;
-            if (vAlpha > 0.66) {
-                heatColor = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.5, 0.0), (1.0 - vAlpha) / 0.34);
-            } else if (vAlpha > 0.33) {
-                heatColor = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.0, 0.0), (0.66 - vAlpha) / 0.33);
-            } else {
-                heatColor = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0), (0.33 - vAlpha) / 0.33);
-            }
-
-            vec4 baseColor = vec4(vColor * heatColor, vAlpha) * falloff;
-
-            // Si une texture est utilisée → multiplie le résultat
-            if (uUseTexture) {
-                vec4 texColor = texture(uTexture, vUV);
-                baseColor *= texColor;
-            }
-
-            FragColor = baseColor;
-        }
-        "#;
-    (vertex_src, fragment_src)
 }

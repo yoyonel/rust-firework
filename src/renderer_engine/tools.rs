@@ -1,6 +1,9 @@
 // use gl::types::*;
+use gl::types::*;
 use log::{debug, info, warn};
 use std::collections::HashSet;
+use std::ffi::CStr;
+use std::os::raw::c_void;
 use std::sync::Mutex;
 use std::{ffi::CString, ptr};
 
@@ -9,126 +12,62 @@ lazy_static::lazy_static! {
     static ref MESSAGE_COUNT: Mutex<std::collections::HashMap<u32, u32>> = Mutex::new(std::collections::HashMap::new());
 }
 
-/// Affiche les informations OpenGL / GPU du contexte actuel
-pub fn print_context_info() {
-    unsafe {
-        use std::ffi::CStr;
-
-        // Vendor / Renderer / Version / GLSL
-        let vendor = CStr::from_ptr(gl::GetString(gl::VENDOR) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-        let renderer = CStr::from_ptr(gl::GetString(gl::RENDERER) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-        let version = CStr::from_ptr(gl::GetString(gl::VERSION) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-        let glsl_version = CStr::from_ptr(gl::GetString(gl::SHADING_LANGUAGE_VERSION) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-
-        info!("🖥 OpenGL context info:");
-        info!("  Vendor   : {}", vendor);
-        info!("  Renderer : {}", renderer);
-        info!("  OpenGL   : {}", version);
-        info!("  GLSL     : {}", glsl_version);
-
-        // Nombre d'extensions
-        let mut num_ext = 0;
-        gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_ext);
-        info!("  Extensions: {} extensions detected", num_ext);
-
-        // Récupère toutes les extensions OpenGL et les affiche en une seule ligne
-        let mut extensions = Vec::new();
-        for i in 0..num_ext {
-            let ext = CStr::from_ptr(gl::GetStringi(gl::EXTENSIONS, i as u32) as *const i8)
-                .to_str()
-                .unwrap_or("Unknown");
-            extensions.push(ext);
-        }
-
-        debug!("GL_EXTENSIONS = {}", extensions.join(" "));
-
-        // Info système (Rust version, OS)
-        info!(
-            "Rust compiler version: {}",
-            rustc_version_runtime::version()
-        );
-        info!("  Platform    : {}", std::env::consts::OS);
-        info!("  Arch        : {}", std::env::consts::ARCH);
-
-        // Consommer le glerror si nécessaire
-        let err = gl::GetError();
-        if err != gl::NO_ERROR {
-            warn!("glerror consumed after getting context info: 0x{:X}", err);
-        }
-
-        let gl_version = std::env::var("GL").unwrap_or_else(|_| "Unknown".into());
-        let glfw_version = std::env::var("GLFW").unwrap_or_else(|_| "Unknown".into());
-        let cpal_version = std::env::var("CPAL").unwrap_or_else(|_| "Unknown".into());
-
-        info!("Rust dependancies");
-        info!("  GL   version: {}", gl_version);
-        info!("  GLFW version: {}", glfw_version);
-        info!("  CPAL version: {}", cpal_version);
-    }
+#[macro_export]
+macro_rules! cstr {
+    ($s:expr) => {
+        concat!($s, "\0").as_ptr() as *const i8
+    };
 }
 
-// /// # Safety
-// /// This function is unsafe because it interacts with raw OpenGL pointers and requires
-// /// the caller to ensure that the provided shader source strings are valid for the duration
-// /// of the shader compilation process.
-// pub unsafe fn compile_shader_program(vertex_src: &str, fragment_src: &str) -> u32 {
-//     fn compile_shader(src: &str, ty: GLenum) -> u32 {
-//         let shader = unsafe { gl::CreateShader(ty) };
-//         let c_str = CString::new(src).unwrap();
-//         unsafe {
-//             gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
-//             gl::CompileShader(shader);
+/// Affiche les informations OpenGL / GPU du contexte actuel
+/// # Safety
+///
+/// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
+pub unsafe fn show_opengl_context_info() {
+    use std::ffi::CStr;
 
-//             let mut success = gl::FALSE as GLint;
-//             gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
-//             if success != gl::TRUE as GLint {
-//                 let mut len = 0;
-//                 gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
-//                 let mut buf = Vec::with_capacity(len as usize);
-//                 gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
-//                 buf.set_len(len as usize);
-//                 panic!(
-//                     "Shader compilation failed: {}",
-//                     String::from_utf8_lossy(&buf)
-//                 );
-//             }
-//         }
-//         shader
-//     }
+    // Vendor / Renderer / Version / GLSL
+    let vendor = CStr::from_ptr(gl::GetString(gl::VENDOR) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
+    let renderer = CStr::from_ptr(gl::GetString(gl::RENDERER) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
+    let version = CStr::from_ptr(gl::GetString(gl::VERSION) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
+    let glsl_version = CStr::from_ptr(gl::GetString(gl::SHADING_LANGUAGE_VERSION) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
 
-//     let vs = compile_shader(vertex_src, gl::VERTEX_SHADER);
-//     let fs = compile_shader(fragment_src, gl::FRAGMENT_SHADER);
+    info!("🖥 OpenGL context info:");
+    info!("  Vendor   : {}", vendor);
+    info!("  Renderer : {}", renderer);
+    info!("  OpenGL   : {}", version);
+    info!("  GLSL     : {}", glsl_version);
 
-//     let program = unsafe { gl::CreateProgram() };
-//     unsafe {
-//         gl::AttachShader(program, vs);
-//         gl::AttachShader(program, fs);
-//         gl::LinkProgram(program);
+    // Nombre d'extensions
+    let mut num_ext = 0;
+    gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_ext);
+    info!("  Extensions: {} extensions detected", num_ext);
 
-//         let mut success = gl::FALSE as GLint;
-//         gl::GetProgramiv(program, gl::LINK_STATUS, &mut success);
-//         if success != gl::TRUE as GLint {
-//             let mut len = 0;
-//             gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
-//             let mut buf = Vec::with_capacity(len as usize);
-//             gl::GetProgramInfoLog(program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
-//             buf.set_len(len as usize);
-//             panic!("Shader link failed: {}", String::from_utf8_lossy(&buf));
-//         }
+    // Récupère toutes les extensions OpenGL et les affiche en une seule ligne
+    let mut extensions = Vec::new();
+    for i in 0..num_ext {
+        let ext = CStr::from_ptr(gl::GetStringi(gl::EXTENSIONS, i as u32) as *const i8)
+            .to_str()
+            .unwrap_or("Unknown");
+        extensions.push(ext);
+    }
 
-//         gl::DeleteShader(vs);
-//         gl::DeleteShader(fs);
-//     }
-//     program
-// }
+    debug!("GL_EXTENSIONS = {}", extensions.join(" "));
+
+    // Consommer le glerror si nécessaire
+    let err = gl::GetError();
+    if err != gl::NO_ERROR {
+        warn!("glerror consumed after getting context info: 0x{:X}", err);
+    }
+}
 
 /// # Safety
 /// Interagit directement avec des pointeurs OpenGL.
@@ -220,10 +159,6 @@ fn show_glsl_error_context(src: &str, line_number: usize) {
         }
     }
 }
-
-use gl::types::*;
-use std::ffi::CStr;
-use std::os::raw::c_void;
 
 /// Callback OpenGL debug, safe pour Rust
 extern "system" fn gl_debug_callback(
@@ -319,6 +254,7 @@ pub unsafe fn setup_opengl_debug() {
     );
 }
 
+/// Formats a byte size into a human-readable string with appropriate units (bytes, KB, MB, GB).
 pub fn format_bytes(size: isize) -> String {
     const KB: f64 = 1024.0;
     const MB: f64 = KB * 1024.0;
