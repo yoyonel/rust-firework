@@ -3,7 +3,6 @@ use crate::{log_metrics_and_fps, profiler::Profiler};
 use anyhow::{anyhow, Result};
 use glfw::{Action, Context, Key, WindowMode};
 use log::{debug, info};
-use std::ffi::CString;
 use std::time::Instant;
 
 use crate::audio_engine::AudioEngine;
@@ -14,21 +13,26 @@ use crate::renderer_engine::{
     utils::{
         adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler},
         glfw_window::Fullscreen,
+        texture::load_texture,
     },
 };
 
-// use crate::audio_engine::DopplerEvent;
 use crate::utils::human_bytes::HumanBytes;
-// use crossbeam::channel::Sender;
+
+macro_rules! cstr {
+    ($s:expr) => {
+        concat!($s, "\0").as_ptr() as *const i8
+    };
+}
 
 pub struct Renderer {
     pub glfw: glfw::Glfw,
-    // pub window: Option<glfw::Window>,
     pub window: Option<glfw::PWindow>,
     pub events: Option<glfw::GlfwReceiver<(f64, glfw::WindowEvent)>>,
 
     vao: u32,
-    vbo: u32,
+    vbo_particles: u32,
+    vbo_quad: u32,
     mapped_ptr: *mut ParticleGPU,
     shader_program: u32,
 
@@ -46,7 +50,12 @@ pub struct Renderer {
 
     // Shader
     loc_size: i32,
-    // _doppler_sender: Option<Sender<DopplerEvent>>, // option pour compatibilité si non fourni
+    loc_tex: i32,
+    loc_use: i32,
+    texture_id: u32,
+
+    // [POC] Instanced Quads
+    use_instanced_quads: bool,
 }
 
 // ---------------------------------------------------------
@@ -61,7 +70,6 @@ pub struct Renderer {
 //   prend **ownership** d'un objet `audio` de type `A`.
 //   Comme le Renderer possède cet objet, il n'y a pas besoin de
 //   références mutables externes ou de lifetimes (`&mut`) pour l'audio.
-//doppler_queue
 // Conséquences / avantages :
 // 1. Typage statique et monomorphisation : pas de dispatch dynamique,
 //    ce qui permet des appels plus rapides.
@@ -79,7 +87,7 @@ impl Renderer {
         height: i32,
         title: &str,
         max_particles_on_gpu: usize,
-        // doppler_sender: Option<Sender<DopplerEvent>>,
+        use_instanced_quads: bool,
     ) -> Result<Self> {
         let _ = env_logger::builder().is_test(true).try_init();
 
@@ -92,9 +100,6 @@ impl Renderer {
             glfw::OpenGlProfileHint::Core,
         ));
 
-        // let (mut window, events) = glfw
-        //     .create_window(width, height, title, glfw::WindowMode::Windowed)
-        //     .ok_or_else(|| anyhow!("Erreur: impossible de créer la fenêtre GLFW"))?;
         let (mut window, events) = glfw
             .create_window(
                 width as u32,
@@ -111,6 +116,9 @@ impl Renderer {
         window.set_mouse_button_polling(true);
         window.set_scroll_polling(true);
 
+        let window_last_pos = window.get_pos();
+        let window_last_size = window.get_size();
+
         info!("✅ OpenGL context ready for '{}'", title);
 
         gl::load_with(|s| window.get_proc_address(s) as *const _);
@@ -124,72 +132,23 @@ impl Renderer {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        // Vertex / Fragment shaders (GPU fait normalisation, alpha, size)
-        let vertex_src = r#"
-            #version 330 core
-            layout(location = 0) in vec2 aPos;       // pixel position
-            layout(location = 1) in vec3 aColor;     // rgb
-            layout(location = 2) in float aLife;     // life
-            layout(location = 3) in float aMaxLife;  // max_life
-            layout(location = 4) in float aSize;     // base size
-
-            out vec3 vertexColor;
-            out float alpha;
-
-            uniform vec2 uSize;
-
-            void main() {
-                float x = aPos.x / uSize.x * 2.0 - 1.0;
-                float y = aPos.y / uSize.y * 2.0 - 1.0;
-                gl_Position = vec4(x, y, 0.0, 1.0);
-
-                alpha = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
-                gl_PointSize = 2.0 + 5.0 * alpha;
-                vertexColor = aColor;
-            }
-        "#;
-
-        let fragment_src = r#"
-            #version 330 core
-            in vec3 vertexColor;
-            in float alpha;
-            out vec4 FragColor;
-            void main() {
-                vec2 uv = gl_PointCoord - vec2(0.5);
-                float dist = dot(uv, uv);
-                if (dist > 0.25) discard;
-                float falloff = smoothstep(0.25, 0.0, dist);
-    
-                // heat color fade: life fraction = alpha
-                vec3 heatColor;
-                if (alpha > 0.66) {
-                    // white → yellow
-                    heatColor = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.5, 0.0), (1.0 - alpha) / 0.34);
-                } else if (alpha > 0.33) {
-                    // yellow → red
-                    heatColor = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.0, 0.0), (0.66 - alpha) / 0.33);
-                } else {
-                    // red → black
-                    heatColor = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0), (0.33 - alpha) / 0.33);
-                }
-                // mix finale avec la couleur de vertex/particule et la heat color fade
-                FragColor = vec4(vertexColor * falloff * heatColor, alpha * falloff);
-            }
-        "#;
-
-        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
-        let loc_size = unsafe {
-            gl::GetUniformLocation(shader_program, CString::new("uSize").unwrap().as_ptr())
+        let (vertex_src, fragment_src) = if !use_instanced_quads {
+            src_shaders_particles()
+        } else {
+            src_shaders_instanced_quads()
         };
+        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
 
-        // // VAO/VBO setup
-        // let (mut vao, mut vbo) = (0u32, 0u32);
+        let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
+        let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
+        let loc_use = unsafe { gl::GetUniformLocation(shader_program, cstr!("uUseTexture")) };
+        let texture_id = load_texture("assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png");
 
-        let window_last_pos = window.get_pos();
-        let window_last_size = window.get_size();
+        // VAO/VBO setup
 
         unsafe {
-            let (vao, vbo, mapped_ptr, buffer_size) = setup_gpu_buffers(max_particles_on_gpu);
+            let (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size) =
+                setup_gpu_buffers(max_particles_on_gpu, use_instanced_quads);
 
             // comme on stocke le pointeur mappé GPU,
             // on doit renvoyer le résultat du constructeur de structure dans la partie unsafe
@@ -198,7 +157,8 @@ impl Renderer {
                 window: Some(window),
                 events: Some(events),
                 vao,
-                vbo,
+                vbo_particles,
+                vbo_quad,
                 mapped_ptr,
                 shader_program,
                 max_particles_on_gpu,
@@ -210,7 +170,10 @@ impl Renderer {
                 window_last_pos,
                 window_last_size,
                 loc_size,
-                // _doppler_sender: doppler_sender,
+                loc_tex,
+                loc_use,
+                texture_id,
+                use_instanced_quads,
             })
         }
     }
@@ -238,14 +201,16 @@ impl Renderer {
     unsafe fn recreate_buffers(&mut self, new_max: usize) {
         // 1. Libérer les anciens buffers
         gl::DeleteVertexArrays(1, &self.vao);
-        gl::DeleteBuffers(1, &self.vbo);
+        gl::DeleteBuffers(1, &self.vbo_particles);
 
         // 2. Recréer avec la nouvelle taille
-        let (vao, vbo, mapped_ptr, buffer_size) = setup_gpu_buffers(new_max);
+        let (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size) =
+            setup_gpu_buffers(new_max, self.use_instanced_quads);
 
         // 3. Mettre à jour les champs
         self.vao = vao;
-        self.vbo = vbo;
+        self.vbo_particles = vbo_particles;
+        self.vbo_quad = vbo_quad;
         self.mapped_ptr = mapped_ptr;
         self.buffer_size = buffer_size;
         self.max_particles_on_gpu = new_max;
@@ -344,10 +309,6 @@ impl Renderer {
         }
 
         unsafe {
-            // Lie le VAO et VBO correspondant aux particules
-            gl::BindVertexArray(self.vao);
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-
             // Active le shader de rendu des particules
             gl::UseProgram(self.shader_program);
 
@@ -358,13 +319,27 @@ impl Renderer {
                 self.window_size_f32.1,
             );
 
-            // Dessine les particules sous forme de points
-            gl::DrawArrays(gl::POINTS, 0, count as i32);
+            // Lie le VAO et VBO correspondant aux particules
+            gl::BindVertexArray(self.vao);
+
+            if !self.use_instanced_quads {
+                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+                // Dessine les particules sous forme de points
+                gl::DrawArrays(gl::POINTS, 0, count as i32);
+            } else {
+                gl::ActiveTexture(gl::TEXTURE0);
+                gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
+                gl::Uniform1i(self.loc_tex, 0);
+                gl::Uniform1i(self.loc_use, 1); // 1 = activer la texture
+                                                //
+                gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_quad);
+                gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
+            }
         }
     }
 
     /// Exécute une seule frame (update + rendu)
-    pub fn render_frame<P: PhysicEngine>(&mut self, physic: &mut P) -> usize {
+    pub fn render_frame<P: PhysicEngine>(&mut self, physic: &P) -> usize {
         // Early-out si la fenêtre est fermée
         if let Some(w) = &self.window {
             if w.should_close() {
@@ -397,7 +372,6 @@ impl Renderer {
         let profiler = Profiler::new(200);
         let mut last_log = Instant::now();
         let log_interval = std::time::Duration::from_secs(5);
-        // let mut next_doppler_update = Instant::now();
 
         // 🔹 Initialisation de l’échantillonneur adaptatif
         let target_samples = 200;
@@ -436,20 +410,7 @@ impl Renderer {
                 sampled_fps.push(fps);
             }
 
-            let update_result = profiler.profile_block("physic - update", || physic.update(delta));
-
-            if let Some(rocket) = update_result.new_rocket {
-                debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
-                audio.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
-            }
-
-            for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
-                debug!(
-                    "💥 Explosion triggered: {} at ({}, {})",
-                    i, expl.pos.x, expl.pos.y
-                );
-                audio.play_explosion((expl.pos.x, expl.pos.y), 1.0);
-            }
+            self.update_physic_and_sync_with_audio(physic, audio, delta, &profiler);
 
             let _render_guard = profiler.measure("render frame");
             let particles_rendered = self.render_frame(physic);
@@ -582,13 +543,36 @@ impl Renderer {
         Ok(())
     }
 
+    fn update_physic_and_sync_with_audio<P: PhysicEngine, A: AudioEngine>(
+        &mut self,
+        physic: &mut P,
+        audio: &mut A,
+        delta: f32,
+        profiler: &Profiler,
+    ) {
+        let update_result = profiler.profile_block("physic - update", || physic.update(delta));
+
+        if let Some(rocket) = update_result.new_rocket {
+            debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
+            audio.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
+        }
+
+        for (i, expl) in update_result.explosions.iter().enumerate() {
+            debug!(
+                "💥 Explosion triggered: {} at ({}, {})",
+                i, expl.pos.x, expl.pos.y
+            );
+            audio.play_explosion((expl.pos.x, expl.pos.y), 1.0);
+        }
+    }
+
     pub fn close(&mut self) {
         info!("🧹 Fermeture du Renderer");
 
         unsafe {
-            if self.vbo != 0 {
-                gl::DeleteBuffers(1, &self.vbo);
-                self.vbo = 0;
+            if self.vbo_particles != 0 {
+                gl::DeleteBuffers(1, &self.vbo_particles);
+                self.vbo_particles = 0;
             }
             if self.vao != 0 {
                 gl::DeleteVertexArrays(1, &self.vao);
@@ -620,21 +604,59 @@ impl RendererEngine for Renderer {
     }
 }
 
-unsafe fn setup_gpu_buffers(max_particles_on_gpu: usize) -> (u32, u32, *mut ParticleGPU, isize) {
-    let (mut vao, mut vbo) = (0u32, 0u32);
-    gl::GenVertexArrays(1, &mut vao);
-    gl::GenBuffers(1, &mut vbo);
+unsafe fn setup_gpu_buffers(
+    max_particles_on_gpu: usize,
+    use_instanced_quads: bool,
+) -> (u32, u32, u32, *mut ParticleGPU, isize) {
+    let (mut vao, mut vbo_quad, mut vbo_particles) = (0u32, 0u32, 0u32);
 
+    // === VAO ===
+    gl::GenVertexArrays(1, &mut vao);
     gl::BindVertexArray(vao);
-    gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
+
+    if use_instanced_quads {
+        // === 1️⃣ QuadVertexAttribPointer unité statique ===
+        const QUAD_VERTICES: [f32; 8] = [
+            -1.0, -1.0, // bottom-left
+            1.0, -1.0, // bottom-right
+            -1.0, 1.0, // top-left
+            1.0, 1.0, // top-right
+        ];
+
+        gl::GenBuffers(1, &mut vbo_quad);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (QUAD_VERTICES.len() * std::mem::size_of::<f32>()) as isize,
+            QUAD_VERTICES.as_ptr() as *const _,
+            gl::STATIC_DRAW,
+        );
+
+        // layout(location = 0): sommets du quad
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            0,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            2 * std::mem::size_of::<f32>() as i32,
+            std::ptr::null(),
+        );
+        gl::VertexAttribDivisor(0, 0); // par sommet
+    }
+
+    // === 2️⃣ Particules persistantes ===
+    gl::GenBuffers(1, &mut vbo_particles);
+    gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
 
     let buffer_size = (max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
     info!(
-        "🎮 Reallocating GPU buffer: {} particles → {}",
+        "🎮 Allocating instanced particle buffer: {} particles → {}",
         max_particles_on_gpu,
         buffer_size.human_bytes()
     );
 
+    // Allocation persistante
     gl::BufferStorage(
         gl::ARRAY_BUFFER,
         buffer_size,
@@ -642,6 +664,7 @@ unsafe fn setup_gpu_buffers(max_particles_on_gpu: usize) -> (u32, u32, *mut Part
         gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT,
     );
 
+    // Mapping CPU → GPU
     let mapped_ptr = gl::MapBufferRange(
         gl::ARRAY_BUFFER,
         0,
@@ -652,8 +675,139 @@ unsafe fn setup_gpu_buffers(max_particles_on_gpu: usize) -> (u32, u32, *mut Part
             | gl::MAP_FLUSH_EXPLICIT_BIT,
     ) as *mut ParticleGPU;
 
-    // Appel unique, auto-configuré
-    ParticleGPU::setup_vertex_attribs();
+    // === Définition des attributs instanciés ===
+    if !use_instanced_quads {
+        ParticleGPU::setup_vertex_attribs();
+    } else {
+        ParticleGPU::setup_vertex_attribs_for_instanced_quad();
+    }
+    // === Nettoyage ===
+    gl::BindVertexArray(0);
 
-    (vao, vbo, mapped_ptr, buffer_size)
+    (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
+}
+
+pub fn src_shaders_particles() -> (&'static str, &'static str) {
+    let vertex_src = r#"
+        #version 330 core
+        layout(location = 0) in vec2 aPos;
+        layout(location = 1) in vec3 aColor;
+        layout(location = 2) in float aLife;
+        layout(location = 3) in float aMaxLife;
+        layout(location = 4) in float aSize;
+
+        out vec3 vertexColor;
+        out float alpha;
+
+        uniform vec2 uSize;
+
+        void main() {
+            float a = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
+            alpha = a;
+            vertexColor = aColor;
+
+            float x = aPos.x / uSize.x * 2.0 - 1.0;
+            float y = aPos.y / uSize.y * 2.0 - 1.0;
+            gl_Position = vec4(x, y, 0.0, 1.0);
+
+            gl_PointSize = 2.0 + 5.0 * a;
+        }
+        "#;
+
+    let fragment_src = r#"
+        #version 330 core
+        in vec3 vertexColor;
+        in float alpha;
+        out vec4 FragColor;
+
+        void main() {
+            vec2 uv = gl_PointCoord - vec2(0.5);
+            float dist = dot(uv, uv);
+            if(dist > 0.25) discard;
+            float falloff = smoothstep(0.25, 0.0, dist);
+            FragColor = vec4(vertexColor, alpha * falloff);
+        }
+        "#;
+    (vertex_src, fragment_src)
+}
+
+fn src_shaders_instanced_quads() -> (&'static str, &'static str) {
+    let vertex_src = r#"
+        #version 330 core
+
+        // === Quad unité (4 sommets pour TRIANGLE_STRIP)
+        layout(location = 0) in vec2 aQuad;
+
+        // === Attributs instanciés (1 par particule)
+        layout(location = 1) in vec2 aPos;
+        layout(location = 2) in vec3 aColor;
+        layout(location = 3) in float aLife;
+        layout(location = 4) in float aMaxLife;
+        layout(location = 5) in float aSize;
+
+        out vec3 vColor;
+        out float vAlpha;
+        out vec2 vUV;
+
+        uniform vec2 uSize;
+
+        void main() {
+            // Ratio de vie (comme avant)
+            vAlpha = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
+            vColor = aColor;
+
+            // On reconstruit les coordonnées UV du quad (-0.5 → +0.5)
+            vUV = aQuad * 0.5 + 0.5;
+
+            // Position du sommet quad dans l’espace clip (avec taille)
+            vec2 world = aPos + aQuad * aSize * (2.0 + 5.0 * vAlpha);
+
+            float x = world.x / uSize.x * 2.0 - 1.0;
+            float y = world.y / uSize.y * 2.0 - 1.0;
+            gl_Position = vec4(x, y, 0.0, 1.0);
+        }
+        "#;
+
+    let fragment_src = r#"
+        #version 330 core
+
+        in vec3 vColor;
+        in float vAlpha;
+        in vec2 vUV;
+        out vec4 FragColor;
+
+        uniform sampler2D uTexture;
+        uniform bool uUseTexture;
+
+        void main() {
+            // Recrée le disque (comme avant)
+            vec2 uv = vUV - vec2(0.5);
+            float dist = dot(uv, uv);
+            if (dist > 0.25)
+                discard;
+
+            float falloff = smoothstep(0.25, 0.0, dist);
+
+            // Heat-color fade (identique)
+            vec3 heatColor;
+            if (vAlpha > 0.66) {
+                heatColor = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.5, 0.0), (1.0 - vAlpha) / 0.34);
+            } else if (vAlpha > 0.33) {
+                heatColor = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.0, 0.0), (0.66 - vAlpha) / 0.33);
+            } else {
+                heatColor = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0), (0.33 - vAlpha) / 0.33);
+            }
+
+            vec4 baseColor = vec4(vColor * heatColor, vAlpha) * falloff;
+
+            // Si une texture est utilisée → multiplie le résultat
+            if (uUseTexture) {
+                vec4 texColor = texture(uTexture, vUV);
+                baseColor *= texColor;
+            }
+
+            FragColor = baseColor;
+        }
+        "#;
+    (vertex_src, fragment_src)
 }
