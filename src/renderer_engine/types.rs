@@ -127,6 +127,72 @@ impl ParticleGPU {
             gl::EnableVertexAttribArray(4);
         }
     }
+
+    pub fn setup_vertex_attribs_for_instanced_quad() {
+        let stride = std::mem::size_of::<Self>() as GLsizei;
+
+        unsafe {
+            // layout(location = 1) : position (vec2)
+            gl::VertexAttribPointer(
+                1,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, pos_x) as *const _,
+            );
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribDivisor(1, 1); // 🔑 une fois par particule
+
+            // layout(location = 2) : couleur (vec3)
+            gl::VertexAttribPointer(
+                2,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, col_r) as *const _,
+            );
+            gl::EnableVertexAttribArray(2);
+            gl::VertexAttribDivisor(2, 1);
+
+            // layout(location = 3) : vie (float)
+            gl::VertexAttribPointer(
+                3,
+                1,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, life) as *const _,
+            );
+            gl::EnableVertexAttribArray(3);
+            gl::VertexAttribDivisor(3, 1);
+
+            // layout(location = 4) : vie max (float)
+            gl::VertexAttribPointer(
+                4,
+                1,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, max_life) as *const _,
+            );
+            gl::EnableVertexAttribArray(4);
+            gl::VertexAttribDivisor(4, 1);
+
+            // layout(location = 5) : taille (float)
+            gl::VertexAttribPointer(
+                5,
+                1,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, size) as *const _,
+            );
+            gl::EnableVertexAttribArray(5);
+            gl::VertexAttribDivisor(5, 1);
+        }
+    }
 }
 
 /// Structure envoyée au GPU représentant une particule de fumée.
