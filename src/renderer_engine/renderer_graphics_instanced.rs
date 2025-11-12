@@ -1,0 +1,389 @@
+use log::info;
+
+use crate::cstr;
+use crate::physic_engine::PhysicEngine;
+use crate::renderer_engine::{
+    tools::compile_shader_program, types::ParticleGPU, utils::texture::load_texture,
+};
+use crate::utils::human_bytes::HumanBytes;
+
+pub struct RendererGraphicsInstanced {
+    pub vao: u32,
+    pub vbo_particles: u32,
+    pub vbo_quad: u32,
+
+    pub mapped_ptr: *mut ParticleGPU,
+
+    pub shader_program: u32,
+    // Shader
+    pub loc_size: i32,
+    pub loc_tex: i32,
+    pub loc_use: i32,
+    pub texture_id: u32,
+
+    pub max_particles_on_gpu: usize,
+}
+
+impl RendererGraphicsInstanced {
+    pub fn new(max_particles_on_gpu: usize) -> Self {
+        let (vertex_src, fragment_src) = RendererGraphicsInstanced::src_shaders_instanced_quads();
+        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
+
+        let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
+        let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
+        let loc_use = unsafe { gl::GetUniformLocation(shader_program, cstr!("uUseTexture")) };
+        let texture_id = load_texture("assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png");
+
+        // VAO/VBO setup
+        unsafe {
+            let (vao, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
+                RendererGraphicsInstanced::setup_gpu_buffers(max_particles_on_gpu);
+
+            Self {
+                vao,
+                vbo_particles,
+                vbo_quad,
+                mapped_ptr,
+                shader_program,
+                loc_size,
+                loc_tex,
+                loc_use,
+                texture_id,
+                max_particles_on_gpu,
+            }
+        }
+    }
+
+    pub fn src_shaders_particles() -> (&'static str, &'static str) {
+        let vertex_src = r#"
+        #version 330 core
+        layout(location = 0) in vec2 aPos;
+        layout(location = 1) in vec3 aColor;
+        layout(location = 2) in float aLife;
+        layout(location = 3) in float aMaxLife;
+        layout(location = 4) in float aSize;
+
+        out vec3 vertexColor;
+        out float alpha;
+
+        uniform vec2 uSize;
+
+        void main() {
+            float a = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
+            alpha = a;
+            vertexColor = aColor;
+
+            float x = aPos.x / uSize.x * 2.0 - 1.0;
+            float y = aPos.y / uSize.y * 2.0 - 1.0;
+            gl_Position = vec4(x, y, 0.0, 1.0);
+
+            gl_PointSize = 2.0 + 5.0 * a;
+        }
+        "#;
+
+        let fragment_src = r#"
+        #version 330 core
+        in vec3 vertexColor;
+        in float alpha;
+        out vec4 FragColor;
+
+        void main() {
+            vec2 uv = gl_PointCoord - vec2(0.5);
+            float dist = dot(uv, uv);
+            if(dist > 0.25) discard;
+            float falloff = smoothstep(0.25, 0.0, dist);
+            FragColor = vec4(vertexColor, alpha * falloff);
+        }
+        "#;
+        (vertex_src, fragment_src)
+    }
+
+    fn src_shaders_instanced_quads() -> (&'static str, &'static str) {
+        let vertex_src = r#"
+        #version 330 core
+
+        // === Quad unité (4 sommets pour TRIANGLE_STRIP)
+        layout(location = 0) in vec2 aQuad;
+
+        // === Attributs instanciés (1 par particule)
+        layout(location = 1) in vec2 aPos;
+        layout(location = 2) in vec3 aColor;
+        layout(location = 3) in float aLife;
+        layout(location = 4) in float aMaxLife;
+        layout(location = 5) in float aSize;
+
+        out vec3 vColor;
+        out float vAlpha;
+        out vec2 vUV;
+
+        uniform vec2 uSize;
+
+        void main() {
+            // Ratio de vie (comme avant)
+            vAlpha = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
+            vColor = aColor;
+
+            // On reconstruit les coordonnées UV du quad (-0.5 → +0.5)
+            vUV = aQuad * 0.5 + 0.5;
+
+            // Position du sommet quad dans l’espace clip (avec taille)
+            vec2 world = aPos + aQuad * aSize * (2.0 + 5.0 * vAlpha);
+
+            float x = world.x / uSize.x * 2.0 - 1.0;
+            float y = world.y / uSize.y * 2.0 - 1.0;
+            gl_Position = vec4(x, y, 0.0, 1.0);
+        }
+        "#;
+
+        let fragment_src = r#"
+        #version 330 core
+
+        in vec3 vColor;
+        in float vAlpha;
+        in vec2 vUV;
+        out vec4 FragColor;
+
+        uniform sampler2D uTexture;
+        uniform bool uUseTexture;
+
+        void main() {
+            // Recrée le disque (comme avant)
+            vec2 uv = vUV - vec2(0.5);
+            float dist = dot(uv, uv);
+            if (dist > 0.25)
+                discard;
+
+            float falloff = smoothstep(0.25, 0.0, dist);
+
+            // Heat-color fade (identique)
+            vec3 heatColor;
+            if (vAlpha > 0.66) {
+                heatColor = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.5, 0.0), (1.0 - vAlpha) / 0.34);
+            } else if (vAlpha > 0.33) {
+                heatColor = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.0, 0.0), (0.66 - vAlpha) / 0.33);
+            } else {
+                heatColor = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0), (0.33 - vAlpha) / 0.33);
+            }
+
+            vec4 baseColor = vec4(vColor * heatColor, vAlpha) * falloff;
+
+            // Si une texture est utilisée → multiplie le résultat
+            if (uUseTexture) {
+                vec4 texColor = texture(uTexture, vUV);
+                baseColor *= texColor;
+            }
+
+            FragColor = baseColor;
+        }
+        "#;
+        (vertex_src, fragment_src)
+    }
+
+    unsafe fn setup_gpu_buffers(
+        max_particles_on_gpu: usize,
+    ) -> (u32, u32, u32, *mut ParticleGPU, isize) {
+        let (mut vao, mut vbo_quad, mut vbo_particles) = (0u32, 0u32, 0u32);
+
+        // === VAO ===
+        gl::GenVertexArrays(1, &mut vao);
+        gl::BindVertexArray(vao);
+
+        // === 1️⃣ QuadVertexAttribPointer unité statique ===
+        const QUAD_VERTICES: [f32; 8] = [
+            -1.0, -1.0, // bottom-left
+            1.0, -1.0, // bottom-right
+            -1.0, 1.0, // top-left
+            1.0, 1.0, // top-right
+        ];
+
+        gl::GenBuffers(1, &mut vbo_quad);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+        gl::BufferData(
+            gl::ARRAY_BUFFER,
+            (QUAD_VERTICES.len() * std::mem::size_of::<f32>()) as isize,
+            QUAD_VERTICES.as_ptr() as *const _,
+            gl::STATIC_DRAW,
+        );
+
+        // layout(location = 0): sommets du quad
+        gl::EnableVertexAttribArray(0);
+        gl::VertexAttribPointer(
+            0,
+            2,
+            gl::FLOAT,
+            gl::FALSE,
+            2 * std::mem::size_of::<f32>() as i32,
+            std::ptr::null(),
+        );
+        gl::VertexAttribDivisor(0, 0); // par sommet
+
+        // === 2️⃣ Particules persistantes ===
+        gl::GenBuffers(1, &mut vbo_particles);
+        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+
+        let buffer_size = (max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
+        info!(
+            "🎮 Allocating instanced particle buffer: {} particles → {}",
+            max_particles_on_gpu,
+            buffer_size.human_bytes()
+        );
+
+        // Allocation persistante
+        gl::BufferStorage(
+            gl::ARRAY_BUFFER,
+            buffer_size,
+            std::ptr::null(),
+            gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT,
+        );
+
+        // Mapping CPU → GPU
+        let mapped_ptr = gl::MapBufferRange(
+            gl::ARRAY_BUFFER,
+            0,
+            buffer_size,
+            gl::MAP_WRITE_BIT
+                | gl::MAP_PERSISTENT_BIT
+                | gl::MAP_COHERENT_BIT
+                | gl::MAP_FLUSH_EXPLICIT_BIT,
+        ) as *mut ParticleGPU;
+
+        // === Définition des attributs instanciés ===
+        ParticleGPU::setup_vertex_attribs_for_instanced_quad();
+        // === Nettoyage ===
+        gl::BindVertexArray(0);
+
+        (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
+    }
+
+    /// Recrée les buffers GPU avec une nouvelle taille maximale.
+    /// Cette opération libère les anciens buffers et en crée de nouveaux,
+    /// puis met à jour les champs internes de la structure.
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn recreate_buffers(&mut self, new_max: usize) {
+        // 1. Libérer les anciens buffers
+        gl::DeleteVertexArrays(1, &self.vao);
+        gl::DeleteBuffers(1, &self.vbo_particles);
+
+        // 2. Recréer avec la nouvelle taille
+        let (vao, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
+            RendererGraphicsInstanced::setup_gpu_buffers(new_max);
+
+        // 3. Mettre à jour les champs
+        self.vao = vao;
+        self.vbo_particles = vbo_particles;
+        self.vbo_quad = vbo_quad;
+        self.mapped_ptr = mapped_ptr;
+        self.max_particles_on_gpu = new_max;
+    }
+
+    /// Remplit le buffer GPU directement
+    /// # Safety
+    /// This function is unsafe because it directly manipulates GPU resources.
+    /// The caller must ensure that the OpenGL context is valid.
+    pub unsafe fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+        let mut count = 0;
+
+        // Crée un slice Rust sûr sur le buffer GPU
+        let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
+
+        for (i, p) in physic.active_particles().enumerate() {
+            if i >= self.max_particles_on_gpu {
+                break;
+            }
+            gpu_slice[i] = ParticleGPU {
+                pos_x: p.pos.x,
+                pos_y: p.pos.y,
+                col_r: p.color.x,
+                col_g: p.color.y,
+                col_b: p.color.z,
+                life: p.life,
+                max_life: p.max_life,
+                size: p.size,
+            };
+            count += 1;
+        }
+        // Flush explicite de la zone modifiée pour que le GPU voit les changements
+        let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
+        gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
+
+        count
+    }
+
+    /// Envoie le slice de ParticleGPU au GPU et dessine.
+    /// Cette fonction est stateless vis-à-vis de `self` (sauf pour uniforms), et accepte le slice brut.
+    /// Rendu des particules via un buffer OpenGL persistant.
+    ///
+    /// Cette méthode lie les ressources GPU nécessaires, et dessine
+    /// les particules à l’écran sous forme de points (`GL_POINTS`).
+    ///
+    /// # Paramètres
+    /// - `count`: nombre de particules à afficher. Si `count` vaut 0, aucun rendu n’est effectué.
+    ///
+    /// # Détails techniques
+    /// - **Persistent Mapping** : Le VBO (Vertex Buffer Object) est mappé de manière
+    ///   persistante en mémoire GPU. Cela signifie que les données peuvent être modifiées
+    ///   directement via un pointeur mémoire (obtenu avec `glMapBufferRange`), sans devoir
+    ///   réappeler `glBufferSubData` à chaque frame.
+    /// - Le shader utilisé (`self.shader_program`) est supposé gérer le rendu de chaque
+    ///   particule via les attributs du VBO et les uniformes `width` et `height`.
+    ///
+    /// # Safety
+    /// Cette fonction utilise des appels `unsafe` à l’API OpenGL, car ces fonctions
+    /// manipulent directement des pointeurs mémoire GPU et des ressources système.
+    /// Il est de la responsabilité de l’appelant de garantir que le contexte OpenGL
+    /// est valide et que les ressources (`VAO`, `VBO`, shader, etc.) sont correctement initialisées.
+    pub unsafe fn render_particles_with_persistent_buffer(
+        &self,
+        count: usize,
+        window_size: (f32, f32),
+    ) {
+        // Si aucune particule, on ne fait rien
+        if count == 0 {
+            return;
+        }
+
+        // Active le shader de rendu des particules
+        gl::UseProgram(self.shader_program);
+
+        // Envoie les dimensions de la fenêtre au shader (uniforms)
+        gl::Uniform2f(self.loc_size, window_size.0, window_size.1);
+
+        // Lie le VAO et VBO correspondant aux particules
+        gl::BindVertexArray(self.vao);
+
+        gl::ActiveTexture(gl::TEXTURE0);
+        gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
+        gl::Uniform1i(self.loc_tex, 0);
+        gl::Uniform1i(self.loc_use, 1); // 1 = activer la texture
+                                        //
+        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_quad);
+        gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
+    }
+
+    /// Libère les ressources GPU associées à ce RendererGraphics.
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn close(&mut self) {
+        if self.vbo_particles != 0 {
+            gl::DeleteBuffers(1, &self.vbo_particles);
+            self.vbo_particles = 0;
+        }
+        if self.vbo_quad != 0 {
+            gl::DeleteBuffers(1, &self.vbo_quad);
+            self.vbo_quad = 0;
+        }
+        if self.vao != 0 {
+            gl::DeleteVertexArrays(1, &self.vao);
+            self.vao = 0;
+        }
+        if self.shader_program != 0 {
+            gl::DeleteProgram(self.shader_program);
+            self.shader_program = 0;
+        }
+    }
+}

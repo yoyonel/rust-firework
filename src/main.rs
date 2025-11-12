@@ -3,20 +3,21 @@ use anyhow::Result;
 use log::info;
 use std::{cmp, env, path::PathBuf};
 
-// use fireworks_sim::audio_engine::audio_event::doppler_queue::DopplerQueue;
 use fireworks_sim::audio_engine::settings::AudioEngineSettings;
 use fireworks_sim::audio_engine::{FireworksAudio3D, FireworksAudioConfig};
 use fireworks_sim::physic_engine::config::PhysicConfig;
-// use fireworks_sim::physic_engine::physic_engine_static_aos::PhysicEngineFireworks;
 use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
+use fireworks_sim::renderer_engine::renderer::Renderer;
+use fireworks_sim::utils::show_rust_core_dependencies;
 use fireworks_sim::Simulator;
 
-use fireworks_sim::renderer_engine::renderer::Renderer;
-
+/// Main entry point for the Fireworks Simulator application.
 fn main() -> Result<()> {
     env_logger::init();
 
     info!("🚀 Starting Fireworks Simulator...");
+
+    show_rust_core_dependencies();
 
     // TODO: mettre en place un vrai gestionnaire de configurations (avec traits) !
     let physic_config = PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
