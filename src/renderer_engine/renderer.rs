@@ -382,7 +382,7 @@ impl Renderer {
             audio.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
         }
 
-        for (i, expl) in update_result.explosions.iter().enumerate() {
+        for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
             debug!(
                 "💥 Explosion triggered: {} at ({}, {})",
                 i, expl.pos.x, expl.pos.y
