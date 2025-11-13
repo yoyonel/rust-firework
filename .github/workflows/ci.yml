@@ -103,6 +103,10 @@ jobs:
           ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-
           ${{ runner.os }}-sccache-
 
+    - name: Lint project
+      run: |
+        make lint
+
     # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
     - name: Install cargo-llvm-cov
       run: |
