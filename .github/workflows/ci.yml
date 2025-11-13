@@ -105,6 +105,7 @@ jobs:
 
     - name: Lint project
       run: |
+        rustup component add rustfmt clippy
         make lint
 
     # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
