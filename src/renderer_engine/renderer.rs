@@ -64,7 +64,6 @@ impl Renderer {
         height: i32,
         title: &str,
         max_particles_on_gpu: usize,
-        _use_instanced_quads: bool,
     ) -> Result<Self> {
         let _ = env_logger::builder().is_test(true).try_init();
 
