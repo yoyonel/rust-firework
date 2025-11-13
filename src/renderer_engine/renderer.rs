@@ -251,7 +251,41 @@ impl Renderer {
         self.max_particles_on_gpu = new_max;
     }
 
-    /// Remplit le buffer GPU directement
+    /// Remplit directement le buffer GPU avec les données des particules actives.
+    ///
+    /// Cette méthode copie les données de toutes les particules actives fournies par
+    /// le moteur physique `physic` dans le buffer GPU mappé en mémoire CPU (`self.mapped_ptr`),
+    /// jusqu'à un maximum défini par `self.max_particles_on_gpu`.
+    ///
+    /// # Fonctionnalité
+    /// - Chaque particule physique active est convertie en `ParticleGPU` via `Particle::to_particle_gpu()`.
+    /// - Les données sont écrites directement dans le slice mappé `gpu_slice`, garantissant que
+    ///   la mémoire GPU est correctement mise à jour.
+    /// - La méthode renvoie le nombre de particules copiées dans le buffer GPU (`count`),
+    ///   ce qui peut être utilisé pour des opérations ultérieures (par exemple le rendu).
+    /// - Après avoir rempli le slice, un flush explicite est effectué via
+    ///   `gl::FlushMappedBufferRange` pour que le GPU prenne en compte les modifications.
+    ///
+    /// # Sécurité et `unsafe`
+    /// - La méthode utilise un bloc `unsafe` car elle crée un slice Rust mutable (`gpu_slice`)
+    ///   à partir d'un pointeur brut mappé sur la mémoire GPU (`self.mapped_ptr`).
+    /// - Les garanties suivantes sont respectées pour que cette opération soit sûre :
+    ///   1. `self.mapped_ptr` pointe vers une mémoire valide et correctement alignée
+    ///      pour `ParticleGPU`.
+    ///   2. Le slice a une longueur exacte de `self.max_particles_on_gpu`, garantissant
+    ///      que l’on n’accède jamais hors limites.
+    ///   3. La boucle `for` itère en parallèle sur le slice GPU et les particules actives via `zip`,
+    ///      donc aucune écriture ne dépasse la capacité du slice.
+    /// - Chaque élément du slice est écrit **en place** (`*dst = …`), et le flush est effectué
+    ///   après toutes les écritures pour synchroniser le GPU.
+    ///
+    /// # Remarques
+    /// - Il est important de **ne pas utiliser de `map()` ou `collect()` ici**, car la mémoire
+    ///   mappée GPU requiert des écritures en place. Les transformations fonctionnelles pourraient
+    ///   entraîner des écritures incorrectes ou hors ordre, rendant le GPU incapable de lire les
+    ///   données correctement.
+    /// - Cette méthode est conçue pour être rapide et sûre, tout en restant compatible avec
+    ///   des milliers de particules dans un buffer mappé CPU ↔ GPU.
     pub fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
         let mut count = 0;
 
@@ -260,22 +294,18 @@ impl Renderer {
             let gpu_slice =
                 std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
 
-            for (i, p) in physic.active_particles().enumerate() {
-                if i >= self.max_particles_on_gpu {
-                    break;
-                }
-                gpu_slice[i] = ParticleGPU {
-                    pos_x: p.pos.x,
-                    pos_y: p.pos.y,
-                    col_r: p.color.x,
-                    col_g: p.color.y,
-                    col_b: p.color.z,
-                    life: p.life,
-                    max_life: p.max_life,
-                    size: p.size,
-                };
-                count += 1;
+            // Itère en parallèle sur les particules physiques actives et les slots GPU disponibles
+            // le zip se fait (dans l'ordre) du slice gpu vers les particules actives,
+            // donc la taille max du slice gpu ne pourra (implicitement) jamais être dépassée.
+            for (i, (dst, src)) in gpu_slice
+                .iter_mut()
+                .zip(physic.active_particles())
+                .enumerate()
+            {
+                *dst = src.to_particle_gpu();
+                count = i + 1;
             }
+
             // Flush explicite de la zone modifiée pour que le GPU voit les changements
             let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
             gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
@@ -413,7 +443,7 @@ impl Renderer {
                 audio.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
             }
 
-            for (i, expl) in update_result.explosions.iter().enumerate() {
+            for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
                 debug!(
                     "💥 Explosion triggered: {} at ({}, {})",
                     i, expl.pos.x, expl.pos.y
@@ -447,8 +477,10 @@ impl Renderer {
                         50,
                         avg_fps,
                     );
+                    info!("Graphe - Sample Timeline");
+                    // [Trait Iterator - for_each - Calls a closure on each element of an iterator.](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.for_each)
+                    graph.lines().for_each(|line| info!("{}", line));
 
-                    info!("Graphe - Sample Timeline\n{}", graph);
                     info!(
                         "Samples: {} / {} | Moyenne FPS: {:.2}",
                         sampler.samples.len(),

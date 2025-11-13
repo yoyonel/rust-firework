@@ -5,7 +5,9 @@ use fireworks_sim::physic_engine::{particle::Particle, rocket::Rocket, types::Up
 use fireworks_sim::renderer_engine::RendererEngine;
 use std::cell::RefCell;
 
+#[allow(unused)]
 pub struct DummyAudio;
+
 impl AudioEngine for DummyAudio {
     fn get_listener_position(&self) -> (f32, f32) {
         (0.0, 0.0)
@@ -22,7 +24,7 @@ impl PhysicEngine for DummyPhysic {
     fn update(&mut self, _dt: f32) -> UpdateResult<'_> {
         UpdateResult {
             new_rocket: None,
-            explosions: &[],
+            triggered_explosions: &[],
         }
     }
     fn close(&mut self) {}
@@ -137,7 +139,7 @@ impl fireworks_sim::physic_engine::PhysicEngine for LoggingPhysic {
         self.log.push("update called".into());
         UpdateResult {
             new_rocket: None,
-            explosions: &[],
+            triggered_explosions: &[],
         }
     }
     fn close(&mut self) {

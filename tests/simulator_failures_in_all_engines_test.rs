@@ -56,7 +56,7 @@ fn run_failure_test(failure: EngineFailure) {
             }
             UpdateResult {
                 new_rocket: None,
-                explosions: &[],
+                triggered_explosions: &[],
             }
         }
         fn set_window_width(&mut self, _width: f32) {

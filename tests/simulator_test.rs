@@ -116,7 +116,7 @@ fn test_call_order_in_simulator_run_and_close() -> anyhow::Result<()> {
             self.log.borrow_mut().push("physic.update".into());
             UpdateResult {
                 new_rocket: None,
-                explosions: &[],
+                triggered_explosions: &[],
             }
         }
         fn set_window_width(&mut self, _width: f32) {

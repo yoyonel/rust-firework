@@ -5,7 +5,7 @@
 # rocket_interval_variation = 0.75
 # rocket_max_next_interval = 0.5
 #
-max_rockets = 8192
+max_rockets = 2048
 particles_per_explosion = 256
 particles_per_trail = 64
 rocket_interval_mean = 0.025
@@ -20,11 +20,11 @@ rocket_max_next_interval = 0.025
 # rocket_max_next_interval = 0.001
 
 # default values
-spawn_rocket_margin = 50.0
+spawn_rocket_margin = 250.0
 spawn_rocket_vertical_angle = 1.570796327
 spawn_rocket_angle_variation = 0.3
 spawn_rocket_min_speed = 350.0
-spawn_rocket_max_speed = 500.0
+spawn_rocket_max_speed = 650.0
 
 gravity = -200.0
 initial_rocket_speed = 100.0

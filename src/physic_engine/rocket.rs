@@ -1,33 +1,47 @@
+#[cfg(debug_assertions)]
+use log::debug;
+use rand::Rng;
+use std::ops::Range;
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    types::{NB_PARTICLES_PER_EXPLOSION, NB_PARTICLES_PER_TRAIL},
+    particles_pools::{ParticlesPool, ParticlesPoolsForRockets},
 };
-use rand::Rng;
-// use std::sync::atomic::AtomicU64;
 use glam::{Vec2, Vec4 as Color};
 
-// static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
+/// Compteur global pour générer des ID uniques pour les rockets
+pub static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
+pub const NB_PARTICLES_PER_EXPLOSION: usize = 256;
+pub const NB_PARTICLES_PER_TRAIL: usize = 64;
+
+/// Représentation d’une fusée
 #[repr(C)]
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct Rocket {
-    // Public
-    // pub id: u64,
-    pub pos: Vec2,      // position actuelle
-    pub prev_pos: Vec2, // position précédente
+    /// ID unique de la rocket
+    pub id: u64,
 
-    // TODO
+    /// Position actuelle et précédente
+    pub pos: Vec2,
+    pub prev_pos: Vec2,
+
+    /// Vitesse et couleur
     pub vel: Vec2,
     pub color: Color,
+
+    /// État de la fusée
     pub exploded: bool,
     pub active: bool,
 
-    pub explosion_particles: [Particle; NB_PARTICLES_PER_EXPLOSION],
-    pub trail_particles: [Particle; NB_PARTICLES_PER_TRAIL],
-    pub trail_index: usize,
+    /// Indices dans le pool des particules d'explosions
+    pub explosion_particle_indices: Option<Range<usize>>,
 
-    pub trail_accum: f32,
+    /// Indices dans le pool des particules de trails
+    pub trail_particle_indices: Option<Range<usize>>,
+    pub trail_index: usize,
     pub last_trail_pos: Vec2,
 }
 
@@ -38,114 +52,210 @@ impl Default for Rocket {
 }
 
 impl Rocket {
-    pub fn new(config: &PhysicConfig) -> Self {
-        assert!(config.particles_per_explosion <= NB_PARTICLES_PER_EXPLOSION);
-        assert!(config.particles_per_trail <= NB_PARTICLES_PER_TRAIL);
-
+    /// Crée une nouvelle fusée (non active)
+    pub fn new(_config: &PhysicConfig) -> Self {
         Self {
-            // id: ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
+            id: ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             pos: Vec2::default(),
             prev_pos: Vec2::default(),
             vel: Vec2::default(),
             color: Color::ONE,
             exploded: false,
             active: false,
-            explosion_particles: [Particle::default(); NB_PARTICLES_PER_EXPLOSION],
-            trail_particles: [Particle::default(); NB_PARTICLES_PER_TRAIL],
+            explosion_particle_indices: None,
+            trail_particle_indices: None,
             trail_index: 0,
-            trail_accum: 0.0,
             last_trail_pos: Vec2::default(),
         }
     }
 
-    pub fn update(&mut self, dt: f32) {
+    /// Retourne un itérateur sur toutes les particules actives de la fusée
+    pub fn active_particles<'a>(
+        &'a self,
+        particles_pools: &'a ParticlesPoolsForRockets,
+    ) -> impl Iterator<Item = &'a Particle> {
+        let trails = self
+            .trail_particle_indices
+            .iter()
+            .flat_map(|range| {
+                particles_pools
+                    .particles_pool_for_trails
+                    .get_particles(range)
+            })
+            .filter(|p| p.active);
+        let explosions = self
+            .explosion_particle_indices
+            .iter()
+            .flat_map(|range| {
+                particles_pools
+                    .particles_pool_for_explosions
+                    .get_particles(range)
+            })
+            .filter(|p| p.active);
+        trails.chain(explosions)
+    }
+
+    /// Met à jour la fusée (mouvement, trails, explosions)
+    pub fn update(
+        &mut self,
+        rng: &mut impl Rng,
+        dt: f32,
+        particles_pools: &mut ParticlesPoolsForRockets,
+    ) {
         if !self.active {
             return;
         }
 
-        let gravity = Vec2 { x: 0.0, y: -200.0 };
-        let mut rng = rand::rng();
+        const GRAVITY: Vec2 = Vec2::new(0.0, -200.0);
 
-        // Movement
+        self.update_movement(dt, GRAVITY);
+        self.update_trails(dt, GRAVITY, &mut particles_pools.particles_pool_for_trails);
+        self.update_explosions(
+            dt,
+            rng,
+            GRAVITY,
+            &mut particles_pools.particles_pool_for_explosions,
+        );
+        self.remove_inactive_rockets(particles_pools);
+    }
+
+    fn remove_inactive_rockets(&mut self, particles_pools: &ParticlesPoolsForRockets) {
+        let exploded_done = self
+            .explosion_particle_indices
+            .as_ref()
+            .map(|range| {
+                particles_pools
+                    .particles_pool_for_explosions
+                    .get_particles(range)
+                    .iter()
+                    .all(|p| !p.active)
+            })
+            .unwrap_or(true);
+        let trail_done = self
+            .trail_particle_indices
+            .as_ref()
+            .map(|range| {
+                particles_pools
+                    .particles_pool_for_trails
+                    .get_particles(range)
+                    .iter()
+                    .all(|p| !p.active)
+            })
+            .unwrap_or(true);
+
+        if self.exploded && exploded_done && trail_done {
+            #[cfg(debug_assertions)]
+            debug!(
+                "Rocket {:?} inactive: all particles (explosion + trails) inactive",
+                self.id
+            );
+            self.active = false;
+        }
+    }
+
+    #[inline(always)]
+    fn update_movement(&mut self, dt: f32, gravity: Vec2) {
         self.vel += gravity * dt;
         self.pos += self.vel * dt;
+    }
 
-        // === TRAIL ===
-        // La distance entre deux particules consécutives est définie par `trail_spacing`.
-        // Si la rocket se déplace rapidement, plusieurs particules peuvent être générées
-        // sur un même update pour maintenir un espacement constant.
-        //
-        // Ce code utilise une interpolation linéaire (lerp) entre la dernière position
-        // de trail (`last_trail_pos`) et la position actuelle de la rocket (`pos`) pour
-        // calculer les positions exactes des particules.
-        const TRAIL_SPACING: f32 = 2.0; // distance minimale entre deux particules
-
-        // Calcul du vecteur de déplacement depuis la dernière particule
+    /// Gère la génération et la mise à jour des particules de trail
+    #[inline(always)]
+    fn update_trails(&mut self, dt: f32, gravity: Vec2, particles_pool: &mut ParticlesPool) {
+        const TRAIL_SPACING: f32 = 2.0;
         let movement = self.pos - self.last_trail_pos;
-
-        // Calcul de la distance euclidienne parcourue depuis la dernière particule
         let dist = movement.length();
 
-        if !self.exploded {
-            // Distance restante à couvrir pour générer des particules
-            let mut remaining_dist = dist;
-
-            // Tant qu'il reste suffisamment de distance pour une nouvelle particule
-            while remaining_dist >= TRAIL_SPACING {
-                // Ratio le long du segment [last_trail_pos, pos] pour placer la particule
-                let t = TRAIL_SPACING / dist;
-
-                // Interpolation linéaire (lerp) pour trouver la position de la nouvelle particule
-                let new_pos = self.last_trail_pos * (1.0 - t) + self.pos * t;
-
-                // Indice circulaire dans le tableau préalloué de particules de trail
-                let i = self.trail_index % NB_PARTICLES_PER_TRAIL;
-
-                // Création de la particule de trail
-                // TODO: paramétrer aussi ces settings (life, max_life, size)
-                self.trail_particles[i] = Particle {
-                    pos: new_pos,
-                    vel: Vec2::ZERO, // pas de vitesse initiale
-                    color: self.color,
-                    life: 0.35,
-                    max_life: 0.35,
-                    size: 2.0,
-                    active: true,
-                };
-
-                // Incrément de l'indice circulaire
-                self.trail_index = (self.trail_index + 1) % NB_PARTICLES_PER_TRAIL;
-
-                // Mise à jour de la dernière position de trail pour la prochaine interpolation
-                self.last_trail_pos = new_pos;
-
-                // Consommation de la distance utilisée pour cette particule
-                remaining_dist -= TRAIL_SPACING;
-            }
+        // Alloue un bloc si nécessaire
+        if self.trail_particle_indices.is_none() {
+            self.trail_particle_indices = particles_pool.allocate_block();
         }
 
-        // === EXPLOSION ===
-        if !self.exploded && self.vel.y <= 0.0 {
-            self.exploded = true;
+        if let Some(range) = &self.trail_particle_indices {
+            let slice = particles_pool.get_particles_mut(range);
 
-            for p in self.explosion_particles.iter_mut() {
+            if !self.exploded {
+                let mut remaining_dist = dist;
+
+                while remaining_dist >= TRAIL_SPACING {
+                    let t = TRAIL_SPACING / dist;
+                    let new_pos = self.last_trail_pos * (1.0 - t) + self.pos * t;
+                    let i = self.trail_index % NB_PARTICLES_PER_TRAIL;
+
+                    slice[i] = Particle {
+                        pos: new_pos,
+                        vel: Vec2::ZERO,
+                        color: self.color,
+                        life: 0.35,
+                        max_life: 0.35,
+                        size: 2.0,
+                        active: true,
+                    };
+
+                    self.trail_index = (self.trail_index + 1) % NB_PARTICLES_PER_TRAIL;
+                    self.last_trail_pos = new_pos;
+                    remaining_dist -= TRAIL_SPACING;
+                }
+            }
+
+            // Update trails
+            for p in &mut slice[..] {
+                if !p.active {
+                    continue;
+                }
+                p.vel.y += gravity.y * dt;
+                p.pos.y += p.vel.y * dt;
+                p.life -= dt;
+                p.active = p.life > 0.0;
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn update_explosions(
+        &mut self,
+        dt: f32,
+        rng: &mut impl Rng,
+        gravity: Vec2,
+        particles_pool: &mut ParticlesPool,
+    ) {
+        if !self.exploded && self.vel.y <= 0.0 {
+            self.trigger_explosion(rng, particles_pool);
+        }
+
+        if let Some(range) = &self.explosion_particle_indices {
+            let slice = particles_pool.get_particles_mut(range);
+            for p in &mut slice[..] {
+                if !p.active {
+                    continue;
+                }
+                p.vel.y += gravity.y * dt;
+                p.pos += p.vel * dt;
+                p.life -= dt;
+                p.active = p.life > 0.0;
+            }
+        }
+    }
+
+    #[inline(always)]
+    fn trigger_explosion(&mut self, rng: &mut impl Rng, particles_pool: &mut ParticlesPool) {
+        self.exploded = true;
+
+        if self.explosion_particle_indices.is_none() {
+            self.explosion_particle_indices = particles_pool.allocate_block();
+        }
+
+        if let Some(range) = &self.explosion_particle_indices {
+            let slice = particles_pool.get_particles_mut(range);
+            for p in slice.iter_mut() {
                 let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
                 let speed = rng.random_range(60.0..200.0);
-                // Durée de vie de l'explosion
                 let life = rng.random_range(0.75..1.5);
 
                 *p = Particle {
                     pos: self.pos,
-                    vel: Vec2 {
-                        x: angle.cos() * speed,
-                        y: angle.sin() * speed,
-                    },
-                    color: Color::new(
-                        rng.random_range(0.5..1.0),
-                        rng.random_range(0.5..1.0),
-                        rng.random_range(0.5..1.0),
-                        1.0,
-                    ),
+                    vel: Vec2::from_angle(angle) * speed,
+                    color: self.color,
                     life,
                     max_life: life,
                     size: rng.random_range(3.0..6.0),
@@ -153,35 +263,41 @@ impl Rocket {
                 };
             }
         }
-
-        // === Update trails ===
-        for p in self.trail_particles.iter_mut().filter(|p| p.active) {
-            p.vel.y += gravity.y * dt;
-            p.pos.y += p.vel.y * dt;
-            p.life -= dt;
-            p.active = p.life > 0.0;
-        }
-
-        // === Update explosions ===
-        for p in self.explosion_particles.iter_mut().filter(|p| p.active) {
-            p.vel.y += gravity.y * dt;
-            p.pos += p.vel * dt;
-            p.life -= dt;
-            p.active = p.life > 0.0;
-        }
-
-        // === Rocket inactive once explosion finished ===
-        if self.exploded && self.explosion_particles.iter().all(|p| !p.active) {
-            self.active = false;
-        }
     }
 
-    pub fn active_particles(&self) -> impl Iterator<Item = &Particle> {
-        // self.trail_particles et self.explosion_particles sont alloués sur la heap (tailles statiques),
-        // donc le iter().filter(...) n'est pas si couteux, mais à vérifier !
-        self.trail_particles
-            .iter()
-            .filter(|p| p.active)
-            .chain(self.explosion_particles.iter().filter(|p| p.active))
+    /// Réinitialise une fusée inactive pour la réutiliser sans réallocation
+    pub fn reset(
+        &mut self,
+        cfg: &PhysicConfig,
+        rng: &mut rand::rngs::ThreadRng,
+        window_width: f32,
+    ) {
+        let margin_min_x = cfg.spawn_rocket_margin;
+        let margin_max_x = window_width - cfg.spawn_rocket_margin;
+        let cx = rng.random_range(margin_min_x..=margin_max_x);
+
+        let angle = rng.random_range(
+            (cfg.spawn_rocket_vertical_angle - cfg.spawn_rocket_angle_variation)
+                ..=(cfg.spawn_rocket_vertical_angle + cfg.spawn_rocket_angle_variation),
+        );
+
+        let speed = rng.random_range(cfg.spawn_rocket_min_speed..=cfg.spawn_rocket_max_speed);
+        self.vel = Vec2::from_angle(angle) * speed;
+        self.color = Color::new(
+            rng.random_range(0.5..=1.0),
+            rng.random_range(0.5..=1.0),
+            rng.random_range(0.5..=1.0),
+            1.0,
+        );
+
+        let pos = Vec2::new(cx, 0.0);
+        self.pos = pos;
+        self.prev_pos = pos;
+        self.last_trail_pos = pos;
+        self.trail_index = 0;
+        self.active = true;
+        self.exploded = false;
+        self.explosion_particle_indices = None;
+        self.trail_particle_indices = None;
     }
 }
