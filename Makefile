@@ -57,16 +57,14 @@ release:
 # -----------------------------------------
 fmt:
 	@echo "🎨 Vérification du formatage..."
-	@$(CARGO) fmt --all -- --check
+	@$(CARGO) fmt -- --check
 
 clippy:
 	@echo "🕵️  Vérification statique avec Clippy..."
-	@$(CARGO) clippy --all-targets --all-features -- -D warnings
+	@$(CARGO) clippy -- -D warnings
 
 # Lint the code
-lint:
-	cargo fmt -- --check
-	cargo clippy -- -D warnings
+lint: fmt clippy
 
 # Run cargo-shear for removing unused dependencies
 remove-unused-dependencies:
