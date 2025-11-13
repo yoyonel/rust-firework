@@ -59,12 +59,7 @@ pub struct Renderer {
 // - Chaque type `A` utilisé génère une version spécifique du Renderer
 //   dans le binaire, ce qui peut augmenter légèrement la taille du code.
 impl Renderer {
-    pub fn new(
-        width: i32,
-        height: i32,
-        title: &str,
-        max_particles_on_gpu: usize,
-    ) -> Result<Self> {
+    pub fn new(width: i32, height: i32, title: &str, max_particles_on_gpu: usize) -> Result<Self> {
         let _ = env_logger::builder().is_test(true).try_init();
 
         let mut glfw = glfw::init(glfw::fail_on_errors)
@@ -160,30 +155,21 @@ impl Renderer {
     }
 
     /// Exécute une seule frame (update + rendu)
-    pub fn render_frame<P: PhysicEngine>(&mut self, physic: &P) -> usize {
-        // Early-out si la fenêtre est fermée
-        if let Some(w) = &self.window {
-            if w.should_close() {
-                return 0;
-            }
-        }
+    /// # Safety
+    /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
+    pub unsafe fn render_frame<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+        // Efface l’écran (fond noir)
+        gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+        gl::Clear(gl::COLOR_BUFFER_BIT);
 
-        unsafe {
-            // Efface l’écran (fond noir)
-            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+        // Remplit le buffer GPU
+        let nb_particles_rendered = self.graphics.fill_particle_data_direct(physic);
 
-            // Remplit le buffer GPU
-            let nb_particles_rendered = self.graphics.fill_particle_data_direct(physic);
+        // // Dessine les particules
+        self.graphics
+            .render_particles_with_persistent_buffer(nb_particles_rendered, self.window_size_f32);
 
-            // // Dessine les particules
-            self.graphics.render_particles_with_persistent_buffer(
-                nb_particles_rendered,
-                self.window_size_f32,
-            );
-
-            nb_particles_rendered
-        }
+        nb_particles_rendered
     }
 
     /// Boucle infinie (production) qui appelle `step_frame`
@@ -236,9 +222,11 @@ impl Renderer {
 
             self.update_physic_and_sync_with_audio(physic, audio, delta, &profiler);
 
-            let _render_guard = profiler.measure("render frame");
-            let particles_rendered = self.render_frame(physic);
-            profiler.record_metric("total particles drawn", particles_rendered);
+            profiler.profile_block("render frame", || {
+                profiler.record_metric("total particles drawn", unsafe {
+                    self.render_frame(physic)
+                });
+            });
 
             // FPSmoyenne​ ← α⋅FPSinstant ​+ (1 − α)⋅FPSmoyenne​
             fps_avg = alpha * fps + (1.0 - alpha) * fps_avg;
@@ -287,7 +275,6 @@ impl Renderer {
             // Swap buffers + events
             if let Some(window) = &mut self.window {
                 window.swap_buffers();
-                drop(_render_guard);
 
                 if first_frame {
                     info!("🚀 First frame rendered");
