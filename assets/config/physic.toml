@@ -24,7 +24,7 @@ spawn_rocket_margin = 250.0
 spawn_rocket_vertical_angle = 1.570796327
 spawn_rocket_angle_variation = 0.3
 spawn_rocket_min_speed = 350.0
-spawn_rocket_max_speed = 650.0
+spawn_rocket_max_speed = 500.0
 
 gravity = -200.0
 initial_rocket_speed = 100.0
