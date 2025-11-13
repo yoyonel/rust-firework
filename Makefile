@@ -12,6 +12,13 @@ XVFB = xvfb-run -a
 run-release:
 	cargo run --release
 
+run-release-with-hud:
+	env \
+	vblank_mode=0 \
+	__GL_SYNC_TO_VBLANK=0 \
+	GALLIUM_HUD_PERIOD=0.15 \
+	GALLIUM_HUD="cpu;fps;N vertices submitted" \
+	cargo run --release 2>&1
 # -----------------------------------------
 # 🧪 Tests unitaires + d'intégration
 # -----------------------------------------
@@ -73,9 +80,12 @@ valgrind-callgrind: ./target/release/fireworks_sim
 	valgrind --tool=callgrind ./target/release/fireworks_sim
 	callgrind_annotate $(ls -tr | grep callgrind.out | tail -1) | grep -e "fireworks_sim::"
 
+./target/profiling/fireworks_sim:
+	cargo build --profile profiling
+
 # Profiling with Heaptrack
-heaptrack: ./target/release/fireworks_sim
-	heaptrack ./target/release/fireworks_sim
+heaptrack: ./target/profiling/fireworks_sim
+	heaptrack ./target/profiling/fireworks_sim
 
 # -----------------------------------------
 # 💡 Cible par défaut
