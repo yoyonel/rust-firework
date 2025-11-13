@@ -69,8 +69,6 @@ fn main() -> Result<()> {
         800,
         "Fireworks Simulator",
         physic_engine.max_particles(),
-        // Some(doppler_queue.sender.clone()),
-        false,
     )?;
 
     // ----------------------------
