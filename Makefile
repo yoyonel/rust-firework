@@ -12,6 +12,7 @@ XVFB = xvfb-run -a
 run-release:
 	cargo run --release
 
+# Gallium HUD (intel compatible)
 run-release-with-hud:
 	env \
 	vblank_mode=0 \
@@ -19,6 +20,19 @@ run-release-with-hud:
 	GALLIUM_HUD_PERIOD=0.15 \
 	GALLIUM_HUD="cpu;fps;N vertices submitted" \
 	cargo run --release 2>&1
+
+# MangoHub (NVidia compatible) shortcut: RIGHT-SHIFT+F10 for chaging the HUD mode
+run-prime-with-hud:
+	echo -e "ℹ️🖥️ Using MangoHud, press RSHIFT+F10 for chaging the HUD mode."
+	env \
+	__NV_PRIME_RENDER_OFFLOAD=1 \
+	__GLX_VENDOR_LIBRARY_NAME=nvidia \
+	__VK_LAYER_NV_optimus=NVIDIA_onl \
+	vblank_mode=0 \
+	__GL_SYNC_TO_VBLANK=0 \
+	RUST_LOG=INFO \
+	mangohud ./target/release/fireworks_sim 2>&1
+
 # -----------------------------------------
 # 🧪 Tests unitaires + d'intégration
 # -----------------------------------------
