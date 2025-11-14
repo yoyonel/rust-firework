@@ -158,20 +158,67 @@ impl RendererGraphics {
         self.max_particles_on_gpu = new_max;
     }
 
-    /// Remplit le buffer GPU directement
+    // /// Remplit le buffer GPU directement
+    // /// # Safety
+    // /// This function is unsafe because it directly manipulates GPU resources.
+    // /// The caller must ensure that the OpenGL context is valid.
+    // pub unsafe fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+    //     let mut count = 0;
+
+    //     // Crée un slice Rust sûr sur le buffer GPU
+    //     let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
+
+    //     for (i, p) in physic.active_particles().enumerate() {
+    //         if i >= self.max_particles_on_gpu {
+    //             break;
+    //         }
+    //         gpu_slice[i] = ParticleGPU {
+    //             pos_x: p.pos.x,
+    //             pos_y: p.pos.y,
+    //             col_r: p.color.x,
+    //             col_g: p.color.y,
+    //             col_b: p.color.z,
+    //             life: p.life,
+    //             max_life: p.max_life,
+    //             size: p.size,
+    //             angle: p.angle,
+    //         };
+    //         count += 1;
+    //     }
+    //     // Flush explicite de la zone modifiée pour que le GPU voit les changements
+    //     let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
+    //     gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
+
+    //     count
+    // }
+
+    /// Remplit directement le buffer GPU mappé avec les particules "têtes"
+    /// renvoyées par le moteur physique.
+    ///
+    /// Cette fonction :
+    /// - itère sur un pipeline paresseux (aucune allocation CPU)
+    /// - écrit séquentiellement dans la mémoire GPU persistently-mapped (optimal)
+    /// - flush uniquement la zone écrite
+    ///
+    /// C’est un pattern AZDO performant : aucune écriture sparse, aucun saut mémoire,
+    /// seulement du contigu cpu → gpu.
     /// # Safety
     /// This function is unsafe because it directly manipulates GPU resources.
     /// The caller must ensure that the OpenGL context is valid.
     pub unsafe fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
         let mut count = 0;
 
-        // Crée un slice Rust sûr sur le buffer GPU
+        // Slice Rust mutable mappé directement sur la mémoire GPU.
+        // Toute écriture dans ce slice écrit physiquement dans la BAR / VRAM.
         let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
 
-        for (i, p) in physic.active_particles().enumerate() {
-            if i >= self.max_particles_on_gpu {
-                break;
-            }
+        // Ici, `iter_active_heads()` fournit un flux paresseux, sans allocation CPU
+        // intermédiaire : idéal pour écrire contigu dans le buffer GPU.
+        for (i, p) in physic
+            .iter_active_particles()
+            .take(self.max_particles_on_gpu)
+            .enumerate()
+        {
             gpu_slice[i] = ParticleGPU {
                 pos_x: p.pos.x,
                 pos_y: p.pos.y,
@@ -185,9 +232,10 @@ impl RendererGraphics {
             };
             count += 1;
         }
-        // Flush explicite de la zone modifiée pour que le GPU voit les changements
-        let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
-        gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
+        // Flush explicite de la zone écrite.
+        // (Si MAP_COHERENT_BIT est utilisé : cette étape peut être omise.)
+        // let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
+        // gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
 
         count
     }

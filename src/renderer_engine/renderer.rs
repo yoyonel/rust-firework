@@ -61,7 +61,7 @@ pub struct Renderer {
 // - Chaque type `A` utilisé génère une version spécifique du Renderer
 //   dans le binaire, ce qui peut augmenter légèrement la taille du code.
 impl Renderer {
-    pub fn new(width: i32, height: i32, title: &str, max_particles_on_gpu: usize) -> Result<Self> {
+    pub fn new(width: i32, height: i32, title: &str, physic_config: &PhysicConfig) -> Result<Self> {
         let _ = env_logger::builder().is_test(true).try_init();
 
         let mut glfw = glfw::init(glfw::fail_on_errors)
@@ -110,17 +110,10 @@ impl Renderer {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        // TODO: il faut utiliser un trait ici sur les renderer graphics pour
-        // pouvoir choisir l'implémentation qu'on souhaite.
-        // Par exemple, on peut vouloir choisir entre RendererGraphics et RendererGraphicsInstanced
-        // et du point de vue de l'interface, ils devraient être interchangeables.
-        //
-        // À terme, on pourrait vouloir utiliser plusieurs renderering graphics pendant la génération d'une frame.
-        // Par exemple, on pourrait vouloir conserver le renderer graphics à base de point rendering pour
-        // les rockets (trainées + explosions), et on pourrait vouloir ajouter des particules en quads instanciés,
-        // pour rendre des effets comme de la poussière/fumée/etc. au départ (de la trainée) et arrivée (explosion de la rocket).
+        let max_particles_on_gpu: usize =
+            physic_config.max_rockets * physic_config.particles_per_explosion;
         let graphics = RendererGraphics::new(max_particles_on_gpu);
-        let graphics_instanced = RendererGraphicsInstanced::new(max_particles_on_gpu);
+        let graphics_instanced = RendererGraphicsInstanced::new(physic_config.max_rockets);
 
         Ok(Self {
             glfw,
@@ -154,7 +147,8 @@ impl Renderer {
             );
             unsafe {
                 self.graphics.recreate_buffers(new_max);
-                self.graphics_instanced.recreate_buffers(new_max);
+                self.graphics_instanced
+                    .recreate_buffers(physic_config.max_rockets);
             }
         }
     }
