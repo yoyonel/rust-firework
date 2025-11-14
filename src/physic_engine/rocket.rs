@@ -93,18 +93,71 @@ impl Rocket {
         trails.chain(explosions)
     }
 
-    pub fn active_heads_particles<'a>(
+    /// Retourne un itérateur paresseux sur toutes les particules "actives" (`is_active`)
+    /// appartenant à cette fusée.
+    ///
+    /// Cette fonction est **zéro allocation** :  
+    /// - pas de `Vec` temporaire  
+    /// - pas de `Box<dyn Iterator>`  
+    /// - pas de copie CPU → CPU  
+    ///
+    /// Le résultat est un pipeline d’itérateurs fusionnés, traité de manière lazy,
+    /// extrêmement efficace côté CPU et parfaitement adapté à un transfert contigu
+    /// vers un buffer GPU en mode persistent mapping.
+    pub fn iter_active_particles<'a>(
         &'a self,
-        particles_pools: &'a ParticlesPoolsForRockets,
-    ) -> impl Iterator<Item = &'a Particle> {
+        pools: &'a ParticlesPoolsForRockets,
+    ) -> impl Iterator<Item = &'a Particle> + 'a {
+        // `trail_particle_indices` contient les indices/ranges des particules de trainée
+        // associées à cette fusée.
+        let trails = self
+            .trail_particle_indices
+            .iter()
+            // Pour chaque "range", on récupère un itérateur sur les particules
+            // correspondantes dans le pool, puis `flat_map` fusionne tout cela
+            // en un flux unique.
+            .flat_map(move |range| pools.particles_pool_for_trails.get_particles(range))
+            // On filtre pour ne garder que les particules actives.
+            // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
+            .filter(|p| p.active);
+        let explosions = self
+            .explosion_particle_indices
+            .iter()
+            // Pour chaque "range", on récupère un itérateur sur les particules
+            // correspondantes dans le pool, puis `flat_map` fusionne tout cela
+            // en un flux unique.
+            .flat_map(move |range| pools.particles_pool_for_explosions.get_particles(range))
+            // On filtre pour ne garder que les particules actives.
+            // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
+            .filter(|p| p.active);
+        trails.chain(explosions)
+    }
+
+    /// Retourne un itérateur paresseux sur toutes les particules "têtes" (`is_head`)
+    /// appartenant à cette fusée.
+    ///
+    /// Cette fonction est **zéro allocation** :  
+    /// - pas de `Vec` temporaire  
+    /// - pas de `Box<dyn Iterator>`  
+    /// - pas de copie CPU → CPU  
+    ///
+    /// Le résultat est un pipeline d’itérateurs fusionnés, traité de manière lazy,
+    /// extrêmement efficace côté CPU et parfaitement adapté à un transfert contigu
+    /// vers un buffer GPU en mode persistent mapping.
+    pub fn iter_active_heads<'a>(
+        &'a self,
+        pools: &'a ParticlesPoolsForRockets,
+    ) -> impl Iterator<Item = &'a Particle> + 'a {
+        // `trail_particle_indices` contient les indices/ranges des particules de trainée
+        // associées à cette fusée.
         self.trail_particle_indices
             .iter()
-            .flat_map(|range| {
-                particles_pools
-                    .particles_pool_for_trails
-                    .get_particles(range)
-            })
-            // FIXME: is_head ne doit pas fonctionner ! ça semble renvoyer toute la trainée
+            // Pour chaque "range", on récupère un itérateur sur les particules
+            // correspondantes dans le pool, puis `flat_map` fusionne tout cela
+            // en un flux unique.
+            .flat_map(move |range| pools.particles_pool_for_trails.get_particles(range))
+            // On filtre pour ne garder que les particules actives et marquées `is_head`.
+            // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
             .filter(|p| p.active && p.is_head)
     }
 
@@ -244,7 +297,7 @@ impl Rocket {
                     continue;
                 }
                 // FIXME: Trouver un meilleur moyen de déterminer la tête de la traînée
-                p.is_head = (p.max_life - p.life) < 0.015;
+                p.is_head = (p.max_life - p.life) < 0.025;
                 p.vel.y += gravity.y * dt;
                 p.pos.y += p.vel.y * dt;
                 p.life -= dt;

@@ -1,7 +1,7 @@
 use fireworks_sim::audio_engine::AudioEngine;
 use fireworks_sim::physic_engine::config::PhysicConfig;
 use fireworks_sim::physic_engine::PhysicEngine;
-use fireworks_sim::physic_engine::{particle::Particle, rocket::Rocket, types::UpdateResult};
+use fireworks_sim::physic_engine::{particle::Particle, types::UpdateResult};
 use fireworks_sim::renderer_engine::RendererEngine;
 use std::cell::RefCell;
 
@@ -29,13 +29,14 @@ impl PhysicEngine for DummyPhysic {
     }
     fn close(&mut self) {}
     fn set_window_width(&mut self, _width: f32) {}
-    fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(std::iter::empty())
+    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        // Crée un itérateur vide, compatible avec la signature
+        std::iter::empty()
     }
-    fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(std::iter::empty())
+    fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        // Crée un itérateur vide, compatible avec la signature
+        std::iter::empty()
     }
-
     fn reload_config(&mut self, _config: &PhysicConfig) -> bool {
         false
     }
@@ -148,11 +149,13 @@ impl fireworks_sim::physic_engine::PhysicEngine for LoggingPhysic {
     fn set_window_width(&mut self, _width: f32) {
         self.log.push("set_width called".into());
     }
-    fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(std::iter::empty())
+    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        // Crée un itérateur vide, compatible avec la signature
+        std::iter::empty()
     }
-    fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(std::iter::empty())
+    fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        // Crée un itérateur vide, compatible avec la signature
+        std::iter::empty()
     }
     fn reload_config(&mut self, _config: &PhysicConfig) -> bool {
         false
