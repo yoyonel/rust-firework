@@ -6,8 +6,9 @@ use log::{debug, info};
 use std::time::Instant;
 
 use crate::audio_engine::AudioEngine;
-use crate::physic_engine::{config::PhysicConfig, PhysicEngine};
+use crate::physic_engine::{config::PhysicConfig, PhysicEngine, UpdateResult};
 use crate::renderer_engine::RendererGraphics;
+use crate::renderer_engine::RendererGraphicsInstanced;
 use crate::renderer_engine::{
     tools::{setup_opengl_debug, show_opengl_context_info},
     utils::{
@@ -33,6 +34,7 @@ pub struct Renderer {
     window_last_size: (i32, i32),
 
     graphics: RendererGraphics,
+    graphics_instanced: RendererGraphicsInstanced,
 }
 
 // ---------------------------------------------------------
@@ -118,6 +120,7 @@ impl Renderer {
         // les rockets (trainées + explosions), et on pourrait vouloir ajouter des particules en quads instanciés,
         // pour rendre des effets comme de la poussière/fumée/etc. au départ (de la trainée) et arrivée (explosion de la rocket).
         let graphics = RendererGraphics::new(max_particles_on_gpu);
+        let graphics_instanced = RendererGraphicsInstanced::new(max_particles_on_gpu);
 
         Ok(Self {
             glfw,
@@ -130,6 +133,7 @@ impl Renderer {
             window_last_pos,
             window_last_size,
             graphics,
+            graphics_instanced,
             max_particles_on_gpu,
         })
     }
@@ -150,6 +154,7 @@ impl Renderer {
             );
             unsafe {
                 self.graphics.recreate_buffers(new_max);
+                self.graphics_instanced.recreate_buffers(new_max);
             }
         }
     }
@@ -158,15 +163,23 @@ impl Renderer {
     /// # Safety
     /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
     pub unsafe fn render_frame<P: PhysicEngine>(&mut self, physic: &P) -> usize {
-        // Efface l’écran (fond noir)
-        gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT);
-
         // Remplit le buffer GPU
         let nb_particles_rendered = self.graphics.fill_particle_data_direct(physic);
-
         // // Dessine les particules
         self.graphics
+            .render_particles_with_persistent_buffer(nb_particles_rendered, self.window_size_f32);
+
+        nb_particles_rendered
+    }
+
+    /// Exécute une seule frame (update + rendu) en mode instancié
+    /// # Safety
+    /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
+    pub unsafe fn render_frame_instanced<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+        // Remplit le buffer GPU
+        let nb_particles_rendered = self.graphics_instanced.fill_particle_data_direct(physic);
+        // // Dessine les particules
+        self.graphics_instanced
             .render_particles_with_persistent_buffer(nb_particles_rendered, self.window_size_f32);
 
         nb_particles_rendered
@@ -220,11 +233,27 @@ impl Renderer {
                 sampled_fps.push(fps);
             }
 
-            self.update_physic_and_sync_with_audio(physic, audio, delta, &profiler);
+            let update_result = profiler.profile_block("physic - update", || physic.update(delta));
+            self.synch_audio_with_physic(&update_result, audio);
 
+            // Clear screen before rendering
+            unsafe {
+                // Efface l’écran (fond noir)
+                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+                gl::Clear(gl::COLOR_BUFFER_BIT);
+            }
+
+            // Render frame with points rendering for representing particles system
             profiler.profile_block("render frame", || {
                 profiler.record_metric("total particles drawn", unsafe {
                     self.render_frame(physic)
+                });
+            });
+
+            // Render frame with instanced textured quads for representing particles system
+            profiler.profile_block("render frame with instanced particles", || {
+                profiler.record_metric("total particles drawn", unsafe {
+                    self.render_frame_instanced(physic)
                 });
             });
 
@@ -354,16 +383,12 @@ impl Renderer {
         Ok(())
     }
 
-    fn update_physic_and_sync_with_audio<P: PhysicEngine, A: AudioEngine>(
+    fn synch_audio_with_physic<A: AudioEngine>(
         &mut self,
-        physic: &mut P,
+        update_result: &UpdateResult,
         audio: &mut A,
-        delta: f32,
-        profiler: &Profiler,
     ) {
-        let update_result = profiler.profile_block("physic - update", || physic.update(delta));
-
-        if let Some(rocket) = update_result.new_rocket {
+        if let Some(rocket) = &update_result.new_rocket {
             debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
             audio.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
         }
@@ -380,9 +405,9 @@ impl Renderer {
     pub fn close(&mut self) {
         info!("🧹 Fermeture du Renderer");
 
-        unsafe {
-            self.graphics.close();
-        }
+        // unsafe {
+        //     self.graphics.close();
+        // }
 
         if let Some(window) = self.window.take() {
             drop(window);

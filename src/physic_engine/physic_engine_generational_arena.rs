@@ -171,7 +171,6 @@ impl PhysicEngineFireworks {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
 
-                // rocket.update(&mut self.rng, dt);
                 rocket.update(&mut self.rng, dt, &mut self.particles_pools_for_rockets);
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
@@ -222,13 +221,26 @@ impl PhysicEngine for PhysicEngineFireworks {
         Box::new(out.into_iter())
     }
 
-    fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {
-        Box::new(
-            self.active_indices
-                .iter()
-                .filter_map(|&idx| self.rockets.get(idx)),
-        )
+    fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        let mut out = Vec::new();
+
+        for &idx in &self.active_indices {
+            if let Some(r) = self.rockets.get(idx) {
+                // On collecte toutes les particules actives (trails + explosions)
+                out.extend(r.active_heads_particles(&self.particles_pools_for_rockets));
+            }
+        }
+
+        Box::new(out.into_iter())
     }
+
+    // fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {
+    //     Box::new(
+    //         self.active_indices
+    //             .iter()
+    //             .filter_map(|&idx| self.rockets.get(idx)),
+    //     )
+    // }
 
     fn set_window_width(&mut self, width: f32) {
         self.window_width = width;

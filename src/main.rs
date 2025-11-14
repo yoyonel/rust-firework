@@ -22,6 +22,9 @@ fn main() -> Result<()> {
     // TODO: mettre en place un vrai gestionnaire de configurations (avec traits) !
     let physic_config = PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
     info!("Physic config loaded:\n{:#?}", physic_config);
+    let physic_instanced_config =
+        PhysicConfig::from_file("assets/config/physic_instanced.toml").unwrap_or_default();
+    info!("Physic config loaded:\n{:#?}", physic_instanced_config);
 
     // --------------------------
     // Gestion du chemin d'export audio

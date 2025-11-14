@@ -126,4 +126,9 @@ impl ParticlesPool {
     pub fn all_particles(&self) -> &[Particle] {
         &self.particles
     }
+
+    #[inline]
+    pub fn get_first_particle(&self, range: &Range<usize>) -> &Particle {
+        &self.particles[range.start]
+    }
 }
