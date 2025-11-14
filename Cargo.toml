@@ -7,7 +7,7 @@ version = "0.1.0"
 [dependencies]
 # Création fenêtre + gestion input
 # last version using glfw2
-glfw = "<=0.59"
+glfw = "<=0.59.0"
 # Liens OpenGL bas-niveau
 gl = ">=0.14"
 
@@ -16,16 +16,16 @@ anyhow = "1.0"
 env_logger = "0.11"
 log = "0.4"
 
-bytemuck = {version = "1.24.0", features = ["derive"]} 
-cpal = "0.16" # ou la dernière version
-crossbeam = "0.8.4" 
-derive_builder = "0.20.2" 
-hound = "3.5" # lecture WAV simple
-lazy_static = "1.5.0" 
-memoffset = "0.9.1" 
-rand = "0.9.2" 
-regex = "1.12.2" 
-rustc_version_runtime = "0.3.0" 
+bytemuck = { version = "1.24.0", features = ["derive"] }
+cpal = "0.16"                                            # ou la dernière version
+crossbeam = "0.8.4"
+derive_builder = "0.20.2"
+hound = "3.5"                                            # lecture WAV simple
+lazy_static = "1.5.0"
+memoffset = "0.9.1"
+rand = "0.9.2"
+regex = "1.12.2"
+rustc_version_runtime = "0.3.0"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = "0.9.8"
 itertools = "0.14.0"
@@ -40,12 +40,12 @@ criterion = "0.7.0"
 [features]
 default = ["simd", "test_helpers"] # SIMD activé par défaut
 fft = []
-no_simd = [] # Force le mode scalaire
-simd = [] # Active le code SIMD
+no_simd = []                       # Force le mode scalaire
+simd = []                          # Active le code SIMD
 test_helpers = []
 
 [build-dependencies]
-cargo_metadata = "0.23.0"
+cargo_metadata = "0.23.1"
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html?highlight=lto#default-profiles
 
@@ -57,10 +57,10 @@ cargo_metadata = "0.23.0"
 # [profile.dev]
 
 [profile.profiling]
-inherits = "dev"         
-debug = true # inclut les symboles de debug dans le binaire
-lto = true # optionnel, améliore les optimisations
-opt-level = 3 # niveau d’optimisation
+inherits = "dev"
+debug = true               # inclut les symboles de debug dans le binaire
+lto = true                 # optionnel, améliore les optimisations
+opt-level = 3              # niveau d’optimisation
 split-debuginfo = 'packed' # conserve les symboles dans le binaire (Linux)
 
 # https://bheisler.github.io/criterion.rs/book/getting_started.html#step-1---add-dependency-to-cargotoml

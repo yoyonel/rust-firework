@@ -1,7 +1,7 @@
 use image::GenericImageView;
 use std::path::Path;
 
-pub fn load_texture(path: &str) -> u32 {
+pub fn load_texture(path: &str) -> (u32, u32, u32) {
     // Charge l'image
     let img = image::open(Path::new(path)).expect("Failed to load texture");
     let img = img.flipv(); // OpenGL attend l'origine en bas à gauche
@@ -35,5 +35,5 @@ pub fn load_texture(path: &str) -> u32 {
         gl::BindTexture(gl::TEXTURE_2D, 0);
     }
 
-    tex_id
+    (tex_id, width, height)
 }

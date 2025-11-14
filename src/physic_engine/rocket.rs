@@ -14,9 +14,6 @@ use glam::{Vec2, Vec4 as Color};
 /// Compteur global pour générer des ID uniques pour les rockets
 pub static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-pub const NB_PARTICLES_PER_EXPLOSION: usize = 256;
-pub const NB_PARTICLES_PER_TRAIL: usize = 64;
-
 /// Représentation d’une fusée
 #[repr(C)]
 #[derive(Debug, Clone)]
@@ -26,7 +23,6 @@ pub struct Rocket {
 
     /// Position actuelle et précédente
     pub pos: Vec2,
-    pub prev_pos: Vec2,
 
     /// Vitesse et couleur
     pub vel: Vec2,
@@ -43,6 +39,8 @@ pub struct Rocket {
     pub trail_particle_indices: Option<Range<usize>>,
     pub trail_index: usize,
     pub last_trail_pos: Vec2,
+
+    pub config: PhysicConfig,
 }
 
 impl Default for Rocket {
@@ -53,11 +51,10 @@ impl Default for Rocket {
 
 impl Rocket {
     /// Crée une nouvelle fusée (non active)
-    pub fn new(_config: &PhysicConfig) -> Self {
+    pub fn new(config: &PhysicConfig) -> Self {
         Self {
             id: ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             pos: Vec2::default(),
-            prev_pos: Vec2::default(),
             vel: Vec2::default(),
             color: Color::ONE,
             exploded: false,
@@ -66,6 +63,7 @@ impl Rocket {
             trail_particle_indices: None,
             trail_index: 0,
             last_trail_pos: Vec2::default(),
+            config: config.clone(),
         }
     }
 
@@ -93,6 +91,34 @@ impl Rocket {
             })
             .filter(|p| p.active);
         trails.chain(explosions)
+    }
+
+    pub fn active_heads_particles<'a>(
+        &'a self,
+        particles_pools: &'a ParticlesPoolsForRockets,
+    ) -> impl Iterator<Item = &'a Particle> {
+        self.trail_particle_indices
+            .iter()
+            .flat_map(|range| {
+                particles_pools
+                    .particles_pool_for_trails
+                    .get_particles(range)
+            })
+            // FIXME: is_head ne doit pas fonctionner ! ça semble renvoyer toute la trainée
+            .filter(|p| p.active && p.is_head)
+    }
+
+    pub fn head_particle<'a>(&'a self, pools: &'a ParticlesPoolsForRockets) -> &'a Particle {
+        let range = self
+            .trail_particle_indices
+            .as_ref()
+            .expect("Trail must exist");
+
+        let particles = pools.particles_pool_for_trails.get_particles(range);
+
+        particles
+            .first()
+            .expect("Trail range should always contain at least one particle")
     }
 
     /// Met à jour la fusée (mouvement, trails, explosions)
@@ -163,6 +189,8 @@ impl Rocket {
     #[inline(always)]
     fn update_trails(&mut self, dt: f32, gravity: Vec2, particles_pool: &mut ParticlesPool) {
         const TRAIL_SPACING: f32 = 2.0;
+        let nb_particles_per_trail: usize = self.config.particles_per_trail;
+
         let movement = self.pos - self.last_trail_pos;
         let dist = movement.length();
 
@@ -180,8 +208,18 @@ impl Rocket {
                 while remaining_dist >= TRAIL_SPACING {
                     let t = TRAIL_SPACING / dist;
                     let new_pos = self.last_trail_pos * (1.0 - t) + self.pos * t;
-                    let i = self.trail_index % NB_PARTICLES_PER_TRAIL;
 
+                    let delta = new_pos - self.last_trail_pos;
+
+                    // Vérifier que delta n'est pas nul
+                    let angle = if delta.length_squared() > 0.0 {
+                        // La rocket/fusée (son sprite/image) est orientée vers le haut (0.0, +1.0)
+                        delta.angle_to(Vec2::new(0.0, 1.0))
+                    } else {
+                        0.0 // angle par défaut si delta nul
+                    };
+
+                    let i = self.trail_index % nb_particles_per_trail;
                     slice[i] = Particle {
                         pos: new_pos,
                         vel: Vec2::ZERO,
@@ -190,9 +228,11 @@ impl Rocket {
                         max_life: 0.35,
                         size: 2.0,
                         active: true,
+                        angle,
+                        is_head: true,
                     };
 
-                    self.trail_index = (self.trail_index + 1) % NB_PARTICLES_PER_TRAIL;
+                    self.trail_index = (self.trail_index + 1) % nb_particles_per_trail;
                     self.last_trail_pos = new_pos;
                     remaining_dist -= TRAIL_SPACING;
                 }
@@ -203,6 +243,8 @@ impl Rocket {
                 if !p.active {
                     continue;
                 }
+                // FIXME: Trouver un meilleur moyen de déterminer la tête de la traînée
+                p.is_head = (p.max_life - p.life) < 0.015;
                 p.vel.y += gravity.y * dt;
                 p.pos.y += p.vel.y * dt;
                 p.life -= dt;
@@ -260,9 +302,29 @@ impl Rocket {
                     max_life: life,
                     size: rng.random_range(3.0..6.0),
                     active: true,
+                    angle,
+                    is_head: false,
                 };
             }
         }
+    }
+
+    fn random_color(rng: &mut rand::rngs::ThreadRng) -> Color {
+        Color::new(
+            rng.random_range(0.5..=1.0),
+            rng.random_range(0.5..=1.0),
+            rng.random_range(0.5..=1.0),
+            1.0,
+        )
+    }
+
+    fn random_vel(cfg: &PhysicConfig, rng: &mut rand::rngs::ThreadRng) -> Vec2 {
+        let angle = rng.random_range(
+            (cfg.spawn_rocket_vertical_angle - cfg.spawn_rocket_angle_variation)
+                ..=(cfg.spawn_rocket_vertical_angle + cfg.spawn_rocket_angle_variation),
+        );
+        Vec2::from_angle(angle)
+            * rng.random_range(cfg.spawn_rocket_min_speed..=cfg.spawn_rocket_max_speed)
     }
 
     /// Réinitialise une fusée inactive pour la réutiliser sans réallocation
@@ -272,28 +334,14 @@ impl Rocket {
         rng: &mut rand::rngs::ThreadRng,
         window_width: f32,
     ) {
-        let margin_min_x = cfg.spawn_rocket_margin;
-        let margin_max_x = window_width - cfg.spawn_rocket_margin;
-        let cx = rng.random_range(margin_min_x..=margin_max_x);
-
-        let angle = rng.random_range(
-            (cfg.spawn_rocket_vertical_angle - cfg.spawn_rocket_angle_variation)
-                ..=(cfg.spawn_rocket_vertical_angle + cfg.spawn_rocket_angle_variation),
-        );
-
-        let speed = rng.random_range(cfg.spawn_rocket_min_speed..=cfg.spawn_rocket_max_speed);
-        self.vel = Vec2::from_angle(angle) * speed;
-        self.color = Color::new(
-            rng.random_range(0.5..=1.0),
-            rng.random_range(0.5..=1.0),
-            rng.random_range(0.5..=1.0),
-            1.0,
-        );
-
+        let cx = rng.random_range(cfg.spawn_rocket_margin..=window_width - cfg.spawn_rocket_margin);
         let pos = Vec2::new(cx, 0.0);
+
+        // Assignations in-place
         self.pos = pos;
-        self.prev_pos = pos;
         self.last_trail_pos = pos;
+        self.vel = Rocket::random_vel(cfg, rng);
+        self.color = Rocket::random_color(rng);
         self.trail_index = 0;
         self.active = true;
         self.exploded = false;

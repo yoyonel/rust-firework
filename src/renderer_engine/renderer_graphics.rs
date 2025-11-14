@@ -49,11 +49,9 @@ impl RendererGraphics {
     pub fn src_shaders_particles() -> (&'static str, &'static str) {
         let vertex_src = r#"
         #version 330 core
-        layout(location = 0) in vec2 aPos;
+        layout(location = 0) in vec4 aPos;
         layout(location = 1) in vec3 aColor;
-        layout(location = 2) in float aLife;
-        layout(location = 3) in float aMaxLife;
-        layout(location = 4) in float aSize;
+        layout(location = 2) in vec2 aLifeMaxLife;
 
         out vec3 vertexColor;
         out float alpha;
@@ -61,7 +59,7 @@ impl RendererGraphics {
         uniform vec2 uSize;
 
         void main() {
-            float a = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
+            float a = clamp(aLifeMaxLife.x / max(aLifeMaxLife.y, 0.0001), 0.0, 1.0);
             alpha = a;
             vertexColor = aColor;
 
@@ -183,6 +181,7 @@ impl RendererGraphics {
                 life: p.life,
                 max_life: p.max_life,
                 size: p.size,
+                angle: p.angle,
             };
             count += 1;
         }

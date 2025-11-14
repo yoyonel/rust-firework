@@ -20,6 +20,8 @@ pub struct RendererGraphicsInstanced {
     pub loc_tex: i32,
     pub loc_use: i32,
     pub texture_id: u32,
+    pub tex_width: u32,
+    pub tex_height: u32,
 
     pub max_particles_on_gpu: usize,
 }
@@ -32,7 +34,16 @@ impl RendererGraphicsInstanced {
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
         let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
         let loc_use = unsafe { gl::GetUniformLocation(shader_program, cstr!("uUseTexture")) };
-        let texture_id = load_texture("assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png");
+        // let texture_id = load_texture("assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png");
+        let (texture_id, tex_width, tex_height) =
+            load_texture("assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png");
+        unsafe {
+            gl::UseProgram(shader_program);
+            gl::Uniform1f(
+                gl::GetUniformLocation(shader_program, cstr!("uTexRatio")),
+                tex_width as f32 / tex_height as f32,
+            );
+        }
 
         // VAO/VBO setup
         unsafe {
@@ -49,6 +60,8 @@ impl RendererGraphicsInstanced {
                 loc_tex,
                 loc_use,
                 texture_id,
+                tex_width,
+                tex_height,
                 max_particles_on_gpu,
             }
         }
@@ -108,31 +121,66 @@ impl RendererGraphicsInstanced {
         // === Attributs instanciés (1 par particule)
         layout(location = 1) in vec2 aPos;
         layout(location = 2) in vec3 aColor;
-        layout(location = 3) in float aLife;
-        layout(location = 4) in float aMaxLife;
-        layout(location = 5) in float aSize;
+        layout(location = 3) in vec4 aLifeMaxLifeSizeAngle;
 
         out vec3 vColor;
         out float vAlpha;
         out vec2 vUV;
 
         uniform vec2 uSize;
+        uniform float uTexRatio;
+
+        mat3 build_world_matrix(float size, float angle) {
+            // Position du sommet quad dans l'espace clip (avec taille)
+            float scale = size * (2.0 + 5.0 * vAlpha);
+            
+            float sx = scale * uTexRatio;
+            float sy = scale * 1.0;            
+
+            mat3 mat_scale = mat3(
+                sx, 0.0, 0.0,
+                0.0, sy, 0.0,
+                0.0, 0.0, 1.0
+            );
+
+            float s = sin(angle);
+            float c = cos(angle);
+            mat3 mat_rotation = mat3(
+                c, -s, 0.0,
+                s,  c, 0.0,
+                0.0, 0.0, 1.0
+            );
+            
+            mat3 mat_translation = mat3(
+                1.0, 0.0, 0.0,
+                0.0, 1.0, 0.0,
+                aPos.x, aPos.y, 1.0
+            );
+
+            return mat_translation * mat_rotation * mat_scale;
+        }
 
         void main() {
+            float life = aLifeMaxLifeSizeAngle.x;
+            float max_life = aLifeMaxLifeSizeAngle.y;
+            float size = aLifeMaxLifeSizeAngle.z * 1.25;
+            float angle = aLifeMaxLifeSizeAngle.w;
+
             // Ratio de vie (comme avant)
-            vAlpha = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
+            vAlpha = clamp(life / max(max_life, 0.0001), 0.0, 1.0);
             vColor = aColor;
 
-            // On reconstruit les coordonnées UV du quad (-0.5 → +0.5)
-            vUV = aQuad * 0.5 + 0.5;
+            // On reconstruit les coordonnées UV du quad (-1.0 → -1.0) -> (0.0, 0.0)
+            vUV = aQuad * 0.5 + 0.5;            
+        
+            mat3 mat_model = build_world_matrix(size, angle);
+            vec2 world_pos = (mat_model * vec3(aQuad, 1.0)).xy;
 
-            // Position du sommet quad dans l’espace clip (avec taille)
-            vec2 world = aPos + aQuad * aSize * (2.0 + 5.0 * vAlpha);
-
-            float x = world.x / uSize.x * 2.0 - 1.0;
-            float y = world.y / uSize.y * 2.0 - 1.0;
+            // Clip space
+            float x = world_pos.x / uSize.x * 2.0 - 1.0;
+            float y = world_pos.y / uSize.y * 2.0 - 1.0;
             gl_Position = vec4(x, y, 0.0, 1.0);
-        }
+        }        
         "#;
 
         let fragment_src = r#"
@@ -171,6 +219,7 @@ impl RendererGraphicsInstanced {
             if (uUseTexture) {
                 vec4 texColor = texture(uTexture, vUV);
                 baseColor *= texColor;
+                // baseColor = vec4(texColor.rgb, vAlpha) * falloff;
             }
 
             FragColor = baseColor;
@@ -289,10 +338,11 @@ impl RendererGraphicsInstanced {
         // Crée un slice Rust sûr sur le buffer GPU
         let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
 
-        for (i, p) in physic.active_particles().enumerate() {
-            if i >= self.max_particles_on_gpu {
-                break;
-            }
+        for (i, p) in physic
+            .active_heads_particles()
+            .take(self.max_particles_on_gpu)
+            .enumerate()
+        {
             gpu_slice[i] = ParticleGPU {
                 pos_x: p.pos.x,
                 pos_y: p.pos.y,
@@ -302,6 +352,7 @@ impl RendererGraphicsInstanced {
                 life: p.life,
                 max_life: p.max_life,
                 size: p.size,
+                angle: p.angle,
             };
             count += 1;
         }

@@ -73,7 +73,7 @@ impl Profiler {
     }
 
     /// Mesure d'un bloc labelisé (RAII)
-    pub fn measure<'a>(&'a self, label: impl Into<String>) -> MeasureGuard<'a> {
+    pub fn measure(&'_ self, label: impl Into<String>) -> MeasureGuard<'_> {
         MeasureGuard {
             profiler: self,
             label: label.into(),
@@ -209,7 +209,7 @@ pub fn summarize_metric(series: &[MetricValue]) -> (MetricValue, MetricValue, Me
                 Usize(u) => *u,
                 _ => 0,
             },
-            MetricValue::Usize,
+            Usize,
         ),
         F32(_) => summarize_numeric(
             series,
