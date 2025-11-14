@@ -32,6 +32,7 @@ use std::mem;
 /// | `2`       | `float`| `life`                    |
 /// | `3`       | `float`| `max_life`                |
 /// | `4`       | `float`| `size`                    |
+/// | `5`       | `float`| `angle`                   |
 #[repr(C)] // garantit un layout C-compatible pour l’envoi GPU
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ParticleGPU {
@@ -58,6 +59,9 @@ pub struct ParticleGPU {
 
     /// Taille de la particule à l’écran.
     pub size: f32,
+
+    /// Angle de rotation de la particule.
+    pub angle: f32,
 }
 
 impl ParticleGPU {
@@ -93,38 +97,16 @@ impl ParticleGPU {
             );
             gl::EnableVertexAttribArray(1);
 
-            // Attribut 2 : vie actuelle
+            // Attribut 2 : vie actuelle, vie maximale, taille, angle
             gl::VertexAttribPointer(
                 2,
-                1,
+                4,
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
                 offset_of!(Self, life) as *const _,
             );
             gl::EnableVertexAttribArray(2);
-
-            // Attribut 3 : vie maximale
-            gl::VertexAttribPointer(
-                3,
-                1,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                offset_of!(Self, max_life) as *const _,
-            );
-            gl::EnableVertexAttribArray(3);
-
-            // Attribut 4 : taille
-            gl::VertexAttribPointer(
-                4,
-                1,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                offset_of!(Self, size) as *const _,
-            );
-            gl::EnableVertexAttribArray(4);
         }
     }
 
@@ -156,10 +138,10 @@ impl ParticleGPU {
             gl::EnableVertexAttribArray(2);
             gl::VertexAttribDivisor(2, 1);
 
-            // layout(location = 3) : vie (float)
+            // layout(location = 3) : vie (float), vie max (float), taille (float), angle (float)
             gl::VertexAttribPointer(
                 3,
-                1,
+                4,
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
@@ -167,30 +149,6 @@ impl ParticleGPU {
             );
             gl::EnableVertexAttribArray(3);
             gl::VertexAttribDivisor(3, 1);
-
-            // layout(location = 4) : vie max (float)
-            gl::VertexAttribPointer(
-                4,
-                1,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                offset_of!(Self, max_life) as *const _,
-            );
-            gl::EnableVertexAttribArray(4);
-            gl::VertexAttribDivisor(4, 1);
-
-            // layout(location = 5) : taille (float)
-            gl::VertexAttribPointer(
-                5,
-                1,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                offset_of!(Self, size) as *const _,
-            );
-            gl::EnableVertexAttribArray(5);
-            gl::VertexAttribDivisor(5, 1);
         }
     }
 }

@@ -65,7 +65,7 @@ fn run_failure_test(failure: EngineFailure) {
         fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
             Box::new(std::iter::empty())
         }
-        fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {
+        fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
             Box::new(std::iter::empty())
         }
         fn close(&mut self) {

@@ -32,7 +32,7 @@ impl PhysicEngine for DummyPhysic {
     fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         Box::new(std::iter::empty())
     }
-    fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {
+    fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         Box::new(std::iter::empty())
     }
 
@@ -151,7 +151,7 @@ impl fireworks_sim::physic_engine::PhysicEngine for LoggingPhysic {
     fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         Box::new(std::iter::empty())
     }
-    fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {
+    fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         Box::new(std::iter::empty())
     }
     fn reload_config(&mut self, _config: &PhysicConfig) -> bool {
