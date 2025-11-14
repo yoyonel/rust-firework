@@ -1,8 +1,6 @@
 use fireworks_sim::{
     audio_engine::AudioEngine,
-    physic_engine::{
-        config::PhysicConfig, particle::Particle, rocket::Rocket, types::UpdateResult, PhysicEngine,
-    },
+    physic_engine::{config::PhysicConfig, particle::Particle, types::UpdateResult, PhysicEngine},
     renderer_engine::RendererEngine,
     Simulator,
 };
@@ -62,11 +60,13 @@ fn run_failure_test(failure: EngineFailure) {
         fn set_window_width(&mut self, _width: f32) {
             self.log.borrow_mut().push("physic.set_width".into());
         }
-        fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-            Box::new(std::iter::empty())
+        fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+            // Crée un itérateur vide, compatible avec la signature
+            std::iter::empty()
         }
-        fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-            Box::new(std::iter::empty())
+        fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+            // Crée un itérateur vide, compatible avec la signature
+            std::iter::empty()
         }
         fn close(&mut self) {
             self.log.borrow_mut().push("physic.close".into());

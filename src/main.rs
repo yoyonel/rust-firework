@@ -22,9 +22,6 @@ fn main() -> Result<()> {
     // TODO: mettre en place un vrai gestionnaire de configurations (avec traits) !
     let physic_config = PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
     info!("Physic config loaded:\n{:#?}", physic_config);
-    let physic_instanced_config =
-        PhysicConfig::from_file("assets/config/physic_instanced.toml").unwrap_or_default();
-    info!("Physic config loaded:\n{:#?}", physic_instanced_config);
 
     // --------------------------
     // Gestion du chemin d'export audio
@@ -67,12 +64,7 @@ fn main() -> Result<()> {
 
     let physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
 
-    let renderer_engine = Renderer::new(
-        window_width,
-        800,
-        "Fireworks Simulator",
-        physic_engine.max_particles(),
-    )?;
+    let renderer_engine = Renderer::new(window_width, 800, "Fireworks Simulator", &physic_config)?;
 
     // ----------------------------
     // Initialisation du simulateur

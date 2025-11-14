@@ -67,50 +67,6 @@ impl RendererGraphicsInstanced {
         }
     }
 
-    pub fn src_shaders_particles() -> (&'static str, &'static str) {
-        let vertex_src = r#"
-        #version 330 core
-        layout(location = 0) in vec2 aPos;
-        layout(location = 1) in vec3 aColor;
-        layout(location = 2) in float aLife;
-        layout(location = 3) in float aMaxLife;
-        layout(location = 4) in float aSize;
-
-        out vec3 vertexColor;
-        out float alpha;
-
-        uniform vec2 uSize;
-
-        void main() {
-            float a = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
-            alpha = a;
-            vertexColor = aColor;
-
-            float x = aPos.x / uSize.x * 2.0 - 1.0;
-            float y = aPos.y / uSize.y * 2.0 - 1.0;
-            gl_Position = vec4(x, y, 0.0, 1.0);
-
-            gl_PointSize = 2.0 + 5.0 * a;
-        }
-        "#;
-
-        let fragment_src = r#"
-        #version 330 core
-        in vec3 vertexColor;
-        in float alpha;
-        out vec4 FragColor;
-
-        void main() {
-            vec2 uv = gl_PointCoord - vec2(0.5);
-            float dist = dot(uv, uv);
-            if(dist > 0.25) discard;
-            float falloff = smoothstep(0.25, 0.0, dist);
-            FragColor = vec4(vertexColor, alpha * falloff);
-        }
-        "#;
-        (vertex_src, fragment_src)
-    }
-
     fn src_shaders_instanced_quads() -> (&'static str, &'static str) {
         let vertex_src = r#"
         #version 330 core
@@ -163,7 +119,7 @@ impl RendererGraphicsInstanced {
         void main() {
             float life = aLifeMaxLifeSizeAngle.x;
             float max_life = aLifeMaxLifeSizeAngle.y;
-            float size = aLifeMaxLifeSizeAngle.z * 1.25;
+            float size = aLifeMaxLifeSizeAngle.z * 1.50;
             float angle = aLifeMaxLifeSizeAngle.w;
 
             // Ratio de vie (comme avant)
@@ -315,6 +271,7 @@ impl RendererGraphicsInstanced {
         // 1. Libérer les anciens buffers
         gl::DeleteVertexArrays(1, &self.vao);
         gl::DeleteBuffers(1, &self.vbo_particles);
+        gl::DeleteBuffers(1, &self.vbo_quad);
 
         // 2. Recréer avec la nouvelle taille
         let (vao, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
@@ -328,18 +285,30 @@ impl RendererGraphicsInstanced {
         self.max_particles_on_gpu = new_max;
     }
 
-    /// Remplit le buffer GPU directement
+    /// Remplit directement le buffer GPU mappé avec les particules "têtes"
+    /// renvoyées par le moteur physique.
+    ///
+    /// Cette fonction :
+    /// - itère sur un pipeline paresseux (aucune allocation CPU)
+    /// - écrit séquentiellement dans la mémoire GPU persistently-mapped (optimal)
+    /// - flush uniquement la zone écrite
+    ///
+    /// C’est un pattern AZDO performant : aucune écriture sparse, aucun saut mémoire,
+    /// seulement du contigu cpu → gpu.
     /// # Safety
     /// This function is unsafe because it directly manipulates GPU resources.
     /// The caller must ensure that the OpenGL context is valid.
     pub unsafe fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
         let mut count = 0;
 
-        // Crée un slice Rust sûr sur le buffer GPU
+        // Slice Rust mutable mappé directement sur la mémoire GPU.
+        // Toute écriture dans ce slice écrit physiquement dans la BAR / VRAM.
         let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
 
+        // Ici, `iter_active_heads()` fournit un flux paresseux, sans allocation CPU
+        // intermédiaire : idéal pour écrire contigu dans le buffer GPU.
         for (i, p) in physic
-            .active_heads_particles()
+            .iter_active_heads()
             .take(self.max_particles_on_gpu)
             .enumerate()
         {
@@ -356,9 +325,11 @@ impl RendererGraphicsInstanced {
             };
             count += 1;
         }
-        // Flush explicite de la zone modifiée pour que le GPU voit les changements
-        let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
-        gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
+
+        // Flush explicite de la zone écrite.
+        // (Si MAP_COHERENT_BIT est utilisé : cette étape peut être omise.)
+        // let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
+        // gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
 
         count
     }

@@ -32,13 +32,8 @@ use crate::physic_engine::types::UpdateResult;
 pub trait PhysicEngine {
     /// Retourne un itérateur dynamique sur les particules actives.
     /// Chaque élément est une référence immuable vers un `Particle`.
-    fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
-
-    fn active_heads_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
-
-    // /// Retourne un itérateur dynamique sur les fusées actives.
-    // /// Chaque élément est une référence immuable vers une `Rocket`.
-    // fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a>;
+    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
+    fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
 
     /// Ajuste la largeur du monde (utile si la fenêtre de rendu change de taille).
     fn set_window_width(&mut self, width: f32);
