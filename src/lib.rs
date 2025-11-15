@@ -1,15 +1,20 @@
 pub mod simulator;
 pub use simulator::Simulator;
+// Renderer engine
 pub mod renderer_engine;
 pub use renderer_engine::RendererEngine;
+// Audio engine
 pub mod audio_engine;
 pub use audio_engine::AudioEngine;
 pub use audio_engine::AudioEngineSettings;
 pub use audio_engine::FireworksAudio3D;
+// Physic engine
 pub mod physic_engine;
 pub use physic_engine::PhysicEngine;
 
+// Profiler
 pub mod profiler;
+// Utilities
 pub mod utils;
 
 // #[cfg(all(feature = "simd", feature = "no_simd"))]

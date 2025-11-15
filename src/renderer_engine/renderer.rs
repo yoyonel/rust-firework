@@ -3,37 +3,26 @@ use crate::{log_metrics_and_fps, profiler::Profiler};
 use anyhow::{anyhow, Result};
 use glfw::{Action, Context, Key, WindowMode};
 use log::{debug, info};
-use std::ffi::CString;
 use std::time::Instant;
 
 use crate::audio_engine::AudioEngine;
-use crate::physic_engine::{config::PhysicConfig, PhysicEngine};
+use crate::physic_engine::{config::PhysicConfig, PhysicEngine, UpdateResult};
+use crate::renderer_engine::RendererGraphics;
+use crate::renderer_engine::RendererGraphicsInstanced;
 use crate::renderer_engine::{
-    tools::{compile_shader_program, print_context_info, setup_opengl_debug},
-    types::ParticleGPU,
+    tools::{setup_opengl_debug, show_opengl_context_info},
     utils::{
         adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler},
         glfw_window::Fullscreen,
     },
 };
 
-// use crate::audio_engine::DopplerEvent;
-use crate::utils::human_bytes::HumanBytes;
-// use crossbeam::channel::Sender;
-
 pub struct Renderer {
     pub glfw: glfw::Glfw,
-    // pub window: Option<glfw::Window>,
     pub window: Option<glfw::PWindow>,
     pub events: Option<glfw::GlfwReceiver<(f64, glfw::WindowEvent)>>,
 
-    vao: u32,
-    vbo: u32,
-    mapped_ptr: *mut ParticleGPU,
-    shader_program: u32,
-
     max_particles_on_gpu: usize,
-    buffer_size: isize,
 
     frames: u32,
     last_time: Instant,
@@ -44,9 +33,8 @@ pub struct Renderer {
     window_last_pos: (i32, i32),
     window_last_size: (i32, i32),
 
-    // Shader
-    loc_size: i32,
-    // _doppler_sender: Option<Sender<DopplerEvent>>, // option pour compatibilité si non fourni
+    graphics: RendererGraphics,
+    graphics_instanced: RendererGraphicsInstanced,
 }
 
 // ---------------------------------------------------------
@@ -61,7 +49,6 @@ pub struct Renderer {
 //   prend **ownership** d'un objet `audio` de type `A`.
 //   Comme le Renderer possède cet objet, il n'y a pas besoin de
 //   références mutables externes ou de lifetimes (`&mut`) pour l'audio.
-//doppler_queue
 // Conséquences / avantages :
 // 1. Typage statique et monomorphisation : pas de dispatch dynamique,
 //    ce qui permet des appels plus rapides.
@@ -74,13 +61,7 @@ pub struct Renderer {
 // - Chaque type `A` utilisé génère une version spécifique du Renderer
 //   dans le binaire, ce qui peut augmenter légèrement la taille du code.
 impl Renderer {
-    pub fn new(
-        width: i32,
-        height: i32,
-        title: &str,
-        max_particles_on_gpu: usize,
-        // doppler_sender: Option<Sender<DopplerEvent>>,
-    ) -> Result<Self> {
+    pub fn new(width: i32, height: i32, title: &str, physic_config: &PhysicConfig) -> Result<Self> {
         let _ = env_logger::builder().is_test(true).try_init();
 
         let mut glfw = glfw::init(glfw::fail_on_errors)
@@ -92,9 +73,6 @@ impl Renderer {
             glfw::OpenGlProfileHint::Core,
         ));
 
-        // let (mut window, events) = glfw
-        //     .create_window(width, height, title, glfw::WindowMode::Windowed)
-        //     .ok_or_else(|| anyhow!("Erreur: impossible de créer la fenêtre GLFW"))?;
         let (mut window, events) = glfw
             .create_window(
                 width as u32,
@@ -111,108 +89,46 @@ impl Renderer {
         window.set_mouse_button_polling(true);
         window.set_scroll_polling(true);
 
+        let window_last_pos = window.get_pos();
+        let window_last_size = window.get_size();
+
         info!("✅ OpenGL context ready for '{}'", title);
 
+        // load OpenGL function pointers
         gl::load_with(|s| window.get_proc_address(s) as *const _);
-        print_context_info();
 
         unsafe {
+            show_opengl_context_info();
+
+            // activate OpenGL debug output
             setup_opengl_debug();
 
+            // set OpenGL states for the rendering
+            // but it's link to the renderer graphics
             gl::Enable(gl::PROGRAM_POINT_SIZE);
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        // Vertex / Fragment shaders (GPU fait normalisation, alpha, size)
-        let vertex_src = r#"
-            #version 330 core
-            layout(location = 0) in vec2 aPos;       // pixel position
-            layout(location = 1) in vec3 aColor;     // rgb
-            layout(location = 2) in float aLife;     // life
-            layout(location = 3) in float aMaxLife;  // max_life
-            layout(location = 4) in float aSize;     // base size
+        let max_particles_on_gpu: usize =
+            physic_config.max_rockets * physic_config.particles_per_explosion;
+        let graphics = RendererGraphics::new(max_particles_on_gpu);
+        let graphics_instanced = RendererGraphicsInstanced::new(physic_config.max_rockets);
 
-            out vec3 vertexColor;
-            out float alpha;
-
-            uniform vec2 uSize;
-
-            void main() {
-                float x = aPos.x / uSize.x * 2.0 - 1.0;
-                float y = aPos.y / uSize.y * 2.0 - 1.0;
-                gl_Position = vec4(x, y, 0.0, 1.0);
-
-                alpha = clamp(aLife / max(aMaxLife, 0.0001), 0.0, 1.0);
-                gl_PointSize = 2.0 + 5.0 * alpha;
-                vertexColor = aColor;
-            }
-        "#;
-
-        let fragment_src = r#"
-            #version 330 core
-            in vec3 vertexColor;
-            in float alpha;
-            out vec4 FragColor;
-            void main() {
-                vec2 uv = gl_PointCoord - vec2(0.5);
-                float dist = dot(uv, uv);
-                if (dist > 0.25) discard;
-                float falloff = smoothstep(0.25, 0.0, dist);
-    
-                // heat color fade: life fraction = alpha
-                vec3 heatColor;
-                if (alpha > 0.66) {
-                    // white → yellow
-                    heatColor = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.5, 0.0), (1.0 - alpha) / 0.34);
-                } else if (alpha > 0.33) {
-                    // yellow → red
-                    heatColor = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.0, 0.0), (0.66 - alpha) / 0.33);
-                } else {
-                    // red → black
-                    heatColor = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0), (0.33 - alpha) / 0.33);
-                }
-                // mix finale avec la couleur de vertex/particule et la heat color fade
-                FragColor = vec4(vertexColor * falloff * heatColor, alpha * falloff);
-            }
-        "#;
-
-        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
-        let loc_size = unsafe {
-            gl::GetUniformLocation(shader_program, CString::new("uSize").unwrap().as_ptr())
-        };
-
-        // // VAO/VBO setup
-        // let (mut vao, mut vbo) = (0u32, 0u32);
-
-        let window_last_pos = window.get_pos();
-        let window_last_size = window.get_size();
-
-        unsafe {
-            let (vao, vbo, mapped_ptr, buffer_size) = setup_gpu_buffers(max_particles_on_gpu);
-
-            // comme on stocke le pointeur mappé GPU,
-            // on doit renvoyer le résultat du constructeur de structure dans la partie unsafe
-            Ok(Self {
-                glfw,
-                window: Some(window),
-                events: Some(events),
-                vao,
-                vbo,
-                mapped_ptr,
-                shader_program,
-                max_particles_on_gpu,
-                buffer_size,
-                frames: 0,
-                last_time: Instant::now(),
-                window_size: (width, height),
-                window_size_f32: (width as f32, height as f32),
-                window_last_pos,
-                window_last_size,
-                loc_size,
-                // _doppler_sender: doppler_sender,
-            })
-        }
+        Ok(Self {
+            glfw,
+            window: Some(window),
+            events: Some(events),
+            frames: 0,
+            last_time: Instant::now(),
+            window_size: (width, height),
+            window_size_f32: (width as f32, height as f32),
+            window_last_pos,
+            window_last_size,
+            graphics,
+            graphics_instanced,
+            max_particles_on_gpu,
+        })
     }
 
     fn reload_config<P: PhysicEngine>(&mut self, physic: &mut P) {
@@ -230,159 +146,35 @@ impl Renderer {
                 self.max_particles_on_gpu, new_max
             );
             unsafe {
-                self.recreate_buffers(new_max);
+                self.graphics.recreate_buffers(new_max);
+                self.graphics_instanced
+                    .recreate_buffers(physic_config.max_rockets);
             }
-        }
-    }
-
-    unsafe fn recreate_buffers(&mut self, new_max: usize) {
-        // 1. Libérer les anciens buffers
-        gl::DeleteVertexArrays(1, &self.vao);
-        gl::DeleteBuffers(1, &self.vbo);
-
-        // 2. Recréer avec la nouvelle taille
-        let (vao, vbo, mapped_ptr, buffer_size) = setup_gpu_buffers(new_max);
-
-        // 3. Mettre à jour les champs
-        self.vao = vao;
-        self.vbo = vbo;
-        self.mapped_ptr = mapped_ptr;
-        self.buffer_size = buffer_size;
-        self.max_particles_on_gpu = new_max;
-    }
-
-    /// Remplit directement le buffer GPU avec les données des particules actives.
-    ///
-    /// Cette méthode copie les données de toutes les particules actives fournies par
-    /// le moteur physique `physic` dans le buffer GPU mappé en mémoire CPU (`self.mapped_ptr`),
-    /// jusqu'à un maximum défini par `self.max_particles_on_gpu`.
-    ///
-    /// # Fonctionnalité
-    /// - Chaque particule physique active est convertie en `ParticleGPU` via `Particle::to_particle_gpu()`.
-    /// - Les données sont écrites directement dans le slice mappé `gpu_slice`, garantissant que
-    ///   la mémoire GPU est correctement mise à jour.
-    /// - La méthode renvoie le nombre de particules copiées dans le buffer GPU (`count`),
-    ///   ce qui peut être utilisé pour des opérations ultérieures (par exemple le rendu).
-    /// - Après avoir rempli le slice, un flush explicite est effectué via
-    ///   `gl::FlushMappedBufferRange` pour que le GPU prenne en compte les modifications.
-    ///
-    /// # Sécurité et `unsafe`
-    /// - La méthode utilise un bloc `unsafe` car elle crée un slice Rust mutable (`gpu_slice`)
-    ///   à partir d'un pointeur brut mappé sur la mémoire GPU (`self.mapped_ptr`).
-    /// - Les garanties suivantes sont respectées pour que cette opération soit sûre :
-    ///   1. `self.mapped_ptr` pointe vers une mémoire valide et correctement alignée
-    ///      pour `ParticleGPU`.
-    ///   2. Le slice a une longueur exacte de `self.max_particles_on_gpu`, garantissant
-    ///      que l’on n’accède jamais hors limites.
-    ///   3. La boucle `for` itère en parallèle sur le slice GPU et les particules actives via `zip`,
-    ///      donc aucune écriture ne dépasse la capacité du slice.
-    /// - Chaque élément du slice est écrit **en place** (`*dst = …`), et le flush est effectué
-    ///   après toutes les écritures pour synchroniser le GPU.
-    ///
-    /// # Remarques
-    /// - Il est important de **ne pas utiliser de `map()` ou `collect()` ici**, car la mémoire
-    ///   mappée GPU requiert des écritures en place. Les transformations fonctionnelles pourraient
-    ///   entraîner des écritures incorrectes ou hors ordre, rendant le GPU incapable de lire les
-    ///   données correctement.
-    /// - Cette méthode est conçue pour être rapide et sûre, tout en restant compatible avec
-    ///   des milliers de particules dans un buffer mappé CPU ↔ GPU.
-    pub fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
-        let mut count = 0;
-
-        unsafe {
-            // Crée un slice Rust sûr sur le buffer GPU
-            let gpu_slice =
-                std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
-
-            // Itère en parallèle sur les particules physiques actives et les slots GPU disponibles
-            // le zip se fait (dans l'ordre) du slice gpu vers les particules actives,
-            // donc la taille max du slice gpu ne pourra (implicitement) jamais être dépassée.
-            for (i, (dst, src)) in gpu_slice
-                .iter_mut()
-                .zip(physic.active_particles())
-                .enumerate()
-            {
-                *dst = src.to_particle_gpu();
-                count = i + 1;
-            }
-
-            // Flush explicite de la zone modifiée pour que le GPU voit les changements
-            let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
-            gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
-        }
-
-        count
-    }
-
-    /// Envoie le slice de ParticleGPU au GPU et dessine.
-    /// Cette fonction est stateless vis-à-vis de `self` (sauf pour uniforms), et accepte le slice brut.
-    /// Rendu des particules via un buffer OpenGL persistant.
-    ///
-    /// Cette méthode lie les ressources GPU nécessaires, et dessine
-    /// les particules à l’écran sous forme de points (`GL_POINTS`).
-    ///
-    /// # Paramètres
-    /// - `count`: nombre de particules à afficher. Si `count` vaut 0, aucun rendu n’est effectué.
-    ///
-    /// # Détails techniques
-    /// - **Persistent Mapping** : Le VBO (Vertex Buffer Object) est mappé de manière
-    ///   persistante en mémoire GPU. Cela signifie que les données peuvent être modifiées
-    ///   directement via un pointeur mémoire (obtenu avec `glMapBufferRange`), sans devoir
-    ///   réappeler `glBufferSubData` à chaque frame.
-    /// - Le shader utilisé (`self.shader_program`) est supposé gérer le rendu de chaque
-    ///   particule via les attributs du VBO et les uniformes `width` et `height`.
-    ///
-    /// # Sécurité
-    /// Cette fonction utilise des appels `unsafe` à l’API OpenGL, car ces fonctions
-    /// manipulent directement des pointeurs mémoire GPU et des ressources système.
-    /// Il est de la responsabilité de l’appelant de garantir que le contexte OpenGL
-    /// est valide et que les ressources (`VAO`, `VBO`, shader, etc.) sont correctement initialisées.
-    fn render_particles_with_persistent_buffer(&self, count: usize) {
-        // Si aucune particule, on ne fait rien
-        if count == 0 {
-            return;
-        }
-
-        unsafe {
-            // Lie le VAO et VBO correspondant aux particules
-            gl::BindVertexArray(self.vao);
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo);
-
-            // Active le shader de rendu des particules
-            gl::UseProgram(self.shader_program);
-
-            // Envoie les dimensions de la fenêtre au shader (uniforms)
-            gl::Uniform2f(
-                self.loc_size,
-                self.window_size_f32.0,
-                self.window_size_f32.1,
-            );
-
-            // Dessine les particules sous forme de points
-            gl::DrawArrays(gl::POINTS, 0, count as i32);
         }
     }
 
     /// Exécute une seule frame (update + rendu)
-    pub fn render_frame<P: PhysicEngine>(&mut self, physic: &mut P) -> usize {
-        // Early-out si la fenêtre est fermée
-        if let Some(w) = &self.window {
-            if w.should_close() {
-                return 0;
-            }
-        }
-
-        unsafe {
-            // Efface l’écran (fond noir)
-            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
-        }
-
+    /// # Safety
+    /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
+    pub unsafe fn render_frame<P: PhysicEngine>(&mut self, physic: &P) -> usize {
         // Remplit le buffer GPU
-        let nb_particles_rendered = self.fill_particle_data_direct(physic);
-
+        let nb_particles_rendered = self.graphics.fill_particle_data_direct(physic);
         // // Dessine les particules
-        self.render_particles_with_persistent_buffer(nb_particles_rendered);
+        self.graphics
+            .render_particles_with_persistent_buffer(nb_particles_rendered, self.window_size_f32);
+
+        nb_particles_rendered
+    }
+
+    /// Exécute une seule frame (update + rendu) en mode instancié
+    /// # Safety
+    /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
+    pub unsafe fn render_frame_instanced<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+        // Remplit le buffer GPU
+        let nb_particles_rendered = self.graphics_instanced.fill_particle_data_direct(physic);
+        // // Dessine les particules
+        self.graphics_instanced
+            .render_particles_with_persistent_buffer(nb_particles_rendered, self.window_size_f32);
 
         nb_particles_rendered
     }
@@ -397,7 +189,6 @@ impl Renderer {
         let profiler = Profiler::new(200);
         let mut last_log = Instant::now();
         let log_interval = std::time::Duration::from_secs(5);
-        // let mut next_doppler_update = Instant::now();
 
         // 🔹 Initialisation de l’échantillonneur adaptatif
         let target_samples = 200;
@@ -437,23 +228,28 @@ impl Renderer {
             }
 
             let update_result = profiler.profile_block("physic - update", || physic.update(delta));
+            self.synch_audio_with_physic(&update_result, audio);
 
-            if let Some(rocket) = update_result.new_rocket {
-                debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
-                audio.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
+            // Clear screen before rendering
+            unsafe {
+                // Efface l’écran (fond noir)
+                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+                gl::Clear(gl::COLOR_BUFFER_BIT);
             }
 
-            for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
-                debug!(
-                    "💥 Explosion triggered: {} at ({}, {})",
-                    i, expl.pos.x, expl.pos.y
-                );
-                audio.play_explosion((expl.pos.x, expl.pos.y), 1.0);
-            }
+            // Render frame with points rendering for representing particles system
+            profiler.profile_block("render frame", || {
+                profiler.record_metric("total particles drawn", unsafe {
+                    self.render_frame(physic)
+                });
+            });
 
-            let _render_guard = profiler.measure("render frame");
-            let particles_rendered = self.render_frame(physic);
-            profiler.record_metric("total particles drawn", particles_rendered);
+            // Render frame with instanced textured quads for representing particles system
+            profiler.profile_block("render frame with instanced particles", || {
+                profiler.record_metric("total particles drawn", unsafe {
+                    self.render_frame_instanced(physic)
+                });
+            });
 
             // FPSmoyenne​ ← α⋅FPSinstant ​+ (1 − α)⋅FPSmoyenne​
             fps_avg = alpha * fps + (1.0 - alpha) * fps_avg;
@@ -502,7 +298,6 @@ impl Renderer {
             // Swap buffers + events
             if let Some(window) = &mut self.window {
                 window.swap_buffers();
-                drop(_render_guard);
 
                 if first_frame {
                     info!("🚀 First frame rendered");
@@ -582,23 +377,31 @@ impl Renderer {
         Ok(())
     }
 
+    fn synch_audio_with_physic<A: AudioEngine>(
+        &mut self,
+        update_result: &UpdateResult,
+        audio: &mut A,
+    ) {
+        if let Some(rocket) = &update_result.new_rocket {
+            debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
+            audio.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
+        }
+
+        for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
+            debug!(
+                "💥 Explosion triggered: {} at ({}, {})",
+                i, expl.pos.x, expl.pos.y
+            );
+            audio.play_explosion((expl.pos.x, expl.pos.y), 1.0);
+        }
+    }
+
     pub fn close(&mut self) {
         info!("🧹 Fermeture du Renderer");
 
-        unsafe {
-            if self.vbo != 0 {
-                gl::DeleteBuffers(1, &self.vbo);
-                self.vbo = 0;
-            }
-            if self.vao != 0 {
-                gl::DeleteVertexArrays(1, &self.vao);
-                self.vao = 0;
-            }
-            if self.shader_program != 0 {
-                gl::DeleteProgram(self.shader_program);
-                self.shader_program = 0;
-            }
-        }
+        // unsafe {
+        //     self.graphics.close();
+        // }
 
         if let Some(window) = self.window.take() {
             drop(window);
@@ -606,6 +409,7 @@ impl Renderer {
     }
 }
 
+// Trait implementation
 impl RendererEngine for Renderer {
     fn run_loop<P: PhysicEngine, A: AudioEngine>(
         &mut self,
@@ -618,42 +422,4 @@ impl RendererEngine for Renderer {
     fn close(&mut self) {
         self.close();
     }
-}
-
-unsafe fn setup_gpu_buffers(max_particles_on_gpu: usize) -> (u32, u32, *mut ParticleGPU, isize) {
-    let (mut vao, mut vbo) = (0u32, 0u32);
-    gl::GenVertexArrays(1, &mut vao);
-    gl::GenBuffers(1, &mut vbo);
-
-    gl::BindVertexArray(vao);
-    gl::BindBuffer(gl::ARRAY_BUFFER, vbo);
-
-    let buffer_size = (max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
-    info!(
-        "🎮 Reallocating GPU buffer: {} particles → {}",
-        max_particles_on_gpu,
-        buffer_size.human_bytes()
-    );
-
-    gl::BufferStorage(
-        gl::ARRAY_BUFFER,
-        buffer_size,
-        std::ptr::null(),
-        gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT,
-    );
-
-    let mapped_ptr = gl::MapBufferRange(
-        gl::ARRAY_BUFFER,
-        0,
-        buffer_size,
-        gl::MAP_WRITE_BIT
-            | gl::MAP_PERSISTENT_BIT
-            | gl::MAP_COHERENT_BIT
-            | gl::MAP_FLUSH_EXPLICIT_BIT,
-    ) as *mut ParticleGPU;
-
-    // Appel unique, auto-configuré
-    ParticleGPU::setup_vertex_attribs();
-
-    (vao, vbo, mapped_ptr, buffer_size)
 }

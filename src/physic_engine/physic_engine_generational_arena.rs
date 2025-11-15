@@ -40,7 +40,7 @@ impl PhysicEngineFireworks {
 
         // Pré-remplissage des slots dans l’arena et free_indices
         for _ in 0..config.max_rockets {
-            let idx = rockets.insert(Rocket::new(config));
+            let idx = rockets.insert(Rocket::new());
             free_indices.push(idx);
         }
 
@@ -91,7 +91,7 @@ impl PhysicEngineFireworks {
             self.free_indices.clear();
 
             for _ in 0..new_config.max_rockets {
-                let idx = self.rockets.insert(Rocket::new(&self.config));
+                let idx = self.rockets.insert(Rocket::new());
                 self.free_indices.push(idx);
             }
         }
@@ -171,8 +171,12 @@ impl PhysicEngineFireworks {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
 
-                // rocket.update(&mut self.rng, dt);
-                rocket.update(&mut self.rng, dt, &mut self.particles_pools_for_rockets);
+                rocket.update(
+                    &mut self.rng,
+                    dt,
+                    &mut self.particles_pools_for_rockets,
+                    &self.config,
+                );
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
@@ -209,25 +213,46 @@ impl PhysicEngineFireworks {
 // Trait PhysicEngine
 // ==================================
 impl PhysicEngine for PhysicEngineFireworks {
-    fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        let mut out = Vec::new();
-
-        for &idx in &self.active_indices {
-            if let Some(r) = self.rockets.get(idx) {
-                // On collecte toutes les particules actives (trails + explosions)
-                out.extend(r.active_particles(&self.particles_pools_for_rockets));
-            }
-        }
-
-        Box::new(out.into_iter())
+    /// Itère sur toutes les particules de **toutes** les fusées actives.
+    ///
+    /// ✔ Aucun `Vec` interne  
+    /// ✔ Aucun `Box<dyn Iterator>`  
+    /// ✔ Zéro allocation  
+    /// ✔ Pipeline d’itérateurs entièrement optimisable par le compilateur  
+    ///
+    /// Cette approche est idéale pour un rendu GPU basé sur un buffer mappé persistant :
+    /// on produit un flux de particules triées, en lecture séquentielle, permettant
+    /// une écriture contiguë dans le VBO d'instanciation (meilleur throughput).
+    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        self.active_indices
+            .iter()
+            // Pour chaque rocket active, on concatène son itérateur de heads
+            // à l’aide d’un `flat_map`. Le résultat final est un seul pipeline
+            // d’itérateurs, entièrement paresseux et zéro-allocation.
+            .flat_map(move |&idx| {
+                self.rockets[idx].iter_active_particles(&self.particles_pools_for_rockets)
+            })
     }
 
-    fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {
-        Box::new(
-            self.active_indices
-                .iter()
-                .filter_map(|&idx| self.rockets.get(idx)),
-        )
+    /// Itère sur toutes les particules "têtes" (`is_head`) de **toutes** les fusées actives.
+    ///
+    /// ✔ Aucun `Vec` interne  
+    /// ✔ Aucun `Box<dyn Iterator>`  
+    /// ✔ Zéro allocation  
+    /// ✔ Pipeline d’itérateurs entièrement optimisable par le compilateur  
+    ///
+    /// Cette approche est idéale pour un rendu GPU basé sur un buffer mappé persistant :
+    /// on produit un flux de particules triées, en lecture séquentielle, permettant
+    /// une écriture contiguë dans le VBO d'instanciation (meilleur throughput).
+    fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        self.active_indices
+            .iter()
+            // Pour chaque rocket active, on concatène son itérateur de heads
+            // à l’aide d’un `flat_map`. Le résultat final est un seul pipeline
+            // d’itérateurs, entièrement paresseux et zéro-allocation.
+            .flat_map(move |&idx| {
+                self.rockets[idx].iter_active_heads(&self.particles_pools_for_rockets)
+            })
     }
 
     fn set_window_width(&mut self, width: f32) {

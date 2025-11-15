@@ -32,6 +32,7 @@ use std::mem;
 /// | `2`       | `float`| `life`                    |
 /// | `3`       | `float`| `max_life`                |
 /// | `4`       | `float`| `size`                    |
+/// | `5`       | `float`| `angle`                   |
 #[repr(C)] // garantit un layout C-compatible pour l’envoi GPU
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ParticleGPU {
@@ -58,6 +59,9 @@ pub struct ParticleGPU {
 
     /// Taille de la particule à l’écran.
     pub size: f32,
+
+    /// Angle de rotation de la particule.
+    pub angle: f32,
 }
 
 impl ParticleGPU {
@@ -93,75 +97,58 @@ impl ParticleGPU {
             );
             gl::EnableVertexAttribArray(1);
 
-            // Attribut 2 : vie actuelle
+            // Attribut 2 : vie actuelle, vie maximale, taille, angle
             gl::VertexAttribPointer(
                 2,
-                1,
+                4,
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
                 offset_of!(Self, life) as *const _,
             );
             gl::EnableVertexAttribArray(2);
-
-            // Attribut 3 : vie maximale
-            gl::VertexAttribPointer(
-                3,
-                1,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                offset_of!(Self, max_life) as *const _,
-            );
-            gl::EnableVertexAttribArray(3);
-
-            // Attribut 4 : taille
-            gl::VertexAttribPointer(
-                4,
-                1,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                offset_of!(Self, size) as *const _,
-            );
-            gl::EnableVertexAttribArray(4);
         }
     }
-}
 
-/// Structure envoyée au GPU représentant une particule de fumée.
-///
-/// Utilisée pour les effets de type "smoke" ou "dust".
-///
-/// # Layout mémoire GPU
-///
-/// ```text
-/// ┌────────────────────────────┐
-/// │         SmokeGPU           │
-/// ├────────────┬───────────────┤
-/// │ pos_x (f32)│ pos_y (f32)   │
-/// │ size  (f32)│ alpha (f32)   │
-/// └────────────┴───────────────┘
-///
-/// Stride total : 4 × f32 = 16 octets
-///
-/// Attributs possibles (exemple) :
-/// — 0 → vec2 position (pos_x, pos_y)
-/// — 1 → float size
-/// — 2 → float alpha
-/// ```
-#[repr(C)]
-#[derive(Debug, Clone, Copy, Default)]
-pub struct SmokeGPU {
-    /// Position horizontale du centre de la particule.
-    pub pos_x: f32,
+    pub fn setup_vertex_attribs_for_instanced_quad() {
+        let stride = std::mem::size_of::<Self>() as GLsizei;
 
-    /// Position verticale du centre de la particule.
-    pub pos_y: f32,
+        unsafe {
+            // layout(location = 1) : position (vec2)
+            gl::VertexAttribPointer(
+                1,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, pos_x) as *const _,
+            );
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribDivisor(1, 1); // 🔑 une fois par particule
 
-    /// Taille du sprite de fumée.
-    pub size: f32,
+            // layout(location = 2) : couleur (vec3)
+            gl::VertexAttribPointer(
+                2,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, col_r) as *const _,
+            );
+            gl::EnableVertexAttribArray(2);
+            gl::VertexAttribDivisor(2, 1);
 
-    /// Opacité (alpha) pour les effets de fade.
-    pub alpha: f32,
+            // layout(location = 3) : vie (float), vie max (float), taille (float), angle (float)
+            gl::VertexAttribPointer(
+                3,
+                4,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, life) as *const _,
+            );
+            gl::EnableVertexAttribArray(3);
+            gl::VertexAttribDivisor(3, 1);
+        }
+    }
 }
