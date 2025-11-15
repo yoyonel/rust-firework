@@ -32,6 +32,28 @@ impl ParticlesPoolsForRockets {
     }
 }
 
+pub enum PoolKind {
+    Trails,
+    Explosions,
+}
+
+impl ParticlesPoolsForRockets {
+    #[inline(always)]
+    pub fn access(&self, kind: PoolKind, range: &Range<usize>) -> &[Particle] {
+        match kind {
+            PoolKind::Trails => self.particles_pool_for_trails.get_particles(range),
+            PoolKind::Explosions => self.particles_pool_for_explosions.get_particles(range),
+        }
+    }
+    #[inline(always)]
+    pub fn access_mut(&mut self, kind: PoolKind, range: &Range<usize>) -> &mut [Particle] {
+        match kind {
+            PoolKind::Trails => self.particles_pool_for_trails.get_particles_mut(range),
+            PoolKind::Explosions => self.particles_pool_for_explosions.get_particles_mut(range),
+        }
+    }
+}
+
 /// Gère toutes les particules globales du moteur (explosions et trails).
 ///
 /// # Rôle

@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
-    particles_pools::{ParticlesPool, ParticlesPoolsForRockets},
+    particles_pools::{ParticlesPool, ParticlesPoolsForRockets, PoolKind},
 };
 use glam::{Vec2, Vec4 as Color};
 
@@ -39,19 +39,17 @@ pub struct Rocket {
     pub trail_particle_indices: Option<Range<usize>>,
     pub trail_index: usize,
     pub last_trail_pos: Vec2,
-
-    pub config: PhysicConfig,
 }
 
 impl Default for Rocket {
     fn default() -> Self {
-        Self::new(&PhysicConfig::default())
+        Self::new()
     }
 }
 
 impl Rocket {
     /// Crée une nouvelle fusée (non active)
-    pub fn new(config: &PhysicConfig) -> Self {
+    pub fn new() -> Self {
         Self {
             id: ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             pos: Vec2::default(),
@@ -63,7 +61,6 @@ impl Rocket {
             trail_particle_indices: None,
             trail_index: 0,
             last_trail_pos: Vec2::default(),
-            config: config.clone(),
         }
     }
 
@@ -75,20 +72,12 @@ impl Rocket {
         let trails = self
             .trail_particle_indices
             .iter()
-            .flat_map(|range| {
-                particles_pools
-                    .particles_pool_for_trails
-                    .get_particles(range)
-            })
+            .flat_map(|range| particles_pools.access(PoolKind::Trails, range))
             .filter(|p| p.active);
         let explosions = self
             .explosion_particle_indices
             .iter()
-            .flat_map(|range| {
-                particles_pools
-                    .particles_pool_for_explosions
-                    .get_particles(range)
-            })
+            .flat_map(|range| particles_pools.access(PoolKind::Explosions, range))
             .filter(|p| p.active);
         trails.chain(explosions)
     }
@@ -116,19 +105,14 @@ impl Rocket {
             // Pour chaque "range", on récupère un itérateur sur les particules
             // correspondantes dans le pool, puis `flat_map` fusionne tout cela
             // en un flux unique.
-            .flat_map(move |range| pools.particles_pool_for_trails.get_particles(range))
+            .flat_map(move |range| pools.access(PoolKind::Trails, range))
             // On filtre pour ne garder que les particules actives.
             // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
             .filter(|p| p.active);
         let explosions = self
             .explosion_particle_indices
             .iter()
-            // Pour chaque "range", on récupère un itérateur sur les particules
-            // correspondantes dans le pool, puis `flat_map` fusionne tout cela
-            // en un flux unique.
-            .flat_map(move |range| pools.particles_pool_for_explosions.get_particles(range))
-            // On filtre pour ne garder que les particules actives.
-            // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
+            .flat_map(move |range| pools.access(PoolKind::Explosions, range))
             .filter(|p| p.active);
         trails.chain(explosions)
     }
@@ -155,7 +139,7 @@ impl Rocket {
             // Pour chaque "range", on récupère un itérateur sur les particules
             // correspondantes dans le pool, puis `flat_map` fusionne tout cela
             // en un flux unique.
-            .flat_map(move |range| pools.particles_pool_for_trails.get_particles(range))
+            .flat_map(move |range| pools.access(PoolKind::Trails, range))
             // On filtre pour ne garder que les particules actives et marquées `is_head`.
             // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
             .filter(|p| p.active && p.is_head)
@@ -167,7 +151,7 @@ impl Rocket {
             .as_ref()
             .expect("Trail must exist");
 
-        let particles = pools.particles_pool_for_trails.get_particles(range);
+        let particles = pools.access(PoolKind::Trails, range);
 
         particles
             .first()
@@ -180,6 +164,7 @@ impl Rocket {
         rng: &mut impl Rng,
         dt: f32,
         particles_pools: &mut ParticlesPoolsForRockets,
+        config: &PhysicConfig,
     ) {
         if !self.active {
             return;
@@ -188,7 +173,12 @@ impl Rocket {
         const GRAVITY: Vec2 = Vec2::new(0.0, -200.0);
 
         self.update_movement(dt, GRAVITY);
-        self.update_trails(dt, GRAVITY, &mut particles_pools.particles_pool_for_trails);
+        self.update_trails(
+            dt,
+            GRAVITY,
+            &mut particles_pools.particles_pool_for_trails,
+            config,
+        );
         self.update_explosions(
             dt,
             rng,
@@ -204,8 +194,7 @@ impl Rocket {
             .as_ref()
             .map(|range| {
                 particles_pools
-                    .particles_pool_for_explosions
-                    .get_particles(range)
+                    .access(PoolKind::Explosions, range)
                     .iter()
                     .all(|p| !p.active)
             })
@@ -215,8 +204,7 @@ impl Rocket {
             .as_ref()
             .map(|range| {
                 particles_pools
-                    .particles_pool_for_trails
-                    .get_particles(range)
+                    .access(PoolKind::Trails, range)
                     .iter()
                     .all(|p| !p.active)
             })
@@ -240,69 +228,117 @@ impl Rocket {
 
     /// Gère la génération et la mise à jour des particules de trail
     #[inline(always)]
-    fn update_trails(&mut self, dt: f32, gravity: Vec2, particles_pool: &mut ParticlesPool) {
-        const TRAIL_SPACING: f32 = 2.0;
-        let nb_particles_per_trail: usize = self.config.particles_per_trail;
-
-        let movement = self.pos - self.last_trail_pos;
-        let dist = movement.length();
-
+    fn update_trails(
+        &mut self,
+        dt: f32,
+        gravity: Vec2,
+        particles_pool: &mut ParticlesPool,
+        config: &PhysicConfig,
+    ) {
         // Alloue un bloc si nécessaire
         if self.trail_particle_indices.is_none() {
             self.trail_particle_indices = particles_pool.allocate_block();
         }
 
-        if let Some(range) = &self.trail_particle_indices {
-            let slice = particles_pool.get_particles_mut(range);
+        let Some(range) = &self.trail_particle_indices else {
+            return;
+        };
 
-            if !self.exploded {
-                let mut remaining_dist = dist;
+        let slice = particles_pool.get_particles_mut(range);
 
-                while remaining_dist >= TRAIL_SPACING {
-                    let t = TRAIL_SPACING / dist;
-                    let new_pos = self.last_trail_pos * (1.0 - t) + self.pos * t;
+        // 1) SPAWN : génération des particules de trail
+        if !self.exploded {
+            self.spawn_trail_particles(slice, config);
+        }
 
-                    let delta = new_pos - self.last_trail_pos;
+        // 2) UPDATE : intégration physique des particules existantes
+        self.integrate_trail_particles(slice, dt, gravity);
+    }
 
-                    // Vérifier que delta n'est pas nul
-                    let angle = if delta.length_squared() > 0.0 {
-                        // La rocket/fusée (son sprite/image) est orientée vers le haut (0.0, +1.0)
-                        delta.angle_to(Vec2::new(0.0, 1.0))
-                    } else {
-                        0.0 // angle par défaut si delta nul
-                    };
+    /// Génère les nouvelles particules de trail selon la distance parcourue.
+    ///
+    /// Cette partie était auparavant intégrée dans `update_trails`.
+    /// Elle gère exclusivement :
+    ///  - le calcul du nombre de particules à spawn
+    ///  - leur position
+    ///  - leur orientation
+    ///  - l’écriture dans le pool sans toucher à la physique.
+    ///
+    /// Cette fonction reste **zéro allocation** et n'effectue que l’amorçage
+    /// des particules dans la fenêtre du pool.
+    #[inline(always)]
+    fn spawn_trail_particles(&mut self, slice: &mut [Particle], config: &PhysicConfig) {
+        const TRAIL_SPACING: f32 = 2.0;
+        let nb_particles_per_trail = config.particles_per_trail;
 
-                    let i = self.trail_index % nb_particles_per_trail;
-                    slice[i] = Particle {
-                        pos: new_pos,
-                        vel: Vec2::ZERO,
-                        color: self.color,
-                        life: 0.35,
-                        max_life: 0.35,
-                        size: 2.0,
-                        active: true,
-                        angle,
-                        is_head: true,
-                    };
+        let movement = self.pos - self.last_trail_pos;
+        let dist = movement.length();
 
-                    self.trail_index = (self.trail_index + 1) % nb_particles_per_trail;
-                    self.last_trail_pos = new_pos;
-                    remaining_dist -= TRAIL_SPACING;
-                }
+        if dist <= 0.0001 {
+            return;
+        }
+
+        let inv_dist = 1.0 / dist;
+        let t_step = TRAIL_SPACING * inv_dist;
+        let count = (dist / TRAIL_SPACING) as u32;
+
+        for _ in 0..count {
+            let new_pos = self.last_trail_pos * (1.0 - t_step) + self.pos * t_step;
+
+            let delta = new_pos - self.last_trail_pos;
+
+            // Vérifier que delta n'est pas nul
+            let angle = if delta.length_squared() > 0.0 {
+                // La rocket/fusée (son sprite/image) est orientée vers le haut (0.0, +1.0)
+                delta.angle_to(Vec2::new(0.0, 1.0))
+            } else {
+                0.0 // angle par défaut si delta nul
+            };
+
+            let i = self.trail_index % nb_particles_per_trail;
+
+            slice[i] = Particle {
+                pos: new_pos,
+                vel: Vec2::ZERO,
+                color: self.color,
+                life: 0.35,
+                max_life: 0.35,
+                size: 2.0,
+                active: true,
+                angle,
+                is_head: true,
+            };
+
+            self.trail_index = (self.trail_index + 1) % nb_particles_per_trail;
+            self.last_trail_pos = new_pos;
+        }
+    }
+
+    /// Met à jour les particules de trail existantes.
+    ///
+    /// Cette fonction est **zéro allocation** et applique uniquement :
+    ///  - la gravité
+    ///  - l’intégration de position
+    ///  - la mise à jour de vie
+    ///  - la désactivation automatique
+    ///
+    /// Aucun spawn, aucune écriture dans les indices de la rocket.
+    /// Optimale pour l’inlining.
+    #[inline(always)]
+    fn integrate_trail_particles(&self, slice: &mut [Particle], dt: f32, gravity: Vec2) {
+        // Update trails
+        for p in slice {
+            if !p.active {
+                continue;
             }
 
-            // Update trails
-            for p in &mut slice[..] {
-                if !p.active {
-                    continue;
-                }
-                // FIXME: Trouver un meilleur moyen de déterminer la tête de la traînée
-                p.is_head = (p.max_life - p.life) < 0.025;
-                p.vel.y += gravity.y * dt;
-                p.pos.y += p.vel.y * dt;
-                p.life -= dt;
-                p.active = p.life > 0.0;
-            }
+            // FIXME: Trouver un meilleur moyen de déterminer la tête de la traînée
+            p.is_head = (p.max_life - p.life) < 0.025;
+
+            p.vel.y += gravity.y * dt;
+            p.pos.y += p.vel.y * dt;
+            p.life -= dt;
+            p.active = p.life > 0.0;
         }
     }
 
