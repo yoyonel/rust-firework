@@ -40,7 +40,7 @@ impl PhysicEngineFireworks {
 
         // Pré-remplissage des slots dans l’arena et free_indices
         for _ in 0..config.max_rockets {
-            let idx = rockets.insert(Rocket::new(config));
+            let idx = rockets.insert(Rocket::new());
             free_indices.push(idx);
         }
 
@@ -91,7 +91,7 @@ impl PhysicEngineFireworks {
             self.free_indices.clear();
 
             for _ in 0..new_config.max_rockets {
-                let idx = self.rockets.insert(Rocket::new(&self.config));
+                let idx = self.rockets.insert(Rocket::new());
                 self.free_indices.push(idx);
             }
         }
@@ -171,7 +171,12 @@ impl PhysicEngineFireworks {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
 
-                rocket.update(&mut self.rng, dt, &mut self.particles_pools_for_rockets);
+                rocket.update(
+                    &mut self.rng,
+                    dt,
+                    &mut self.particles_pools_for_rockets,
+                    &self.config,
+                );
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
