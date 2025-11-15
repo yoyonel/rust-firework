@@ -246,3 +246,9 @@ __marimo__/
 
 # callgrind+valgrind
 callgrind*
+
+# flamegraph
+flamegraph*
+
+# vtune
+r*hs/
