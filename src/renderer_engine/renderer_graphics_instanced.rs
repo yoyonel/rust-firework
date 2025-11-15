@@ -18,7 +18,6 @@ pub struct RendererGraphicsInstanced {
     // Shader
     pub loc_size: i32,
     pub loc_tex: i32,
-    pub loc_use: i32,
     pub texture_id: u32,
     pub tex_width: u32,
     pub tex_height: u32,
@@ -33,7 +32,6 @@ impl RendererGraphicsInstanced {
 
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
         let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
-        let loc_use = unsafe { gl::GetUniformLocation(shader_program, cstr!("uUseTexture")) };
         // let texture_id = load_texture("assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png");
         let (texture_id, tex_width, tex_height) =
             load_texture("assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png");
@@ -58,7 +56,6 @@ impl RendererGraphicsInstanced {
                 shader_program,
                 loc_size,
                 loc_tex,
-                loc_use,
                 texture_id,
                 tex_width,
                 tex_height,
@@ -119,7 +116,7 @@ impl RendererGraphicsInstanced {
         void main() {
             float life = aLifeMaxLifeSizeAngle.x;
             float max_life = aLifeMaxLifeSizeAngle.y;
-            float size = aLifeMaxLifeSizeAngle.z * 1.50;
+            float size = aLifeMaxLifeSizeAngle.z;
             float angle = aLifeMaxLifeSizeAngle.w;
 
             // Ratio de vie (comme avant)
@@ -145,40 +142,14 @@ impl RendererGraphicsInstanced {
         in vec3 vColor;
         in float vAlpha;
         in vec2 vUV;
+
         out vec4 FragColor;
 
         uniform sampler2D uTexture;
-        uniform bool uUseTexture;
 
         void main() {
-            // Recrée le disque (comme avant)
-            vec2 uv = vUV - vec2(0.5);
-            float dist = dot(uv, uv);
-            if (dist > 0.25)
-                discard;
-
-            float falloff = smoothstep(0.25, 0.0, dist);
-
-            // Heat-color fade (identique)
-            vec3 heatColor;
-            if (vAlpha > 0.66) {
-                heatColor = mix(vec3(1.0, 1.0, 1.0), vec3(1.0, 0.5, 0.0), (1.0 - vAlpha) / 0.34);
-            } else if (vAlpha > 0.33) {
-                heatColor = mix(vec3(1.0, 0.5, 0.0), vec3(1.0, 0.0, 0.0), (0.66 - vAlpha) / 0.33);
-            } else {
-                heatColor = mix(vec3(1.0, 0.0, 0.0), vec3(0.0, 0.0, 0.0), (0.33 - vAlpha) / 0.33);
-            }
-
-            vec4 baseColor = vec4(vColor * heatColor, vAlpha) * falloff;
-
-            // Si une texture est utilisée → multiplie le résultat
-            if (uUseTexture) {
-                vec4 texColor = texture(uTexture, vUV);
-                baseColor *= texColor;
-                // baseColor = vec4(texColor.rgb, vAlpha) * falloff;
-            }
-
-            FragColor = baseColor;
+            if (vAlpha <= 0.0) discard;
+            FragColor = vec4(vColor, vAlpha) * texture(uTexture, vUV);
         }
         "#;
         (vertex_src, fragment_src)
@@ -379,8 +350,7 @@ impl RendererGraphicsInstanced {
         gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
         gl::Uniform1i(self.loc_tex, 0);
-        gl::Uniform1i(self.loc_use, 1); // 1 = activer la texture
-                                        //
+        //
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_quad);
         gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
     }
