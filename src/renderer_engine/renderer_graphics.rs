@@ -158,40 +158,6 @@ impl RendererGraphics {
         self.max_particles_on_gpu = new_max;
     }
 
-    // /// Remplit le buffer GPU directement
-    // /// # Safety
-    // /// This function is unsafe because it directly manipulates GPU resources.
-    // /// The caller must ensure that the OpenGL context is valid.
-    // pub unsafe fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
-    //     let mut count = 0;
-
-    //     // Crée un slice Rust sûr sur le buffer GPU
-    //     let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
-
-    //     for (i, p) in physic.active_particles().enumerate() {
-    //         if i >= self.max_particles_on_gpu {
-    //             break;
-    //         }
-    //         gpu_slice[i] = ParticleGPU {
-    //             pos_x: p.pos.x,
-    //             pos_y: p.pos.y,
-    //             col_r: p.color.x,
-    //             col_g: p.color.y,
-    //             col_b: p.color.z,
-    //             life: p.life,
-    //             max_life: p.max_life,
-    //             size: p.size,
-    //             angle: p.angle,
-    //         };
-    //         count += 1;
-    //     }
-    //     // Flush explicite de la zone modifiée pour que le GPU voit les changements
-    //     let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
-    //     gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
-
-    //     count
-    // }
-
     /// Remplit directement le buffer GPU mappé avec les particules "têtes"
     /// renvoyées par le moteur physique.
     ///
