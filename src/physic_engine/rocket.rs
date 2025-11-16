@@ -1,6 +1,8 @@
 #[cfg(debug_assertions)]
 use log::debug;
+use rand::rngs::SmallRng;
 use rand::Rng;
+use rand::SeedableRng;
 use std::ops::Range;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -18,6 +20,8 @@ pub static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
 #[repr(C)]
 #[derive(Debug, Clone)]
 pub struct Rocket {
+    rng: SmallRng,
+
     /// ID unique de la rocket
     pub id: u64,
 
@@ -45,14 +49,17 @@ pub struct Rocket {
 
 impl Default for Rocket {
     fn default() -> Self {
-        Self::new()
+        let mut thread_rng = rand::rng();
+        Self::new(&mut thread_rng)
     }
 }
 
 impl Rocket {
     /// Crée une nouvelle fusée (non active)
-    pub fn new() -> Self {
+    pub fn new(global_rng: &mut impl Rng) -> Self {
+        let rng = SmallRng::from_rng(global_rng);
         let mut r = Rocket {
+            rng,
             id: ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             pos: Vec2::default(),
             vel: Vec2::default(),
@@ -129,7 +136,6 @@ impl Rocket {
     /// Met à jour la fusée (mouvement, trails, explosions)
     pub fn update(
         &mut self,
-        rng: &mut impl Rng,
         dt: f32,
         particles_pools: &mut ParticlesPoolsForRockets,
         config: &PhysicConfig,
@@ -149,7 +155,6 @@ impl Rocket {
         );
         self.update_explosions(
             dt,
-            rng,
             GRAVITY,
             &mut particles_pools.particles_pool_for_explosions,
         );
@@ -298,15 +303,9 @@ impl Rocket {
     }
 
     #[inline(always)]
-    fn update_explosions(
-        &mut self,
-        dt: f32,
-        rng: &mut impl Rng,
-        gravity: Vec2,
-        particles_pool: &mut ParticlesPool,
-    ) {
+    fn update_explosions(&mut self, dt: f32, gravity: Vec2, particles_pool: &mut ParticlesPool) {
         if !self.exploded && self.vel.y <= 0.0 {
-            self.trigger_explosion(rng, particles_pool);
+            self.trigger_explosion(particles_pool);
         }
 
         if let Some(range) = &self.explosion_particle_indices {
@@ -324,7 +323,7 @@ impl Rocket {
     }
 
     #[inline(always)]
-    fn trigger_explosion(&mut self, rng: &mut impl Rng, particles_pool: &mut ParticlesPool) {
+    fn trigger_explosion(&mut self, particles_pool: &mut ParticlesPool) {
         self.exploded = true;
 
         if self.explosion_particle_indices.is_none() {
@@ -334,9 +333,9 @@ impl Rocket {
         if let Some(range) = &self.explosion_particle_indices {
             let slice = particles_pool.get_particles_mut(range);
             for p in slice.iter_mut() {
-                let angle = rng.random_range(0.0..(2.0 * std::f32::consts::PI));
-                let speed = rng.random_range(60.0..200.0);
-                let life = rng.random_range(0.75..1.5);
+                let angle = self.rng.random_range(0.0..(2.0 * std::f32::consts::PI));
+                let speed = self.rng.random_range(60.0..200.0);
+                let life = self.rng.random_range(0.75..1.5);
 
                 *p = Particle {
                     pos: self.pos,
@@ -344,7 +343,7 @@ impl Rocket {
                     color: self.color,
                     life,
                     max_life: life,
-                    size: rng.random_range(3.0..6.0),
+                    size: self.rng.random_range(3.0..6.0),
                     active: true,
                     angle,
                 };
@@ -352,39 +351,38 @@ impl Rocket {
         }
     }
 
-    fn random_color(rng: &mut rand::rngs::ThreadRng) -> Color {
+    fn random_color(&mut self) -> Color {
         Color::new(
-            rng.random_range(0.5..=1.0),
-            rng.random_range(0.5..=1.0),
-            rng.random_range(0.5..=1.0),
+            self.rng.random_range(0.5..=1.0),
+            self.rng.random_range(0.5..=1.0),
+            self.rng.random_range(0.5..=1.0),
             1.0,
         )
     }
 
-    fn random_vel(cfg: &PhysicConfig, rng: &mut rand::rngs::ThreadRng) -> Vec2 {
-        let angle = rng.random_range(
+    fn random_vel(&mut self, cfg: &PhysicConfig) -> Vec2 {
+        let angle = self.rng.random_range(
             (cfg.spawn_rocket_vertical_angle - cfg.spawn_rocket_angle_variation)
                 ..=(cfg.spawn_rocket_vertical_angle + cfg.spawn_rocket_angle_variation),
         );
         Vec2::from_angle(angle)
-            * rng.random_range(cfg.spawn_rocket_min_speed..=cfg.spawn_rocket_max_speed)
+            * self
+                .rng
+                .random_range(cfg.spawn_rocket_min_speed..=cfg.spawn_rocket_max_speed)
     }
 
     /// Réinitialise une fusée inactive pour la réutiliser sans réallocation
-    pub fn reset(
-        &mut self,
-        cfg: &PhysicConfig,
-        rng: &mut rand::rngs::ThreadRng,
-        window_width: f32,
-    ) {
-        let cx = rng.random_range(cfg.spawn_rocket_margin..=window_width - cfg.spawn_rocket_margin);
+    pub fn reset(&mut self, cfg: &PhysicConfig, window_width: f32) {
+        let cx = self
+            .rng
+            .random_range(cfg.spawn_rocket_margin..=window_width - cfg.spawn_rocket_margin);
         let pos = Vec2::new(cx, 0.0);
 
         // Assignations in-place
         self.pos = pos;
         self.last_trail_pos = pos;
-        self.vel = Rocket::random_vel(cfg, rng);
-        self.color = Rocket::random_color(rng);
+        self.vel = self.random_vel(cfg);
+        self.color = self.random_color();
         self.trail_index = 0;
         self.active = true;
         self.exploded = false;

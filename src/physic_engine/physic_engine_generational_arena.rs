@@ -38,9 +38,10 @@ impl PhysicEngineFireworks {
         let mut rockets = Arena::with_capacity(config.max_rockets);
         let mut free_indices = Vec::with_capacity(config.max_rockets);
 
+        let mut rng = rand::rng();
         // Pré-remplissage des slots dans l’arena et free_indices
         for _ in 0..config.max_rockets {
-            let idx = rockets.insert(Rocket::new());
+            let idx = rockets.insert(Rocket::new(&mut rng));
             free_indices.push(idx);
         }
 
@@ -58,7 +59,7 @@ impl PhysicEngineFireworks {
             time_since_last_rocket: 0.0,
             next_rocket_interval: 0.0,
             window_width,
-            rng: rand::rng(),
+            rng,
             config: config.clone(),
             rocket_margin_min_x: 0.0,
             rocket_margin_max_x: 0.0,
@@ -91,7 +92,7 @@ impl PhysicEngineFireworks {
             self.free_indices.clear();
 
             for _ in 0..new_config.max_rockets {
-                let idx = self.rockets.insert(Rocket::new());
+                let idx = self.rockets.insert(Rocket::new(&mut self.rng));
                 self.free_indices.push(idx);
             }
         }
@@ -126,7 +127,7 @@ impl PhysicEngineFireworks {
 
         if let Some(r) = self.rockets.get_mut(idx) {
             // Réutilisation sans recréer la structure complète
-            r.reset(cfg, &mut self.rng, self.window_width);
+            r.reset(cfg, self.window_width);
         }
 
         self.active_indices.push(idx);
@@ -171,12 +172,7 @@ impl PhysicEngineFireworks {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
 
-                rocket.update(
-                    &mut self.rng,
-                    dt,
-                    &mut self.particles_pools_for_rockets,
-                    &self.config,
-                );
+                rocket.update(dt, &mut self.particles_pools_for_rockets, &self.config);
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
