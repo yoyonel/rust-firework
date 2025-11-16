@@ -57,7 +57,7 @@ cargo_metadata = "0.23.1"
 # [profile.dev]
 
 [profile.profiling]
-inherits = "dev"
+inherits = "release"
 debug = true               # inclut les symboles de debug dans le binaire
 lto = true                 # optionnel, améliore les optimisations
 opt-level = 3              # niveau d’optimisation

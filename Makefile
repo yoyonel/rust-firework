@@ -88,8 +88,8 @@ remove-unused-dependencies:
 # 🧪 Benchmarks
 # -----------------------------------------
 # Profiling with Valgrind
-valgrind-callgrind: ./target/release/fireworks_sim
-	valgrind --tool=callgrind ./target/release/fireworks_sim
+valgrind-callgrind: ./target/profiling/fireworks_sim
+	valgrind --tool=callgrind ./target/profiling/fireworks_sim
 	callgrind_annotate $(ls -tr | grep callgrind.out | tail -1) | grep -e "fireworks_sim::"
 
 ./target/profiling/fireworks_sim:

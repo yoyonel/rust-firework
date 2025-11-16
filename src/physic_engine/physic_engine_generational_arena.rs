@@ -2,7 +2,6 @@ use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::{debug, info};
 use rand::Rng;
-use std::cmp::max;
 use std::sync::atomic::Ordering;
 
 use crate::physic_engine::{
@@ -75,7 +74,7 @@ impl PhysicEngineFireworks {
         engine
     }
 
-    pub fn reload_config(&mut self, new_config: &PhysicConfig) -> bool {
+    fn reload_config(&mut self, new_config: &PhysicConfig) -> bool {
         let old_max_rockets = self.config.max_rockets;
         self.config = new_config.clone();
 
@@ -121,7 +120,7 @@ impl PhysicEngineFireworks {
             .max(self.config.rocket_max_next_interval)
     }
 
-    pub fn spawn_rocket(&mut self) -> Option<&mut Rocket> {
+    fn spawn_rocket(&mut self) -> Option<&mut Rocket> {
         let idx = self.free_indices.pop()?;
         let cfg = &self.config;
 
@@ -150,7 +149,7 @@ impl PhysicEngineFireworks {
         self.free_indices.push(idx);
     }
 
-    pub fn update(&mut self, dt: f32) -> UpdateResult<'_> {
+    fn update(&mut self, dt: f32) -> UpdateResult<'_> {
         let mut triggered_count = 0;
         let mut new_rocket: Option<Rocket> = None;
 
@@ -194,14 +193,6 @@ impl PhysicEngineFireworks {
             // on renvoie le slice d'explosions déclenchées
             triggered_explosions: &self.triggered_explosions[..triggered_count],
         }
-    }
-
-    pub fn max_particles(&self) -> usize {
-        self.config.max_rockets
-            * max(
-                self.config.particles_per_explosion,
-                self.config.particles_per_trail,
-            )
     }
 }
 
