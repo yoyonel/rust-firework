@@ -76,24 +76,6 @@ impl Rocket {
         r
     }
 
-    /// Retourne un itérateur sur toutes les particules actives de la fusée
-    pub fn active_particles<'a>(
-        &'a self,
-        particles_pools: &'a ParticlesPoolsForRockets,
-    ) -> impl Iterator<Item = &'a Particle> {
-        let trails = self
-            .trail_particle_indices
-            .iter()
-            .flat_map(|range| particles_pools.access(PoolKind::Trails, range))
-            .filter(|p| p.active);
-        let explosions = self
-            .explosion_particle_indices
-            .iter()
-            .flat_map(|range| particles_pools.access(PoolKind::Explosions, range))
-            .filter(|p| p.active);
-        trails.chain(explosions)
-    }
-
     /// Retourne un itérateur paresseux sur toutes les particules "actives" (`is_active`)
     /// appartenant à cette fusée.
     ///
@@ -393,7 +375,7 @@ impl Rocket {
 
 impl Rocket {
     #[inline(always)]
-    pub fn update_head_particle(&mut self) {
+    fn update_head_particle(&mut self) {
         // angle = direction de la fusée
         let angle = if self.vel.length_squared() > 0.0 {
             self.vel.angle_to(Vec2::new(0.0, 1.0))
