@@ -64,7 +64,7 @@ fn run_failure_test(failure: EngineFailure) {
             // Crée un itérateur vide, compatible avec la signature
             std::iter::empty()
         }
-        fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
             // Crée un itérateur vide, compatible avec la signature
             std::iter::empty()
         }

@@ -39,6 +39,8 @@ pub struct Rocket {
     pub trail_particle_indices: Option<Range<usize>>,
     pub trail_index: usize,
     pub last_trail_pos: Vec2,
+
+    head: Particle,
 }
 
 impl Default for Rocket {
@@ -50,7 +52,7 @@ impl Default for Rocket {
 impl Rocket {
     /// Crée une nouvelle fusée (non active)
     pub fn new() -> Self {
-        Self {
+        let mut r = Rocket {
             id: ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             pos: Vec2::default(),
             vel: Vec2::default(),
@@ -61,7 +63,10 @@ impl Rocket {
             trail_particle_indices: None,
             trail_index: 0,
             last_trail_pos: Vec2::default(),
-        }
+            head: Particle::default(),
+        };
+        r.update_head_particle();
+        r
     }
 
     /// Retourne un itérateur sur toutes les particules actives de la fusée
@@ -117,45 +122,8 @@ impl Rocket {
         trails.chain(explosions)
     }
 
-    /// Retourne un itérateur paresseux sur toutes les particules "têtes" (`is_head`)
-    /// appartenant à cette fusée.
-    ///
-    /// Cette fonction est **zéro allocation** :  
-    /// - pas de `Vec` temporaire  
-    /// - pas de `Box<dyn Iterator>`  
-    /// - pas de copie CPU → CPU  
-    ///
-    /// Le résultat est un pipeline d’itérateurs fusionnés, traité de manière lazy,
-    /// extrêmement efficace côté CPU et parfaitement adapté à un transfert contigu
-    /// vers un buffer GPU en mode persistent mapping.
-    pub fn iter_active_heads<'a>(
-        &'a self,
-        pools: &'a ParticlesPoolsForRockets,
-    ) -> impl Iterator<Item = &'a Particle> + 'a {
-        // `trail_particle_indices` contient les indices/ranges des particules de trainée
-        // associées à cette fusée.
-        self.trail_particle_indices
-            .iter()
-            // Pour chaque "range", on récupère un itérateur sur les particules
-            // correspondantes dans le pool, puis `flat_map` fusionne tout cela
-            // en un flux unique.
-            .flat_map(move |range| pools.access(PoolKind::Trails, range))
-            // On filtre pour ne garder que les particules actives et marquées `is_head`.
-            // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
-            .filter(|p| p.active && p.is_head)
-    }
-
-    pub fn head_particle<'a>(&'a self, pools: &'a ParticlesPoolsForRockets) -> &'a Particle {
-        let range = self
-            .trail_particle_indices
-            .as_ref()
-            .expect("Trail must exist");
-
-        let particles = pools.access(PoolKind::Trails, range);
-
-        particles
-            .first()
-            .expect("Trail range should always contain at least one particle")
+    pub fn head_particle(&self) -> &Particle {
+        &self.head
     }
 
     /// Met à jour la fusée (mouvement, trails, explosions)
@@ -186,6 +154,8 @@ impl Rocket {
             &mut particles_pools.particles_pool_for_explosions,
         );
         self.remove_inactive_rockets(particles_pools);
+
+        self.update_head_particle();
     }
 
     fn remove_inactive_rockets(&mut self, particles_pools: &ParticlesPoolsForRockets) {
@@ -284,17 +254,6 @@ impl Rocket {
 
         for _ in 0..count {
             let new_pos = self.last_trail_pos * (1.0 - t_step) + self.pos * t_step;
-
-            let delta = new_pos - self.last_trail_pos;
-
-            // Vérifier que delta n'est pas nul
-            let angle = if delta.length_squared() > 0.0 {
-                // La rocket/fusée (son sprite/image) est orientée vers le haut (0.0, +1.0)
-                delta.angle_to(Vec2::new(0.0, 1.0))
-            } else {
-                0.0 // angle par défaut si delta nul
-            };
-
             let i = self.trail_index % nb_particles_per_trail;
 
             slice[i] = Particle {
@@ -305,8 +264,7 @@ impl Rocket {
                 max_life: 0.35,
                 size: 2.0,
                 active: true,
-                angle,
-                is_head: true,
+                angle: 0.0,
             };
 
             self.trail_index = (self.trail_index + 1) % nb_particles_per_trail;
@@ -331,9 +289,6 @@ impl Rocket {
             if !p.active {
                 continue;
             }
-
-            // FIXME: Trouver un meilleur moyen de déterminer la tête de la traînée
-            p.is_head = (p.max_life - p.life) < 0.025;
 
             p.vel.y += gravity.y * dt;
             p.pos.y += p.vel.y * dt;
@@ -392,7 +347,6 @@ impl Rocket {
                     size: rng.random_range(3.0..6.0),
                     active: true,
                     angle,
-                    is_head: false,
                 };
             }
         }
@@ -436,5 +390,29 @@ impl Rocket {
         self.exploded = false;
         self.explosion_particle_indices = None;
         self.trail_particle_indices = None;
+    }
+}
+
+impl Rocket {
+    #[inline(always)]
+    pub fn update_head_particle(&mut self) {
+        // angle = direction de la fusée
+        let angle = if self.vel.length_squared() > 0.0 {
+            self.vel.angle_to(Vec2::new(0.0, 1.0))
+        } else {
+            0.0
+        };
+
+        self.head = Particle {
+            pos: self.pos,
+            vel: self.vel,
+            color: self.color,
+            life: 1.0,
+            max_life: 1.0,
+            size: 2.0,
+            active: true,
+            // FIXME: angle n'est vraiment utilisé que pour les têtes de fusée (pas pour les trails ou explosions)
+            angle,
+        };
     }
 }

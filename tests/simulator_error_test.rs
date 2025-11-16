@@ -52,7 +52,7 @@ fn test_renderer_error_triggers_proper_cleanup() {
             // Crée un itérateur vide, compatible avec la signature
             std::iter::empty()
         }
-        fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
             std::iter::empty()
         }
         fn close(&mut self) {
