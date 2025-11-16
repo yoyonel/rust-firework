@@ -234,25 +234,20 @@ impl PhysicEngine for PhysicEngineFireworks {
             })
     }
 
-    /// Itère sur toutes les particules "têtes" (`is_head`) de **toutes** les fusées actives.
+    /// Itère sur les particules-têtes (non explosées) référencées statiquement
+    /// pour chaque fusée active.
     ///
-    /// ✔ Aucun `Vec` interne  
-    /// ✔ Aucun `Box<dyn Iterator>`  
-    /// ✔ Zéro allocation  
-    /// ✔ Pipeline d’itérateurs entièrement optimisable par le compilateur  
-    ///
-    /// Cette approche est idéale pour un rendu GPU basé sur un buffer mappé persistant :
-    /// on produit un flux de particules triées, en lecture séquentielle, permettant
-    /// une écriture contiguë dans le VBO d'instanciation (meilleur throughput).
-    fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+    /// ✔ Zero allocation
+    /// ✔ Transmet une Particle (référencée) par rocket active
+    /// ✔ Pas d'accès aux pools
+    /// ✔ Parfaitement optimisable
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+        // TODO: peut être mettre en place une liste d'indices de rockets non-explosées
         self.active_indices
             .iter()
-            // Pour chaque rocket active, on concatène son itérateur de heads
-            // à l’aide d’un `flat_map`. Le résultat final est un seul pipeline
-            // d’itérateurs, entièrement paresseux et zéro-allocation.
-            .flat_map(move |&idx| {
-                self.rockets[idx].iter_active_heads(&self.particles_pools_for_rockets)
-            })
+            // 1) filtrage des fusées non-explosées
+            .filter(move |&&idx| !self.rockets[idx].exploded)
+            .map(move |&idx| self.rockets[idx].head_particle())
     }
 
     fn set_window_width(&mut self, width: f32) {

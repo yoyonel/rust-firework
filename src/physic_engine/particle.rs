@@ -15,9 +15,6 @@ pub struct Particle {
     pub vel: Vec2,
     pub active: bool,
     pub angle: f32,
-
-    // only for physic part (not GPU)
-    pub is_head: bool,
 }
 
 use bytemuck::{Pod, Zeroable};

@@ -33,7 +33,7 @@ pub trait PhysicEngine {
     /// Retourne un itérateur dynamique sur les particules actives.
     /// Chaque élément est une référence immuable vers un `Particle`.
     fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
-    fn iter_active_heads<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
 
     /// Ajuste la largeur du monde (utile si la fenêtre de rendu change de taille).
     fn set_window_width(&mut self, width: f32);

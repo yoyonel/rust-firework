@@ -178,7 +178,7 @@ impl RendererGraphics {
         // Toute écriture dans ce slice écrit physiquement dans la BAR / VRAM.
         let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
 
-        // Ici, `iter_active_heads()` fournit un flux paresseux, sans allocation CPU
+        // Ici, `iter_active_particles()` fournit un flux paresseux, sans allocation CPU
         // intermédiaire : idéal pour écrire contigu dans le buffer GPU.
         for (i, p) in physic
             .iter_active_particles()
