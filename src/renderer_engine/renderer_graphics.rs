@@ -1,4 +1,4 @@
-use log::info;
+use log::{debug, info};
 
 use crate::physic_engine::PhysicEngine;
 use crate::renderer_engine::{tools::compile_shader_program, types::ParticleGPU};
@@ -271,5 +271,6 @@ impl RendererGraphics {
             gl::DeleteProgram(self.shader_program);
             self.shader_program = 0;
         }
+        debug!("Graphic Engine for Points Rendering closed and reset.");
     }
 }

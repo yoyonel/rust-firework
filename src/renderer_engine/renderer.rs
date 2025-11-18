@@ -399,9 +399,10 @@ impl Renderer {
     pub fn close(&mut self) {
         info!("🧹 Fermeture du Renderer");
 
-        // unsafe {
-        //     self.graphics.close();
-        // }
+        unsafe {
+            self.graphics.close();
+            self.graphics_instanced.close();
+        }
 
         if let Some(window) = self.window.take() {
             drop(window);
