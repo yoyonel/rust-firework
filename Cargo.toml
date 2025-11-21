@@ -33,6 +33,9 @@ generational-arena = "0.2.9"
 glam = "0.30.9"
 crossbeam-channel = "0.5.15"
 image = "0.25.8"
+imgui = "0.12.0"
+imgui-glfw-rs = "0.12.0"
+fuzzy-matcher = "0.3.7"
 
 [dev-dependencies]
 criterion = "0.7.0"

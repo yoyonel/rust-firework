@@ -1,5 +1,7 @@
 pub mod r#trait;
 pub use r#trait::PhysicEngine;
+pub use r#trait::PhysicEngineFull;
+pub use r#trait::PhysicEngineIterator;
 
 pub mod types;
 pub use self::types::UpdateResult;

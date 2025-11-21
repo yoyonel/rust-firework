@@ -8,18 +8,21 @@ COVERAGE_DIR = target/llvm-cov
 # X Virtual FrameBuffer
 XVFB = xvfb-run -a
 
+run-debug:
+	@$(CARGO) run
+
 # Run the project in release mode
 run-release:
-	cargo run --release
+	@$(CARGO) run --release
 
 # Gallium HUD (intel compatible)
 run-release-with-hud:
-	env \
+	@env \
 	vblank_mode=0 \
 	__GL_SYNC_TO_VBLANK=0 \
 	GALLIUM_HUD_PERIOD=0.15 \
 	GALLIUM_HUD="cpu;fps;N vertices submitted" \
-	cargo run --release 2>&1
+	$(CARGO) run --release 2>&1
 
 # MangoHub (NVidia compatible) shortcut: RIGHT-SHIFT+F10 for chaging the HUD mode
 run-prime-with-hud:
@@ -82,7 +85,7 @@ lint: fmt clippy
 
 # Run cargo-shear for removing unused dependencies
 remove-unused-dependencies:
-	cargo shear --fix
+	@$(CARGO) shear --fix
 
 # -----------------------------------------
 # 🧪 Benchmarks
@@ -93,7 +96,7 @@ valgrind-callgrind: ./target/profiling/fireworks_sim
 	callgrind_annotate $(ls -tr | grep callgrind.out | tail -1) | grep -e "fireworks_sim::"
 
 ./target/profiling/fireworks_sim:
-	cargo build --profile profiling
+	@$(CARGO) build --profile profiling
 
 # Profiling with Heaptrack
 heaptrack: ./target/profiling/fireworks_sim

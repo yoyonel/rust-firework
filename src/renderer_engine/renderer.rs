@@ -1,8 +1,13 @@
+use crate::physic_engine::{PhysicEngineFull, PhysicEngineIterator};
 use crate::RendererEngine;
 use crate::{log_metrics_and_fps, profiler::Profiler};
 use anyhow::{anyhow, Result};
 use glfw::{Action, Context, Key, WindowMode};
-use log::{debug, info};
+use imgui::Context as ImContext;
+use imgui_glfw_rs::glfw;
+use imgui_glfw_rs::imgui;
+use imgui_glfw_rs::ImguiGLFW;
+use log::{debug, info, warn};
 use std::time::Instant;
 
 use crate::audio_engine::AudioEngine;
@@ -10,6 +15,7 @@ use crate::physic_engine::{config::PhysicConfig, PhysicEngine, UpdateResult};
 use crate::renderer_engine::RendererGraphics;
 use crate::renderer_engine::RendererGraphicsInstanced;
 use crate::renderer_engine::{
+    command_console::{CommandRegistry, Console},
     tools::{setup_opengl_debug, show_opengl_context_info},
     utils::{
         adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler},
@@ -17,10 +23,20 @@ use crate::renderer_engine::{
     },
 };
 
+//
+pub struct ImguiSystem {
+    pub context: imgui::Context,
+    pub glfw: ImguiGLFW,
+}
+
+// ---------------------------------------------------------
 pub struct Renderer {
     pub glfw: glfw::Glfw,
     pub window: Option<glfw::PWindow>,
     pub events: Option<glfw::GlfwReceiver<(f64, glfw::WindowEvent)>>,
+
+    pub imgui_system: Option<ImguiSystem>,
+    console: Console,
 
     max_particles_on_gpu: usize,
 
@@ -84,6 +100,7 @@ impl Renderer {
 
         window.make_current();
         window.set_key_polling(true);
+        window.set_char_polling(true);
         window.set_framebuffer_size_polling(true);
         window.set_cursor_pos_polling(true);
         window.set_mouse_button_polling(true);
@@ -110,15 +127,49 @@ impl Renderer {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
+        let mut imgui = ImContext::create();
+
+        // Charge la font TTF “Quake style”
+        let font_data =
+            std::fs::read("assets/fonts/PerfectDOSVGA437.ttf").expect("Failed to read font file");
+        imgui.fonts().add_font(&[imgui::FontSource::TtfData {
+            data: &font_data,
+            size_pixels: 18.0, // ajuste la taille selon le rendu
+            config: Some(imgui::FontConfig {
+                oversample_h: 1,          // ne pas lisser horizontalement
+                oversample_v: 1,          // ne pas lisser verticalement
+                rasterizer_multiply: 1.0, // contraste des glyphes
+                ..Default::default()
+            }),
+        }]);
+
+        imgui.fonts().build_rgba32_texture();
+        if !imgui.fonts().is_built() {
+            warn!("No ImGui fonts built");
+        } else {
+            info!("✅ ImGui fonts BUILD");
+        }
+
+        imgui.style_mut().use_dark_colors();
+
+        let imgui_glfw = ImguiGLFW::new(&mut imgui, &mut window);
+
         let max_particles_on_gpu: usize =
             physic_config.max_rockets * physic_config.particles_per_explosion;
         let graphics = RendererGraphics::new(max_particles_on_gpu);
         let graphics_instanced = RendererGraphicsInstanced::new(physic_config.max_rockets);
 
+        let console = Console::new();
+
         Ok(Self {
             glfw,
             window: Some(window),
             events: Some(events),
+            imgui_system: Some(ImguiSystem {
+                context: imgui,
+                glfw: imgui_glfw,
+            }),
+            console,
             frames: 0,
             last_time: Instant::now(),
             window_size: (width, height),
@@ -156,7 +207,7 @@ impl Renderer {
     /// Exécute une seule frame (update + rendu)
     /// # Safety
     /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
-    pub unsafe fn render_frame<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+    pub unsafe fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
         // Remplit le buffer GPU
         let nb_particles_rendered = self.graphics.fill_particle_data_direct(physic);
         // // Dessine les particules
@@ -169,7 +220,7 @@ impl Renderer {
     /// Exécute une seule frame (update + rendu) en mode instancié
     /// # Safety
     /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
-    pub unsafe fn render_frame_instanced<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+    pub unsafe fn render_frame_instanced<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
         // Remplit le buffer GPU
         let nb_particles_rendered = self.graphics_instanced.fill_particle_data_direct(physic);
         // // Dessine les particules
@@ -180,10 +231,11 @@ impl Renderer {
     }
 
     /// Boucle infinie (production) qui appelle `step_frame`
-    pub fn run_loop<P: PhysicEngine, A: AudioEngine>(
+    pub fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
         &mut self,
         physic: &mut P,
         audio: &mut A,
+        commands_registry: &CommandRegistry,
     ) -> Result<()> {
         // Partagé entre moteurs
         let profiler = Profiler::new(200);
@@ -209,6 +261,91 @@ impl Renderer {
         while let Some(window) = &mut self.window {
             if window.should_close() {
                 break;
+            }
+            let mut reload_config = false;
+
+            // Window events
+            if let Some(window) = &mut self.window {
+                self.glfw.poll_events();
+
+                if let Some(events) = &self.events {
+                    for (_, event) in glfw::flush_messages(events) {
+                        match event {
+                            glfw::WindowEvent::FramebufferSize(w, h) => unsafe {
+                                gl::Viewport(0, 0, w, h);
+                                self.window_size_f32 = (w as f32, h as f32);
+                                physic.set_window_width(w as f32);
+                                audio.set_listener_position(((w / 2) as f32, 0.0));
+                            },
+                            glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                                window.set_should_close(true);
+                            }
+                            glfw::WindowEvent::Key(Key::R, _, Action::Press, _) => {
+                                reload_config = true;
+                            }
+                            glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
+                                if window.is_fullscreen() {
+                                    window.set_monitor(
+                                        WindowMode::Windowed,
+                                        self.window_last_pos.0,
+                                        self.window_last_pos.1,
+                                        self.window_last_size.0 as u32,
+                                        self.window_last_size.1 as u32,
+                                        None,
+                                    );
+                                    self.window_size = self.window_last_size;
+                                    self.window_size_f32 = (
+                                        self.window_last_size.0 as f32,
+                                        self.window_last_size.1 as f32,
+                                    );
+                                    info!(
+                                        "🖥️ Window resized: {} x {}",
+                                        self.window_size.0, self.window_size.1
+                                    );
+                                } else {
+                                    self.window_last_pos = window.get_pos();
+                                    self.window_last_size = window.get_size();
+
+                                    let mut glfw = window.glfw.clone();
+                                    glfw.with_primary_monitor(|_, monitor| {
+                                        if let Some(monitor) = monitor {
+                                            window.set_fullscreen(monitor);
+                                            self.window_size = (
+                                                monitor.get_video_mode().unwrap().width as i32,
+                                                monitor.get_video_mode().unwrap().height as i32,
+                                            );
+                                            self.window_size_f32 = (
+                                                self.window_last_size.0 as f32,
+                                                self.window_last_size.1 as f32,
+                                            );
+                                            info!(
+                                                "🖥️ Fullscreen: {} x {}",
+                                                self.window_size.0, self.window_size.1
+                                            );
+                                        }
+                                    });
+                                }
+                            }
+                            glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, _) => {
+                                self.console.open = !self.console.open;
+                                window.set_cursor_mode(if self.console.open {
+                                    self.console.focus_previous_widget = true;
+                                    glfw::CursorMode::Normal
+                                } else {
+                                    glfw::CursorMode::Disabled
+                                });
+                            }
+                            _ => {}
+                        }
+                        // Pas besoin de helper externe, on peut le faire "inline"
+                        if let Some(system) = &mut self.imgui_system {
+                            system.glfw.handle_event(&mut system.context, &event);
+                        }
+                    }
+                }
+            }
+            if reload_config {
+                self.reload_config(physic);
             }
 
             // 🔹 start global frame
@@ -293,84 +430,21 @@ impl Renderer {
                 last_log = Instant::now();
             }
 
-            let mut reload_config = false;
-
-            // Swap buffers + events
             if let Some(window) = &mut self.window {
+                if self.console.open {
+                    if let Some(system) = &mut self.imgui_system {
+                        let ui = system.glfw.frame(window, &mut system.context);
+                        self.console.draw(ui, audio, physic, commands_registry);
+                        system.glfw.draw(&mut system.context, window);
+                    }
+                }
+
                 window.swap_buffers();
 
                 if first_frame {
                     info!("🚀 First frame rendered");
                     first_frame = false;
                 }
-
-                self.glfw.poll_events();
-
-                if let Some(events) = &self.events {
-                    for (_, event) in glfw::flush_messages(events) {
-                        match event {
-                            glfw::WindowEvent::FramebufferSize(w, h) => unsafe {
-                                gl::Viewport(0, 0, w, h);
-                                self.window_size_f32 = (w as f32, h as f32);
-                                physic.set_window_width(w as f32);
-                                audio.set_listener_position(((w / 2) as f32, 0.0));
-                            },
-                            glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
-                                window.set_should_close(true);
-                            }
-                            glfw::WindowEvent::Key(Key::R, _, Action::Press, _) => {
-                                reload_config = true;
-                            }
-                            glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
-                                if window.is_fullscreen() {
-                                    window.set_monitor(
-                                        WindowMode::Windowed,
-                                        self.window_last_pos.0,
-                                        self.window_last_pos.1,
-                                        self.window_last_size.0 as u32,
-                                        self.window_last_size.1 as u32,
-                                        None,
-                                    );
-                                    self.window_size = self.window_last_size;
-                                    self.window_size_f32 = (
-                                        self.window_last_size.0 as f32,
-                                        self.window_last_size.1 as f32,
-                                    );
-                                    info!(
-                                        "🖥️ Window resized: {} x {}",
-                                        self.window_size.0, self.window_size.1
-                                    );
-                                } else {
-                                    self.window_last_pos = window.get_pos();
-                                    self.window_last_size = window.get_size();
-
-                                    let mut glfw = window.glfw.clone();
-                                    glfw.with_primary_monitor(|_, monitor| {
-                                        if let Some(monitor) = monitor {
-                                            window.set_fullscreen(monitor);
-                                            self.window_size = (
-                                                monitor.get_video_mode().unwrap().width as i32,
-                                                monitor.get_video_mode().unwrap().height as i32,
-                                            );
-                                            self.window_size_f32 = (
-                                                self.window_last_size.0 as f32,
-                                                self.window_last_size.1 as f32,
-                                            );
-                                            info!(
-                                                "🖥️ Fullscreen: {} x {}",
-                                                self.window_size.0, self.window_size.1
-                                            );
-                                        }
-                                    });
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-            }
-            if reload_config {
-                self.reload_config(physic);
             }
         }
 
@@ -404,20 +478,25 @@ impl Renderer {
             self.graphics_instanced.close();
         }
 
-        if let Some(window) = self.window.take() {
-            drop(window);
-        }
+        // Important de drop la ressource imgui pour glfw avant de drop la window glfw
+        // car la window porte le contexte OpenGL et au drop de imgui_glfw il sera alors
+        // impossible (sans crash) de libérer les ressources GL du crate.
+        // L'assignation déclenche le drop de l'ancienne valeur immédiatement
+        self.imgui_system = None;
+
+        self.window = None;
     }
 }
 
 // Trait implementation
 impl RendererEngine for Renderer {
-    fn run_loop<P: PhysicEngine, A: AudioEngine>(
+    fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
         &mut self,
         physic: &mut P,
         audio: &mut A,
+        commands_registry: &CommandRegistry,
     ) -> Result<()> {
-        self.run_loop(physic, audio)
+        self.run_loop(physic, audio, commands_registry)
     }
 
     fn close(&mut self) {

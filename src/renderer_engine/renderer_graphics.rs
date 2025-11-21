@@ -1,6 +1,6 @@
 use log::{debug, info};
 
-use crate::physic_engine::PhysicEngine;
+use crate::physic_engine::PhysicEngineIterator;
 use crate::renderer_engine::{tools::compile_shader_program, types::ParticleGPU};
 use crate::utils::human_bytes::HumanBytes;
 
@@ -171,7 +171,10 @@ impl RendererGraphics {
     /// # Safety
     /// This function is unsafe because it directly manipulates GPU resources.
     /// The caller must ensure that the OpenGL context is valid.
-    pub unsafe fn fill_particle_data_direct<P: PhysicEngine>(&mut self, physic: &P) -> usize {
+    pub unsafe fn fill_particle_data_direct<P: PhysicEngineIterator>(
+        &mut self,
+        physic: &P,
+    ) -> usize {
         let mut count = 0;
 
         // Slice Rust mutable mappé directement sur la mémoire GPU.

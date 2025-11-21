@@ -11,6 +11,8 @@ pub use audio_engine::FireworksAudio3D;
 // Physic engine
 pub mod physic_engine;
 pub use physic_engine::PhysicEngine;
+pub use physic_engine::PhysicEngineFull;
+pub use physic_engine::PhysicEngineIterator;
 
 // Profiler
 pub mod profiler;

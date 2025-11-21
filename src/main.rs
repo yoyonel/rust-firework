@@ -71,6 +71,7 @@ fn main() -> Result<()> {
     // ----------------------------
     info!("🚀 Starting Fireworks Simulator...");
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine);
+    simulator.init_console_commands();
     let _ = simulator.run(export_path.as_ref().map(|p| p.to_str().unwrap()));
     simulator.close();
 

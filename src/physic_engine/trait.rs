@@ -1,8 +1,16 @@
 use crate::physic_engine::config::PhysicConfig;
 use crate::physic_engine::particle::Particle;
-// use crate::physic_engine::rocket::Rocket;
 use crate::physic_engine::types::UpdateResult;
-// use generational_arena::Index;
+
+pub trait PhysicEngineIterator {
+    // Les types associés ne sont pas nécessaires ici si 'Particle' est importé.
+
+    /// Retourne un itérateur sur les particules actives.
+    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
+
+    /// Retourne un itérateur sur les têtes de fusées non explosées.
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
+}
 
 /// 🔧 Trait `PhysicEngine`
 ///
@@ -30,25 +38,19 @@ use crate::physic_engine::types::UpdateResult;
 ///
 /// En résumé : cette approche est **le bon compromis** entre performance, clarté et maintenabilité.
 pub trait PhysicEngine {
-    /// Retourne un itérateur dynamique sur les particules actives.
-    /// Chaque élément est une référence immuable vers un `Particle`.
-    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
-
     /// Ajuste la largeur du monde (utile si la fenêtre de rendu change de taille).
     fn set_window_width(&mut self, width: f32);
 
     /// Met à jour la physique du moteur sur un intervalle de temps `dt`.
-    /// Retourne un `UpdateResult` contenant les événements (nouvelles fusées, explosions, etc.).
+    /// Retourne un `UpdateResult` contenant les événements.
     fn update(&mut self, dt: f32) -> UpdateResult<'_>;
 
     /// Ferme / libère le moteur physique.
-    /// Par défaut, fait rien.
-    fn close(&mut self) {}
-
-    // fn max_particles(&self) -> usize;
+    fn close(&mut self) {} // Par défaut, fait rien.
 
     fn reload_config(&mut self, config: &PhysicConfig) -> bool;
 
-    // fn get_rocket(&self, index: Index) -> Option<&Rocket>;
+    fn get_config(&self) -> &PhysicConfig;
 }
+
+pub trait PhysicEngineFull: PhysicEngine + PhysicEngineIterator {}
