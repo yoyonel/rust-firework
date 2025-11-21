@@ -40,6 +40,7 @@ pub struct FireworksAudio3D {
     running_pair: Arc<(Mutex<bool>, Condvar)>,
     // doppler_receiver: Option<Receiver<DopplerEvent>>,
     // doppler_states: Vec<DopplerState>,
+    global_gain: f32,
 }
 
 impl FireworksAudio3D {
@@ -65,6 +66,8 @@ impl FireworksAudio3D {
         let mut voices = Vec::with_capacity(config.max_voices);
         voices.resize_with(config.max_voices, Voice::new);
 
+        let global_gain = config.settings.global_gain();
+
         Self {
             rocket_data,
             explosion_data,
@@ -77,6 +80,7 @@ impl FireworksAudio3D {
             running_pair: Arc::new((Mutex::new(true), Condvar::new())),
             // doppler_receiver: config.doppler_receiver,
             // doppler_states: config.doppler_states,
+            global_gain,
         }
     }
 
@@ -138,12 +142,18 @@ impl FireworksAudio3D {
 
     /// Queue a sound for playback
     fn enqueue_sound(&self, data: &[[f32; 2]], pos: (f32, f32), gain: f32) {
-        let (stereo_data, fade_in, fade_out, filter_a) = self.prepare_voice(data, pos, gain);
+        if self.global_gain == 0.0 {
+            return;
+        }
+
+        let global_gain = self.global_gain * gain;
+
+        let (stereo_data, fade_in, fade_out, filter_a) = self.prepare_voice(data, pos, global_gain);
         let req = PlayRequest {
             data: stereo_data,
             fade_in,
             fade_out,
-            gain,
+            gain: global_gain,
             filter_a,
             sent_at: Instant::now(), // for monitoring
         };
@@ -402,6 +412,10 @@ impl FireworksAudio3D {
         cvar.notify_all(); // réveiller le thread
         drop(running); // unlock
     }
+
+    pub fn set_volume(&mut self, volume: f32) {
+        self.global_gain = volume;
+    }
 }
 
 impl AudioEngine for FireworksAudio3D {
@@ -428,6 +442,15 @@ impl AudioEngine for FireworksAudio3D {
 
     fn get_listener_position(&self) -> (f32, f32) {
         self.listener_pos
+    }
+
+    fn mute(&mut self) {
+        self.set_volume(0.0);
+    }
+
+    fn unmute(&mut self) -> f32 {
+        self.set_volume(self.settings.global_gain());
+        self.settings.global_gain()
     }
 }
 

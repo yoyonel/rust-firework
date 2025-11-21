@@ -10,7 +10,7 @@ use crate::physic_engine::{
     particles_pools::ParticlesPoolsForRockets,
     rocket::{Rocket, ROCKET_ID_COUNTER},
     types::UpdateResult,
-    PhysicEngine,
+    PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
 
 #[derive(Debug)]
@@ -199,7 +199,7 @@ impl PhysicEngineFireworks {
 // ==================================
 // Trait PhysicEngine
 // ==================================
-impl PhysicEngine for PhysicEngineFireworks {
+impl PhysicEngineIterator for PhysicEngineFireworks {
     /// Itère sur toutes les particules de **toutes** les fusées actives.
     ///
     /// ✔ Aucun `Vec` interne  
@@ -236,7 +236,9 @@ impl PhysicEngine for PhysicEngineFireworks {
             .filter(move |&&idx| !self.rockets[idx].exploded)
             .map(move |&idx| self.rockets[idx].head_particle())
     }
+}
 
+impl PhysicEngine for PhysicEngineFireworks {
     fn set_window_width(&mut self, width: f32) {
         self.window_width = width;
         self.update_spawn_rocket_margin();
@@ -256,7 +258,13 @@ impl PhysicEngine for PhysicEngineFireworks {
     fn reload_config(&mut self, config: &PhysicConfig) -> bool {
         self.reload_config(config)
     }
+
+    fn get_config(&self) -> &PhysicConfig {
+        &self.config
+    }
 }
+
+impl PhysicEngineFull for PhysicEngineFireworks {}
 
 // ==================================
 // Helpers pour tests
