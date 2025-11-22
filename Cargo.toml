@@ -39,6 +39,7 @@ fuzzy-matcher = "0.3.7"
 
 [dev-dependencies]
 criterion = "0.7.0"
+tempfile = "3.8"
 
 [features]
 default = ["simd", "test_helpers"] # SIMD activé par défaut

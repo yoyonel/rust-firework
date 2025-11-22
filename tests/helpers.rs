@@ -9,6 +9,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 // --- Shared Types ---
+#[allow(dead_code)]
 pub type SharedLog = Rc<RefCell<Vec<String>>>;
 
 // --- Dummy Mocks (Minimal implementation, no logging) ---
@@ -31,6 +32,7 @@ impl AudioEngine for DummyAudio {
     }
 }
 
+#[allow(dead_code)]
 pub struct DummyPhysic {
     pub config: PhysicConfig,
 }
@@ -91,11 +93,13 @@ impl RendererEngine for DummyRenderer {
 
 // --- Test Mocks (Logging + Failure Injection) ---
 
+#[allow(dead_code)]
 pub struct TestAudio {
     pub log: SharedLog,
     pub fail_on_start: bool,
 }
 
+#[allow(dead_code)]
 impl TestAudio {
     pub fn new(log: SharedLog) -> Self {
         Self {
@@ -138,12 +142,14 @@ impl AudioEngine for TestAudio {
     }
 }
 
+#[allow(dead_code)]
 pub struct TestPhysic {
     pub log: SharedLog,
     pub config: PhysicConfig,
     pub fail_on_update: bool,
 }
 
+#[allow(dead_code)]
 impl TestPhysic {
     pub fn new(log: SharedLog) -> Self {
         Self {
@@ -190,11 +196,13 @@ impl PhysicEngineIterator for TestPhysic {
 
 impl PhysicEngineFull for TestPhysic {}
 
+#[allow(dead_code)]
 pub struct TestRenderer {
     pub log: SharedLog,
     pub fail_on_run_loop: bool,
 }
 
+#[allow(dead_code)]
 impl TestRenderer {
     pub fn new(log: SharedLog) -> Self {
         Self {
