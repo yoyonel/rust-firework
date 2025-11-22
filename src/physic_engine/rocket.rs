@@ -10,6 +10,7 @@ use crate::physic_engine::{
     config::PhysicConfig,
     particle::Particle,
     particles_pools::{ParticlesPool, ParticlesPoolsForRockets, PoolKind},
+    ParticleType,
 };
 use glam::{Vec2, Vec4 as Color};
 
@@ -252,6 +253,7 @@ impl Rocket {
                 size: 2.0,
                 active: true,
                 angle: 0.0,
+                particle_type: ParticleType::Trail,
             };
 
             self.trail_index = (self.trail_index + 1) % nb_particles_per_trail;
@@ -328,6 +330,7 @@ impl Rocket {
                     size: self.rng.random_range(3.0..6.0),
                     active: true,
                     angle,
+                    particle_type: ParticleType::Explosion,
                 };
             }
         }
@@ -393,6 +396,7 @@ impl Rocket {
             active: true,
             // FIXME: angle n'est vraiment utilisé que pour les têtes de fusée (pas pour les trails ou explosions)
             angle,
+            particle_type: ParticleType::Rocket,
         };
     }
 }

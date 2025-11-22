@@ -2,7 +2,9 @@ use fireworks_sim::audio_engine::AudioEngine;
 use fireworks_sim::physic_engine::config::PhysicConfig;
 use fireworks_sim::physic_engine::particle::Particle;
 use fireworks_sim::physic_engine::types::UpdateResult;
-use fireworks_sim::physic_engine::{PhysicEngine, PhysicEngineFull, PhysicEngineIterator};
+use fireworks_sim::physic_engine::{
+    ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
+};
 use fireworks_sim::renderer_engine::command_console::CommandRegistry;
 use fireworks_sim::renderer_engine::RendererEngine;
 use std::cell::RefCell;
@@ -70,6 +72,16 @@ impl PhysicEngineIterator for DummyPhysic {
     }
     fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         Box::new(self.particles.iter())
+    }
+    fn iter_particles_by_type<'a>(
+        &'a self,
+        particle_type: ParticleType,
+    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        Box::new(
+            self.particles
+                .iter()
+                .filter(move |p| p.particle_type == particle_type),
+        )
     }
 }
 
@@ -192,6 +204,12 @@ impl PhysicEngineIterator for TestPhysic {
         Box::new(std::iter::empty())
     }
     fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        Box::new(std::iter::empty())
+    }
+    fn iter_particles_by_type<'a>(
+        &'a self,
+        _particle_type: ParticleType,
+    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         Box::new(std::iter::empty())
     }
 }

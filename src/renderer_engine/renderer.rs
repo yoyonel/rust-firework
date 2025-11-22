@@ -159,7 +159,11 @@ impl Renderer {
 
         let renderers: Vec<Box<dyn ParticleGraphicsRenderer>> = vec![
             Box::new(RendererGraphics::new(max_particles_on_gpu)),
-            Box::new(RendererGraphicsInstanced::new(physic_config.max_rockets)),
+            Box::new(RendererGraphicsInstanced::new(
+                physic_config.max_rockets,
+                crate::physic_engine::ParticleType::Rocket,
+                "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png",
+            )),
         ];
 
         let console = Console::new();

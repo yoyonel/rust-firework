@@ -1,7 +1,7 @@
 use log::{debug, info};
 
 use crate::cstr;
-use crate::physic_engine::PhysicEngineIterator;
+use crate::physic_engine::{ParticleType, PhysicEngineIterator};
 use crate::renderer_engine::{
     tools::compile_shader_program, types::ParticleGPU, utils::texture::load_texture,
 };
@@ -21,18 +21,24 @@ pub struct RendererGraphicsInstanced {
     texture_id: u32,
 
     max_particles_on_gpu: usize,
+
+    // Configuration du type de particule
+    particle_type: ParticleType,
 }
 
 impl RendererGraphicsInstanced {
-    pub fn new(max_particles_on_gpu: usize) -> Self {
+    pub fn new(
+        max_particles_on_gpu: usize,
+        particle_type: ParticleType,
+        texture_path: &str,
+    ) -> Self {
         let (vertex_src, fragment_src) = RendererGraphicsInstanced::src_shaders_instanced_quads();
         let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
 
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
         let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
-        // let texture_id = load_texture("assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png");
-        let (texture_id, tex_width, tex_height) =
-            load_texture("assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png");
+
+        let (texture_id, tex_width, tex_height) = load_texture(texture_path);
         unsafe {
             gl::UseProgram(shader_program);
             gl::Uniform1f(
@@ -55,13 +61,11 @@ impl RendererGraphicsInstanced {
                 loc_size,
                 loc_tex,
                 texture_id,
-                // tex_width,
-                // tex_height,
                 max_particles_on_gpu,
+                particle_type,
             }
         }
     }
-
     /// Recrée les buffers GPU avec une nouvelle taille maximale.
     /// Cette opération libère les anciens buffers et en crée de nouveaux,
     /// puis met à jour les champs internes de la structure.
@@ -87,15 +91,15 @@ impl RendererGraphicsInstanced {
         self.max_particles_on_gpu = new_max;
     }
 
-    /// Remplit directement le buffer GPU mappé avec les particules "têtes"
-    /// renvoyées par le moteur physique.
+    /// Remplit directement le buffer GPU mappé avec les particules du type spécifié.
     ///
     /// Cette fonction :
     /// - itère sur un pipeline paresseux (aucune allocation CPU)
+    /// - filtre les particules par type
     /// - écrit séquentiellement dans la mémoire GPU persistently-mapped (optimal)
     /// - flush uniquement la zone écrite
     ///
-    /// C’est un pattern AZDO performant : aucune écriture sparse, aucun saut mémoire,
+    /// C'est un pattern AZDO performant : aucune écriture sparse, aucun saut mémoire,
     /// seulement du contigu cpu → gpu.
     /// # Safety
     /// This function is unsafe because it directly manipulates GPU resources.
@@ -110,10 +114,9 @@ impl RendererGraphicsInstanced {
         // Toute écriture dans ce slice écrit physiquement dans la BAR / VRAM.
         let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
 
-        // Ici, `iter_active_heads_not_exploded()` fournit un flux paresseux, sans allocation CPU
-        // intermédiaire : idéal pour écrire contigu dans le buffer GPU.
+        // Utilise iter_particles_by_type pour filtrer les particules du bon type
         for (i, p) in physic
-            .iter_active_heads_not_exploded()
+            .iter_particles_by_type(self.particle_type)
             .take(self.max_particles_on_gpu)
             .enumerate()
         {
