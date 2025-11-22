@@ -13,6 +13,14 @@ fn test_renderer_step_frame_coverage() {
     // Forcer la fermeture immédiate pour éviter boucle infinie
     renderer.window.as_mut().unwrap().set_should_close(true);
 
+    // Ajout de particules pour tester le rendu
+    physic
+        .particles
+        .push(fireworks_sim::physic_engine::particle::Particle::default());
+
+    // Test reload_config coverage
+    renderer.reload_config(&mut physic);
+
     // ✅ On appelle step_frame directement pour couvrir tout
     unsafe {
         renderer.render_frame(&mut physic);

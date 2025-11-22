@@ -3,6 +3,8 @@ pub use r#trait::RendererEngine;
 
 pub mod renderer;
 pub use self::renderer::Renderer;
+pub mod particle_renderer;
+pub use self::particle_renderer::ParticleGraphicsRenderer;
 pub mod renderer_graphics;
 pub use self::renderer_graphics::RendererGraphics;
 pub mod renderer_graphics_instanced;

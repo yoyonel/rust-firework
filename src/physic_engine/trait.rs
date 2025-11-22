@@ -6,10 +6,10 @@ pub trait PhysicEngineIterator {
     // Les types associés ne sont pas nécessaires ici si 'Particle' est importé.
 
     /// Retourne un itérateur sur les particules actives.
-    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
+    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
 
     /// Retourne un itérateur sur les têtes de fusées non explosées.
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a;
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
 }
 
 /// 🔧 Trait `PhysicEngine`
