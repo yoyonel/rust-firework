@@ -87,3 +87,212 @@ fn test_binauralize_mono_basic() {
         "Right channel should be louder for source on right"
     );
 }
+
+// ==================================
+// Additional Binaural Tests
+// ==================================
+
+#[test]
+fn test_binauralize_mono_left_side() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+    let sample_rate = 44100;
+
+    // Source at (-10, 0, 0) -> Left side
+    let src_pos = (-10.0, 0.0, 0.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    let avg_l: f32 = stereo.iter().map(|s| s[0].abs()).sum::<f32>() / stereo.len() as f32;
+    let avg_r: f32 = stereo.iter().map(|s| s[1].abs()).sum::<f32>() / stereo.len() as f32;
+
+    // Left channel should be louder for source on left
+    assert!(
+        avg_l > avg_r,
+        "Left channel should be louder for source on left"
+    );
+}
+
+#[test]
+fn test_binauralize_mono_center() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+    let sample_rate = 44100;
+
+    // Source at (0, 0, -10) -> Center (in front)
+    let src_pos = (0.0, 0.0, -10.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    let avg_l: f32 = stereo.iter().map(|s| s[0].abs()).sum::<f32>() / stereo.len() as f32;
+    let avg_r: f32 = stereo.iter().map(|s| s[1].abs()).sum::<f32>() / stereo.len() as f32;
+
+    // Channels should be approximately equal for centered source
+    let ratio = avg_l / avg_r.max(1e-6);
+    assert!(
+        ratio > 0.9 && ratio < 1.1,
+        "Channels should be balanced for centered source, ratio: {}",
+        ratio
+    );
+}
+
+#[test]
+fn test_binauralize_mono_with_elevation() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+    let sample_rate = 44100;
+
+    // Source above and to the right (10, 5, 0)
+    let src_pos = (10.0, 5.0, 0.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    assert_eq!(stereo.len(), mono.len());
+
+    // Right channel should still be louder (source on right)
+    let avg_l: f32 = stereo.iter().map(|s| s[0].abs()).sum::<f32>() / stereo.len() as f32;
+    let avg_r: f32 = stereo.iter().map(|s| s[1].abs()).sum::<f32>() / stereo.len() as f32;
+
+    assert!(avg_r > avg_l, "Right channel should be louder");
+}
+
+#[test]
+fn test_binauralize_mono_very_close() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+    let sample_rate = 44100;
+
+    // Source very close (1, 0, 0)
+    let src_pos = (1.0, 0.0, 0.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    // Should have valid output
+    assert_eq!(stereo.len(), mono.len());
+    for frame in &stereo {
+        assert!(frame[0].is_finite());
+        assert!(frame[1].is_finite());
+    }
+}
+
+#[test]
+fn test_binauralize_mono_very_far() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+    let sample_rate = 44100;
+
+    // Source very far (1000, 0, 0) - beyond max_distance
+    let src_pos = (1000.0, 0.0, 0.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    // Should be heavily attenuated or silent
+    let avg_l: f32 = stereo.iter().map(|s| s[0].abs()).sum::<f32>() / stereo.len() as f32;
+    let avg_r: f32 = stereo.iter().map(|s| s[1].abs()).sum::<f32>() / stereo.len() as f32;
+
+    // Both channels should be very quiet (distance attenuation)
+    assert!(
+        avg_l < 0.1 && avg_r < 0.1,
+        "Far source should be attenuated: L={}, R={}",
+        avg_l,
+        avg_r
+    );
+}
+
+#[test]
+fn test_binauralize_mono_behind() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+    let sample_rate = 44100;
+
+    // Source behind (0, 0, 10) - positive z
+    let src_pos = (0.0, 0.0, 10.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    // Should be centered (behind = azimuth 0)
+    let avg_l: f32 = stereo.iter().map(|s| s[0].abs()).sum::<f32>() / stereo.len() as f32;
+    let avg_r: f32 = stereo.iter().map(|s| s[1].abs()).sum::<f32>() / stereo.len() as f32;
+
+    let ratio = avg_l / avg_r.max(1e-6);
+    assert!(
+        ratio > 0.9 && ratio < 1.1,
+        "Behind source should be balanced, ratio: {}",
+        ratio
+    );
+}
+
+#[test]
+fn test_binauralize_mono_empty_input() {
+    let settings = AudioEngineSettings::default();
+    let mono: Vec<f32> = vec![];
+    let sample_rate = 44100;
+
+    let src_pos = (10.0, 0.0, 0.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    assert!(stereo.is_empty(), "Empty input should produce empty output");
+}
+
+#[test]
+fn test_binauralize_mono_single_sample() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![1.0];
+    let sample_rate = 44100;
+
+    let src_pos = (10.0, 0.0, 0.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    assert_eq!(stereo.len(), 1);
+    assert!(stereo[0][0].is_finite());
+    assert!(stereo[0][1].is_finite());
+}
+
+#[test]
+fn test_binauralize_mono_different_sample_rates() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+
+    for sample_rate in [22050, 44100, 48000, 96000] {
+        let src_pos = (10.0, 0.0, 0.0);
+        let listener_pos = (0.0, 0.0, 0.0);
+
+        let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+        assert_eq!(stereo.len(), mono.len());
+        for frame in &stereo {
+            assert!(frame[0].is_finite());
+            assert!(frame[1].is_finite());
+        }
+    }
+}
+
+#[test]
+fn test_binauralize_mono_listener_not_at_origin() {
+    let settings = AudioEngineSettings::default();
+    let mono = vec![0.5; 100];
+    let sample_rate = 44100;
+
+    // Source at (20, 0, 0), listener at (10, 0, 0)
+    // Relative position: (10, 0, 0) -> right side
+    let src_pos = (20.0, 0.0, 0.0);
+    let listener_pos = (10.0, 0.0, 0.0);
+
+    let stereo = binauralize_mono(&mono, src_pos, listener_pos, sample_rate, &settings);
+
+    let avg_l: f32 = stereo.iter().map(|s| s[0].abs()).sum::<f32>() / stereo.len() as f32;
+    let avg_r: f32 = stereo.iter().map(|s| s[1].abs()).sum::<f32>() / stereo.len() as f32;
+
+    // Right channel should be louder (relative position is right)
+    assert!(avg_r > avg_l, "Right channel should be louder");
+}
