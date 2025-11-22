@@ -5,7 +5,7 @@ use helpers::DummyPhysic;
 
 #[test]
 fn test_renderer_step_frame_coverage() {
-    let mut physic = DummyPhysic;
+    let mut physic = DummyPhysic::default();
     // Renderer minimal (pas de fenêtre réelle pour test)
     let mut renderer =
         Renderer::new(800, 600, "Test Renderer", &PhysicConfig::default().clone()).unwrap();

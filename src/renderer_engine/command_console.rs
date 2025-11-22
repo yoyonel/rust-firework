@@ -275,7 +275,8 @@ impl Console {
         registry: &CommandRegistry,
     ) {
         if self.input.capacity() < INPUT_BUFFER_GROWTH {
-            self.input.reserve(INPUT_BUFFER_GROWTH - self.input.capacity());
+            self.input
+                .reserve(INPUT_BUFFER_GROWTH - self.input.capacity());
         }
 
         // Apply colors
@@ -334,7 +335,7 @@ impl Console {
 
     fn draw_scrolling_region(&mut self, ui: &imgui::Ui) {
         let input_height = ui.frame_height_with_spacing();
-        
+
         ui.child_window("scrolling")
             .size([0.0, -(input_height + SUGGESTION_BOX_HEIGHT)])
             .scroll_bar(true)
