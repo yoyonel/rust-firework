@@ -142,6 +142,12 @@ fn parse_glsl_error_line(log: &str) -> Option<(usize, usize)> {
 /// Affiche un extrait du code GLSL autour de la ligne fautive
 fn show_glsl_error_context(src: &str, line_number: usize) {
     let lines: Vec<&str> = src.lines().collect();
+
+    // Handle empty source or line number beyond source length
+    if lines.is_empty() || line_number == 0 {
+        return;
+    }
+
     let context_range = 2; // nb de lignes avant/après à afficher
 
     eprintln!("🔍 Error context (line {}):", line_number);
@@ -149,8 +155,12 @@ fn show_glsl_error_context(src: &str, line_number: usize) {
     let start = line_number.saturating_sub(1 + context_range);
     let end = (line_number + context_range).min(lines.len());
 
-    for (i, line) in lines[start..end].iter().enumerate() {
-        let current = start + i + 1;
+    // Ensure we don't try to slice beyond the array bounds
+    let safe_start = start.min(lines.len());
+    let safe_end = end.min(lines.len());
+
+    for (i, line) in lines[safe_start..safe_end].iter().enumerate() {
+        let current = safe_start + i + 1;
         if current == line_number {
             eprintln!("> {:>3} | {}", current, line);
             eprintln!("        {}", "^".repeat(line.len().min(80)));
@@ -270,5 +280,207 @@ pub fn format_bytes(size: isize) -> String {
         format!("{:.3} KB", size_f64 / KB)
     } else {
         format!("{} bytes", size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CStr;
+
+    #[test]
+    fn test_format_bytes() {
+        assert_eq!(format_bytes(500), "500 bytes");
+        assert_eq!(format_bytes(1024), "1.000 KB");
+        assert_eq!(format_bytes(1536), "1.500 KB");
+        assert_eq!(format_bytes(1024 * 1024), "1.000 MB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1.000 GB");
+    }
+
+    #[test]
+    fn test_format_bytes_edge_cases() {
+        // Zero bytes
+        assert_eq!(format_bytes(0), "0 bytes");
+
+        // Negative values (edge case)
+        assert_eq!(format_bytes(-100), "-100 bytes");
+
+        // Boundary values
+        assert_eq!(format_bytes(1023), "1023 bytes");
+        assert_eq!(format_bytes(1024 * 1024 - 1), "1023.999 KB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024 - 1), "1024.000 MB");
+
+        // Very large values
+        let large_value = 5 * 1024 * 1024 * 1024; // 5 GB
+        assert_eq!(format_bytes(large_value), "5.000 GB");
+
+        // Fractional KB
+        assert_eq!(format_bytes(2048), "2.000 KB");
+        assert_eq!(format_bytes(2560), "2.500 KB");
+    }
+
+    #[test]
+    fn test_parse_glsl_error_line() {
+        // Test standard format: "0:12(105): error: ..."
+        // The regex is r"(\d+):(\d+)\((\d+)\)"
+        // It captures group 2 as line, group 3 as col?
+        // Let's check the regex in the code:
+        // let re = regex::Regex::new(r"(\d+):(\d+)\((\d+)\)").ok()?;
+        // cap.get(2) -> line
+        // cap.get(3) -> col
+        // So "0:12(105)" -> line 12, col 105.
+
+        let log = "0:12(105): error: undefined variable";
+        assert_eq!(parse_glsl_error_line(log), Some((12, 105)));
+
+        let log_no_match = "Error: some error without line info";
+        assert_eq!(parse_glsl_error_line(log_no_match), None);
+    }
+
+    #[test]
+    fn test_parse_glsl_error_line_edge_cases() {
+        // Different line and column numbers
+        assert_eq!(parse_glsl_error_line("0:1(1): error"), Some((1, 1)));
+        assert_eq!(
+            parse_glsl_error_line("0:999(9999): error"),
+            Some((999, 9999))
+        );
+
+        // Multiple matches - should get the first one
+        assert_eq!(
+            parse_glsl_error_line("0:5(10): error and 0:6(20): another"),
+            Some((5, 10))
+        );
+
+        // Malformed patterns
+        assert_eq!(parse_glsl_error_line("0:12: error"), None); // Missing column
+        assert_eq!(parse_glsl_error_line("12(105): error"), None); // Missing first number
+        assert_eq!(parse_glsl_error_line("abc:12(105): error"), None); // Non-numeric
+
+        // Empty string
+        assert_eq!(parse_glsl_error_line(""), None);
+
+        // Error message with context
+        let complex_log = "ERROR: 0:42(256): 'undefined_var' : undeclared identifier";
+        assert_eq!(parse_glsl_error_line(complex_log), Some((42, 256)));
+    }
+
+    #[test]
+    fn test_show_glsl_error_context() {
+        let src = r#"void main() {
+            gl_Position = vec4(0.0);
+            // error here
+        }"#;
+        // Just ensure it doesn't panic
+        show_glsl_error_context(src, 2);
+    }
+
+    #[test]
+    fn test_show_glsl_error_context_edge_cases() {
+        // Empty source
+        show_glsl_error_context("", 1);
+
+        // Single line source
+        show_glsl_error_context("void main() {}", 1);
+
+        // Error at first line
+        let src = "line1\nline2\nline3\nline4\nline5";
+        show_glsl_error_context(src, 1);
+
+        // Error at last line
+        show_glsl_error_context(src, 5);
+
+        // Error beyond source length (should not panic)
+        show_glsl_error_context(src, 100);
+
+        // Very long line (should truncate in display)
+        let long_line = "a".repeat(200);
+        show_glsl_error_context(&long_line, 1);
+
+        // Multi-line with error in middle
+        let multi = "line1\nline2\nline3\nline4\nline5\nline6\nline7";
+        show_glsl_error_context(multi, 4);
+    }
+
+    #[test]
+    fn test_cstr_macro() {
+        let ptr = cstr!("hello");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "hello");
+        }
+    }
+
+    #[test]
+    fn test_cstr_macro_edge_cases() {
+        // Empty string
+        let ptr = cstr!("");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "");
+        }
+
+        // String with spaces
+        let ptr = cstr!("hello world");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "hello world");
+        }
+
+        // String with special characters
+        let ptr = cstr!("test_123");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "test_123");
+        }
+    }
+
+    #[test]
+    fn test_gl_debug_callback_deduplication() {
+        use std::ffi::CString;
+
+        // Use a unique ID for this test to avoid collision
+        let id = 0x12345678;
+        let msg = CString::new("Test debug message").unwrap();
+
+        // First call
+        gl_debug_callback(
+            gl::DEBUG_SOURCE_APPLICATION,
+            gl::DEBUG_TYPE_ERROR,
+            id,
+            gl::DEBUG_SEVERITY_HIGH,
+            0,
+            msg.as_ptr(),
+            std::ptr::null_mut(),
+        );
+
+        // Check if it's in LOGGED_IDS
+        {
+            let logged = LOGGED_IDS.lock().unwrap();
+            assert!(logged.contains(&id));
+        }
+
+        // Check MESSAGE_COUNT
+        {
+            let counts = MESSAGE_COUNT.lock().unwrap();
+            assert_eq!(counts.get(&id), Some(&1));
+        }
+
+        // Second call - should return early due to deduplication
+        gl_debug_callback(
+            gl::DEBUG_SOURCE_APPLICATION,
+            gl::DEBUG_TYPE_ERROR,
+            id,
+            gl::DEBUG_SEVERITY_HIGH,
+            0,
+            msg.as_ptr(),
+            std::ptr::null_mut(),
+        );
+
+        // Check MESSAGE_COUNT again - should still be 1
+        {
+            let counts = MESSAGE_COUNT.lock().unwrap();
+            assert_eq!(counts.get(&id), Some(&1));
+        }
     }
 }
