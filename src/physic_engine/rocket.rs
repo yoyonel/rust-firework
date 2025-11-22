@@ -140,6 +140,7 @@ impl Rocket {
             dt,
             GRAVITY,
             &mut particles_pools.particles_pool_for_explosions,
+            config,
         );
         self.remove_inactive_rockets(particles_pools);
 
@@ -287,8 +288,14 @@ impl Rocket {
     }
 
     #[inline(always)]
-    fn update_explosions(&mut self, dt: f32, gravity: Vec2, particles_pool: &mut ParticlesPool) {
-        if !self.exploded && self.vel.y <= 0.0 {
+    fn update_explosions(
+        &mut self,
+        dt: f32,
+        gravity: Vec2,
+        particles_pool: &mut ParticlesPool,
+        config: &PhysicConfig,
+    ) {
+        if !self.exploded && self.vel.y <= config.explosion_threshold {
             self.trigger_explosion(particles_pool);
         }
 
