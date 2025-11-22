@@ -10,7 +10,7 @@ use crate::physic_engine::{
     particles_pools::ParticlesPoolsForRockets,
     rocket::{Rocket, ROCKET_ID_COUNTER},
     types::UpdateResult,
-    PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
+    ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
 
 #[derive(Debug)]
@@ -239,6 +239,31 @@ impl PhysicEngineIterator for PhysicEngineFireworks {
                 .filter(move |&&idx| !self.rockets[idx].exploded)
                 .map(move |&idx| self.rockets[idx].head_particle()),
         )
+    }
+
+    /// Retourne un itérateur sur les particules actives d'un type spécifique.
+    ///
+    /// ✔ Zero allocation
+    /// ✔ Filtrage paresseux (lazy)
+    /// ✔ Parfaitement optimisable
+    ///
+    /// Note: Pour les particules de type Rocket, cette méthode combine les particules
+    /// de tête (head_particle) avec les particules des pools qui correspondent au type.
+    fn iter_particles_by_type<'a>(
+        &'a self,
+        particle_type: ParticleType,
+    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        // Pour les particules de type Rocket, on doit inclure les têtes de fusée
+        // qui ne sont pas dans les pools mais dans la structure Rocket elle-même
+        if particle_type == ParticleType::Rocket {
+            Box::new(self.iter_active_heads_not_exploded())
+        } else {
+            // Pour les autres types, on filtre les particules des pools
+            Box::new(
+                self.iter_active_particles()
+                    .filter(move |p| p.particle_type == particle_type),
+            )
+        }
     }
 }
 

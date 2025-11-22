@@ -1,6 +1,7 @@
 use crate::physic_engine::config::PhysicConfig;
 use crate::physic_engine::particle::Particle;
 use crate::physic_engine::types::UpdateResult;
+use crate::physic_engine::ParticleType;
 
 pub trait PhysicEngineIterator {
     // Les types associés ne sont pas nécessaires ici si 'Particle' est importé.
@@ -10,6 +11,12 @@ pub trait PhysicEngineIterator {
 
     /// Retourne un itérateur sur les têtes de fusées non explosées.
     fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
+
+    /// Retourne un itérateur sur les particules actives d'un type spécifique.
+    fn iter_particles_by_type<'a>(
+        &'a self,
+        particle_type: ParticleType,
+    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
 }
 
 /// 🔧 Trait `PhysicEngine`

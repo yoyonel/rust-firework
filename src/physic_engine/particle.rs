@@ -1,3 +1,4 @@
+use crate::physic_engine::ParticleType;
 use glam::{Vec2, Vec4 as Color};
 
 #[repr(C, align(16))]
@@ -14,6 +15,7 @@ pub struct Particle {
     pub vel: Vec2,
     pub active: bool,
     pub angle: f32,
+    pub particle_type: ParticleType,
 }
 
 use bytemuck::{Pod, Zeroable};
