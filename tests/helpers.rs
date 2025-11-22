@@ -35,12 +35,14 @@ impl AudioEngine for DummyAudio {
 #[allow(dead_code)]
 pub struct DummyPhysic {
     pub config: PhysicConfig,
+    pub particles: Vec<Particle>,
 }
 
 impl Default for DummyPhysic {
     fn default() -> Self {
         Self {
             config: PhysicConfig::default(),
+            particles: Vec::new(),
         }
     }
 }
@@ -63,11 +65,11 @@ impl PhysicEngine for DummyPhysic {
 }
 
 impl PhysicEngineIterator for DummyPhysic {
-    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
-        std::iter::empty()
+    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        Box::new(self.particles.iter())
     }
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
-        std::iter::empty()
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        Box::new(self.particles.iter())
     }
 }
 
@@ -186,11 +188,11 @@ impl PhysicEngine for TestPhysic {
 }
 
 impl PhysicEngineIterator for TestPhysic {
-    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
-        std::iter::empty()
+    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        Box::new(std::iter::empty())
     }
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
-        std::iter::empty()
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        Box::new(std::iter::empty())
     }
 }
 

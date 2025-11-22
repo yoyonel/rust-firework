@@ -171,7 +171,7 @@ impl RendererGraphics {
     /// # Safety
     /// This function is unsafe because it directly manipulates GPU resources.
     /// The caller must ensure that the OpenGL context is valid.
-    pub unsafe fn fill_particle_data_direct<P: PhysicEngineIterator>(
+    pub unsafe fn fill_particle_data_direct<P: PhysicEngineIterator + ?Sized>(
         &mut self,
         physic: &P,
     ) -> usize {
@@ -275,5 +275,28 @@ impl RendererGraphics {
             self.shader_program = 0;
         }
         debug!("Graphic Engine for Points Rendering closed and reset.");
+    }
+}
+use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
+
+impl ParticleGraphicsRenderer for RendererGraphics {
+    unsafe fn recreate_buffers(&mut self, new_max: usize) {
+        self.recreate_buffers(new_max);
+    }
+
+    unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize {
+        self.fill_particle_data_direct(physic)
+    }
+
+    unsafe fn render_particles_with_persistent_buffer(
+        &self,
+        count: usize,
+        window_size: (f32, f32),
+    ) {
+        self.render_particles_with_persistent_buffer(count, window_size);
+    }
+
+    unsafe fn close(&mut self) {
+        self.close();
     }
 }

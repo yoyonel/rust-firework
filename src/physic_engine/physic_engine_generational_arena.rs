@@ -210,15 +210,17 @@ impl PhysicEngineIterator for PhysicEngineFireworks {
     /// Cette approche est idéale pour un rendu GPU basé sur un buffer mappé persistant :
     /// on produit un flux de particules triées, en lecture séquentielle, permettant
     /// une écriture contiguë dans le VBO d'instanciation (meilleur throughput).
-    fn iter_active_particles<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
-        self.active_indices
-            .iter()
-            // Pour chaque rocket active, on concatène son itérateur de heads
-            // à l’aide d’un `flat_map`. Le résultat final est un seul pipeline
-            // d’itérateurs, entièrement paresseux et zéro-allocation.
-            .flat_map(move |&idx| {
-                self.rockets[idx].iter_active_particles(&self.particles_pools_for_rockets)
-            })
+    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        Box::new(
+            self.active_indices
+                .iter()
+                // Pour chaque rocket active, on concatène son itérateur de heads
+                // à l’aide d’un `flat_map`. Le résultat final est un seul pipeline
+                // d’itérateurs, entièrement paresseux et zéro-allocation.
+                .flat_map(move |&idx| {
+                    self.rockets[idx].iter_active_particles(&self.particles_pools_for_rockets)
+                }),
+        )
     }
 
     /// Itère sur les particules-têtes (non explosées) référencées statiquement
@@ -228,13 +230,15 @@ impl PhysicEngineIterator for PhysicEngineFireworks {
     /// ✔ Transmet une Particle (référencée) par rocket active
     /// ✔ Pas d'accès aux pools
     /// ✔ Parfaitement optimisable
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> impl Iterator<Item = &'a Particle> + 'a {
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         // TODO: peut être mettre en place une liste d'indices de rockets non-explosées
-        self.active_indices
-            .iter()
-            // 1) filtrage des fusées non-explosées
-            .filter(move |&&idx| !self.rockets[idx].exploded)
-            .map(move |&idx| self.rockets[idx].head_particle())
+        Box::new(
+            self.active_indices
+                .iter()
+                // 1) filtrage des fusées non-explosées
+                .filter(move |&&idx| !self.rockets[idx].exploded)
+                .map(move |&idx| self.rockets[idx].head_particle()),
+        )
     }
 }
 

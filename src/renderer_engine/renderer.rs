@@ -12,6 +12,7 @@ use std::time::Instant;
 
 use crate::audio_engine::AudioEngine;
 use crate::physic_engine::{config::PhysicConfig, PhysicEngine, UpdateResult};
+use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::RendererGraphics;
 use crate::renderer_engine::RendererGraphicsInstanced;
 use crate::renderer_engine::{
@@ -49,8 +50,7 @@ pub struct Renderer {
     window_last_pos: (i32, i32),
     window_last_size: (i32, i32),
 
-    graphics: RendererGraphics,
-    graphics_instanced: RendererGraphicsInstanced,
+    renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
 }
 
 // ---------------------------------------------------------
@@ -156,8 +156,11 @@ impl Renderer {
 
         let max_particles_on_gpu: usize =
             physic_config.max_rockets * physic_config.particles_per_explosion;
-        let graphics = RendererGraphics::new(max_particles_on_gpu);
-        let graphics_instanced = RendererGraphicsInstanced::new(physic_config.max_rockets);
+
+        let renderers: Vec<Box<dyn ParticleGraphicsRenderer>> = vec![
+            Box::new(RendererGraphics::new(max_particles_on_gpu)),
+            Box::new(RendererGraphicsInstanced::new(physic_config.max_rockets)),
+        ];
 
         let console = Console::new();
 
@@ -176,13 +179,12 @@ impl Renderer {
             window_size_f32: (width as f32, height as f32),
             window_last_pos,
             window_last_size,
-            graphics,
-            graphics_instanced,
+            renderers,
             max_particles_on_gpu,
         })
     }
 
-    fn reload_config<P: PhysicEngine>(&mut self, physic: &mut P) {
+    pub fn reload_config<P: PhysicEngine>(&mut self, physic: &mut P) {
         let physic_config =
             PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
         info!("Physic config loaded:\n{:#?}", physic_config);
@@ -197,9 +199,9 @@ impl Renderer {
                 self.max_particles_on_gpu, new_max
             );
             unsafe {
-                self.graphics.recreate_buffers(new_max);
-                self.graphics_instanced
-                    .recreate_buffers(physic_config.max_rockets);
+                for renderer in &mut self.renderers {
+                    renderer.recreate_buffers(new_max);
+                }
             }
         }
     }
@@ -208,26 +210,15 @@ impl Renderer {
     /// # Safety
     /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
     pub unsafe fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
-        // Remplit le buffer GPU
-        let nb_particles_rendered = self.graphics.fill_particle_data_direct(physic);
-        // // Dessine les particules
-        self.graphics
-            .render_particles_with_persistent_buffer(nb_particles_rendered, self.window_size_f32);
-
-        nb_particles_rendered
-    }
-
-    /// Exécute une seule frame (update + rendu) en mode instancié
-    /// # Safety
-    /// Cette fonction est unsafe car elle effectue des appels OpenGL non sécurisés.
-    pub unsafe fn render_frame_instanced<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
-        // Remplit le buffer GPU
-        let nb_particles_rendered = self.graphics_instanced.fill_particle_data_direct(physic);
-        // // Dessine les particules
-        self.graphics_instanced
-            .render_particles_with_persistent_buffer(nb_particles_rendered, self.window_size_f32);
-
-        nb_particles_rendered
+        let mut total_particles = 0;
+        for renderer in &mut self.renderers {
+            // Remplit le buffer GPU
+            let nb = renderer.fill_particle_data_direct(physic);
+            // Dessine les particules
+            renderer.render_particles_with_persistent_buffer(nb, self.window_size_f32);
+            total_particles += nb;
+        }
+        total_particles
     }
 
     /// Boucle infinie (production) qui appelle `step_frame`
@@ -374,17 +365,10 @@ impl Renderer {
                 gl::Clear(gl::COLOR_BUFFER_BIT);
             }
 
-            // Render frame with points rendering for representing particles system
+            // Render frame with all renderers
             profiler.profile_block("render frame", || {
                 profiler.record_metric("total particles drawn", unsafe {
                     self.render_frame(physic)
-                });
-            });
-
-            // Render frame with instanced textured quads for representing particles system
-            profiler.profile_block("render frame with instanced particles", || {
-                profiler.record_metric("total particles drawn", unsafe {
-                    self.render_frame_instanced(physic)
                 });
             });
 
@@ -474,8 +458,9 @@ impl Renderer {
         info!("🧹 Fermeture du Renderer");
 
         unsafe {
-            self.graphics.close();
-            self.graphics_instanced.close();
+            for renderer in &mut self.renderers {
+                renderer.close();
+            }
         }
 
         // Important de drop la ressource imgui pour glfw avant de drop la window glfw
