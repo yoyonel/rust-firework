@@ -8,17 +8,34 @@ COVERAGE_DIR = target/llvm-cov
 # X Virtual FrameBuffer
 XVFB = xvfb-run -a
 
+run-debug:
+	@$(CARGO) run
+
 # Run the project in release mode
 run-release:
-	cargo run --release
+	@$(CARGO) run --release
 
+# Gallium HUD (intel compatible)
 run-release-with-hud:
-	env \
+	@env \
 	vblank_mode=0 \
 	__GL_SYNC_TO_VBLANK=0 \
 	GALLIUM_HUD_PERIOD=0.15 \
 	GALLIUM_HUD="cpu;fps;N vertices submitted" \
-	cargo run --release 2>&1
+	$(CARGO) run --release 2>&1
+
+# MangoHub (NVidia compatible) shortcut: RIGHT-SHIFT+F10 for chaging the HUD mode
+run-prime-with-hud:
+	echo -e "ℹ️🖥️ Using MangoHud, press RSHIFT+F10 for chaging the HUD mode."
+	env \
+	__NV_PRIME_RENDER_OFFLOAD=1 \
+	__GLX_VENDOR_LIBRARY_NAME=nvidia \
+	__VK_LAYER_NV_optimus=NVIDIA_onl \
+	vblank_mode=0 \
+	__GL_SYNC_TO_VBLANK=0 \
+	RUST_LOG=INFO \
+	mangohud ./target/release/fireworks_sim 2>&1
+
 # -----------------------------------------
 # 🧪 Tests unitaires + d'intégration
 # -----------------------------------------
@@ -57,31 +74,29 @@ release:
 # -----------------------------------------
 fmt:
 	@echo "🎨 Vérification du formatage..."
-	@$(CARGO) fmt --all -- --check
+	@$(CARGO) fmt -- --check
 
 clippy:
 	@echo "🕵️  Vérification statique avec Clippy..."
-	@$(CARGO) clippy --all-targets --all-features -- -D warnings
+	@$(CARGO) clippy -- -D warnings
 
 # Lint the code
-lint:
-	cargo fmt -- --check
-	cargo clippy -- -D warnings
+lint: fmt clippy
 
 # Run cargo-shear for removing unused dependencies
 remove-unused-dependencies:
-	cargo shear --fix
+	@$(CARGO) shear --fix
 
 # -----------------------------------------
 # 🧪 Benchmarks
 # -----------------------------------------
 # Profiling with Valgrind
-valgrind-callgrind: ./target/release/fireworks_sim
-	valgrind --tool=callgrind ./target/release/fireworks_sim
+valgrind-callgrind: ./target/profiling/fireworks_sim
+	valgrind --tool=callgrind ./target/profiling/fireworks_sim
 	callgrind_annotate $(ls -tr | grep callgrind.out | tail -1) | grep -e "fireworks_sim::"
 
 ./target/profiling/fireworks_sim:
-	cargo build --profile profiling
+	@$(CARGO) build --profile profiling
 
 # Profiling with Heaptrack
 heaptrack: ./target/profiling/fireworks_sim

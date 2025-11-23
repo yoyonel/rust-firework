@@ -15,6 +15,8 @@ pub struct PhysicConfig {
     pub spawn_rocket_angle_variation: f32,
     pub spawn_rocket_min_speed: f32,
     pub spawn_rocket_max_speed: f32,
+
+    pub explosion_threshold: f32,
 }
 
 impl Default for PhysicConfig {
@@ -31,6 +33,7 @@ impl Default for PhysicConfig {
             spawn_rocket_angle_variation: 0.3, // Amplitude de variation autour de la verticale (±0.3 rad ≈ ±17°)
             spawn_rocket_min_speed: 350.0,
             spawn_rocket_max_speed: 500.0,
+            explosion_threshold: 50.0, // en m/s
         }
     }
 }

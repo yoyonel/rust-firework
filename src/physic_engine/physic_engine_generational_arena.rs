@@ -2,7 +2,6 @@ use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::{debug, info};
 use rand::Rng;
-use std::cmp::max;
 use std::sync::atomic::Ordering;
 
 use crate::physic_engine::{
@@ -11,7 +10,7 @@ use crate::physic_engine::{
     particles_pools::ParticlesPoolsForRockets,
     rocket::{Rocket, ROCKET_ID_COUNTER},
     types::UpdateResult,
-    PhysicEngine,
+    ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
 
 #[derive(Debug)]
@@ -38,9 +37,10 @@ impl PhysicEngineFireworks {
         let mut rockets = Arena::with_capacity(config.max_rockets);
         let mut free_indices = Vec::with_capacity(config.max_rockets);
 
+        let mut rng = rand::rng();
         // Pré-remplissage des slots dans l’arena et free_indices
         for _ in 0..config.max_rockets {
-            let idx = rockets.insert(Rocket::new(config));
+            let idx = rockets.insert(Rocket::new(&mut rng));
             free_indices.push(idx);
         }
 
@@ -58,7 +58,7 @@ impl PhysicEngineFireworks {
             time_since_last_rocket: 0.0,
             next_rocket_interval: 0.0,
             window_width,
-            rng: rand::rng(),
+            rng,
             config: config.clone(),
             rocket_margin_min_x: 0.0,
             rocket_margin_max_x: 0.0,
@@ -74,7 +74,7 @@ impl PhysicEngineFireworks {
         engine
     }
 
-    pub fn reload_config(&mut self, new_config: &PhysicConfig) -> bool {
+    fn reload_config(&mut self, new_config: &PhysicConfig) -> bool {
         let old_max_rockets = self.config.max_rockets;
         self.config = new_config.clone();
 
@@ -91,7 +91,7 @@ impl PhysicEngineFireworks {
             self.free_indices.clear();
 
             for _ in 0..new_config.max_rockets {
-                let idx = self.rockets.insert(Rocket::new(&self.config));
+                let idx = self.rockets.insert(Rocket::new(&mut self.rng));
                 self.free_indices.push(idx);
             }
         }
@@ -120,13 +120,13 @@ impl PhysicEngineFireworks {
             .max(self.config.rocket_max_next_interval)
     }
 
-    pub fn spawn_rocket(&mut self) -> Option<&mut Rocket> {
+    fn spawn_rocket(&mut self) -> Option<&mut Rocket> {
         let idx = self.free_indices.pop()?;
         let cfg = &self.config;
 
         if let Some(r) = self.rockets.get_mut(idx) {
             // Réutilisation sans recréer la structure complète
-            r.reset(cfg, &mut self.rng, self.window_width);
+            r.reset(cfg, self.window_width);
         }
 
         self.active_indices.push(idx);
@@ -149,7 +149,7 @@ impl PhysicEngineFireworks {
         self.free_indices.push(idx);
     }
 
-    pub fn update(&mut self, dt: f32) -> UpdateResult<'_> {
+    fn update(&mut self, dt: f32) -> UpdateResult<'_> {
         let mut triggered_count = 0;
         let mut new_rocket: Option<Rocket> = None;
 
@@ -171,8 +171,7 @@ impl PhysicEngineFireworks {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
 
-                // rocket.update(&mut self.rng, dt);
-                rocket.update(&mut self.rng, dt, &mut self.particles_pools_for_rockets);
+                rocket.update(dt, &mut self.particles_pools_for_rockets, &self.config);
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
@@ -195,41 +194,80 @@ impl PhysicEngineFireworks {
             triggered_explosions: &self.triggered_explosions[..triggered_count],
         }
     }
-
-    pub fn max_particles(&self) -> usize {
-        self.config.max_rockets
-            * max(
-                self.config.particles_per_explosion,
-                self.config.particles_per_trail,
-            )
-    }
 }
 
 // ==================================
 // Trait PhysicEngine
 // ==================================
-impl PhysicEngine for PhysicEngineFireworks {
-    fn active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        let mut out = Vec::new();
-
-        for &idx in &self.active_indices {
-            if let Some(r) = self.rockets.get(idx) {
-                // On collecte toutes les particules actives (trails + explosions)
-                out.extend(r.active_particles(&self.particles_pools_for_rockets));
-            }
-        }
-
-        Box::new(out.into_iter())
-    }
-
-    fn active_rockets<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Rocket> + 'a> {
+impl PhysicEngineIterator for PhysicEngineFireworks {
+    /// Itère sur toutes les particules de **toutes** les fusées actives.
+    ///
+    /// ✔ Aucun `Vec` interne  
+    /// ✔ Aucun `Box<dyn Iterator>`  
+    /// ✔ Zéro allocation  
+    /// ✔ Pipeline d’itérateurs entièrement optimisable par le compilateur  
+    ///
+    /// Cette approche est idéale pour un rendu GPU basé sur un buffer mappé persistant :
+    /// on produit un flux de particules triées, en lecture séquentielle, permettant
+    /// une écriture contiguë dans le VBO d'instanciation (meilleur throughput).
+    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
         Box::new(
             self.active_indices
                 .iter()
-                .filter_map(|&idx| self.rockets.get(idx)),
+                // Pour chaque rocket active, on concatène son itérateur de heads
+                // à l’aide d’un `flat_map`. Le résultat final est un seul pipeline
+                // d’itérateurs, entièrement paresseux et zéro-allocation.
+                .flat_map(move |&idx| {
+                    self.rockets[idx].iter_active_particles(&self.particles_pools_for_rockets)
+                }),
         )
     }
 
+    /// Itère sur les particules-têtes (non explosées) référencées statiquement
+    /// pour chaque fusée active.
+    ///
+    /// ✔ Zero allocation
+    /// ✔ Transmet une Particle (référencée) par rocket active
+    /// ✔ Pas d'accès aux pools
+    /// ✔ Parfaitement optimisable
+    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        // TODO: peut être mettre en place une liste d'indices de rockets non-explosées
+        Box::new(
+            self.active_indices
+                .iter()
+                // 1) filtrage des fusées non-explosées
+                .filter(move |&&idx| !self.rockets[idx].exploded)
+                .map(move |&idx| self.rockets[idx].head_particle()),
+        )
+    }
+
+    /// Retourne un itérateur sur les particules actives d'un type spécifique.
+    ///
+    /// ✔ Zero allocation
+    /// ✔ Filtrage paresseux (lazy)
+    /// ✔ Parfaitement optimisable
+    ///
+    /// Note: Pour les particules de type Rocket, cette méthode combine les particules
+    /// de tête (head_particle) avec les particules des pools qui correspondent au type.
+    fn iter_particles_by_type<'a>(
+        &'a self,
+        particle_type: ParticleType,
+    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
+        // Pour les particules de type Rocket, on doit inclure les têtes de fusée
+        // qui ne sont pas dans les pools mais dans la structure Rocket elle-même
+        if particle_type == ParticleType::Rocket {
+            Box::new(self.iter_active_heads_not_exploded())
+        } else {
+            // Pour les autres types, on filtre les particules des pools
+            Box::new(
+                self.iter_active_particles()
+                    .filter(move |p| p.particle_type == particle_type),
+            )
+        }
+    }
+}
+
+impl PhysicEngine for PhysicEngineFireworks {
     fn set_window_width(&mut self, width: f32) {
         self.window_width = width;
         self.update_spawn_rocket_margin();
@@ -249,7 +287,13 @@ impl PhysicEngine for PhysicEngineFireworks {
     fn reload_config(&mut self, config: &PhysicConfig) -> bool {
         self.reload_config(config)
     }
+
+    fn get_config(&self) -> &PhysicConfig {
+        &self.config
+    }
 }
+
+impl PhysicEngineFull for PhysicEngineFireworks {}
 
 // ==================================
 // Helpers pour tests

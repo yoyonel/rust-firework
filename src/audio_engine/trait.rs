@@ -7,4 +7,7 @@ pub trait AudioEngine {
     // Getter/Setter
     fn set_listener_position(&mut self, pos: (f32, f32));
     fn get_listener_position(&self) -> (f32, f32);
+
+    fn mute(&mut self);
+    fn unmute(&mut self) -> f32;
 }

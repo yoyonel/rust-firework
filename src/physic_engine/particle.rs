@@ -1,4 +1,4 @@
-use crate::renderer_engine::ParticleGPU;
+use crate::physic_engine::ParticleType;
 use glam::{Vec2, Vec4 as Color};
 
 #[repr(C, align(16))]
@@ -14,25 +14,11 @@ pub struct Particle {
     // TODO: Make private
     pub vel: Vec2,
     pub active: bool,
+    pub angle: f32,
+    pub particle_type: ParticleType,
 }
 
 use bytemuck::{Pod, Zeroable};
 
 unsafe impl Pod for Particle {}
 unsafe impl Zeroable for Particle {}
-
-impl Particle {
-    #[inline(always)]
-    pub fn to_particle_gpu(&self) -> ParticleGPU {
-        ParticleGPU {
-            pos_x: self.pos.x,
-            pos_y: self.pos.y,
-            col_r: self.color.x,
-            col_g: self.color.y,
-            col_b: self.color.z,
-            life: self.life,
-            max_life: self.max_life,
-            size: self.size,
-        }
-    }
-}
