@@ -32,6 +32,28 @@ impl ParticlesPoolsForRockets {
     }
 }
 
+pub enum PoolKind {
+    Trails,
+    Explosions,
+}
+
+impl ParticlesPoolsForRockets {
+    #[inline(always)]
+    pub fn access(&self, kind: PoolKind, range: &Range<usize>) -> &[Particle] {
+        match kind {
+            PoolKind::Trails => self.particles_pool_for_trails.get_particles(range),
+            PoolKind::Explosions => self.particles_pool_for_explosions.get_particles(range),
+        }
+    }
+    #[inline(always)]
+    pub fn access_mut(&mut self, kind: PoolKind, range: &Range<usize>) -> &mut [Particle] {
+        match kind {
+            PoolKind::Trails => self.particles_pool_for_trails.get_particles_mut(range),
+            PoolKind::Explosions => self.particles_pool_for_explosions.get_particles_mut(range),
+        }
+    }
+}
+
 /// Gère toutes les particules globales du moteur (explosions et trails).
 ///
 /// # Rôle
@@ -102,7 +124,7 @@ impl ParticlesPool {
     ///
     /// Le bloc est remis en pile pour réutilisation ultérieure.
     /// Complexité : **O(1)**.
-    pub fn free_block(&self, range: Range<usize>) {
+    fn free_block(&self, range: Range<usize>) {
         let mut free_blocks = self.free_blocks.lock().unwrap();
         free_blocks.push_back(range.start);
         #[cfg(debug_assertions)]
@@ -111,7 +133,7 @@ impl ParticlesPool {
 
     /// Accès immuable à un bloc de particules.
     #[inline]
-    pub fn get_particles(&self, range: &Range<usize>) -> &[Particle] {
+    fn get_particles(&self, range: &Range<usize>) -> &[Particle] {
         &self.particles[range.start..range.end]
     }
 
@@ -119,11 +141,5 @@ impl ParticlesPool {
     #[inline(always)]
     pub fn get_particles_mut(&mut self, range: &Range<usize>) -> &mut [Particle] {
         &mut self.particles[range.start..range.end]
-    }
-
-    /// Accès à toutes les particules pour le rendu GPU.
-    #[inline]
-    pub fn all_particles(&self) -> &[Particle] {
-        &self.particles
     }
 }

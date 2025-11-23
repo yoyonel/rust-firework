@@ -1,6 +1,9 @@
 // use gl::types::*;
+use gl::types::*;
 use log::{debug, info, warn};
 use std::collections::HashSet;
+use std::ffi::CStr;
+use std::os::raw::c_void;
 use std::sync::Mutex;
 use std::{ffi::CString, ptr};
 
@@ -9,126 +12,62 @@ lazy_static::lazy_static! {
     static ref MESSAGE_COUNT: Mutex<std::collections::HashMap<u32, u32>> = Mutex::new(std::collections::HashMap::new());
 }
 
-/// Affiche les informations OpenGL / GPU du contexte actuel
-pub fn print_context_info() {
-    unsafe {
-        use std::ffi::CStr;
-
-        // Vendor / Renderer / Version / GLSL
-        let vendor = CStr::from_ptr(gl::GetString(gl::VENDOR) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-        let renderer = CStr::from_ptr(gl::GetString(gl::RENDERER) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-        let version = CStr::from_ptr(gl::GetString(gl::VERSION) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-        let glsl_version = CStr::from_ptr(gl::GetString(gl::SHADING_LANGUAGE_VERSION) as *const i8)
-            .to_str()
-            .unwrap_or("Unknown");
-
-        info!("🖥 OpenGL context info:");
-        info!("  Vendor   : {}", vendor);
-        info!("  Renderer : {}", renderer);
-        info!("  OpenGL   : {}", version);
-        info!("  GLSL     : {}", glsl_version);
-
-        // Nombre d'extensions
-        let mut num_ext = 0;
-        gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_ext);
-        info!("  Extensions: {} extensions detected", num_ext);
-
-        // Récupère toutes les extensions OpenGL et les affiche en une seule ligne
-        let mut extensions = Vec::new();
-        for i in 0..num_ext {
-            let ext = CStr::from_ptr(gl::GetStringi(gl::EXTENSIONS, i as u32) as *const i8)
-                .to_str()
-                .unwrap_or("Unknown");
-            extensions.push(ext);
-        }
-
-        debug!("GL_EXTENSIONS = {}", extensions.join(" "));
-
-        // Info système (Rust version, OS)
-        info!(
-            "Rust compiler version: {}",
-            rustc_version_runtime::version()
-        );
-        info!("  Platform    : {}", std::env::consts::OS);
-        info!("  Arch        : {}", std::env::consts::ARCH);
-
-        // Consommer le glerror si nécessaire
-        let err = gl::GetError();
-        if err != gl::NO_ERROR {
-            warn!("glerror consumed after getting context info: 0x{:X}", err);
-        }
-
-        let gl_version = std::env::var("GL").unwrap_or_else(|_| "Unknown".into());
-        let glfw_version = std::env::var("GLFW").unwrap_or_else(|_| "Unknown".into());
-        let cpal_version = std::env::var("CPAL").unwrap_or_else(|_| "Unknown".into());
-
-        info!("Rust dependancies");
-        info!("  GL   version: {}", gl_version);
-        info!("  GLFW version: {}", glfw_version);
-        info!("  CPAL version: {}", cpal_version);
-    }
+#[macro_export]
+macro_rules! cstr {
+    ($s:expr) => {
+        concat!($s, "\0").as_ptr() as *const i8
+    };
 }
 
-// /// # Safety
-// /// This function is unsafe because it interacts with raw OpenGL pointers and requires
-// /// the caller to ensure that the provided shader source strings are valid for the duration
-// /// of the shader compilation process.
-// pub unsafe fn compile_shader_program(vertex_src: &str, fragment_src: &str) -> u32 {
-//     fn compile_shader(src: &str, ty: GLenum) -> u32 {
-//         let shader = unsafe { gl::CreateShader(ty) };
-//         let c_str = CString::new(src).unwrap();
-//         unsafe {
-//             gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
-//             gl::CompileShader(shader);
+/// Affiche les informations OpenGL / GPU du contexte actuel
+/// # Safety
+///
+/// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
+pub unsafe fn show_opengl_context_info() {
+    use std::ffi::CStr;
 
-//             let mut success = gl::FALSE as GLint;
-//             gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
-//             if success != gl::TRUE as GLint {
-//                 let mut len = 0;
-//                 gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
-//                 let mut buf = Vec::with_capacity(len as usize);
-//                 gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
-//                 buf.set_len(len as usize);
-//                 panic!(
-//                     "Shader compilation failed: {}",
-//                     String::from_utf8_lossy(&buf)
-//                 );
-//             }
-//         }
-//         shader
-//     }
+    // Vendor / Renderer / Version / GLSL
+    let vendor = CStr::from_ptr(gl::GetString(gl::VENDOR) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
+    let renderer = CStr::from_ptr(gl::GetString(gl::RENDERER) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
+    let version = CStr::from_ptr(gl::GetString(gl::VERSION) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
+    let glsl_version = CStr::from_ptr(gl::GetString(gl::SHADING_LANGUAGE_VERSION) as *const i8)
+        .to_str()
+        .unwrap_or("Unknown");
 
-//     let vs = compile_shader(vertex_src, gl::VERTEX_SHADER);
-//     let fs = compile_shader(fragment_src, gl::FRAGMENT_SHADER);
+    info!("🖥 OpenGL context info:");
+    info!("  Vendor   : {}", vendor);
+    info!("  Renderer : {}", renderer);
+    info!("  OpenGL   : {}", version);
+    info!("  GLSL     : {}", glsl_version);
 
-//     let program = unsafe { gl::CreateProgram() };
-//     unsafe {
-//         gl::AttachShader(program, vs);
-//         gl::AttachShader(program, fs);
-//         gl::LinkProgram(program);
+    // Nombre d'extensions
+    let mut num_ext = 0;
+    gl::GetIntegerv(gl::NUM_EXTENSIONS, &mut num_ext);
+    info!("  Extensions: {} extensions detected", num_ext);
 
-//         let mut success = gl::FALSE as GLint;
-//         gl::GetProgramiv(program, gl::LINK_STATUS, &mut success);
-//         if success != gl::TRUE as GLint {
-//             let mut len = 0;
-//             gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
-//             let mut buf = Vec::with_capacity(len as usize);
-//             gl::GetProgramInfoLog(program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
-//             buf.set_len(len as usize);
-//             panic!("Shader link failed: {}", String::from_utf8_lossy(&buf));
-//         }
+    // Récupère toutes les extensions OpenGL et les affiche en une seule ligne
+    let mut extensions = Vec::new();
+    for i in 0..num_ext {
+        let ext = CStr::from_ptr(gl::GetStringi(gl::EXTENSIONS, i as u32) as *const i8)
+            .to_str()
+            .unwrap_or("Unknown");
+        extensions.push(ext);
+    }
 
-//         gl::DeleteShader(vs);
-//         gl::DeleteShader(fs);
-//     }
-//     program
-// }
+    debug!("GL_EXTENSIONS = {}", extensions.join(" "));
+
+    // Consommer le glerror si nécessaire
+    let err = gl::GetError();
+    if err != gl::NO_ERROR {
+        warn!("glerror consumed after getting context info: 0x{:X}", err);
+    }
+}
 
 /// # Safety
 /// Interagit directement avec des pointeurs OpenGL.
@@ -203,6 +142,12 @@ fn parse_glsl_error_line(log: &str) -> Option<(usize, usize)> {
 /// Affiche un extrait du code GLSL autour de la ligne fautive
 fn show_glsl_error_context(src: &str, line_number: usize) {
     let lines: Vec<&str> = src.lines().collect();
+
+    // Handle empty source or line number beyond source length
+    if lines.is_empty() || line_number == 0 {
+        return;
+    }
+
     let context_range = 2; // nb de lignes avant/après à afficher
 
     eprintln!("🔍 Error context (line {}):", line_number);
@@ -210,8 +155,12 @@ fn show_glsl_error_context(src: &str, line_number: usize) {
     let start = line_number.saturating_sub(1 + context_range);
     let end = (line_number + context_range).min(lines.len());
 
-    for (i, line) in lines[start..end].iter().enumerate() {
-        let current = start + i + 1;
+    // Ensure we don't try to slice beyond the array bounds
+    let safe_start = start.min(lines.len());
+    let safe_end = end.min(lines.len());
+
+    for (i, line) in lines[safe_start..safe_end].iter().enumerate() {
+        let current = safe_start + i + 1;
         if current == line_number {
             eprintln!("> {:>3} | {}", current, line);
             eprintln!("        {}", "^".repeat(line.len().min(80)));
@@ -220,10 +169,6 @@ fn show_glsl_error_context(src: &str, line_number: usize) {
         }
     }
 }
-
-use gl::types::*;
-use std::ffi::CStr;
-use std::os::raw::c_void;
 
 /// Callback OpenGL debug, safe pour Rust
 extern "system" fn gl_debug_callback(
@@ -319,6 +264,7 @@ pub unsafe fn setup_opengl_debug() {
     );
 }
 
+/// Formats a byte size into a human-readable string with appropriate units (bytes, KB, MB, GB).
 pub fn format_bytes(size: isize) -> String {
     const KB: f64 = 1024.0;
     const MB: f64 = KB * 1024.0;
@@ -334,5 +280,207 @@ pub fn format_bytes(size: isize) -> String {
         format!("{:.3} KB", size_f64 / KB)
     } else {
         format!("{} bytes", size)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::CStr;
+
+    #[test]
+    fn test_format_bytes() {
+        assert_eq!(format_bytes(500), "500 bytes");
+        assert_eq!(format_bytes(1024), "1.000 KB");
+        assert_eq!(format_bytes(1536), "1.500 KB");
+        assert_eq!(format_bytes(1024 * 1024), "1.000 MB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024), "1.000 GB");
+    }
+
+    #[test]
+    fn test_format_bytes_edge_cases() {
+        // Zero bytes
+        assert_eq!(format_bytes(0), "0 bytes");
+
+        // Negative values (edge case)
+        assert_eq!(format_bytes(-100), "-100 bytes");
+
+        // Boundary values
+        assert_eq!(format_bytes(1023), "1023 bytes");
+        assert_eq!(format_bytes(1024 * 1024 - 1), "1023.999 KB");
+        assert_eq!(format_bytes(1024 * 1024 * 1024 - 1), "1024.000 MB");
+
+        // Very large values
+        let large_value = 5 * 1024 * 1024 * 1024; // 5 GB
+        assert_eq!(format_bytes(large_value), "5.000 GB");
+
+        // Fractional KB
+        assert_eq!(format_bytes(2048), "2.000 KB");
+        assert_eq!(format_bytes(2560), "2.500 KB");
+    }
+
+    #[test]
+    fn test_parse_glsl_error_line() {
+        // Test standard format: "0:12(105): error: ..."
+        // The regex is r"(\d+):(\d+)\((\d+)\)"
+        // It captures group 2 as line, group 3 as col?
+        // Let's check the regex in the code:
+        // let re = regex::Regex::new(r"(\d+):(\d+)\((\d+)\)").ok()?;
+        // cap.get(2) -> line
+        // cap.get(3) -> col
+        // So "0:12(105)" -> line 12, col 105.
+
+        let log = "0:12(105): error: undefined variable";
+        assert_eq!(parse_glsl_error_line(log), Some((12, 105)));
+
+        let log_no_match = "Error: some error without line info";
+        assert_eq!(parse_glsl_error_line(log_no_match), None);
+    }
+
+    #[test]
+    fn test_parse_glsl_error_line_edge_cases() {
+        // Different line and column numbers
+        assert_eq!(parse_glsl_error_line("0:1(1): error"), Some((1, 1)));
+        assert_eq!(
+            parse_glsl_error_line("0:999(9999): error"),
+            Some((999, 9999))
+        );
+
+        // Multiple matches - should get the first one
+        assert_eq!(
+            parse_glsl_error_line("0:5(10): error and 0:6(20): another"),
+            Some((5, 10))
+        );
+
+        // Malformed patterns
+        assert_eq!(parse_glsl_error_line("0:12: error"), None); // Missing column
+        assert_eq!(parse_glsl_error_line("12(105): error"), None); // Missing first number
+        assert_eq!(parse_glsl_error_line("abc:12(105): error"), None); // Non-numeric
+
+        // Empty string
+        assert_eq!(parse_glsl_error_line(""), None);
+
+        // Error message with context
+        let complex_log = "ERROR: 0:42(256): 'undefined_var' : undeclared identifier";
+        assert_eq!(parse_glsl_error_line(complex_log), Some((42, 256)));
+    }
+
+    #[test]
+    fn test_show_glsl_error_context() {
+        let src = r#"void main() {
+            gl_Position = vec4(0.0);
+            // error here
+        }"#;
+        // Just ensure it doesn't panic
+        show_glsl_error_context(src, 2);
+    }
+
+    #[test]
+    fn test_show_glsl_error_context_edge_cases() {
+        // Empty source
+        show_glsl_error_context("", 1);
+
+        // Single line source
+        show_glsl_error_context("void main() {}", 1);
+
+        // Error at first line
+        let src = "line1\nline2\nline3\nline4\nline5";
+        show_glsl_error_context(src, 1);
+
+        // Error at last line
+        show_glsl_error_context(src, 5);
+
+        // Error beyond source length (should not panic)
+        show_glsl_error_context(src, 100);
+
+        // Very long line (should truncate in display)
+        let long_line = "a".repeat(200);
+        show_glsl_error_context(&long_line, 1);
+
+        // Multi-line with error in middle
+        let multi = "line1\nline2\nline3\nline4\nline5\nline6\nline7";
+        show_glsl_error_context(multi, 4);
+    }
+
+    #[test]
+    fn test_cstr_macro() {
+        let ptr = cstr!("hello");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "hello");
+        }
+    }
+
+    #[test]
+    fn test_cstr_macro_edge_cases() {
+        // Empty string
+        let ptr = cstr!("");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "");
+        }
+
+        // String with spaces
+        let ptr = cstr!("hello world");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "hello world");
+        }
+
+        // String with special characters
+        let ptr = cstr!("test_123");
+        unsafe {
+            let c_str = CStr::from_ptr(ptr);
+            assert_eq!(c_str.to_str().unwrap(), "test_123");
+        }
+    }
+
+    #[test]
+    fn test_gl_debug_callback_deduplication() {
+        use std::ffi::CString;
+
+        // Use a unique ID for this test to avoid collision
+        let id = 0x12345678;
+        let msg = CString::new("Test debug message").unwrap();
+
+        // First call
+        gl_debug_callback(
+            gl::DEBUG_SOURCE_APPLICATION,
+            gl::DEBUG_TYPE_ERROR,
+            id,
+            gl::DEBUG_SEVERITY_HIGH,
+            0,
+            msg.as_ptr(),
+            std::ptr::null_mut(),
+        );
+
+        // Check if it's in LOGGED_IDS
+        {
+            let logged = LOGGED_IDS.lock().unwrap();
+            assert!(logged.contains(&id));
+        }
+
+        // Check MESSAGE_COUNT
+        {
+            let counts = MESSAGE_COUNT.lock().unwrap();
+            assert_eq!(counts.get(&id), Some(&1));
+        }
+
+        // Second call - should return early due to deduplication
+        gl_debug_callback(
+            gl::DEBUG_SOURCE_APPLICATION,
+            gl::DEBUG_TYPE_ERROR,
+            id,
+            gl::DEBUG_SEVERITY_HIGH,
+            0,
+            msg.as_ptr(),
+            std::ptr::null_mut(),
+        );
+
+        // Check MESSAGE_COUNT again - should still be 1
+        {
+            let counts = MESSAGE_COUNT.lock().unwrap();
+            assert_eq!(counts.get(&id), Some(&1));
+        }
     }
 }
