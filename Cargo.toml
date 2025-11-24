@@ -47,6 +47,7 @@ fft = []
 no_simd = []                       # Force le mode scalaire
 simd = []                          # Active le code SIMD
 test_helpers = []
+interactive_tests = []
 
 [build-dependencies]
 cargo_metadata = "0.23.1"

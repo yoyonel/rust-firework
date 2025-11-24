@@ -1,3 +1,6 @@
+use fireworks_sim::audio_engine::FireworksAudio3D;
+use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
+use fireworks_sim::renderer_engine::Renderer;
 use fireworks_sim::Simulator;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -30,7 +33,15 @@ fn run_failure_test(failure: EngineFailure) {
         audio.fail_on_start = true;
     }
 
-    let mut sim = Simulator::new(renderer, physic, audio);
+    let mut sim = {
+        let (glfw, window, events, imgui) = Simulator::<
+            Renderer,
+            PhysicEngineFireworks,
+            FireworksAudio3D,
+        >::init_window(800, 600, "Test Simulator")
+        .unwrap();
+        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+    };
 
     // --- Exécution & vérification ---
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| sim.run(None)));

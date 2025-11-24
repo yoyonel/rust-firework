@@ -5,7 +5,7 @@ use fireworks_sim::physic_engine::types::UpdateResult;
 use fireworks_sim::physic_engine::{
     ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
-use fireworks_sim::renderer_engine::command_console::CommandRegistry;
+
 use fireworks_sim::renderer_engine::RendererEngine;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -91,15 +91,11 @@ impl PhysicEngineFull for DummyPhysic {}
 pub struct DummyRenderer;
 #[allow(dead_code)]
 impl RendererEngine for DummyRenderer {
-    fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
-        &mut self,
-        _physic: &mut P,
-        _audio: &mut A,
-        _registry: &CommandRegistry,
-    ) -> anyhow::Result<()> {
-        Ok(())
+    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P) -> usize {
+        0
     }
-
+    fn set_window_size(&mut self, _width: i32, _height: i32) {}
+    fn recreate_buffers(&mut self, _max_particles: usize) {}
     fn close(&mut self) {
         println!("Closing renderer...");
     }
@@ -233,25 +229,23 @@ impl TestRenderer {
 }
 
 impl RendererEngine for TestRenderer {
-    fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
-        &mut self,
-        physic: &mut P,
-        audio: &mut A,
-        _registry: &CommandRegistry,
-    ) -> anyhow::Result<()> {
-        self.log.borrow_mut().push("renderer.run_loop.start".into());
+    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P) -> usize {
+        self.log.borrow_mut().push("renderer.render_frame".into());
         if self.fail_on_run_loop {
-            return Err(anyhow::anyhow!("RendererEngine simulated failure"));
+            panic!("RendererEngine simulated failure");
         }
-
-        // Simule une frame
-        physic.update(0.016);
-        audio.play_rocket((0.0, 0.0), 1.0);
-
-        self.log.borrow_mut().push("renderer.run_loop.end".into());
-        Ok(())
+        0
     }
-
+    fn set_window_size(&mut self, _width: i32, _height: i32) {
+        self.log
+            .borrow_mut()
+            .push("renderer.set_window_size".into());
+    }
+    fn recreate_buffers(&mut self, _max_particles: usize) {
+        self.log
+            .borrow_mut()
+            .push("renderer.recreate_buffers".into());
+    }
     fn close(&mut self) {
         self.log.borrow_mut().push("renderer.close".into());
     }
