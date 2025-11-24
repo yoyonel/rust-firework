@@ -21,13 +21,23 @@ fn test_renderer_error_triggers_proper_cleanup() {
     let audio = TestAudio::new(log.clone());
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let (glfw, window, events, imgui, cursor_data) =
+            Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
+                800,
+                600,
+                "Test Simulator",
+            )
+            .unwrap();
+        Simulator::new(
+            renderer,
+            physic,
+            audio,
+            glfw,
+            window,
+            events,
+            imgui,
+            cursor_data,
+        )
     };
 
     // --- Simulation d'une exécution échouée ---

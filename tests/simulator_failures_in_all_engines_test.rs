@@ -34,13 +34,24 @@ fn run_failure_test(failure: EngineFailure) {
     }
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let (glfw, window, events, imgui, cursor_data) =
+            Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
+                800,
+                600,
+                "Test Renderer",
+            )
+            .expect("Failed to init window");
+
+        Simulator::new(
+            renderer,
+            physic,
+            audio,
+            glfw,
+            window,
+            events,
+            imgui,
+            cursor_data,
+        )
     };
 
     // --- Exécution & vérification ---

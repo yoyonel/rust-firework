@@ -19,12 +19,13 @@ fn test_renderer_render_frame() {
     // DummyRenderer satisfies RendererEngine.
     // DummyPhysic satisfies PhysicEngineFull.
     // DummyAudio satisfies AudioEngine.
-    let (_glfw, _window, _events, _imgui) = Simulator::<
-        fireworks_sim::renderer_engine::Renderer,
-        PhysicEngineFireworks,
-        FireworksAudio3D,
-    >::init_window(800, 600, "Test Renderer")
-    .expect("Failed to init window");
+    let (_glfw, _window, _events, _imgui, _cursor_data) =
+        Simulator::<
+            fireworks_sim::renderer_engine::Renderer,
+            PhysicEngineFireworks,
+            FireworksAudio3D,
+        >::init_window(800, 600, "Test Renderer")
+        .expect("Failed to init window");
 
     // 2. Create Renderer
     let mut renderer =

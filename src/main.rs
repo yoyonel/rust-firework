@@ -64,7 +64,7 @@ fn main() -> Result<()> {
     let window_height = 800;
 
     // 1. Init Window & Context (via Simulator static helper)
-    let (glfw, window, events, imgui_system) =
+    let (glfw, window, events, imgui_system, cursor_data) =
         Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
             window_width,
             window_height,
@@ -77,7 +77,7 @@ fn main() -> Result<()> {
     let physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
 
     // 3. Init Simulator
-    info!("🚀 Starting Fireworks Simulator...");
+    info!("🚀 Creating Simulator...");
     let mut simulator = Simulator::new(
         renderer_engine,
         physic_engine,
@@ -86,6 +86,7 @@ fn main() -> Result<()> {
         window,
         events,
         imgui_system,
+        cursor_data,
     );
 
     simulator.init_console_commands();

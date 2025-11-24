@@ -15,13 +15,22 @@ fn test_simulator_with_dummy_engines() -> anyhow::Result<()> {
     let audio = DummyAudio;
     let physic = DummyPhysic::default();
 
-    let (glfw, window, events, imgui) = Simulator::<
+    let (glfw, window, events, imgui, cursor_data) = Simulator::<
         Renderer,
         PhysicEngineFireworks,
         FireworksAudio3D,
     >::init_window(800, 600, "Test Simulator")?;
 
-    let mut simulator = Simulator::new(renderer, physic, audio, glfw, window, events, imgui);
+    let mut simulator = Simulator::new(
+        renderer,
+        physic,
+        audio,
+        glfw,
+        window,
+        events,
+        imgui,
+        cursor_data,
+    );
     simulator.step(); // Run one frame
     simulator.close();
     println!("Simulator closed.");
@@ -37,13 +46,23 @@ fn test_renderer_called_by_simulator() {
     let physic = DummyPhysic::default();
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let (glfw, window, events, imgui, cursor_data) =
+            Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
+                800,
+                600,
+                "Test Simulator",
+            )
+            .unwrap();
+        Simulator::new(
+            renderer,
+            physic,
+            audio,
+            glfw,
+            window,
+            events,
+            imgui,
+            cursor_data,
+        )
     };
     sim.step();
     sim.close();
@@ -62,13 +81,23 @@ fn test_audio_called_by_renderer() {
     let physic = DummyPhysic::default();
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let (glfw, window, events, imgui, cursor_data) =
+            Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
+                800,
+                600,
+                "Test Simulator",
+            )
+            .unwrap();
+        Simulator::new(
+            renderer,
+            physic,
+            audio,
+            glfw,
+            window,
+            events,
+            imgui,
+            cursor_data,
+        )
     };
     sim.run(None).unwrap();
     sim.close();
@@ -90,13 +119,23 @@ fn test_physic_called_by_renderer() {
     let physic = TestPhysic::new(log.clone());
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let (glfw, window, events, imgui, cursor_data) =
+            Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
+                800,
+                600,
+                "Test Simulator",
+            )
+            .unwrap();
+        Simulator::new(
+            renderer,
+            physic,
+            audio,
+            glfw,
+            window,
+            events,
+            imgui,
+            cursor_data,
+        )
     };
     sim.run(None).unwrap();
     sim.close();
@@ -118,13 +157,23 @@ fn test_call_order_in_simulator_run_and_close() -> anyhow::Result<()> {
     let audio = TestAudio::new(log.clone());
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let (glfw, window, events, imgui, cursor_data) =
+            Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
+                800,
+                600,
+                "Test Simulator",
+            )
+            .unwrap();
+        Simulator::new(
+            renderer,
+            physic,
+            audio,
+            glfw,
+            window,
+            events,
+            imgui,
+            cursor_data,
+        )
     };
 
     // --- Exécution du simulateur ---

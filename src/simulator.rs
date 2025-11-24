@@ -41,6 +41,7 @@ where
     pub events: Option<WindowEvents>,
     pub imgui_system: Option<ImguiSystem>,
     pub console: Console,
+    cursor_data: Option<(Vec<u32>, u32, u32)>, // (pixels, width, height)
 
     // Flags for console commands
     reload_shaders_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -74,7 +75,13 @@ where
         width: i32,
         height: i32,
         title: &str,
-    ) -> Result<(glfw::Glfw, glfw::PWindow, WindowEvents, ImguiSystem)> {
+    ) -> Result<(
+        glfw::Glfw,
+        glfw::PWindow,
+        WindowEvents,
+        ImguiSystem,
+        (Vec<u32>, u32, u32),
+    )> {
         let _ = env_logger::builder().is_test(true).try_init();
 
         let mut glfw = glfw::init(glfw::fail_on_errors)
@@ -116,6 +123,46 @@ where
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
+        // Load and create custom cursor
+        let cursor_path = "assets/textures/rocket_cursor_32.png";
+        let cursor_img =
+            image::open(cursor_path).map_err(|e| anyhow!("Failed to load cursor image: {}", e))?;
+        let cursor_rgba = cursor_img.to_rgba8();
+        let (cursor_width, cursor_height) = cursor_rgba.dimensions();
+
+        // Convert RGBA8 (u8 per channel) to u32 pixels for GLFW
+        // GLFW documentation says "32-bit, little-endian, non-premultiplied RGBA"
+        // On little-endian systems, this means bytes in memory: R G B A
+        // When packed into u32: (A << 24) | (B << 16) | (G << 8) | R = ABGR in u32
+        let pixels: Vec<u32> = cursor_rgba
+            .chunks_exact(4)
+            .map(|rgba| {
+                let r = rgba[0] as u32;
+                let g = rgba[1] as u32;
+                let b = rgba[2] as u32;
+                let a = rgba[3] as u32;
+                // Pack as ABGR for little-endian RGBA
+                (a << 24) | (b << 16) | (g << 8) | r
+            })
+            .collect();
+
+        let pixel_image = glfw::PixelImage {
+            width: cursor_width,
+            height: cursor_height,
+            pixels: pixels.clone(),
+        };
+
+        // Set hotspot to center-bottom of the cursor (where the rocket tip would be)
+        let cursor_for_window = glfw::Cursor::create_from_pixels(
+            pixel_image,
+            cursor_width / 2,
+            (cursor_height * 7) / 8,
+        );
+
+        window.set_cursor(Some(cursor_for_window));
+
+        info!("✅ Custom rocket cursor loaded");
+
         let mut imgui = ImContext::create();
         let font_data =
             std::fs::read("assets/fonts/PerfectDOSVGA437.ttf").expect("Failed to read font file");
@@ -143,6 +190,7 @@ where
                 context: imgui,
                 glfw: imgui_glfw,
             },
+            (pixels, cursor_width, cursor_height),
         ))
     }
 
@@ -154,6 +202,7 @@ where
         window: glfw::PWindow,
         events: WindowEvents,
         imgui_system: ImguiSystem,
+        cursor_data: (Vec<u32>, u32, u32),
     ) -> Self {
         let window_size = window.get_size();
         let window_pos = window.get_pos();
@@ -168,6 +217,7 @@ where
             events: Some(events),
             imgui_system: Some(imgui_system),
             console: Console::new(),
+            cursor_data: Some(cursor_data),
             reload_shaders_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
@@ -286,12 +336,7 @@ where
                         }
                         glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, _) => {
                             self.console.open = !self.console.open;
-                            window.set_cursor_mode(if self.console.open {
-                                self.console.focus_previous_widget = true;
-                                glfw::CursorMode::Normal
-                            } else {
-                                glfw::CursorMode::Disabled
-                            });
+                            self.console.focus_previous_widget = self.console.open;
                         }
                         _ => {}
                     }
@@ -408,6 +453,24 @@ where
                         &self.commands_registry,
                     );
                     system.glfw.draw(&mut system.context, window);
+
+                    // Reapply custom cursor after ImGui rendering
+                    // ImGui may have changed the cursor, so we restore it
+                    if let Some((pixels, width, height)) = &self.cursor_data {
+                        let pixel_image = glfw::PixelImage {
+                            width: *width,
+                            height: *height,
+                            pixels: pixels.clone(),
+                        };
+
+                        let cursor = glfw::Cursor::create_from_pixels(
+                            pixel_image,
+                            width / 2,
+                            (height * 7) / 8,
+                        );
+
+                        window.set_cursor(Some(cursor));
+                    }
                 }
             }
 
