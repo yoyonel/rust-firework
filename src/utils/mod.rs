@@ -6,3 +6,6 @@ pub use self::tools::show_rust_core_dependencies;
 
 pub mod command_console;
 pub use self::command_console::Console;
+
+pub mod glfw_window;
+pub use self::glfw_window::{CenterWindow, Fullscreen};
