@@ -548,10 +548,12 @@ impl Console {
 
 type AudioCommandFn = dyn Fn(&mut dyn AudioEngine, &str) -> String + 'static;
 type PhysicCommandFn = dyn Fn(&mut dyn PhysicEngine, &str) -> String + 'static;
+type RendererCommandFn = dyn Fn(&str) -> String + 'static;
 
 pub struct CommandRegistry {
     commands_audio: HashMap<String, Box<AudioCommandFn>>,
     commands_physic: HashMap<String, Box<PhysicCommandFn>>,
+    commands_renderer: HashMap<String, Box<RendererCommandFn>>,
 }
 
 impl Default for CommandRegistry {
@@ -565,6 +567,7 @@ impl CommandRegistry {
         Self {
             commands_audio: HashMap::new(),
             commands_physic: HashMap::new(),
+            commands_renderer: HashMap::new(),
         }
     }
 
@@ -580,6 +583,14 @@ impl CommandRegistry {
         F: Fn(&mut dyn PhysicEngine, &str) -> String + 'static,
     {
         self.commands_physic
+            .insert(name.to_string(), Box::new(func));
+    }
+
+    pub fn register_for_renderer<F>(&mut self, name: &str, func: F)
+    where
+        F: Fn(&str) -> String + 'static,
+    {
+        self.commands_renderer
             .insert(name.to_string(), Box::new(func));
     }
 
@@ -620,6 +631,11 @@ impl CommandRegistry {
                     return func(physic_engine, input);
                 }
             }
+            "renderer" => {
+                if let Some(func) = self.commands_renderer.get(cmd_key) {
+                    return func(input);
+                }
+            }
             _ => return format!("Unknown engine prefix '{}'.", prefix),
         }
 
@@ -635,6 +651,7 @@ impl CommandRegistry {
         self.commands_audio
             .keys()
             .chain(self.commands_physic.keys())
+            .chain(self.commands_renderer.keys())
             .cloned()
             .collect()
     }

@@ -11,6 +11,9 @@ macro_rules! cstr {
     };
 }
 
+const VERTEX_SHADER_PATH: &str = "assets/shaders/point_rendering.vert.glsl";
+const FRAGMENT_SHADER_PATH: &str = "assets/shaders/point_rendering.frag.glsl";
+
 pub struct RendererGraphics {
     pub vao: u32,
     pub vbo_particles: u32,
@@ -26,12 +29,8 @@ pub struct RendererGraphics {
 
 impl RendererGraphics {
     pub fn new(max_particles_on_gpu: usize) -> Self {
-        let shader_program = unsafe {
-            compile_shader_program_from_files(
-                "assets/shaders/point_rendering.vert.glsl",
-                "assets/shaders/point_rendering.frag.glsl",
-            )
-        };
+        let shader_program =
+            unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
 
@@ -239,6 +238,38 @@ impl RendererGraphics {
         }
         debug!("Graphic Engine for Points Rendering closed and reset.");
     }
+
+    /// Recharge les shaders depuis les fichiers et recompile le programme shader.
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        use crate::renderer_engine::shader::try_compile_shader_program_from_files;
+        use log::error;
+
+        match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
+            Ok(new_program) => {
+                // Supprimer l'ancien programme shader
+                if self.shader_program != 0 {
+                    gl::DeleteProgram(self.shader_program);
+                }
+
+                // Utiliser le nouveau programme
+                self.shader_program = new_program;
+
+                // Mettre à jour les uniform locations
+                self.loc_size = gl::GetUniformLocation(self.shader_program, cstr!("uSize"));
+
+                info!("✅ Point rendering shaders reloaded successfully");
+                Ok(())
+            }
+            Err(e) => {
+                error!("❌ Failed to reload point rendering shaders:\n{}", e);
+                Err(e)
+            }
+        }
+    }
 }
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 
@@ -257,6 +288,10 @@ impl ParticleGraphicsRenderer for RendererGraphics {
         window_size: (f32, f32),
     ) {
         self.render_particles_with_persistent_buffer(count, window_size);
+    }
+
+    unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        self.reload_shaders()
     }
 
     unsafe fn close(&mut self) {
