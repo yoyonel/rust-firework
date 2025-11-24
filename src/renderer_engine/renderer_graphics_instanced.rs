@@ -2,9 +2,8 @@ use log::{debug, info};
 
 use crate::cstr;
 use crate::physic_engine::{ParticleType, PhysicEngineIterator};
-use crate::renderer_engine::{
-    tools::compile_shader_program, types::ParticleGPU, utils::texture::load_texture,
-};
+use crate::renderer_engine::shader::compile_shader_program;
+use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture};
 use crate::utils::human_bytes::HumanBytes;
 
 pub struct RendererGraphicsInstanced {

@@ -1,7 +1,8 @@
 use log::{debug, info};
 
 use crate::physic_engine::PhysicEngineIterator;
-use crate::renderer_engine::{tools::compile_shader_program, types::ParticleGPU};
+use crate::renderer_engine::shader::compile_shader_program;
+use crate::renderer_engine::types::ParticleGPU;
 use crate::utils::human_bytes::HumanBytes;
 
 macro_rules! cstr {
