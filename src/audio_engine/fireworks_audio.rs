@@ -45,18 +45,21 @@ pub struct FireworksAudio3D {
 
 impl FireworksAudio3D {
     /// Initialize the engine with WAV paths, sample rate, and max voices
-    pub fn new(config: FireworksAudioConfig) -> Self {
+    ///
+    /// # Errors
+    /// Returns error if audio files cannot be loaded or sample rates cannot be determined
+    pub fn new(config: FireworksAudioConfig) -> anyhow::Result<Self> {
         // Load WAV data
-        let mut rocket_data = load_audio(&config.rocket_path);
-        let mut explosion_data = load_audio(&config.explosion_path);
+        let mut rocket_data = load_audio(&config.rocket_path)?;
+        let mut explosion_data = load_audio(&config.explosion_path)?;
 
         // Resample to target sample rate
         let rocket_sr = WavReader::open(&config.rocket_path)
-            .unwrap()
+            .map_err(|e| anyhow::anyhow!("Failed to read rocket audio spec: {}", e))?
             .spec()
             .sample_rate;
         let explosion_sr = WavReader::open(&config.explosion_path)
-            .unwrap()
+            .map_err(|e| anyhow::anyhow!("Failed to read explosion audio spec: {}", e))?
             .spec()
             .sample_rate;
 
@@ -68,7 +71,7 @@ impl FireworksAudio3D {
 
         let global_gain = config.settings.global_gain();
 
-        Self {
+        Ok(Self {
             rocket_data,
             explosion_data,
             listener_pos: config.listener_pos,
@@ -81,7 +84,7 @@ impl FireworksAudio3D {
             // doppler_receiver: config.doppler_receiver,
             // doppler_states: config.doppler_states,
             global_gain,
-        }
+        })
     }
 
     // =========================
@@ -502,6 +505,7 @@ mod tests {
             // doppler_receiver: Some(doppler_queue.receiver.clone()),
             // doppler_states: Vec::new(),
         })
+        .expect("Failed to build test audio engine")
     }
 
     #[test]

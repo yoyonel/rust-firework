@@ -13,10 +13,14 @@ use hound::WavReader; // WAV file loader
 /// * `path` — chemin du fichier WAV à charger
 ///
 /// # Retour
-/// * `Vec<[f32; 2]>` — échantillons stéréo prêtes à être joués ou traités
-pub fn load_audio(path: &str) -> Vec<[f32; 2]> {
+/// * `Result<Vec<[f32; 2]>>` — échantillons stéréo prêtes à être jouées ou traitées
+///
+/// # Errors
+/// Returns error if the WAV file cannot be opened or read
+pub fn load_audio(path: &str) -> anyhow::Result<Vec<[f32; 2]>> {
     // Ouvre le fichier WAV
-    let mut reader = WavReader::open(path).unwrap();
+    let mut reader = WavReader::open(path)
+        .map_err(|e| anyhow::anyhow!("Failed to open audio file '{}': {}", path, e))?;
 
     // Récupère la description du flux audio (nombre de canaux, format, etc.)
     let spec = reader.spec();
@@ -53,7 +57,7 @@ pub fn load_audio(path: &str) -> Vec<[f32; 2]> {
     }
 
     // Retourne le buffer stéréo complet
-    data
+    Ok(data)
 }
 
 /// Resample audio linearly from src_sr → dst_sr

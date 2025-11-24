@@ -184,8 +184,8 @@ where
         }
     }
 
-    pub fn run(&mut self, export_path: Option<&str>) -> anyhow::Result<()> {
-        self.audio_engine.start_audio_thread(export_path);
+    pub fn run(&mut self, export_path: Option<String>) -> anyhow::Result<()> {
+        self.audio_engine.start_audio_thread(export_path.as_deref());
         self.audio_engine
             .set_listener_position((self.window_size_f32.0 / 2.0, 0.0));
 
@@ -251,19 +251,23 @@ where
                                 let mut glfw = window.glfw.clone();
                                 glfw.with_primary_monitor(|_, monitor| {
                                     if let Some(monitor) = monitor {
-                                        window.set_fullscreen(monitor);
-                                        self.window_size = (
-                                            monitor.get_video_mode().unwrap().width as i32,
-                                            monitor.get_video_mode().unwrap().height as i32,
-                                        );
-                                        self.window_size_f32 = (
-                                            self.window_last_size.0 as f32,
-                                            self.window_last_size.1 as f32,
-                                        );
-                                        info!(
-                                            "🖥️ Fullscreen: {} x {}",
-                                            self.window_size.0, self.window_size.1
-                                        );
+                                        if let Some(video_mode) = monitor.get_video_mode() {
+                                            window.set_fullscreen(monitor);
+                                            self.window_size = (
+                                                video_mode.width as i32,
+                                                video_mode.height as i32,
+                                            );
+                                            self.window_size_f32 = (
+                                                self.window_size.0 as f32,
+                                                self.window_size.1 as f32,
+                                            );
+                                            info!(
+                                                "🖥️ Fullscreen: {} x {}",
+                                                self.window_size.0, self.window_size.1
+                                            );
+                                        } else {
+                                            info!("⚠️ Could not get monitor video mode, staying windowed");
+                                        }
                                     }
                                 });
                             }
