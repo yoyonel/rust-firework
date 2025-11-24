@@ -3,11 +3,9 @@ use crate::physic_engine::{config::PhysicConfig, PhysicEngine, PhysicEngineFull,
 use crate::renderer_engine::RendererEngine;
 use crate::renderer_engine::{
     tools::{setup_opengl_debug, show_opengl_context_info},
-    utils::{
-        adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler},
-        glfw_window::Fullscreen,
-    },
+    utils::adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler},
 };
+use crate::utils::Fullscreen;
 use crate::{log_metrics_and_fps, profiler::Profiler};
 use crate::{CommandRegistry, Console};
 use anyhow::{anyhow, Result};
