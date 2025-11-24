@@ -1,7 +1,7 @@
 use log::{debug, info};
 
 use crate::physic_engine::PhysicEngineIterator;
-use crate::renderer_engine::shader::compile_shader_program;
+use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::renderer_engine::types::ParticleGPU;
 use crate::utils::human_bytes::HumanBytes;
 
@@ -26,8 +26,12 @@ pub struct RendererGraphics {
 
 impl RendererGraphics {
     pub fn new(max_particles_on_gpu: usize) -> Self {
-        let (vertex_src, fragment_src) = RendererGraphics::src_shaders_particles();
-        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
+        let shader_program = unsafe {
+            compile_shader_program_from_files(
+                "assets/shaders/point_rendering.vert.glsl",
+                "assets/shaders/point_rendering.frag.glsl",
+            )
+        };
 
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
 
@@ -45,48 +49,6 @@ impl RendererGraphics {
                 max_particles_on_gpu,
             }
         }
-    }
-
-    pub fn src_shaders_particles() -> (&'static str, &'static str) {
-        let vertex_src = r#"
-        #version 330 core
-        layout(location = 0) in vec4 aPos;
-        layout(location = 1) in vec3 aColor;
-        layout(location = 2) in vec2 aLifeMaxLife;
-
-        out vec3 vertexColor;
-        out float alpha;
-
-        uniform vec2 uSize;
-
-        void main() {
-            float a = clamp(aLifeMaxLife.x / max(aLifeMaxLife.y, 0.0001), 0.0, 1.0);
-            alpha = a;
-            vertexColor = aColor;
-
-            float x = aPos.x / uSize.x * 2.0 - 1.0;
-            float y = aPos.y / uSize.y * 2.0 - 1.0;
-            gl_Position = vec4(x, y, 0.0, 1.0);
-
-            gl_PointSize = 2.0 + 5.0 * a;
-        }
-        "#;
-
-        let fragment_src = r#"
-        #version 330 core
-        in vec3 vertexColor;
-        in float alpha;
-        out vec4 FragColor;
-
-        void main() {
-            vec2 uv = gl_PointCoord - vec2(0.5);
-            float dist = dot(uv, uv);
-            if(dist > 0.25) discard;
-            float falloff = smoothstep(0.25, 0.0, dist);
-            FragColor = vec4(vertexColor, alpha * falloff);
-        }
-        "#;
-        (vertex_src, fragment_src)
     }
 
     unsafe fn setup_gpu_buffers(
