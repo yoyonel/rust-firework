@@ -17,9 +17,9 @@ sudo sh -c 'echo 0 > /proc/sys/kernel/perf_event_paranoid'
 # 
 ╰─ source /opt/intel/oneapi/vtune/2025.7/vtune-vars.sh; vtune -collect gpu_offload -- ./target/profiling/fireworks_sim
 vtune: Warning: To profile kernel modules during the session, make sure they are available in the /lib/modules/kernel_version/ location.
-vtune: Collection started. To stop the collection, either press CTRL-C or enter from another console window: vtune -r /home/latty/Prog/__RUST__/chatgpt-rust-fireworks_sim/r003go -command stop.
+vtune: Collection started. To stop the collection, either press CTRL-C or enter from another console window: vtune -r $PATH_TO_PROJECT/r003go -command stop.
 vtune: Collection stopped.
-vtune: Using result path `/home/latty/Prog/__RUST__/chatgpt-rust-fireworks_sim/r003go'
+vtune: Using result path `$PATH_TO_PROJECT/r003go'
 vtune: Executing actions 19 % Resolving information for `i915.ko'
 vtune: Warning: Cannot locate debugging information for file `/lib/modules/6.1.0-32-amd64/kernel/drivers/gpu/drm/drm.ko'.
 [...]

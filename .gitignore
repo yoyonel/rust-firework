@@ -257,6 +257,7 @@ __marimo__/
 
 # callgrind+valgrind
 callgrind*
+massif.out.*
 
 # flamegraph
 perf.data*
