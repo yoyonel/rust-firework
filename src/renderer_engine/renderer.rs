@@ -124,6 +124,24 @@ impl RendererEngine for Renderer {
         }
     }
 
+    fn reload_shaders(&mut self) -> Result<(), String> {
+        info!("🔄 Reloading shaders for all renderers...");
+        let mut errors = Vec::new();
+        unsafe {
+            for renderer in &mut self.renderers {
+                if let Err(e) = renderer.reload_shaders() {
+                    errors.push(e);
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors.join("\n\n"))
+        }
+    }
+
     fn close(&mut self) {
         info!("🧹 Fermeture du Renderer");
         unsafe {
