@@ -58,7 +58,7 @@ fn main() -> Result<()> {
         // doppler_states: Vec::new(),
         // export_in_wav: true,
     };
-    let audio_engine = FireworksAudio3D::new(audio_config);
+    let audio_engine = FireworksAudio3D::new(audio_config)?;
 
     let window_width = 1024;
     let window_height = 800;
@@ -89,7 +89,11 @@ fn main() -> Result<()> {
     );
 
     simulator.init_console_commands();
-    let _ = simulator.run(export_path.as_ref().map(|p| p.to_str().unwrap()));
+    let _ = simulator.run(
+        export_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned()),
+    );
     simulator.close();
 
     Ok(())
