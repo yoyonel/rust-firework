@@ -1,6 +1,4 @@
-use fireworks_sim::renderer_engine::command_console::{
-    CommandRegistry, HistoryCursor, SelectionCycler,
-};
+use fireworks_sim::utils::command_console::{CommandRegistry, HistoryCursor, SelectionCycler};
 use std::cell::RefCell;
 use std::rc::Rc;
 

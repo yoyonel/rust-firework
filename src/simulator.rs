@@ -1,6 +1,5 @@
 use crate::audio_engine::AudioEngine;
 use crate::physic_engine::{config::PhysicConfig, PhysicEngine, PhysicEngineFull, UpdateResult};
-use crate::renderer_engine::command_console::{CommandRegistry, Console};
 use crate::renderer_engine::RendererEngine;
 use crate::renderer_engine::{
     tools::{setup_opengl_debug, show_opengl_context_info},
@@ -10,6 +9,7 @@ use crate::renderer_engine::{
     },
 };
 use crate::{log_metrics_and_fps, profiler::Profiler};
+use crate::{CommandRegistry, Console};
 use anyhow::{anyhow, Result};
 use glfw::{Action, Context, Key, WindowMode};
 use imgui::Context as ImContext;
