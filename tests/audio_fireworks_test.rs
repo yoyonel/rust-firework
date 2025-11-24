@@ -9,11 +9,12 @@ fn build_test_engine() -> FireworksAudio3D {
         rocket_path: "assets/sounds/rocket.wav".into(),
         explosion_path: "assets/sounds/explosion.wav".into(),
         listener_pos: (0.0, 0.0),
-        sample_rate: 44100,
-        block_size: 1024,
-        max_voices: 16,
+        sample_rate: 48000,
+        block_size: 512,
+        max_voices: 32,
         settings: AudioEngineSettings::default(),
     })
+    .expect("Failed to build test audio engine")
 }
 
 // ==================================
