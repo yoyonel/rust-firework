@@ -61,16 +61,33 @@ fn main() -> Result<()> {
     let audio_engine = FireworksAudio3D::new(audio_config);
 
     let window_width = 1024;
+    let window_height = 800;
+
+    // 1. Init Window & Context (via Simulator static helper)
+    let (glfw, window, events, imgui_system) =
+        Simulator::<Renderer, PhysicEngineFireworks, FireworksAudio3D>::init_window(
+            window_width,
+            window_height,
+            "Fireworks Simulator",
+        )?;
+
+    // 2. Init Renderer (now that GL context is ready)
+    let renderer_engine = Renderer::new(window_width, window_height, &physic_config)?;
 
     let physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
 
-    let renderer_engine = Renderer::new(window_width, 800, "Fireworks Simulator", &physic_config)?;
-
-    // ----------------------------
-    // Initialisation du simulateur
-    // ----------------------------
+    // 3. Init Simulator
     info!("🚀 Starting Fireworks Simulator...");
-    let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine);
+    let mut simulator = Simulator::new(
+        renderer_engine,
+        physic_engine,
+        audio_engine,
+        glfw,
+        window,
+        events,
+        imgui_system,
+    );
+
     simulator.init_console_commands();
     let _ = simulator.run(export_path.as_ref().map(|p| p.to_str().unwrap()));
     simulator.close();

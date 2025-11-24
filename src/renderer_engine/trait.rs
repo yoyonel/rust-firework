@@ -1,15 +1,8 @@
-use crate::audio_engine::AudioEngine;
-use crate::physic_engine::PhysicEngineFull;
-use crate::renderer_engine::command_console::CommandRegistry;
-
-use anyhow::Result;
+use crate::physic_engine::PhysicEngineIterator;
 
 pub trait RendererEngine {
-    fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
-        &mut self,
-        physic: &mut P,
-        audio: &mut A,
-        commands_registry: &CommandRegistry,
-    ) -> Result<()>;
+    fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize;
+    fn set_window_size(&mut self, width: i32, height: i32);
+    fn recreate_buffers(&mut self, max_particles: usize);
     fn close(&mut self);
 }
