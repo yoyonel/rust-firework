@@ -1,5 +1,46 @@
 use gl::types::*;
-use std::{ffi::CString, ptr};
+use std::{ffi::CString, fs, path::Path, ptr};
+
+/// Charge le code source d'un shader depuis un fichier.
+///
+/// # Arguments
+/// * `path` - Chemin vers le fichier shader (relatif ou absolu)
+///
+/// # Returns
+/// Le contenu du fichier shader sous forme de String
+///
+/// # Panics
+/// Panique si le fichier ne peut pas être lu
+pub fn load_shader_from_file<P: AsRef<Path>>(path: P) -> String {
+    let path = path.as_ref();
+    fs::read_to_string(path).unwrap_or_else(|err| {
+        panic!(
+            "❌ Failed to load shader file '{}': {}",
+            path.display(),
+            err
+        )
+    })
+}
+
+/// Compile un programme shader à partir de fichiers GLSL.
+///
+/// # Arguments
+/// * `vertex_path` - Chemin vers le fichier vertex shader
+/// * `fragment_path` - Chemin vers le fichier fragment shader
+///
+/// # Returns
+/// L'ID du programme shader compilé
+///
+/// # Safety
+/// Cette fonction est unsafe car elle interagit directement avec des pointeurs OpenGL.
+pub unsafe fn compile_shader_program_from_files<P: AsRef<Path>>(
+    vertex_path: P,
+    fragment_path: P,
+) -> u32 {
+    let vertex_src = load_shader_from_file(vertex_path);
+    let fragment_src = load_shader_from_file(fragment_path);
+    compile_shader_program(&vertex_src, &fragment_src)
+}
 
 /// # Safety
 /// Interagit directement avec des pointeurs OpenGL.
