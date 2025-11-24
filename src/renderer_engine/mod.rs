@@ -18,6 +18,3 @@ pub use self::types::ParticleGPU;
 
 pub mod utils;
 pub use self::utils::glfw_window;
-
-pub mod command_console;
-pub use self::command_console::Console;

@@ -19,6 +19,8 @@ pub mod profiler;
 // Utilities
 pub mod utils;
 
+pub use utils::command_console::{CommandRegistry, Console};
+
 // #[cfg(all(feature = "simd", feature = "no_simd"))]
 // compile_error!("Features `simd` et `no_simd` ne peuvent pas être activées en même temps");
 
