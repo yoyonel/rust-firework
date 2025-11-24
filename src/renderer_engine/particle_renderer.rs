@@ -23,6 +23,12 @@ pub trait ParticleGraphicsRenderer {
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     unsafe fn render_particles_with_persistent_buffer(&self, count: usize, window_size: (f32, f32));
 
+    /// Recharge les shaders depuis les fichiers.
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    unsafe fn reload_shaders(&mut self) -> Result<(), String>;
+
     /// Libère les ressources GPU.
     ///
     /// # Safety

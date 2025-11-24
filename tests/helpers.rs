@@ -96,6 +96,9 @@ impl RendererEngine for DummyRenderer {
     }
     fn set_window_size(&mut self, _width: i32, _height: i32) {}
     fn recreate_buffers(&mut self, _max_particles: usize) {}
+    fn reload_shaders(&mut self) -> Result<(), String> {
+        Ok(())
+    }
     fn close(&mut self) {
         println!("Closing renderer...");
     }
@@ -245,6 +248,10 @@ impl RendererEngine for TestRenderer {
         self.log
             .borrow_mut()
             .push("renderer.recreate_buffers".into());
+    }
+    fn reload_shaders(&mut self) -> Result<(), String> {
+        self.log.borrow_mut().push("renderer.reload_shaders".into());
+        Ok(())
     }
     fn close(&mut self) {
         self.log.borrow_mut().push("renderer.close".into());

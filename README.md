@@ -64,6 +64,33 @@ Les paramètres modifiables incluent :
 - couleur
 - volume audio
 
+## ⌨️ Commandes & Contrôles
+
+### Raccourcis Clavier
+
+| Touche | Action |
+|--------|--------|
+| `R` | Recharger la configuration physique (`physic.toml`) |
+| `S` | Recharger les shaders à chaud |
+| `F11` | Basculer en plein écran |
+| `Echap` | Quitter l'application |
+| `` ` `` (Grave) | Ouvrir/Fermer la console de commande |
+
+### Commandes Console
+
+La console permet d'interagir avec le moteur en temps réel.
+
+**Audio**
+- `audio.list_devices` : Liste les périphériques audio disponibles
+- `audio.set_device <index>` : Change le périphérique de sortie
+- `audio.set_volume <0.0-1.0>` : Ajuste le volume global
+
+**Physique**
+- `physic.set_gravity <x> <y>` : Modifie le vecteur de gravité
+
+**Rendu**
+- `renderer.reload_shaders` : Recharge les fichiers shaders (identique à `S`)
+
 ## 📁 Structure du projet
 
     rust-firework/

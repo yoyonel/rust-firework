@@ -40,9 +40,12 @@ where
     pub window: Option<glfw::PWindow>,
     pub events: Option<WindowEvents>,
     pub imgui_system: Option<ImguiSystem>,
-    console: Console,
+    pub console: Console,
 
-    frames: u32,
+    // Flags for console commands
+    reload_shaders_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
+
+    frames: u64,
     last_time: Instant,
 
     // Window state
@@ -165,6 +168,9 @@ where
             events: Some(events),
             imgui_system: Some(imgui_system),
             console: Console::new(),
+            reload_shaders_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                false,
+            )),
             frames: 0,
             last_time: Instant::now(),
             window_size,
@@ -202,6 +208,7 @@ where
         }
 
         let mut reload_config = false;
+        let mut reload_shaders = false;
 
         // Window events
         if let Some(window) = &mut self.window {
@@ -221,7 +228,14 @@ where
                             window.set_should_close(true);
                         }
                         glfw::WindowEvent::Key(Key::R, _, Action::Press, _) => {
-                            reload_config = true;
+                            if !self.console.open {
+                                reload_config = true;
+                            }
+                        }
+                        glfw::WindowEvent::Key(Key::S, _, Action::Press, _) => {
+                            if !self.console.open {
+                                reload_shaders = true;
+                            }
                         }
                         glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
                             if window.is_fullscreen() {
@@ -290,6 +304,19 @@ where
         }
         if reload_config {
             self.reload_config();
+        }
+        if reload_shaders {
+            self.reload_shaders();
+        }
+
+        // Check console command flags
+        if self
+            .reload_shaders_requested
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            self.reload_shaders_requested
+                .store(false, std::sync::atomic::Ordering::Relaxed);
+            self.reload_shaders();
         }
 
         // 🔹 start global frame
@@ -425,6 +452,18 @@ where
         self.renderer_engine.recreate_buffers(new_max);
     }
 
+    pub fn reload_shaders(&mut self) {
+        info!("🔄 Reloading shaders...");
+        match self.renderer_engine.reload_shaders() {
+            Ok(_) => {
+                self.console.log("✅ Shaders reloaded successfully");
+            }
+            Err(e) => {
+                self.console.log(format!("❌ Shader reload failed:\n{}", e));
+            }
+        }
+    }
+
     pub fn close(&mut self) {
         self.renderer_engine.close();
         self.physic_engine.close();
@@ -481,6 +520,14 @@ where
                 // Le moteur passé ici n'est que la partie Dyn Compatible.
                 // Or, get_config() est bien dans PhysicEngine (maintenant Dyn Compatible).
                 format!("{:#?}", engine.get_config())
+            });
+
+        // Register renderer commands
+        let reload_flag = self.reload_shaders_requested.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.reload_shaders", move |_args| {
+                reload_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                "✅ Shader reload requested".to_string()
             });
     }
 }

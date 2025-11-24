@@ -6,6 +6,9 @@ use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture};
 use crate::utils::human_bytes::HumanBytes;
 
+const VERTEX_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.vert.glsl";
+const FRAGMENT_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.frag.glsl";
+
 pub struct RendererGraphicsInstanced {
     vao: u32,
     vbo_particles: u32,
@@ -18,6 +21,7 @@ pub struct RendererGraphicsInstanced {
     loc_size: i32,
     loc_tex: i32,
     texture_id: u32,
+    tex_ratio: f32, // Stocke le ratio de texture pour le reload
 
     max_particles_on_gpu: usize,
 
@@ -31,12 +35,8 @@ impl RendererGraphicsInstanced {
         particle_type: ParticleType,
         texture_path: &str,
     ) -> Self {
-        let shader_program = unsafe {
-            compile_shader_program_from_files(
-                "assets/shaders/instanced_textured_quad.vert.glsl",
-                "assets/shaders/instanced_textured_quad.frag.glsl",
-            )
-        };
+        let shader_program =
+            unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
         let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
@@ -64,6 +64,7 @@ impl RendererGraphicsInstanced {
                 loc_size,
                 loc_tex,
                 texture_id,
+                tex_ratio: tex_width as f32 / tex_height as f32,
                 max_particles_on_gpu,
                 particle_type,
             }
@@ -220,6 +221,48 @@ impl RendererGraphicsInstanced {
         debug!("Graphic Engine for Instanced Rendering closed and reset.");
     }
 
+    /// Recharge les shaders depuis les fichiers et recompile le programme shader.
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        use crate::renderer_engine::shader::try_compile_shader_program_from_files;
+        use log::error;
+
+        match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
+            Ok(new_program) => {
+                // Supprimer l'ancien programme shader
+                if self.shader_program != 0 {
+                    gl::DeleteProgram(self.shader_program);
+                }
+
+                // Utiliser le nouveau programme
+                self.shader_program = new_program;
+
+                // Mettre à jour les uniform locations
+                self.loc_size = gl::GetUniformLocation(self.shader_program, cstr!("uSize"));
+                self.loc_tex = gl::GetUniformLocation(self.shader_program, cstr!("uTexture"));
+
+                // Remettre à jour le ratio de texture
+                gl::UseProgram(self.shader_program);
+                gl::Uniform1f(
+                    gl::GetUniformLocation(self.shader_program, cstr!("uTexRatio")),
+                    self.tex_ratio,
+                );
+
+                info!("✅ Instanced textured quad shaders reloaded successfully");
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    "❌ Failed to reload instanced textured quad shaders:\n{}",
+                    e
+                );
+                Err(e)
+            }
+        }
+    }
     unsafe fn setup_gpu_buffers(
         max_particles_on_gpu: usize,
     ) -> (u32, u32, u32, *mut ParticleGPU, isize) {
@@ -313,6 +356,10 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
         window_size: (f32, f32),
     ) {
         self.render_particles_with_persistent_buffer(count, window_size);
+    }
+
+    unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        self.reload_shaders()
     }
 
     unsafe fn close(&mut self) {
