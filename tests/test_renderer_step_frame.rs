@@ -1,24 +1,19 @@
+#![cfg(feature = "interactive_tests")]
+
 use fireworks_sim::physic_engine::PhysicConfig;
 use fireworks_sim::renderer_engine::renderer::Renderer;
+use fireworks_sim::renderer_engine::RendererEngine;
+use fireworks_sim::window_engine::{GlfwWindowEngine, WindowEngine};
 mod helpers;
 use helpers::DummyPhysic;
-
-use fireworks_sim::audio_engine::FireworksAudio3D;
-use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
-use fireworks_sim::renderer_engine::RendererEngine;
-use fireworks_sim::Simulator;
 
 #[test]
 fn test_renderer_step_frame_coverage() {
     let mut physic = DummyPhysic::default();
 
     // 1. Init Window (Hidden)
-    let (_glfw, _window, _events, _imgui) = Simulator::<
-        fireworks_sim::renderer_engine::Renderer,
-        PhysicEngineFireworks,
-        FireworksAudio3D,
-    >::init_window(800, 600, "Test Renderer")
-    .expect("Failed to init window");
+    let _window_engine =
+        GlfwWindowEngine::init(800, 600, "Test Renderer").expect("Failed to init window");
 
     // 2. Create Renderer
     let mut renderer =
