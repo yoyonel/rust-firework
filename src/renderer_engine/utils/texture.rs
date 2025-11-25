@@ -4,9 +4,9 @@ use std::path::Path;
 pub fn load_texture(path: &str) -> (u32, u32, u32) {
     // Charge l'image
     let img = image::open(Path::new(path)).expect("Failed to load texture");
-    let img = img.flipv(); // OpenGL attend l'origine en bas à gauche
-    let (width, height) = img.dimensions();
-    let rgba = img.to_rgba8();
+    let flipped_img = img.flipv(); // OpenGL attend l'origine en bas à gauche
+    let (width, height) = flipped_img.dimensions();
+    let rgba = flipped_img.to_rgba8();
     let data = rgba.as_raw();
 
     // Crée une texture OpenGL

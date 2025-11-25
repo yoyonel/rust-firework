@@ -12,14 +12,9 @@ use std::{ffi::CString, fs, path::Path, ptr};
 /// # Panics
 /// Panique si le fichier ne peut pas être lu
 pub fn load_shader_from_file<P: AsRef<Path>>(path: P) -> String {
-    let path = path.as_ref();
-    fs::read_to_string(path).unwrap_or_else(|err| {
-        panic!(
-            "❌ Failed to load shader file '{}': {}",
-            path.display(),
-            err
-        )
-    })
+    let path_ref = path.as_ref();
+    fs::read_to_string(path_ref)
+        .unwrap_or_else(|_| panic!("Failed to read shader file: {:?}", path_ref))
 }
 
 /// Compile un programme shader à partir de fichiers GLSL.
@@ -58,27 +53,27 @@ pub unsafe fn try_compile_shader_program_from_files<P: AsRef<Path>>(
     vertex_path: P,
     fragment_path: P,
 ) -> Result<u32, String> {
-    let vertex_path = vertex_path.as_ref();
-    let fragment_path = fragment_path.as_ref();
+    let vertex_path_ref = vertex_path.as_ref();
+    let fragment_path_ref = fragment_path.as_ref();
 
     // Charger les fichiers shader
-    let vertex_src = match std::fs::read_to_string(vertex_path) {
+    let vertex_src = match std::fs::read_to_string(vertex_path_ref) {
         Ok(src) => src,
         Err(e) => {
             return Err(format!(
                 "Failed to load vertex shader '{}': {}",
-                vertex_path.display(),
+                vertex_path_ref.display(),
                 e
             ))
         }
     };
 
-    let fragment_src = match std::fs::read_to_string(fragment_path) {
+    let fragment_src = match std::fs::read_to_string(fragment_path_ref) {
         Ok(src) => src,
         Err(e) => {
             return Err(format!(
                 "Failed to load fragment shader '{}': {}",
-                fragment_path.display(),
+                fragment_path_ref.display(),
                 e
             ))
         }

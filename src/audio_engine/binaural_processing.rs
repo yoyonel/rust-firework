@@ -105,12 +105,15 @@ fn interpolate_sample(samples: &[f32], idx: f32) -> f32 {
 // Ça fait déjà ~20–30% de gain CPU.
 fn interpolate_sample_fast(samples: &[f32], idx: f32) -> f32 {
     let len = samples.len();
+    if len == 0 {
+        return 0.0;
+    }
     if idx <= 0.0 {
         return samples[0];
     }
-    let idx = idx.min((len - 2) as f32);
-    let i0 = idx as usize;
-    let frac = idx - i0 as f32;
+    let clamped_idx = idx.min((len - 2) as f32);
+    let i0 = clamped_idx as usize;
+    let frac = clamped_idx - i0 as f32;
     let s0 = samples[i0];
     let s1 = samples[i0 + 1];
     s0 + (s1 - s0) * frac
