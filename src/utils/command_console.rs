@@ -598,9 +598,9 @@ impl CommandRegistry {
         &self,
         audio_engine: &mut dyn AudioEngine,
         physic_engine: &mut dyn PhysicEngine,
-        input: &str,
+        input_str: &str,
     ) -> String {
-        let input = input.trim();
+        let input = input_str.trim();
         let cmd_name_with_args = input.split_whitespace().next().unwrap_or("");
 
         if cmd_name_with_args.is_empty() {

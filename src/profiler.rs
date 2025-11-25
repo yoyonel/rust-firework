@@ -83,10 +83,10 @@ impl Profiler {
 
     /// Enregistre une métrique scalaire typée
     pub fn record_metric<T: Into<MetricValue>>(&self, label: impl Into<String>, value: T) {
-        let label = label.into();
+        let label_str = label.into();
         let mut inner = self.inner.write().unwrap();
         let max_samples = inner.max_samples;
-        let buffer = inner.metrics.entry(label).or_default();
+        let buffer = inner.metrics.entry(label_str).or_default();
         if buffer.len() >= max_samples {
             buffer.remove(0);
         }
@@ -138,14 +138,14 @@ impl Profiler {
     where
         F: FnOnce() -> T,
     {
-        let label = label.into();
+        let label_str = label.into();
         let start = Instant::now();
         let result = f();
         let dt = start.elapsed().as_secs_f32() * 1000.0;
 
         let mut inner = self.inner.write().unwrap();
         let max_samples = inner.max_samples;
-        let samples = inner.samples.entry(label).or_default();
+        let samples = inner.samples.entry(label_str).or_default();
         if samples.len() >= max_samples {
             samples.remove(0);
         }

@@ -3,6 +3,7 @@
 use fireworks_sim::audio_engine::FireworksAudio3D;
 use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
 use fireworks_sim::renderer_engine::Renderer;
+use fireworks_sim::window_engine::{GlfwWindowEngine, WindowEngine};
 use fireworks_sim::Simulator;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -15,13 +16,8 @@ fn test_simulator_with_dummy_engines() -> anyhow::Result<()> {
     let audio = DummyAudio;
     let physic = DummyPhysic::default();
 
-    let (glfw, window, events, imgui) = Simulator::<
-        Renderer,
-        PhysicEngineFireworks,
-        FireworksAudio3D,
-    >::init_window(800, 600, "Test Simulator")?;
-
-    let mut simulator = Simulator::new(renderer, physic, audio, glfw, window, events, imgui);
+    let window_engine = GlfwWindowEngine::init(800, 600, "Test Simulator")?;
+    let mut simulator = Simulator::new(renderer, physic, audio, window_engine);
     simulator.step(); // Run one frame
     simulator.close();
     println!("Simulator closed.");
@@ -37,13 +33,8 @@ fn test_renderer_called_by_simulator() {
     let physic = DummyPhysic::default();
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let window_engine = GlfwWindowEngine::init(800, 600, "Test Simulator").unwrap();
+        Simulator::new(renderer, physic, audio, window_engine)
     };
     sim.step();
     sim.close();
@@ -62,13 +53,8 @@ fn test_audio_called_by_renderer() {
     let physic = DummyPhysic::default();
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let window_engine = GlfwWindowEngine::init(800, 600, "Test Simulator").unwrap();
+        Simulator::new(renderer, physic, audio, window_engine)
     };
     sim.run(None).unwrap();
     sim.close();
@@ -90,13 +76,8 @@ fn test_physic_called_by_renderer() {
     let physic = TestPhysic::new(log.clone());
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let window_engine = GlfwWindowEngine::init(800, 600, "Test Simulator").unwrap();
+        Simulator::new(renderer, physic, audio, window_engine)
     };
     sim.run(None).unwrap();
     sim.close();
@@ -118,20 +99,15 @@ fn test_call_order_in_simulator_run_and_close() -> anyhow::Result<()> {
     let audio = TestAudio::new(log.clone());
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let window_engine = GlfwWindowEngine::init(800, 600, "Test Simulator").unwrap();
+        Simulator::new(renderer, physic, audio, window_engine)
     };
 
     // --- Exécution du simulateur ---
     sim.step();
     sim.close();
 
-    // --- Vérification de l’ordre des appels ---
+    // --- Vérification de l'ordre des appels ---
     let calls = log.borrow();
     assert_eq!(
         *calls,

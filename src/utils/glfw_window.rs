@@ -9,9 +9,9 @@ impl CenterWindow for Window {
     fn center_on_primary_monitor(&mut self) {
         let mut glfw = self.glfw.clone();
 
-        glfw.with_primary_monitor(|_, monitor| {
-            if let Some(monitor) = monitor {
-                center_window(self, monitor);
+        glfw.with_primary_monitor(|_, primary_monitor| {
+            if let Some(mon) = primary_monitor {
+                center_window(self, mon);
             }
         });
     }

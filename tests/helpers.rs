@@ -6,13 +6,70 @@ use fireworks_sim::physic_engine::{
     ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
 
+use anyhow::Result;
 use fireworks_sim::renderer_engine::RendererEngine;
+use fireworks_sim::window_engine::{ImguiSystem, WindowEngine, WindowEvents};
+use glfw::{CursorMode, WindowMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 // --- Shared Types ---
 #[allow(dead_code)]
 pub type SharedLog = Rc<RefCell<Vec<String>>>;
+
+// --- Dummy Window Engine ---
+
+#[allow(dead_code)]
+pub struct DummyWindowEngine;
+
+impl WindowEngine for DummyWindowEngine {
+    fn init(_width: i32, _height: i32, _title: &str) -> Result<Self> {
+        Ok(Self)
+    }
+
+    fn poll_events(&mut self) {}
+    fn swap_buffers(&mut self) {}
+    fn should_close(&self) -> bool {
+        false
+    }
+    fn set_should_close(&mut self, _value: bool) {}
+    fn get_size(&self) -> (i32, i32) {
+        (800, 600)
+    }
+    fn get_pos(&self) -> (i32, i32) {
+        (0, 0)
+    }
+    fn is_fullscreen(&self) -> bool {
+        false
+    }
+    fn set_monitor(
+        &mut self,
+        _mode: WindowMode,
+        _xpos: i32,
+        _ypos: i32,
+        _width: u32,
+        _height: u32,
+        _refresh_rate: Option<u32>,
+    ) {
+    }
+    fn set_cursor_mode(&mut self, _mode: CursorMode) {}
+    fn make_current(&mut self) {}
+    fn get_glfw(&self) -> &glfw::Glfw {
+        panic!("DummyWindowEngine does not have a real GLFW instance")
+    }
+    fn get_window_mut(&mut self) -> &mut glfw::PWindow {
+        panic!("DummyWindowEngine does not have a real window")
+    }
+    fn get_events(&self) -> &WindowEvents {
+        panic!("DummyWindowEngine does not have real events")
+    }
+    fn get_imgui_system_mut(&mut self) -> &mut ImguiSystem {
+        panic!("DummyWindowEngine does not have a real imgui system")
+    }
+    fn get_window_and_imgui_mut(&mut self) -> (&mut glfw::PWindow, &mut ImguiSystem) {
+        panic!("DummyWindowEngine does not have real window/imgui")
+    }
+}
 
 // --- Dummy Mocks (Minimal implementation, no logging) ---
 

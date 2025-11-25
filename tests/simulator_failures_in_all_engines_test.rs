@@ -1,6 +1,9 @@
+#![cfg(feature = "interactive_tests")]
+
 use fireworks_sim::audio_engine::FireworksAudio3D;
 use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
 use fireworks_sim::renderer_engine::Renderer;
+use fireworks_sim::window_engine::{GlfwWindowEngine, WindowEngine};
 use fireworks_sim::Simulator;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -34,13 +37,8 @@ fn run_failure_test(failure: EngineFailure) {
     }
 
     let mut sim = {
-        let (glfw, window, events, imgui) = Simulator::<
-            Renderer,
-            PhysicEngineFireworks,
-            FireworksAudio3D,
-        >::init_window(800, 600, "Test Simulator")
-        .unwrap();
-        Simulator::new(renderer, physic, audio, glfw, window, events, imgui)
+        let window_engine = GlfwWindowEngine::init(800, 600, "Test Simulator").unwrap();
+        Simulator::new(renderer, physic, audio, window_engine)
     };
 
     // --- Exécution & vérification ---
