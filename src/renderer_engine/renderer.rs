@@ -6,6 +6,7 @@ use log::info;
 use crate::physic_engine::config::PhysicConfig;
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::tools::{setup_opengl_debug, show_opengl_context_info};
+use crate::renderer_engine::BloomPass;
 use crate::renderer_engine::RendererGraphics;
 use crate::renderer_engine::RendererGraphicsInstanced;
 
@@ -17,6 +18,9 @@ pub struct Renderer {
     window_size_f32: (f32, f32),
 
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
+
+    // Bloom post-processing
+    bloom_pass: BloomPass,
 }
 
 // ---------------------------------------------------------
@@ -69,10 +73,15 @@ impl Renderer {
             )),
         ];
 
+        // Initialize bloom pass
+        let bloom_pass = BloomPass::new(width, height)
+            .map_err(|e| anyhow::anyhow!("Failed to initialize bloom: {}", e))?;
+
         Ok(Self {
             window_size_f32: (width as f32, height as f32),
             renderers,
             max_particles_on_gpu,
+            bloom_pass,
         })
     }
 
@@ -88,23 +97,41 @@ impl Renderer {
         }
         total_particles
     }
+
+    /// Returns a mutable reference to the bloom pass for configuration
+    pub fn bloom_pass_mut(&mut self) -> &mut BloomPass {
+        &mut self.bloom_pass
+    }
 }
 
 // Trait implementation
 impl RendererEngine for Renderer {
     fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
         unsafe {
-            // Efface l’écran (fond noir)
-            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-            gl::Clear(gl::COLOR_BUFFER_BIT);
+            if self.bloom_pass.enabled {
+                // Render to HDR framebuffer
+                self.bloom_pass.begin_scene();
+                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+                gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+                let particle_count = self.render_particles(physic);
 
-            self.render_particles(physic)
+                // Apply bloom and render to screen
+                self.bloom_pass.end_scene_and_apply_bloom();
+                particle_count
+            } else {
+                // Direct rendering without bloom
+                gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+                gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+                self.render_particles(physic)
+            }
         }
     }
 
     fn set_window_size(&mut self, width: i32, height: i32) {
         unsafe {
             gl::Viewport(0, 0, width, height);
+            self.bloom_pass.resize(width, height);
         }
         self.window_size_f32 = (width as f32, height as f32);
     }
@@ -133,6 +160,11 @@ impl RendererEngine for Renderer {
                     errors.push(e);
                 }
             }
+
+            // Reload bloom shaders
+            if let Err(e) = self.bloom_pass.reload_shaders() {
+                errors.push(format!("Bloom shaders: {}", e));
+            }
         }
 
         if errors.is_empty() {
@@ -148,7 +180,12 @@ impl RendererEngine for Renderer {
             for renderer in &mut self.renderers {
                 renderer.close();
             }
+            self.bloom_pass.close();
         }
+    }
+
+    fn bloom_pass_mut(&mut self) -> &mut BloomPass {
+        &mut self.bloom_pass
     }
 }
 
