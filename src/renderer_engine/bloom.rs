@@ -13,6 +13,7 @@ pub struct BloomPass {
     // Framebuffers and textures
     hdr_fbo: GLuint,
     hdr_texture: GLuint,
+    bright_texture: GLuint, // MRT Attachment 1
     hdr_depth_rbo: GLuint,
 
     ping_pong_fbo: [GLuint; 2],
@@ -24,8 +25,7 @@ pub struct BloomPass {
     composition_shader: GLuint,
 
     // Uniform Locations
-    loc_brightness_scene: GLint,
-    loc_brightness_threshold: GLint,
+    // loc_brightness_* removed (MRT)
     loc_blur_texture: GLint,
     loc_blur_direction: GLint,
     loc_comp_scene: GLint,
@@ -37,10 +37,13 @@ pub struct BloomPass {
     pub threshold: f32,
     pub blur_iterations: u32,
     pub enabled: bool,
+    pub downsample_factor: u32, // 1 = full res, 2 = half res, 4 = quarter res
 
     // Window size
     width: i32,
     height: i32,
+    blur_width: i32, // Actual blur resolution
+    blur_height: i32,
 }
 
 impl BloomPass {
@@ -81,6 +84,37 @@ impl BloomPass {
                 0,
             );
 
+            // Create Brightness/Bloom texture (MRT Attachment 1)
+            let mut bright_texture = 0;
+            gl::GenTextures(1, &mut bright_texture);
+            gl::BindTexture(gl::TEXTURE_2D, bright_texture);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA16F as i32,
+                width,
+                height,
+                0,
+                gl::RGBA,
+                gl::FLOAT,
+                std::ptr::null(),
+            );
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            gl::FramebufferTexture2D(
+                gl::FRAMEBUFFER,
+                gl::COLOR_ATTACHMENT1,
+                gl::TEXTURE_2D,
+                bright_texture,
+                0,
+            );
+
+            // Configure DrawBuffers for MRT
+            let attachments = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+            gl::DrawBuffers(2, attachments.as_ptr());
+
             // Create depth renderbuffer
             let mut hdr_depth_rbo = 0;
             gl::GenRenderbuffers(1, &mut hdr_depth_rbo);
@@ -99,6 +133,11 @@ impl BloomPass {
             }
 
             // Create ping-pong framebuffers for blur
+            // Use downsampling for performance (default: 2x = half resolution)
+            let downsample_factor = 2u32; // Default to half-res blur
+            let blur_width = width / downsample_factor as i32;
+            let blur_height = height / downsample_factor as i32;
+
             let mut ping_pong_fbo = [0; 2];
             let mut ping_pong_textures = [0; 2];
             gl::GenFramebuffers(2, ping_pong_fbo.as_mut_ptr());
@@ -111,8 +150,8 @@ impl BloomPass {
                     gl::TEXTURE_2D,
                     0,
                     gl::RGBA16F as i32,
-                    width,
-                    height,
+                    blur_width, // Downsampled resolution
+                    blur_height,
                     0,
                     gl::RGBA,
                     gl::FLOAT,
@@ -139,10 +178,7 @@ impl BloomPass {
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
             // Compile shaders
-            let brightness_shader = try_compile_shader_program_from_files(
-                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-                "assets/shaders/bloom/brightness_extract.frag.glsl",
-            )?;
+            // Note: Brightness extraction shader is no longer needed with MRT
 
             let blur_shader = try_compile_shader_program_from_files(
                 "assets/shaders/bloom/fullscreen_quad.vert.glsl",
@@ -155,11 +191,6 @@ impl BloomPass {
             )?;
 
             // Cache uniform locations
-            let loc_brightness_scene =
-                gl::GetUniformLocation(brightness_shader, crate::cstr!("uSceneTexture"));
-            let loc_brightness_threshold =
-                gl::GetUniformLocation(brightness_shader, crate::cstr!("uThreshold"));
-
             let loc_blur_texture = gl::GetUniformLocation(blur_shader, crate::cstr!("uTexture"));
             let loc_blur_direction =
                 gl::GetUniformLocation(blur_shader, crate::cstr!("uDirection"));
@@ -171,19 +202,18 @@ impl BloomPass {
             let loc_comp_intensity =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uBloomIntensity"));
 
-            info!("✅ Bloom Pass initialized successfully");
+            info!("✅ Bloom Pass initialized successfully (MRT enabled)");
 
             Ok(Self {
                 hdr_fbo,
                 hdr_texture,
+                bright_texture,
                 hdr_depth_rbo,
                 ping_pong_fbo,
                 ping_pong_textures,
-                brightness_shader,
+                brightness_shader: 0, // Unused
                 blur_shader,
                 composition_shader,
-                loc_brightness_scene,
-                loc_brightness_threshold,
                 loc_blur_texture,
                 loc_blur_direction,
                 loc_comp_scene,
@@ -193,8 +223,11 @@ impl BloomPass {
                 threshold: 0.2,
                 blur_iterations: 5,
                 enabled: true,
+                downsample_factor,
                 width,
                 height,
+                blur_width,
+                blur_height,
             })
         }
     }
@@ -224,16 +257,13 @@ impl BloomPass {
         // Disable depth test for post-processing
         gl::Disable(gl::DEPTH_TEST);
 
-        // 1. Extract bright pixels
-        gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[0]);
-        gl::UseProgram(self.brightness_shader);
-        gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture);
-        gl::Uniform1i(self.loc_brightness_scene, 0);
-        gl::Uniform1f(self.loc_brightness_threshold, self.threshold);
-        self.render_fullscreen_quad();
+        // 1. Extract bright pixels - SKIPPED (MRT handles this)
+        // We use self.bright_texture directly as input for blur
 
         // 2. Blur passes (ping-pong between two framebuffers)
+        // Switch to blur resolution viewport for downsampling
+        gl::Viewport(0, 0, self.blur_width, self.blur_height);
+
         let mut horizontal = true;
         let mut first_iteration = true;
 
@@ -244,7 +274,11 @@ impl BloomPass {
             } else {
                 self.ping_pong_fbo[0]
             };
-            let source_texture = if first_iteration || horizontal {
+
+            // For the VERY first iteration, we read from the MRT bright texture
+            let source_texture = if first_iteration {
+                self.bright_texture
+            } else if horizontal {
                 self.ping_pong_textures[0]
             } else {
                 self.ping_pong_textures[1]
@@ -269,6 +303,9 @@ impl BloomPass {
                 first_iteration = false;
             }
         }
+
+        // Restore full resolution viewport for composition
+        gl::Viewport(0, 0, self.width, self.height);
 
         // 3. Final composition (blend scene + bloom)
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
@@ -317,6 +354,7 @@ impl BloomPass {
         // Delete old framebuffers
         gl::DeleteFramebuffers(1, &self.hdr_fbo);
         gl::DeleteTextures(1, &self.hdr_texture);
+        gl::DeleteTextures(1, &self.bright_texture);
         gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
         gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
         gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
@@ -327,9 +365,15 @@ impl BloomPass {
         // Copy configuration
         self.hdr_fbo = new_bloom.hdr_fbo;
         self.hdr_texture = new_bloom.hdr_texture;
+        self.bright_texture = new_bloom.bright_texture;
         self.hdr_depth_rbo = new_bloom.hdr_depth_rbo;
         self.ping_pong_fbo = new_bloom.ping_pong_fbo;
         self.ping_pong_textures = new_bloom.ping_pong_textures;
+
+        // Update blur dimensions
+        self.blur_width = new_bloom.blur_width;
+        self.blur_height = new_bloom.blur_height;
+        // downsample_factor remains unchanged (user setting)
 
         // Copy uniform locations (shaders are not recreated here, but we copy from new_bloom which has them)
         // Wait, new_bloom creates NEW shaders. We want to KEEP existing shaders to avoid recompiling if not needed.
@@ -389,6 +433,76 @@ impl BloomPass {
         std::mem::forget(new_bloom);
     }
 
+    /// Recreates blur buffers with current downsample_factor
+    /// Call this when downsample_factor changes to apply immediately
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly.
+    pub unsafe fn recreate_blur_buffers(&mut self) {
+        info!(
+            "🔄 Recreating blur buffers with downsample factor {}x",
+            self.downsample_factor
+        );
+
+        // Delete old ping-pong buffers
+        gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
+        gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
+
+        // Calculate new blur dimensions
+        self.blur_width = self.width / self.downsample_factor as i32;
+        self.blur_height = self.height / self.downsample_factor as i32;
+
+        // Create new ping-pong framebuffers
+        let mut ping_pong_fbo = [0; 2];
+        let mut ping_pong_textures = [0; 2];
+        gl::GenFramebuffers(2, ping_pong_fbo.as_mut_ptr());
+        gl::GenTextures(2, ping_pong_textures.as_mut_ptr());
+
+        for i in 0..2 {
+            gl::BindFramebuffer(gl::FRAMEBUFFER, ping_pong_fbo[i]);
+            gl::BindTexture(gl::TEXTURE_2D, ping_pong_textures[i]);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA16F as i32,
+                self.blur_width,
+                self.blur_height,
+                0,
+                gl::RGBA,
+                gl::FLOAT,
+                std::ptr::null(),
+            );
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            gl::FramebufferTexture2D(
+                gl::FRAMEBUFFER,
+                gl::COLOR_ATTACHMENT0,
+                gl::TEXTURE_2D,
+                ping_pong_textures[i],
+                0,
+            );
+
+            if gl::CheckFramebufferStatus(gl::FRAMEBUFFER) != gl::FRAMEBUFFER_COMPLETE {
+                log::error!(
+                    "Ping-pong framebuffer {} is not complete after recreation",
+                    i
+                );
+            }
+        }
+
+        gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+
+        self.ping_pong_fbo = ping_pong_fbo;
+        self.ping_pong_textures = ping_pong_textures;
+
+        info!(
+            "✅ Blur buffers recreated at {}x{} ({}x downsample)",
+            self.blur_width, self.blur_height, self.downsample_factor
+        );
+    }
+
     /// Reloads bloom shaders from disk
     ///
     /// # Safety
@@ -397,11 +511,6 @@ impl BloomPass {
         info!("🔄 Reloading bloom shaders...");
 
         // Try to compile new shaders
-        let new_brightness = try_compile_shader_program_from_files(
-            "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-            "assets/shaders/bloom/brightness_extract.frag.glsl",
-        )?;
-
         let new_blur = try_compile_shader_program_from_files(
             "assets/shaders/bloom/fullscreen_quad.vert.glsl",
             "assets/shaders/bloom/gaussian_blur.frag.glsl",
@@ -413,21 +522,15 @@ impl BloomPass {
         )?;
 
         // Delete old shaders
-        gl::DeleteProgram(self.brightness_shader);
+        // gl::DeleteProgram(self.brightness_shader); // Already 0 or deleted
         gl::DeleteProgram(self.blur_shader);
         gl::DeleteProgram(self.composition_shader);
 
         // Update with new shaders
-        self.brightness_shader = new_brightness;
         self.blur_shader = new_blur;
         self.composition_shader = new_composition;
 
         // Update uniform locations
-        self.loc_brightness_scene =
-            gl::GetUniformLocation(self.brightness_shader, crate::cstr!("uSceneTexture"));
-        self.loc_brightness_threshold =
-            gl::GetUniformLocation(self.brightness_shader, crate::cstr!("uThreshold"));
-
         self.loc_blur_texture = gl::GetUniformLocation(self.blur_shader, crate::cstr!("uTexture"));
         self.loc_blur_direction =
             gl::GetUniformLocation(self.blur_shader, crate::cstr!("uDirection"));
@@ -452,10 +555,11 @@ impl BloomPass {
 
         gl::DeleteFramebuffers(1, &self.hdr_fbo);
         gl::DeleteTextures(1, &self.hdr_texture);
+        gl::DeleteTextures(1, &self.bright_texture);
         gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
         gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
         gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
-        gl::DeleteProgram(self.brightness_shader);
+        // gl::DeleteProgram(self.brightness_shader); // No longer used
         gl::DeleteProgram(self.blur_shader);
         gl::DeleteProgram(self.composition_shader);
     }
