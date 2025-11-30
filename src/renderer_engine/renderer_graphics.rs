@@ -160,7 +160,9 @@ impl RendererGraphics {
                 max_life: p.max_life,
                 size: p.size,
                 angle: p.angle,
-                brightness: 1.0, // User will implement custom calculation
+                // Brightness based on speed (velocity magnitude)
+                // Factor 0.025: Speed 40 -> 1.0, Speed 200 -> 5.0
+                brightness: p.vel.length() * 0.025,
             };
             count += 1;
         }
