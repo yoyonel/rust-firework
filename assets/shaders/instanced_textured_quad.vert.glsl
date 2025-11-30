@@ -7,10 +7,12 @@ layout(location = 0) in vec2 aQuad;
 layout(location = 1) in vec2 aPos;
 layout(location = 2) in vec3 aColor;
 layout(location = 3) in vec4 aLifeMaxLifeSizeAngle;
+layout(location = 4) in float aBrightness;  // HDR multiplier
 
 out vec3 vColor;
 out float vAlpha;
 out vec2 vUV;
+out float vBrightness;  // Pass brightness to fragment shader
 
 uniform vec2 uSize;
 uniform float uTexRatio;
@@ -54,6 +56,7 @@ void main() {
     // Ratio de vie (comme avant)
     vAlpha = clamp(life / max(max_life, 0.0001), 0.0, 1.0);
     vColor = aColor;
+    vBrightness = aBrightness;  // Pass brightness to fragment shader
 
     // On reconstruit les coordonnées UV du quad (-1.0 → -1.0) -> (0.0, 0.0)
     vUV = aQuad * 0.5 + 0.5;            

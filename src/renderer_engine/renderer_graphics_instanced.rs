@@ -134,6 +134,7 @@ impl RendererGraphicsInstanced {
                 max_life: p.max_life,
                 size: p.size,
                 angle: p.angle,
+                brightness: 1.0, // User will implement custom calculation
             };
             count += 1;
         }

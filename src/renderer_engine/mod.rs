@@ -20,3 +20,6 @@ pub mod types;
 pub use self::types::ParticleGPU;
 
 pub mod utils;
+
+pub mod bloom;
+pub use self::bloom::BloomPass;
