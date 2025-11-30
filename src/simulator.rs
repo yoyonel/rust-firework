@@ -30,12 +30,8 @@ where
     // Flags for console commands
     reload_shaders_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
-    // Bloom control flags
-    bloom_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
-    bloom_intensity: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
-    bloom_threshold: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
-    bloom_iterations: std::sync::Arc<std::sync::atomic::AtomicU32>,
-    bloom_downsample: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
+    // Renderer configuration
+    renderer_config: std::sync::Arc<std::sync::RwLock<crate::renderer_engine::RendererConfig>>,
 
     frames: u64,
     last_time: Instant,
@@ -78,16 +74,12 @@ where
                 false,
             )),
 
-            // Initialize bloom flags with default values
-            bloom_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
-            bloom_intensity: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(
-                2.0f32.to_bits(),
+            // Initialize renderer config
+            renderer_config: std::sync::Arc::new(std::sync::RwLock::new(
+                crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
+                    .unwrap_or_default(),
             )),
-            bloom_threshold: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(
-                0.2f32.to_bits(),
-            )),
-            bloom_iterations: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(5)),
-            bloom_downsample: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(2)),
+
             frames: 0,
             last_time: Instant::now(),
             window_size,
@@ -229,43 +221,31 @@ where
             self.reload_shaders();
         }
 
-        // Check bloom command flags and apply changes
-        let bloom_pass = self.renderer_engine.bloom_pass_mut();
-
-        // Update bloom enabled state
-        let enabled = self
-            .bloom_enabled
-            .load(std::sync::atomic::Ordering::Relaxed);
-        bloom_pass.enabled = enabled;
-
         // Update bloom intensity
-        let intensity_bits = self
-            .bloom_intensity
-            .load(std::sync::atomic::Ordering::Relaxed);
-        bloom_pass.intensity = f32::from_bits(intensity_bits);
+        // --- Apply Bloom Parameters from Config ---
+        {
+            if let Ok(config) = self.renderer_config.read() {
+                let bloom_pass = self.renderer_engine.bloom_pass_mut();
 
-        // Update bloom threshold
-        let threshold_bits = self
-            .bloom_threshold
-            .load(std::sync::atomic::Ordering::Relaxed);
-        bloom_pass.threshold = f32::from_bits(threshold_bits);
+                bloom_pass.enabled = config.bloom_enabled;
+                bloom_pass.intensity = config.bloom_intensity;
+                bloom_pass.blur_iterations = config.bloom_iterations;
+                bloom_pass.blur_method = match config.bloom_blur_method {
+                    crate::renderer_engine::config::BlurMethod::Gaussian => {
+                        crate::renderer_engine::bloom::BlurMethod::Gaussian
+                    }
+                    crate::renderer_engine::config::BlurMethod::Kawase => {
+                        crate::renderer_engine::bloom::BlurMethod::Kawase
+                    }
+                };
 
-        // Update bloom iterations
-        let iterations = self
-            .bloom_iterations
-            .load(std::sync::atomic::Ordering::Relaxed);
-        bloom_pass.blur_iterations = iterations;
-
-        // Update bloom downsample factor
-        let downsample = self
-            .bloom_downsample
-            .load(std::sync::atomic::Ordering::Relaxed);
-
-        // If downsample factor changed, recreate blur buffers immediately
-        if bloom_pass.downsample_factor != downsample {
-            bloom_pass.downsample_factor = downsample;
-            unsafe {
-                bloom_pass.recreate_blur_buffers();
+                // Check for downsample change
+                if bloom_pass.downsample_factor != config.bloom_downsample {
+                    bloom_pass.downsample_factor = config.bloom_downsample;
+                    unsafe {
+                        bloom_pass.recreate_blur_buffers();
+                    }
+                }
             }
         }
 
@@ -477,22 +457,30 @@ where
                 "✅ Shader reload requested".to_string()
             });
 
-        // Bloom commands
-        let bloom_enabled_flag = self.bloom_enabled.clone();
+        // --- Bloom Commands ---
+        let config_clone = self.renderer_config.clone();
         self.commands_registry
             .register_for_renderer("renderer.bloom.enable", move |_args| {
-                bloom_enabled_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-                "✅ Bloom enabled".to_string()
+                if let Ok(mut config) = config_clone.write() {
+                    config.bloom_enabled = true;
+                    "✅ Bloom enabled".to_string()
+                } else {
+                    "❌ Failed to lock config".to_string()
+                }
             });
 
-        let bloom_disabled_flag = self.bloom_enabled.clone();
+        let config_clone = self.renderer_config.clone();
         self.commands_registry
             .register_for_renderer("renderer.bloom.disable", move |_args| {
-                bloom_disabled_flag.store(false, std::sync::atomic::Ordering::Relaxed);
-                "✅ Bloom disabled".to_string()
+                if let Ok(mut config) = config_clone.write() {
+                    config.bloom_enabled = false;
+                    "✅ Bloom disabled".to_string()
+                } else {
+                    "❌ Failed to lock config".to_string()
+                }
             });
 
-        let bloom_intensity_flag = self.bloom_intensity.clone();
+        let config_clone = self.renderer_config.clone();
         self.commands_registry
             .register_for_renderer("renderer.bloom.intensity", move |args| {
                 if args.trim().is_empty() {
@@ -501,34 +489,19 @@ where
                 let value_str = args.split_whitespace().nth(1).unwrap_or("");
                 match value_str.parse::<f32>() {
                     Ok(val) if (0.0..=2.0).contains(&val) => {
-                        bloom_intensity_flag
-                            .store(val.to_bits(), std::sync::atomic::Ordering::Relaxed);
-                        format!("✅ Bloom intensity set to {:.2}", val)
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_intensity = val;
+                            format!("✅ Bloom intensity set to {:.2}", val)
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
                     }
                     Ok(val) => format!("❌ Value {:.2} out of range [0.0, 2.0]", val),
                     Err(_) => "❌ Invalid number".to_string(),
                 }
             });
 
-        let bloom_threshold_flag = self.bloom_threshold.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.bloom.threshold", move |args| {
-                if args.trim().is_empty() {
-                    return "Usage: bloom.threshold <value> (0.0-1.0)".to_string();
-                }
-                let value_str = args.split_whitespace().nth(1).unwrap_or("");
-                match value_str.parse::<f32>() {
-                    Ok(val) if (0.0..=1.0).contains(&val) => {
-                        bloom_threshold_flag
-                            .store(val.to_bits(), std::sync::atomic::Ordering::Relaxed);
-                        format!("✅ Bloom threshold set to {:.2}", val)
-                    }
-                    Ok(val) => format!("❌ Value {:.2} out of range [0.0, 1.0]", val),
-                    Err(_) => "❌ Invalid number".to_string(),
-                }
-            });
-
-        let bloom_iterations_flag = self.bloom_iterations.clone();
+        let config_clone = self.renderer_config.clone();
         self.commands_registry
             .register_for_renderer("renderer.bloom.iterations", move |args| {
                 if args.trim().is_empty() {
@@ -537,15 +510,19 @@ where
                 let value_str = args.split_whitespace().nth(1).unwrap_or("");
                 match value_str.parse::<u32>() {
                     Ok(val) if (1..=10).contains(&val) => {
-                        bloom_iterations_flag.store(val, std::sync::atomic::Ordering::Relaxed);
-                        format!("✅ Bloom iterations set to {}", val)
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_iterations = val;
+                            format!("✅ Bloom iterations set to {}", val)
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
                     }
                     Ok(val) => format!("❌ Value {} out of range [1, 10]", val),
                     Err(_) => "❌ Invalid number".to_string(),
                 }
             });
 
-        let bloom_downsample_flag = self.bloom_downsample.clone();
+        let config_clone = self.renderer_config.clone();
         self.commands_registry
             .register_for_renderer("renderer.bloom.downsample", move |args| {
                 if args.trim().is_empty() {
@@ -556,11 +533,92 @@ where
                 match value_str.parse::<u32>() {
                     Ok(1) | Ok(2) | Ok(4) => {
                         let val = value_str.parse::<u32>().unwrap();
-                        bloom_downsample_flag.store(val, std::sync::atomic::Ordering::Relaxed);
-                        format!("✅ Bloom downsample set to {}x", val)
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_downsample = val;
+                            format!("✅ Bloom downsample set to {}x", val)
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
                     }
                     Ok(val) => format!("❌ Value {} invalid. Use 1, 2, or 4", val),
                     Err(_) => "❌ Invalid number".to_string(),
+                }
+            });
+
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.method", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.method <gaussian|kawase>".to_string();
+                }
+                let method_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+                match method_str.as_str() {
+                    "gaussian" => {
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_blur_method =
+                                crate::renderer_engine::config::BlurMethod::Gaussian;
+                            "✅ Bloom method set to Gaussian".to_string()
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    }
+                    "kawase" => {
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_blur_method =
+                                crate::renderer_engine::config::BlurMethod::Kawase;
+                            "✅ Bloom method set to Kawase (Dual Filtering)".to_string()
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    }
+                    _ => format!(
+                        "❌ Unknown method '{}'. Use 'gaussian' or 'kawase'",
+                        method_str
+                    ),
+                }
+            });
+
+        // New command: renderer.config
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config", move |_args| {
+                if let Ok(config) = config_clone.read() {
+                    format!("{:#?}", *config)
+                } else {
+                    "❌ Failed to read config".to_string()
+                }
+            });
+
+        // New command: renderer.config.save
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config.save", move |_args| {
+                if let Ok(config) = config_clone.read() {
+                    match config.save_to_file("assets/config/renderer.toml") {
+                        Ok(_) => "✅ Config saved to assets/config/renderer.toml".to_string(),
+                        Err(e) => format!("❌ Failed to save config: {}", e),
+                    }
+                } else {
+                    "❌ Failed to read config".to_string()
+                }
+            });
+
+        // New command: renderer.config.reload
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config.reload", move |_args| {
+                match crate::renderer_engine::RendererConfig::from_file(
+                    "assets/config/renderer.toml",
+                ) {
+                    Ok(new_config) => {
+                        if let Ok(mut config) = config_clone.write() {
+                            *config = new_config;
+                            "✅ Config reloaded from assets/config/renderer.toml".to_string()
+                        } else {
+                            "❌ Failed to lock config for writing".to_string()
+                        }
+                    }
+                    Err(e) => format!("❌ Failed to load config: {}", e),
                 }
             });
     }
