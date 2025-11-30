@@ -160,6 +160,8 @@ impl RendererGraphics {
                 max_life: p.max_life,
                 size: p.size,
                 angle: p.angle,
+                // Brightness based on life ratio with exponential decay (cubic)
+                brightness: (p.life / p.max_life).powi(3),
             };
             count += 1;
         }

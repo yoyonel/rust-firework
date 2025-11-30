@@ -30,6 +30,9 @@ where
     // Flags for console commands
     reload_shaders_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
+    // Renderer configuration
+    renderer_config: std::sync::Arc<std::sync::RwLock<crate::renderer_engine::RendererConfig>>,
+
     frames: u64,
     last_time: Instant,
 
@@ -70,6 +73,13 @@ where
             reload_shaders_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
+
+            // Initialize renderer config
+            renderer_config: std::sync::Arc::new(std::sync::RwLock::new(
+                crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
+                    .unwrap_or_default(),
+            )),
+
             frames: 0,
             last_time: Instant::now(),
             window_size,
@@ -209,6 +219,34 @@ where
             self.reload_shaders_requested
                 .store(false, std::sync::atomic::Ordering::Relaxed);
             self.reload_shaders();
+        }
+
+        // Update bloom intensity
+        // --- Apply Bloom Parameters from Config ---
+        {
+            if let Ok(config) = self.renderer_config.read() {
+                let bloom_pass = self.renderer_engine.bloom_pass_mut();
+
+                bloom_pass.enabled = config.bloom_enabled;
+                bloom_pass.intensity = config.bloom_intensity;
+                bloom_pass.blur_iterations = config.bloom_iterations;
+                bloom_pass.blur_method = match config.bloom_blur_method {
+                    crate::renderer_engine::config::BlurMethod::Gaussian => {
+                        crate::renderer_engine::bloom::BlurMethod::Gaussian
+                    }
+                    crate::renderer_engine::config::BlurMethod::Kawase => {
+                        crate::renderer_engine::bloom::BlurMethod::Kawase
+                    }
+                };
+
+                // Check for downsample change
+                if bloom_pass.downsample_factor != config.bloom_downsample {
+                    bloom_pass.downsample_factor = config.bloom_downsample;
+                    unsafe {
+                        bloom_pass.recreate_blur_buffers();
+                    }
+                }
+            }
         }
 
         // 🔹 start global frame
@@ -417,6 +455,171 @@ where
             .register_for_renderer("renderer.reload_shaders", move |_args| {
                 reload_flag.store(true, std::sync::atomic::Ordering::Relaxed);
                 "✅ Shader reload requested".to_string()
+            });
+
+        // --- Bloom Commands ---
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.enable", move |_args| {
+                if let Ok(mut config) = config_clone.write() {
+                    config.bloom_enabled = true;
+                    "✅ Bloom enabled".to_string()
+                } else {
+                    "❌ Failed to lock config".to_string()
+                }
+            });
+
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.disable", move |_args| {
+                if let Ok(mut config) = config_clone.write() {
+                    config.bloom_enabled = false;
+                    "✅ Bloom disabled".to_string()
+                } else {
+                    "❌ Failed to lock config".to_string()
+                }
+            });
+
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.intensity", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.intensity <value> (0.0-2.0)".to_string();
+                }
+                let value_str = args.split_whitespace().nth(1).unwrap_or("");
+                match value_str.parse::<f32>() {
+                    Ok(val) if (0.0..=2.0).contains(&val) => {
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_intensity = val;
+                            format!("✅ Bloom intensity set to {:.2}", val)
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    }
+                    Ok(val) => format!("❌ Value {:.2} out of range [0.0, 2.0]", val),
+                    Err(_) => "❌ Invalid number".to_string(),
+                }
+            });
+
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.iterations", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.iterations <count> (1-10)".to_string();
+                }
+                let value_str = args.split_whitespace().nth(1).unwrap_or("");
+                match value_str.parse::<u32>() {
+                    Ok(val) if (1..=10).contains(&val) => {
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_iterations = val;
+                            format!("✅ Bloom iterations set to {}", val)
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    }
+                    Ok(val) => format!("❌ Value {} out of range [1, 10]", val),
+                    Err(_) => "❌ Invalid number".to_string(),
+                }
+            });
+
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.downsample", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.downsample <factor> (1=full, 2=half, 4=quarter)"
+                        .to_string();
+                }
+                let value_str = args.split_whitespace().nth(1).unwrap_or("");
+                match value_str.parse::<u32>() {
+                    Ok(1) | Ok(2) | Ok(4) => {
+                        let val = value_str.parse::<u32>().unwrap();
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_downsample = val;
+                            format!("✅ Bloom downsample set to {}x", val)
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    }
+                    Ok(val) => format!("❌ Value {} invalid. Use 1, 2, or 4", val),
+                    Err(_) => "❌ Invalid number".to_string(),
+                }
+            });
+
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.method", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.method <gaussian|kawase>".to_string();
+                }
+                let method_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+                match method_str.as_str() {
+                    "gaussian" => {
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_blur_method =
+                                crate::renderer_engine::config::BlurMethod::Gaussian;
+                            "✅ Bloom method set to Gaussian".to_string()
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    }
+                    "kawase" => {
+                        if let Ok(mut config) = config_clone.write() {
+                            config.bloom_blur_method =
+                                crate::renderer_engine::config::BlurMethod::Kawase;
+                            "✅ Bloom method set to Kawase (Dual Filtering)".to_string()
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    }
+                    _ => format!(
+                        "❌ Unknown method '{}'. Use 'gaussian' or 'kawase'",
+                        method_str
+                    ),
+                }
+            });
+
+        // New command: renderer.config
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config", move |_args| {
+                if let Ok(config) = config_clone.read() {
+                    format!("{:#?}", *config)
+                } else {
+                    "❌ Failed to read config".to_string()
+                }
+            });
+
+        // New command: renderer.config.save
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config.save", move |_args| {
+                if let Ok(config) = config_clone.read() {
+                    match config.save_to_file("assets/config/renderer.toml") {
+                        Ok(_) => "✅ Config saved to assets/config/renderer.toml".to_string(),
+                        Err(e) => format!("❌ Failed to save config: {}", e),
+                    }
+                } else {
+                    "❌ Failed to read config".to_string()
+                }
+            });
+
+        // New command: renderer.config.reload
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config.reload", move |_args| {
+                match crate::renderer_engine::RendererConfig::from_file(
+                    "assets/config/renderer.toml",
+                ) {
+                    Ok(new_config) => {
+                        if let Ok(mut config) = config_clone.write() {
+                            *config = new_config;
+                            "✅ Config reloaded from assets/config/renderer.toml".to_string()
+                        } else {
+                            "❌ Failed to lock config for writing".to_string()
+                        }
+                    }
+                    Err(e) => format!("❌ Failed to load config: {}", e),
+                }
             });
     }
 }
