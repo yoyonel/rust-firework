@@ -127,23 +127,28 @@ impl<'a> imgui::InputTextCallbackHandler for CombinedInputHandler<'a> {
     }
 
     // COMPLETION_HANDLER LOGIC
-    fn on_completion(&mut self, mut _data: imgui::TextCallbackData) {
+    fn on_completion(&mut self, mut data: imgui::TextCallbackData) {
         if self.suggestions.is_empty() {
             return;
         }
 
-        // 1. Instantiate Cycler and load current state
+        // Apply the currently selected suggestion to the input buffer
+        let selected_suggestion = &self.suggestions[*self.selected_suggestion_index];
+
+        // Clear current input
+        let current_len = data.str().len();
+        data.remove_chars(0, current_len);
+
+        // Insert selected suggestion
+        data.insert_chars(0, selected_suggestion);
+
+        // Move to next suggestion for next TAB press (cycling behavior)
         let mut cycler = SelectionCycler::new(self.suggestions);
         cycler.current_index = *self.selected_suggestion_index;
 
-        // 2. Execute idiomatic action (rotation)
         if cycler.next_cyclic().is_some() {
-            // 3. Save updated state
             *self.selected_suggestion_index = cycler.get_index();
         }
-
-        // Reminder: Here we ONLY rotate the index.
-        // Text application is handled by ENTER or TAB key in Console::draw.
     }
 
     // HISTORY_HANDLER LOGIC
@@ -519,6 +524,42 @@ impl Console {
 
         let input = self.input.trim();
 
+        // Check if we're completing an argument (space after command name)
+        if let Some(space_pos) = input.find(' ') {
+            let cmd_name = &input[..space_pos];
+            let arg_part = &input[space_pos + 1..];
+
+            // Special handling for commands with known argument values
+            let arg_suggestions: Vec<&str> = match cmd_name {
+                "renderer.bloom.method" => vec!["gaussian", "kawase"],
+                _ => vec![],
+            };
+
+            if !arg_suggestions.is_empty() {
+                // Filter and score argument suggestions
+                let mut scored_args: Vec<(i64, String)> = arg_suggestions
+                    .iter()
+                    .filter_map(|arg| {
+                        self.matcher
+                            .fuzzy_match(arg, arg_part)
+                            .map(|score| (score, format!("{} {}", cmd_name, arg)))
+                    })
+                    .collect();
+
+                // Sort by score descending
+                scored_args.sort_by(|a, b| b.0.cmp(&a.0));
+
+                self.autocomplete_suggestions = scored_args
+                    .into_iter()
+                    .map(|(_, suggestion)| suggestion)
+                    .collect();
+
+                self.selected_suggestion = 0;
+                return;
+            }
+        }
+
+        // Default: command name completion
         // 1. Collect ALL possible commands (Registry + Internal)
         let command_list_iter = registry
             .get_commands()

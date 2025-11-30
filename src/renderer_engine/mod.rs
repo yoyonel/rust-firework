@@ -19,6 +19,9 @@ pub use self::shader::compile_shader_program;
 pub mod types;
 pub use self::types::ParticleGPU;
 
+pub mod config;
+pub use self::config::RendererConfig;
+
 pub mod utils;
 
 pub mod bloom;

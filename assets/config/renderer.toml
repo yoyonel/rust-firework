@@ -1,0 +1,5 @@
+bloom_enabled = true
+bloom_intensity = 0.75
+bloom_iterations = 3
+bloom_downsample = 2
+bloom_blur_method = "Gaussian"
