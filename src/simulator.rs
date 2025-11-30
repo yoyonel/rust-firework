@@ -35,6 +35,7 @@ where
     bloom_intensity: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
     bloom_threshold: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
     bloom_iterations: std::sync::Arc<std::sync::atomic::AtomicU32>,
+    bloom_downsample: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
 
     frames: u64,
     last_time: Instant,
@@ -80,12 +81,13 @@ where
             // Initialize bloom flags with default values
             bloom_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
             bloom_intensity: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(
-                2.0_f32.to_bits(),
+                2.0f32.to_bits(),
             )),
             bloom_threshold: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(
-                0.2_f32.to_bits(),
+                0.2f32.to_bits(),
             )),
             bloom_iterations: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(5)),
+            bloom_downsample: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(2)),
             frames: 0,
             last_time: Instant::now(),
             window_size,
@@ -253,6 +255,19 @@ where
             .bloom_iterations
             .load(std::sync::atomic::Ordering::Relaxed);
         bloom_pass.blur_iterations = iterations;
+
+        // Update bloom downsample factor
+        let downsample = self
+            .bloom_downsample
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        // If downsample factor changed, recreate blur buffers immediately
+        if bloom_pass.downsample_factor != downsample {
+            bloom_pass.downsample_factor = downsample;
+            unsafe {
+                bloom_pass.recreate_blur_buffers();
+            }
+        }
 
         // 🔹 start global frame
         let _frame_guard = self.profiler.frame(); // RAII: mesure totale de la frame
@@ -526,6 +541,25 @@ where
                         format!("✅ Bloom iterations set to {}", val)
                     }
                     Ok(val) => format!("❌ Value {} out of range [1, 10]", val),
+                    Err(_) => "❌ Invalid number".to_string(),
+                }
+            });
+
+        let bloom_downsample_flag = self.bloom_downsample.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.downsample", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.downsample <factor> (1=full, 2=half, 4=quarter)"
+                        .to_string();
+                }
+                let value_str = args.split_whitespace().nth(1).unwrap_or("");
+                match value_str.parse::<u32>() {
+                    Ok(1) | Ok(2) | Ok(4) => {
+                        let val = value_str.parse::<u32>().unwrap();
+                        bloom_downsample_flag.store(val, std::sync::atomic::Ordering::Relaxed);
+                        format!("✅ Bloom downsample set to {}x", val)
+                    }
+                    Ok(val) => format!("❌ Value {} invalid. Use 1, 2, or 4", val),
                     Err(_) => "❌ Invalid number".to_string(),
                 }
             });
