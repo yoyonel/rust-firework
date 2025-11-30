@@ -2,6 +2,13 @@ use crate::renderer_engine::shader::try_compile_shader_program_from_files;
 use gl::types::*;
 use log::info;
 
+/// Blur algorithm selection
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlurMethod {
+    Gaussian, // Separable Gaussian blur (10 passes for 5 iterations)
+    Kawase,   // Dual Kawase blur (6 passes: 3 down + 3 up)
+}
+
 /// Bloom post-processing effect
 ///
 /// Implements an Unreal-style bloom with:
@@ -22,22 +29,28 @@ pub struct BloomPass {
     // Shaders
     brightness_shader: GLuint,
     blur_shader: GLuint,
+    kawase_downsample_shader: GLuint,
+    kawase_upsample_shader: GLuint,
     composition_shader: GLuint,
 
     // Uniform Locations
     // loc_brightness_* removed (MRT)
     loc_blur_texture: GLint,
     loc_blur_direction: GLint,
+    loc_kawase_down_texture: GLint,
+    loc_kawase_down_halfpixel: GLint,
+    loc_kawase_up_texture: GLint,
+    loc_kawase_up_halfpixel: GLint,
     loc_comp_scene: GLint,
     loc_comp_bloom: GLint,
     loc_comp_intensity: GLint,
 
     // Configuration
     pub intensity: f32,
-    pub threshold: f32,
     pub blur_iterations: u32,
     pub enabled: bool,
     pub downsample_factor: u32, // 1 = full res, 2 = half res, 4 = quarter res
+    pub blur_method: BlurMethod,
 
     // Window size
     width: i32,
@@ -185,6 +198,16 @@ impl BloomPass {
                 "assets/shaders/bloom/gaussian_blur.frag.glsl",
             )?;
 
+            let kawase_downsample_shader = try_compile_shader_program_from_files(
+                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
+                "assets/shaders/bloom/kawase_downsample.frag.glsl",
+            )?;
+
+            let kawase_upsample_shader = try_compile_shader_program_from_files(
+                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
+                "assets/shaders/bloom/kawase_upsample.frag.glsl",
+            )?;
+
             let composition_shader = try_compile_shader_program_from_files(
                 "assets/shaders/bloom/fullscreen_quad.vert.glsl",
                 "assets/shaders/bloom/bloom_composition.frag.glsl",
@@ -194,6 +217,16 @@ impl BloomPass {
             let loc_blur_texture = gl::GetUniformLocation(blur_shader, crate::cstr!("uTexture"));
             let loc_blur_direction =
                 gl::GetUniformLocation(blur_shader, crate::cstr!("uDirection"));
+
+            let loc_kawase_down_texture =
+                gl::GetUniformLocation(kawase_downsample_shader, crate::cstr!("uTexture"));
+            let loc_kawase_down_halfpixel =
+                gl::GetUniformLocation(kawase_downsample_shader, crate::cstr!("uHalfPixel"));
+
+            let loc_kawase_up_texture =
+                gl::GetUniformLocation(kawase_upsample_shader, crate::cstr!("uTexture"));
+            let loc_kawase_up_halfpixel =
+                gl::GetUniformLocation(kawase_upsample_shader, crate::cstr!("uHalfPixel"));
 
             let loc_comp_scene =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uSceneTexture"));
@@ -213,17 +246,23 @@ impl BloomPass {
                 ping_pong_textures,
                 brightness_shader: 0, // Unused
                 blur_shader,
+                kawase_downsample_shader,
+                kawase_upsample_shader,
                 composition_shader,
                 loc_blur_texture,
                 loc_blur_direction,
+                loc_kawase_down_texture,
+                loc_kawase_down_halfpixel,
+                loc_kawase_up_texture,
+                loc_kawase_up_halfpixel,
                 loc_comp_scene,
                 loc_comp_bloom,
                 loc_comp_intensity,
                 intensity: 2.0,
-                threshold: 0.2,
                 blur_iterations: 5,
                 enabled: true,
                 downsample_factor,
+                blur_method: BlurMethod::Gaussian, // Default to Gaussian
                 width,
                 height,
                 blur_width,
@@ -260,48 +299,10 @@ impl BloomPass {
         // 1. Extract bright pixels - SKIPPED (MRT handles this)
         // We use self.bright_texture directly as input for blur
 
-        // 2. Blur passes (ping-pong between two framebuffers)
-        // Switch to blur resolution viewport for downsampling
-        gl::Viewport(0, 0, self.blur_width, self.blur_height);
-
-        let mut horizontal = true;
-        let mut first_iteration = true;
-
-        gl::UseProgram(self.blur_shader);
-        for _ in 0..(self.blur_iterations * 2) {
-            let target_fbo = if horizontal {
-                self.ping_pong_fbo[1]
-            } else {
-                self.ping_pong_fbo[0]
-            };
-
-            // For the VERY first iteration, we read from the MRT bright texture
-            let source_texture = if first_iteration {
-                self.bright_texture
-            } else if horizontal {
-                self.ping_pong_textures[0]
-            } else {
-                self.ping_pong_textures[1]
-            };
-
-            gl::BindFramebuffer(gl::FRAMEBUFFER, target_fbo);
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, source_texture);
-            gl::Uniform1i(self.loc_blur_texture, 0);
-
-            // Set blur direction
-            if horizontal {
-                gl::Uniform2f(self.loc_blur_direction, 1.0, 0.0);
-            } else {
-                gl::Uniform2f(self.loc_blur_direction, 0.0, 1.0);
-            }
-
-            self.render_fullscreen_quad();
-
-            horizontal = !horizontal;
-            if first_iteration {
-                first_iteration = false;
-            }
+        // 2. Blur passes - method selection
+        match self.blur_method {
+            BlurMethod::Gaussian => self.apply_gaussian_blur(),
+            BlurMethod::Kawase => self.apply_kawase_blur(),
         }
 
         // Restore full resolution viewport for composition
@@ -327,6 +328,100 @@ impl BloomPass {
 
         // Re-enable depth test
         gl::Enable(gl::DEPTH_TEST);
+    }
+
+    /// Applies Gaussian blur (separable, ping-pong)
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly.
+    unsafe fn apply_gaussian_blur(&self) {
+        gl::Viewport(0, 0, self.blur_width, self.blur_height);
+
+        let mut horizontal = true;
+        let mut first_iteration = true;
+
+        gl::UseProgram(self.blur_shader);
+        for _ in 0..(self.blur_iterations * 2) {
+            let target_fbo = if horizontal {
+                self.ping_pong_fbo[1]
+            } else {
+                self.ping_pong_fbo[0]
+            };
+
+            let source_texture = if first_iteration {
+                self.bright_texture
+            } else if horizontal {
+                self.ping_pong_textures[0]
+            } else {
+                self.ping_pong_textures[1]
+            };
+
+            gl::BindFramebuffer(gl::FRAMEBUFFER, target_fbo);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, source_texture);
+            gl::Uniform1i(self.loc_blur_texture, 0);
+
+            if horizontal {
+                gl::Uniform2f(self.loc_blur_direction, 1.0, 0.0);
+            } else {
+                gl::Uniform2f(self.loc_blur_direction, 0.0, 1.0);
+            }
+
+            self.render_fullscreen_quad();
+
+            horizontal = !horizontal;
+            if first_iteration {
+                first_iteration = false;
+            }
+        }
+    }
+
+    /// Applies Dual Kawase blur (downsample + upsample)
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly.
+    unsafe fn apply_kawase_blur(&self) {
+        gl::Viewport(0, 0, self.blur_width, self.blur_height);
+
+        let half_pixel_x = 0.5 / self.blur_width as f32;
+        let half_pixel_y = 0.5 / self.blur_height as f32;
+
+        // Downsample passes (3 iterations)
+        gl::UseProgram(self.kawase_downsample_shader);
+        gl::Uniform1i(self.loc_kawase_down_texture, 0);
+
+        for i in 0..3 {
+            let source_texture = if i == 0 {
+                self.bright_texture
+            } else {
+                self.ping_pong_textures[(i - 1) % 2]
+            };
+
+            let target_fbo = self.ping_pong_fbo[i % 2];
+
+            gl::BindFramebuffer(gl::FRAMEBUFFER, target_fbo);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, source_texture);
+            gl::Uniform2f(self.loc_kawase_down_halfpixel, half_pixel_x, half_pixel_y);
+
+            self.render_fullscreen_quad();
+        }
+
+        // Upsample passes (3 iterations)
+        gl::UseProgram(self.kawase_upsample_shader);
+        gl::Uniform1i(self.loc_kawase_up_texture, 0);
+
+        for i in 0..3 {
+            let source_idx = (2 - i) % 2;
+            let target_idx = (2 - i + 1) % 2;
+
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[target_idx]);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[source_idx]);
+            gl::Uniform2f(self.loc_kawase_up_halfpixel, half_pixel_x, half_pixel_y);
+
+            self.render_fullscreen_quad();
+        }
     }
 
     /// Renders a fullscreen quad using the vertex ID trick (no VBO needed)
