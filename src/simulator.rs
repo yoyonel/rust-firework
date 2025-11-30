@@ -30,6 +30,12 @@ where
     // Flags for console commands
     reload_shaders_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
+    // Bloom control flags
+    bloom_enabled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    bloom_intensity: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
+    bloom_threshold: std::sync::Arc<std::sync::atomic::AtomicU32>, // f32 as u32 bits
+    bloom_iterations: std::sync::Arc<std::sync::atomic::AtomicU32>,
+
     frames: u64,
     last_time: Instant,
 
@@ -70,6 +76,16 @@ where
             reload_shaders_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
+
+            // Initialize bloom flags with default values
+            bloom_enabled: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true)),
+            bloom_intensity: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(
+                2.0_f32.to_bits(),
+            )),
+            bloom_threshold: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(
+                0.2_f32.to_bits(),
+            )),
+            bloom_iterations: std::sync::Arc::new(std::sync::atomic::AtomicU32::new(5)),
             frames: 0,
             last_time: Instant::now(),
             window_size,
@@ -210,6 +226,33 @@ where
                 .store(false, std::sync::atomic::Ordering::Relaxed);
             self.reload_shaders();
         }
+
+        // Check bloom command flags and apply changes
+        let bloom_pass = self.renderer_engine.bloom_pass_mut();
+
+        // Update bloom enabled state
+        let enabled = self
+            .bloom_enabled
+            .load(std::sync::atomic::Ordering::Relaxed);
+        bloom_pass.enabled = enabled;
+
+        // Update bloom intensity
+        let intensity_bits = self
+            .bloom_intensity
+            .load(std::sync::atomic::Ordering::Relaxed);
+        bloom_pass.intensity = f32::from_bits(intensity_bits);
+
+        // Update bloom threshold
+        let threshold_bits = self
+            .bloom_threshold
+            .load(std::sync::atomic::Ordering::Relaxed);
+        bloom_pass.threshold = f32::from_bits(threshold_bits);
+
+        // Update bloom iterations
+        let iterations = self
+            .bloom_iterations
+            .load(std::sync::atomic::Ordering::Relaxed);
+        bloom_pass.blur_iterations = iterations;
 
         // 🔹 start global frame
         let _frame_guard = self.profiler.frame(); // RAII: mesure totale de la frame
@@ -417,6 +460,74 @@ where
             .register_for_renderer("renderer.reload_shaders", move |_args| {
                 reload_flag.store(true, std::sync::atomic::Ordering::Relaxed);
                 "✅ Shader reload requested".to_string()
+            });
+
+        // Bloom commands
+        let bloom_enabled_flag = self.bloom_enabled.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.enable", move |_args| {
+                bloom_enabled_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                "✅ Bloom enabled".to_string()
+            });
+
+        let bloom_disabled_flag = self.bloom_enabled.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.disable", move |_args| {
+                bloom_disabled_flag.store(false, std::sync::atomic::Ordering::Relaxed);
+                "✅ Bloom disabled".to_string()
+            });
+
+        let bloom_intensity_flag = self.bloom_intensity.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.intensity", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.intensity <value> (0.0-2.0)".to_string();
+                }
+                let value_str = args.split_whitespace().nth(1).unwrap_or("");
+                match value_str.parse::<f32>() {
+                    Ok(val) if (0.0..=2.0).contains(&val) => {
+                        bloom_intensity_flag
+                            .store(val.to_bits(), std::sync::atomic::Ordering::Relaxed);
+                        format!("✅ Bloom intensity set to {:.2}", val)
+                    }
+                    Ok(val) => format!("❌ Value {:.2} out of range [0.0, 2.0]", val),
+                    Err(_) => "❌ Invalid number".to_string(),
+                }
+            });
+
+        let bloom_threshold_flag = self.bloom_threshold.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.threshold", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.threshold <value> (0.0-1.0)".to_string();
+                }
+                let value_str = args.split_whitespace().nth(1).unwrap_or("");
+                match value_str.parse::<f32>() {
+                    Ok(val) if (0.0..=1.0).contains(&val) => {
+                        bloom_threshold_flag
+                            .store(val.to_bits(), std::sync::atomic::Ordering::Relaxed);
+                        format!("✅ Bloom threshold set to {:.2}", val)
+                    }
+                    Ok(val) => format!("❌ Value {:.2} out of range [0.0, 1.0]", val),
+                    Err(_) => "❌ Invalid number".to_string(),
+                }
+            });
+
+        let bloom_iterations_flag = self.bloom_iterations.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.bloom.iterations", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: bloom.iterations <count> (1-10)".to_string();
+                }
+                let value_str = args.split_whitespace().nth(1).unwrap_or("");
+                match value_str.parse::<u32>() {
+                    Ok(val) if (1..=10).contains(&val) => {
+                        bloom_iterations_flag.store(val, std::sync::atomic::Ordering::Relaxed);
+                        format!("✅ Bloom iterations set to {}", val)
+                    }
+                    Ok(val) => format!("❌ Value {} out of range [1, 10]", val),
+                    Err(_) => "❌ Invalid number".to_string(),
+                }
             });
     }
 }

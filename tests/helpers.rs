@@ -159,6 +159,9 @@ impl RendererEngine for DummyRenderer {
     fn close(&mut self) {
         println!("Closing renderer...");
     }
+    fn bloom_pass_mut(&mut self) -> &mut fireworks_sim::renderer_engine::BloomPass {
+        panic!("DummyRenderer does not have a real BloomPass")
+    }
 }
 
 // --- Test Mocks (Logging + Failure Injection) ---
@@ -312,6 +315,9 @@ impl RendererEngine for TestRenderer {
     }
     fn close(&mut self) {
         self.log.borrow_mut().push("renderer.close".into());
+    }
+    fn bloom_pass_mut(&mut self) -> &mut fireworks_sim::renderer_engine::BloomPass {
+        panic!("TestRenderer does not have a real BloomPass")
     }
 }
 
