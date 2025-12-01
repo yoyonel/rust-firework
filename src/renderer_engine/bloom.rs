@@ -32,6 +32,9 @@ pub struct BloomPass {
     kawase_upsample_shader: GLuint,
     composition_shader: GLuint,
 
+    // VAO (required for Core Profile even without VBOs)
+    dummy_vao: GLuint,
+
     // Uniform Locations
     // loc_brightness_* removed (MRT)
     loc_blur_texture: GLint,
@@ -232,6 +235,10 @@ impl BloomPass {
             let loc_comp_intensity =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uBloomIntensity"));
 
+            // Create dummy VAO for fullscreen quad rendering (Core Profile requirement)
+            let mut dummy_vao = 0;
+            gl::GenVertexArrays(1, &mut dummy_vao);
+
             info!("✅ Bloom Pass initialized successfully (MRT enabled)");
 
             Ok(Self {
@@ -245,6 +252,7 @@ impl BloomPass {
                 kawase_downsample_shader,
                 kawase_upsample_shader,
                 composition_shader,
+                dummy_vao,
                 loc_blur_texture,
                 loc_blur_direction,
                 loc_kawase_down_texture,
@@ -283,9 +291,6 @@ impl BloomPass {
     pub unsafe fn end_scene_and_apply_bloom(&self) {
         // Disable depth test for post-processing
         gl::Disable(gl::DEPTH_TEST);
-
-        // 1. Extract bright pixels - SKIPPED (MRT handles this)
-        // We use self.bright_texture directly as input for blur
 
         // 2. Blur passes - method selection
         match self.blur_method {
@@ -401,7 +406,9 @@ impl BloomPass {
 
     /// Renders a fullscreen quad using the vertex ID trick (no VBO needed)
     unsafe fn render_fullscreen_quad(&self) {
+        gl::BindVertexArray(self.dummy_vao);
         gl::DrawArrays(gl::TRIANGLES, 0, 3);
+        gl::BindVertexArray(0);
     }
 
     /// Recreates framebuffers when window is resized
@@ -461,6 +468,7 @@ impl BloomPass {
         // So we should delete new_bloom's shaders immediately since we won't use them.
         gl::DeleteProgram(new_bloom.blur_shader);
         gl::DeleteProgram(new_bloom.composition_shader);
+        gl::DeleteVertexArrays(1, &new_bloom.dummy_vao);
 
         // We only take the FBOs/textures from new_bloom
         // And we prevent new_bloom from deleting them when dropped
@@ -621,14 +629,42 @@ impl BloomPass {
     pub unsafe fn close(&mut self) {
         info!("🧹 Cleaning up Bloom Pass");
 
-        gl::DeleteFramebuffers(1, &self.hdr_fbo);
-        gl::DeleteTextures(1, &self.hdr_texture);
-        gl::DeleteTextures(1, &self.bright_texture);
-        gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
-        gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
-        gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
-        gl::DeleteProgram(self.blur_shader);
-        gl::DeleteProgram(self.composition_shader);
+        if self.hdr_fbo != 0 {
+            gl::DeleteFramebuffers(1, &self.hdr_fbo);
+            self.hdr_fbo = 0;
+        }
+        if self.hdr_texture != 0 {
+            gl::DeleteTextures(1, &self.hdr_texture);
+            self.hdr_texture = 0;
+        }
+        if self.bright_texture != 0 {
+            gl::DeleteTextures(1, &self.bright_texture);
+            self.bright_texture = 0;
+        }
+        if self.hdr_depth_rbo != 0 {
+            gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
+            self.hdr_depth_rbo = 0;
+        }
+        if self.ping_pong_fbo[0] != 0 {
+            gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
+            self.ping_pong_fbo = [0; 2];
+        }
+        if self.ping_pong_textures[0] != 0 {
+            gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
+            self.ping_pong_textures = [0; 2];
+        }
+        if self.blur_shader != 0 {
+            gl::DeleteProgram(self.blur_shader);
+            self.blur_shader = 0;
+        }
+        if self.composition_shader != 0 {
+            gl::DeleteProgram(self.composition_shader);
+            self.composition_shader = 0;
+        }
+        if self.dummy_vao != 0 {
+            gl::DeleteVertexArrays(1, &self.dummy_vao);
+            self.dummy_vao = 0;
+        }
     }
 
     pub fn sync_with_renderer_config(&mut self, config: &RendererConfig) {
