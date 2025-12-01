@@ -1,4 +1,4 @@
-use crate::renderer_engine::config::RendererConfig;
+use crate::renderer_engine::config::{RendererConfig, ToneMappingMode};
 use crate::renderer_engine::shader::try_compile_shader_program_from_files;
 use gl::types::*;
 use log::info;
@@ -46,6 +46,7 @@ pub struct BloomPass {
     loc_comp_scene: GLint,
     loc_comp_bloom: GLint,
     loc_comp_intensity: GLint,
+    loc_tone_mapping_mode: GLint,
 
     // Configuration
     pub intensity: f32,
@@ -53,6 +54,7 @@ pub struct BloomPass {
     pub enabled: bool,
     pub downsample_factor: u32, // 1 = full res, 2 = half res, 4 = quarter res
     pub blur_method: BlurMethod,
+    pub tone_mapping_mode: ToneMappingMode,
 
     // Window size
     width: i32,
@@ -234,6 +236,8 @@ impl BloomPass {
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uBloomTexture"));
             let loc_comp_intensity =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uBloomIntensity"));
+            let loc_tone_mapping_mode =
+                gl::GetUniformLocation(composition_shader, crate::cstr!("uToneMappingMode"));
 
             // Create dummy VAO for fullscreen quad rendering (Core Profile requirement)
             let mut dummy_vao = 0;
@@ -262,11 +266,13 @@ impl BloomPass {
                 loc_comp_scene,
                 loc_comp_bloom,
                 loc_comp_intensity,
+                loc_tone_mapping_mode,
                 intensity: 2.0,
                 blur_iterations: 5,
                 enabled: true,
                 downsample_factor,
                 blur_method: BlurMethod::Gaussian, // Default to Gaussian
+                tone_mapping_mode: ToneMappingMode::ACES, // Default to ACES
                 width,
                 height,
                 blur_width,
@@ -316,6 +322,7 @@ impl BloomPass {
         gl::Uniform1i(self.loc_comp_bloom, 1);
 
         gl::Uniform1f(self.loc_comp_intensity, self.intensity);
+        gl::Uniform1i(self.loc_tone_mapping_mode, self.tone_mapping_mode as i32);
 
         self.render_fullscreen_quad();
 
@@ -617,6 +624,8 @@ impl BloomPass {
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBloomTexture"));
         self.loc_comp_intensity =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBloomIntensity"));
+        self.loc_tone_mapping_mode =
+            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uToneMappingMode"));
 
         info!("✅ Bloom shaders reloaded successfully");
         Ok(())
@@ -679,6 +688,7 @@ impl BloomPass {
                 crate::renderer_engine::bloom::BlurMethod::Kawase
             }
         };
+        self.tone_mapping_mode = config.tone_mapping_mode;
 
         // Check for downsample change
         if self.downsample_factor != config.bloom_downsample {

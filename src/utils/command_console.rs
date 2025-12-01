@@ -532,6 +532,14 @@ impl Console {
             // Special handling for commands with known argument values
             let arg_suggestions: Vec<&str> = match cmd_name {
                 "renderer.bloom.method" => vec!["gaussian", "kawase"],
+                "renderer.tonemapping" => vec![
+                    "reinhard",
+                    "reinhard_extended",
+                    "aces",
+                    "uncharted2",
+                    "agx",
+                    "khronos",
+                ],
                 _ => vec![],
             };
 

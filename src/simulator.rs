@@ -601,5 +601,35 @@ where
                     Err(e) => format!("❌ Failed to load config: {}", e),
                 }
             });
+
+        // New command: renderer.tonemapping
+        let config_clone = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.tonemapping", move |args| {
+                if args.trim().is_empty() {
+                    return "Usage: renderer.tonemapping <mode>\nModes: reinhard, reinhard_extended, aces, uncharted2, agx, khronos".to_string();
+                }
+                let mode_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+                let mode = match mode_str.as_str() {
+                    "reinhard" => Some(crate::renderer_engine::config::ToneMappingMode::Reinhard),
+                    "reinhard_extended" => Some(crate::renderer_engine::config::ToneMappingMode::ReinhardExtended),
+                    "aces" => Some(crate::renderer_engine::config::ToneMappingMode::ACES),
+                    "uncharted2" => Some(crate::renderer_engine::config::ToneMappingMode::Uncharted2),
+                    "agx" => Some(crate::renderer_engine::config::ToneMappingMode::AgX),
+                    "khronos" => Some(crate::renderer_engine::config::ToneMappingMode::KhronosPBR),
+                    _ => None,
+                };
+
+                if let Some(m) = mode {
+                    if let Ok(mut config) = config_clone.write() {
+                        config.tone_mapping_mode = m;
+                        format!("✅ Tone mapping set to {:?}", m)
+                    } else {
+                        "❌ Failed to lock config".to_string()
+                    }
+                } else {
+                    format!("❌ Unknown mode '{}'.\nAvailable: reinhard, reinhard_extended, aces, uncharted2, agx, khronos", mode_str)
+                }
+            });
     }
 }
