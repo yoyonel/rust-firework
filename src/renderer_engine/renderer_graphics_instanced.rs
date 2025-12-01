@@ -203,6 +203,13 @@ impl RendererGraphicsInstanced {
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn close(&mut self) {
+        // Unmap the persistent buffer BEFORE deleting it
+        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::UnmapBuffer(gl::ARRAY_BUFFER);
+            self.mapped_ptr = std::ptr::null_mut();
+        }
+
         if self.vbo_particles != 0 {
             gl::DeleteBuffers(1, &self.vbo_particles);
             self.vbo_particles = 0;
@@ -214,6 +221,10 @@ impl RendererGraphicsInstanced {
         if self.vao != 0 {
             gl::DeleteVertexArrays(1, &self.vao);
             self.vao = 0;
+        }
+        if self.texture_id != 0 {
+            gl::DeleteTextures(1, &self.texture_id);
+            self.texture_id = 0;
         }
         if self.shader_program != 0 {
             gl::DeleteProgram(self.shader_program);

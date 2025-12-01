@@ -223,30 +223,10 @@ where
 
         // Update bloom intensity
         // --- Apply Bloom Parameters from Config ---
-        {
-            if let Ok(config) = self.renderer_config.read() {
-                let bloom_pass = self.renderer_engine.bloom_pass_mut();
-
-                bloom_pass.enabled = config.bloom_enabled;
-                bloom_pass.intensity = config.bloom_intensity;
-                bloom_pass.blur_iterations = config.bloom_iterations;
-                bloom_pass.blur_method = match config.bloom_blur_method {
-                    crate::renderer_engine::config::BlurMethod::Gaussian => {
-                        crate::renderer_engine::bloom::BlurMethod::Gaussian
-                    }
-                    crate::renderer_engine::config::BlurMethod::Kawase => {
-                        crate::renderer_engine::bloom::BlurMethod::Kawase
-                    }
-                };
-
-                // Check for downsample change
-                if bloom_pass.downsample_factor != config.bloom_downsample {
-                    bloom_pass.downsample_factor = config.bloom_downsample;
-                    unsafe {
-                        bloom_pass.recreate_blur_buffers();
-                    }
-                }
-            }
+        if let Ok(config) = self.renderer_config.read() {
+            self.renderer_engine
+                .bloom_pass_mut()
+                .sync_with_renderer_config(&config);
         }
 
         // 🔹 start global frame
@@ -354,7 +334,7 @@ where
     fn synch_audio_with_physic(audio_engine: &mut A, update_result: &UpdateResult) {
         if let Some(rocket) = &update_result.new_rocket {
             debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
-            audio_engine.play_rocket((rocket.pos.x, rocket.pos.y), 0.6);
+            audio_engine.play_rocket((rocket.pos.x, rocket.pos.y), 0.8);
         }
 
         for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
@@ -488,7 +468,7 @@ where
                 }
                 let value_str = args.split_whitespace().nth(1).unwrap_or("");
                 match value_str.parse::<f32>() {
-                    Ok(val) if (0.0..=2.0).contains(&val) => {
+                    Ok(val) if (0.0..=10.0).contains(&val) => {
                         if let Ok(mut config) = config_clone.write() {
                             config.bloom_intensity = val;
                             format!("✅ Bloom intensity set to {:.2}", val)
@@ -496,7 +476,7 @@ where
                             "❌ Failed to lock config".to_string()
                         }
                     }
-                    Ok(val) => format!("❌ Value {:.2} out of range [0.0, 2.0]", val),
+                    Ok(val) => format!("❌ Value {:.2} out of range [0.0, 10.0]", val),
                     Err(_) => "❌ Invalid number".to_string(),
                 }
             });

@@ -160,8 +160,8 @@ impl RendererGraphics {
                 max_life: p.max_life,
                 size: p.size,
                 angle: p.angle,
-                // Brightness based on life ratio with exponential decay (cubic)
-                brightness: (p.life / p.max_life).powi(3),
+                // Brightness based on life ratio with exponential decay (quartic)
+                brightness: (p.life / p.max_life).powi(4),
             };
             count += 1;
         }
@@ -226,6 +226,13 @@ impl RendererGraphics {
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn close(&mut self) {
+        // Unmap the persistent buffer BEFORE deleting it
+        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::UnmapBuffer(gl::ARRAY_BUFFER);
+            self.mapped_ptr = std::ptr::null_mut();
+        }
+
         if self.vbo_particles != 0 {
             gl::DeleteBuffers(1, &self.vbo_particles);
             self.vbo_particles = 0;

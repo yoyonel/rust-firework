@@ -5,9 +5,10 @@ use fireworks_sim::physic_engine::types::UpdateResult;
 use fireworks_sim::physic_engine::{
     ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
+use fireworks_sim::renderer_engine::BloomPass;
+use fireworks_sim::renderer_engine::RendererEngine;
 
 use anyhow::Result;
-use fireworks_sim::renderer_engine::RendererEngine;
 use fireworks_sim::window_engine::{ImguiSystem, WindowEngine, WindowEvents};
 use glfw::{CursorMode, WindowMode};
 use std::cell::RefCell;
@@ -159,8 +160,8 @@ impl RendererEngine for DummyRenderer {
     fn close(&mut self) {
         println!("Closing renderer...");
     }
-    fn bloom_pass_mut(&mut self) -> &mut fireworks_sim::renderer_engine::BloomPass {
-        panic!("DummyRenderer does not have a real BloomPass")
+    fn bloom_pass_mut(&mut self) -> &mut BloomPass {
+        panic!("DummyRenderer does not have a real bloom pass")
     }
 }
 
