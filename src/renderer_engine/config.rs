@@ -6,6 +6,16 @@ pub enum BlurMethod {
     Kawase = 1,
 }
 
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
+pub enum ToneMappingMode {
+    Reinhard = 0,
+    ReinhardExtended = 1,
+    ACES = 2,
+    Uncharted2 = 3,
+    AgX = 4,
+    KhronosPBR = 5,
+}
+
 #[derive(Debug, Deserialize, Serialize)]
 pub struct RendererConfig {
     pub bloom_enabled: bool,
@@ -13,6 +23,7 @@ pub struct RendererConfig {
     pub bloom_iterations: u32,
     pub bloom_downsample: u32,
     pub bloom_blur_method: BlurMethod,
+    pub tone_mapping_mode: ToneMappingMode,
 }
 
 impl Default for RendererConfig {
@@ -23,6 +34,7 @@ impl Default for RendererConfig {
             bloom_iterations: 5,
             bloom_downsample: 2,
             bloom_blur_method: BlurMethod::Gaussian,
+            tone_mapping_mode: ToneMappingMode::ACES,
         }
     }
 }
