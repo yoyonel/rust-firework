@@ -1,3 +1,4 @@
+use crate::renderer_engine::config::RendererConfig;
 use crate::renderer_engine::shader::try_compile_shader_program_from_files;
 use gl::types::*;
 use log::info;
@@ -628,6 +629,28 @@ impl BloomPass {
         gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
         gl::DeleteProgram(self.blur_shader);
         gl::DeleteProgram(self.composition_shader);
+    }
+
+    pub fn sync_with_renderer_config(&mut self, config: &RendererConfig) {
+        self.enabled = config.bloom_enabled;
+        self.intensity = config.bloom_intensity;
+        self.blur_iterations = config.bloom_iterations;
+        self.blur_method = match config.bloom_blur_method {
+            crate::renderer_engine::config::BlurMethod::Gaussian => {
+                crate::renderer_engine::bloom::BlurMethod::Gaussian
+            }
+            crate::renderer_engine::config::BlurMethod::Kawase => {
+                crate::renderer_engine::bloom::BlurMethod::Kawase
+            }
+        };
+
+        // Check for downsample change
+        if self.downsample_factor != config.bloom_downsample {
+            self.downsample_factor = config.bloom_downsample;
+            unsafe {
+                self.recreate_blur_buffers();
+            }
+        }
     }
 }
 

@@ -5,10 +5,9 @@ use log::info;
 
 use crate::physic_engine::config::PhysicConfig;
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
-use crate::renderer_engine::tools::{setup_opengl_debug, show_opengl_context_info};
+use crate::renderer_engine::renderer_graphics::RendererGraphics;
+use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
 use crate::renderer_engine::BloomPass;
-use crate::renderer_engine::RendererGraphics;
-use crate::renderer_engine::RendererGraphicsInstanced;
 
 // ---------------------------------------------------------
 pub struct Renderer {
@@ -48,18 +47,8 @@ pub struct Renderer {
 //   dans le binaire, ce qui peut augmenter légèrement la taille du code.
 impl Renderer {
     pub fn new(width: i32, height: i32, physic_config: &PhysicConfig) -> Result<Self> {
-        unsafe {
-            show_opengl_context_info();
-
-            // activate OpenGL debug output
-            setup_opengl_debug();
-
-            // set OpenGL states for the rendering
-            // but it's link to the renderer graphics
-            gl::Enable(gl::PROGRAM_POINT_SIZE);
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        }
+        // Note: OpenGL context initialization (show_opengl_context_info, setup_opengl_debug, etc.)
+        // is already done by GlfwWindowEngine::init(), so we don't duplicate it here.
 
         let max_particles_on_gpu: usize =
             physic_config.max_rockets * physic_config.particles_per_explosion;
@@ -177,6 +166,11 @@ impl RendererEngine for Renderer {
     fn close(&mut self) {
         info!("🧹 Fermeture du Renderer");
         unsafe {
+            // Disable OpenGL debug callback BEFORE closing resources
+            // to prevent the callback from being invoked during/after context destruction
+            gl::DebugMessageCallback(None, std::ptr::null_mut());
+            gl::Disable(gl::DEBUG_OUTPUT);
+
             for renderer in &mut self.renderers {
                 renderer.close();
             }

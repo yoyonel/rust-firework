@@ -4,7 +4,7 @@ use glfw::{Context, CursorMode, WindowMode};
 use imgui::Context as ImContext;
 use imgui_glfw_rs::glfw;
 use imgui_glfw_rs::ImguiGLFW;
-use log::info;
+use log::{debug, info};
 
 use crate::renderer_engine::tools::{setup_opengl_debug, show_opengl_context_info};
 use crate::utils::Fullscreen;
@@ -13,7 +13,7 @@ pub struct GlfwWindowEngine {
     glfw: glfw::Glfw,
     window: glfw::PWindow,
     events: WindowEvents,
-    imgui_system: ImguiSystem,
+    imgui_system: Option<ImguiSystem>,
 }
 
 impl WindowEngine for GlfwWindowEngine {
@@ -82,10 +82,10 @@ impl WindowEngine for GlfwWindowEngine {
             glfw,
             window,
             events,
-            imgui_system: ImguiSystem {
+            imgui_system: Some(ImguiSystem {
                 context: imgui,
                 glfw: imgui_glfw,
-            },
+            }),
         })
     }
 
@@ -151,10 +151,57 @@ impl WindowEngine for GlfwWindowEngine {
     }
 
     fn get_imgui_system_mut(&mut self) -> &mut ImguiSystem {
-        &mut self.imgui_system
+        self.imgui_system
+            .as_mut()
+            .expect("ImguiSystem has been closed or not initialized")
     }
 
     fn get_window_and_imgui_mut(&mut self) -> (&mut glfw::PWindow, &mut ImguiSystem) {
-        (&mut self.window, &mut self.imgui_system)
+        (
+            &mut self.window,
+            self.imgui_system
+                .as_mut()
+                .expect("ImguiSystem has been closed or not initialized"),
+        )
+    }
+}
+
+impl GlfwWindowEngine {
+    /// Explicitly close and drop the ImGui system.
+    /// This is useful to ensure ImGui resources (OpenGL) are cleaned up
+    /// BEFORE the OpenGL context is destroyed or before other renderers are closed.
+    pub fn close_imgui(&mut self) {
+        if let Some(imgui) = self.imgui_system.take() {
+            debug!("🧹 Explicitly closing ImGui system");
+            drop(imgui);
+            debug!("✅ ImGui system closed");
+        }
+    }
+}
+
+// Implement Drop to ensure proper cleanup order:
+// ImGui resources must be destroyed BEFORE the GLFW window/context
+impl Drop for GlfwWindowEngine {
+    fn drop(&mut self) {
+        debug!("🧹 Cleaning up GlfwWindowEngine");
+
+        // CRITICAL: Disable OpenGL debug callback BEFORE ImGui cleanup
+        // The debug callback can be invoked during ImGui's OpenGL resource cleanup,
+        // and if the callback tries to log after some resources are freed, it can cause SIGSEGV
+        unsafe {
+            gl::DebugMessageCallback(None, std::ptr::null_mut());
+            gl::Disable(gl::DEBUG_OUTPUT);
+        }
+
+        debug!("✅ OpenGL debug callback disabled");
+
+        // If close_imgui wasn't called manually, drop it here.
+        if let Some(imgui) = self.imgui_system.take() {
+            debug!("🧹 Dropping ImGui system in Drop");
+            drop(imgui);
+            debug!("✅ ImGui system dropped");
+        }
+
+        debug!("🧹 GlfwWindowEngine cleanup complete");
     }
 }
