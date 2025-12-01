@@ -8,12 +8,12 @@ mod helpers;
 use helpers::DummyPhysic;
 
 #[test]
-#[ignore] // Segfaults in headless environment
+// #[ignore] // Segfaults in headless environment - FIXED by explicit ImGui cleanup
 fn test_renderer_step_frame() -> Result<(), Box<dyn std::error::Error>> {
     let mut physic = DummyPhysic::default();
 
     // 1. Init Window (Hidden)
-    let _window_engine =
+    let mut window_engine =
         GlfwWindowEngine::init(800, 600, "Test Renderer").expect("Failed to init window");
 
     // 2. Create Renderer
@@ -33,6 +33,10 @@ fn test_renderer_step_frame() -> Result<(), Box<dyn std::error::Error>> {
 
     // Vérifie qu'on peut fermer correctement
     renderer.close();
+    drop(renderer);
+
+    // Explicitly close ImGui to prevent SIGSEGV
+    window_engine.close_imgui();
 
     Ok(())
 }

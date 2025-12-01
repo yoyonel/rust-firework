@@ -20,5 +20,6 @@ void main() {
     float y = pos.y / uSize.y * 2.0 - 1.0;
     gl_Position = vec4(x, y, 0.0, 1.0);
 
-    gl_PointSize = lifeData.z;
+    // gl_PointSize = lifeData.z;
+    gl_PointSize = max(2.0, a * lifeData.z);
 }
