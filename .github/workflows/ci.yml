@@ -130,9 +130,10 @@ jobs:
         sleep 2
 
     # --- Étape 8 : Lancer les tests avec coverage ---
+    # cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
     - name: Run tests with coverage
       run: |
-        cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
+        cargo llvm-cov --features interactive_tests -- --test-threads=1
 
     - name: SCCache stop server
       run: |
