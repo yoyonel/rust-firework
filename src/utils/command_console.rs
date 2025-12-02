@@ -537,7 +537,6 @@ impl Console {
                     "reinhard_extended",
                     "aces",
                     "uncharted2",
-                    "agx",
                     "khronos",
                 ],
                 _ => vec![],

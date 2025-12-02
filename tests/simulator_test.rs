@@ -9,7 +9,7 @@ use helpers::{DummyAudio, DummyPhysic, DummyRenderer, TestAudio, TestPhysic, Tes
 
 #[test]
 fn test_simulator_with_dummy_engines() -> anyhow::Result<()> {
-    let renderer = DummyRenderer;
+    let renderer = DummyRenderer::default();
     let audio = DummyAudio;
     let physic = DummyPhysic::default();
 

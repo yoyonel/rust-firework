@@ -50,6 +50,9 @@ where
     fps_avg_iter: f32,
     last_log: Instant,
     first_frame: bool,
+
+    // Tone mapping comparison
+    pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -94,6 +97,9 @@ where
             fps_avg_iter: 0.0,
             last_log: Instant::now(),
             first_frame: true,
+            tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                false,
+            )),
         }
     }
 
@@ -227,6 +233,12 @@ where
             self.renderer_engine.sync_bloom_config(&config);
         }
 
+        // Sync comparison mode with BloomPass
+        let comparison_active = self
+            .tonemapping_comparison_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
+        self.renderer_engine.bloom_pass_mut().comparison_mode = comparison_active;
+
         // 🔹 start global frame
         let _frame_guard = self.profiler.frame(); // RAII: mesure totale de la frame
 
@@ -255,6 +267,13 @@ where
                 self.renderer_engine.render_frame(&self.physic_engine),
             );
         });
+
+        // Render comparison textures if mode is active
+        if comparison_active {
+            unsafe {
+                self.renderer_engine.bloom_pass_mut().render_comparison();
+            }
+        }
 
         // moyenne pondérée EMA
         let alpha = 0.15;
@@ -305,15 +324,54 @@ where
             self.last_log = Instant::now();
         }
 
-        if self.console.open {
+        if self.console.open || comparison_active {
             let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
             let ui = imgui_system.glfw.frame(window, &mut imgui_system.context);
-            self.console.draw(
-                ui,
-                &mut self.audio_engine,
-                &mut self.physic_engine,
-                &self.commands_registry,
-            );
+
+            if self.console.open {
+                self.console.draw(
+                    ui,
+                    &mut self.audio_engine,
+                    &mut self.physic_engine,
+                    &self.commands_registry,
+                );
+            }
+
+            if comparison_active {
+                let (positions, labels) = self
+                    .renderer_engine
+                    .bloom_pass_mut()
+                    .get_comparison_grid_info();
+
+                for ((x, y, _w, _h), &label) in positions.iter().zip(labels.iter()) {
+                    // Position text at top-left of each cell with some padding
+                    let text_x = x + 10.0;
+                    let text_y = y + 10.0;
+
+                    // Draw text with background for better visibility using ForegroundDrawList
+                    // This ensures text is always on top, even over other ImGui windows
+                    let draw_list = ui.get_foreground_draw_list();
+                    let text_size = ui.calc_text_size(label);
+                    let padding = 5.0;
+
+                    // Background rectangle
+                    draw_list
+                        .add_rect(
+                            [text_x - padding, text_y - padding],
+                            [
+                                text_x + text_size[0] + padding,
+                                text_y + text_size[1] + padding,
+                            ],
+                            [0.0, 0.0, 0.0, 0.8],
+                        )
+                        .filled(true)
+                        .build();
+
+                    // Text
+                    draw_list.add_text([text_x, text_y], [1.0, 1.0, 1.0, 1.0], label);
+                }
+            }
+
             // Get references again after draw
             let (win, sys) = self.window_engine.get_window_and_imgui_mut();
             sys.glfw.draw(&mut sys.context, win);
@@ -605,7 +663,7 @@ where
         self.commands_registry
             .register_for_renderer("renderer.tonemapping", move |args| {
                 if args.trim().is_empty() {
-                    return "Usage: renderer.tonemapping <mode>\nModes: reinhard, reinhard_extended, aces, uncharted2, agx, khronos".to_string();
+                    return "Usage: renderer.tonemapping <mode>\nModes: reinhard, reinhard_extended, aces, uncharted2, khronos".to_string();
                 }
                 let mode_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
                 let mode = match mode_str.as_str() {
@@ -613,7 +671,7 @@ where
                     "reinhard_extended" => Some(crate::renderer_engine::config::ToneMappingMode::ReinhardExtended),
                     "aces" => Some(crate::renderer_engine::config::ToneMappingMode::ACES),
                     "uncharted2" => Some(crate::renderer_engine::config::ToneMappingMode::Uncharted2),
-                    "agx" => Some(crate::renderer_engine::config::ToneMappingMode::AgX),
+                    "agx" => Some(crate::renderer_engine::config::ToneMappingMode::AgX), // Deprecated, maps to Khronos in shader
                     "khronos" => Some(crate::renderer_engine::config::ToneMappingMode::KhronosPBR),
                     _ => None,
                 };
@@ -626,8 +684,23 @@ where
                         "❌ Failed to lock config".to_string()
                     }
                 } else {
-                    format!("❌ Unknown mode '{}'.\nAvailable: reinhard, reinhard_extended, aces, uncharted2, agx, khronos", mode_str)
+                    format!("❌ Unknown mode '{}'.\nAvailable: reinhard, reinhard_extended, aces, uncharted2, khronos", mode_str)
                 }
             });
+
+        // New command: renderer.tonemapping.compare (toggle comparison mode)
+        let comparison_mode = self.tonemapping_comparison_mode.clone();
+        self.commands_registry.register_for_renderer(
+            "renderer.tonemapping.compare",
+            move |_args| {
+                let current = comparison_mode.load(std::sync::atomic::Ordering::Relaxed);
+                comparison_mode.store(!current, std::sync::atomic::Ordering::Relaxed);
+                if !current {
+                    "✅ Tone mapping comparison mode enabled".to_string()
+                } else {
+                    "✅ Tone mapping comparison mode disabled".to_string()
+                }
+            },
+        );
     }
 }
