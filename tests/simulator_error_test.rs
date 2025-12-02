@@ -10,7 +10,6 @@ use helpers::{TestAudio, TestPhysic, TestRenderer};
 /// Vérifie que le Simulator appelle quand même les méthodes `close`
 /// après une erreur dans le moteur de rendu.
 #[test]
-#[ignore] // Segfaults in headless environment
 fn test_renderer_error_triggers_proper_cleanup() {
     let log = Rc::new(RefCell::new(vec![]));
 

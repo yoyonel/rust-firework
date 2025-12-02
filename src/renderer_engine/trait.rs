@@ -1,5 +1,5 @@
 use crate::physic_engine::PhysicEngineIterator;
-use crate::renderer_engine::BloomPass;
+use crate::renderer_engine::{BloomPass, RendererConfig};
 
 pub trait RendererEngine {
     fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize;
@@ -8,4 +8,10 @@ pub trait RendererEngine {
     fn reload_shaders(&mut self) -> Result<(), String>;
     fn close(&mut self);
     fn bloom_pass_mut(&mut self) -> &mut BloomPass;
+
+    /// Synchronizes bloom configuration from RendererConfig
+    /// Default implementation does nothing (for test mocks)
+    fn sync_bloom_config(&mut self, _config: &RendererConfig) {
+        // Default: no-op for test mocks
+    }
 }

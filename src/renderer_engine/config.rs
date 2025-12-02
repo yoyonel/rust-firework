@@ -30,11 +30,11 @@ impl Default for RendererConfig {
     fn default() -> Self {
         Self {
             bloom_enabled: true,
-            bloom_intensity: 2.0,
-            bloom_iterations: 5,
+            bloom_intensity: 1.5,
+            bloom_iterations: 3,
             bloom_downsample: 2,
             bloom_blur_method: BlurMethod::Gaussian,
-            tone_mapping_mode: ToneMappingMode::ACES,
+            tone_mapping_mode: ToneMappingMode::KhronosPBR,
         }
     }
 }

@@ -75,7 +75,6 @@ fn run_failure_test(failure: EngineFailure) {
 }
 
 #[test]
-#[ignore] // Segfaults in headless environment
 fn test_failures_in_all_engines() {
     for failure in [
         EngineFailure::Renderer,
