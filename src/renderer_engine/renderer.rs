@@ -181,6 +181,10 @@ impl RendererEngine for Renderer {
     fn bloom_pass_mut(&mut self) -> &mut BloomPass {
         &mut self.bloom_pass
     }
+
+    fn sync_bloom_config(&mut self, config: &crate::renderer_engine::RendererConfig) {
+        self.bloom_pass.sync_with_renderer_config(config);
+    }
 }
 
 // Trait implementation
