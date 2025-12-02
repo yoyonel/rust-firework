@@ -224,9 +224,7 @@ where
         // Update bloom intensity
         // --- Apply Bloom Parameters from Config ---
         if let Ok(config) = self.renderer_config.read() {
-            self.renderer_engine
-                .bloom_pass_mut()
-                .sync_with_renderer_config(&config);
+            self.renderer_engine.sync_bloom_config(&config);
         }
 
         // 🔹 start global frame

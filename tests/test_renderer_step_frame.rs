@@ -8,7 +8,6 @@ mod helpers;
 use helpers::DummyPhysic;
 
 #[test]
-// #[ignore] // Segfaults in headless environment - FIXED by explicit ImGui cleanup
 fn test_renderer_step_frame() -> Result<(), Box<dyn std::error::Error>> {
     let mut physic = DummyPhysic::default();
 
