@@ -5,7 +5,6 @@ use fireworks_sim::physic_engine::types::UpdateResult;
 use fireworks_sim::physic_engine::{
     ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
-use fireworks_sim::renderer_engine::BloomPass;
 use fireworks_sim::renderer_engine::RendererEngine;
 
 use anyhow::Result;
@@ -146,7 +145,25 @@ impl PhysicEngineIterator for DummyPhysic {
 impl PhysicEngineFull for DummyPhysic {}
 
 #[allow(dead_code)]
-pub struct DummyRenderer;
+pub struct DummyRenderer {
+    pub bloom_pass: fireworks_sim::renderer_engine::BloomPass,
+}
+
+#[allow(dead_code)]
+impl DummyRenderer {
+    pub fn new() -> Self {
+        Self {
+            bloom_pass: fireworks_sim::renderer_engine::BloomPass::new_dummy(),
+        }
+    }
+}
+
+impl Default for DummyRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[allow(dead_code)]
 impl RendererEngine for DummyRenderer {
     fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P) -> usize {
@@ -160,8 +177,8 @@ impl RendererEngine for DummyRenderer {
     fn close(&mut self) {
         println!("Closing renderer...");
     }
-    fn bloom_pass_mut(&mut self) -> &mut BloomPass {
-        panic!("DummyRenderer does not have a real bloom pass")
+    fn bloom_pass_mut(&mut self) -> &mut fireworks_sim::renderer_engine::BloomPass {
+        &mut self.bloom_pass
     }
 }
 
@@ -280,6 +297,7 @@ impl PhysicEngineFull for TestPhysic {}
 pub struct TestRenderer {
     pub log: SharedLog,
     pub fail_on_run_loop: bool,
+    pub bloom_pass: fireworks_sim::renderer_engine::BloomPass,
 }
 
 #[allow(dead_code)]
@@ -288,6 +306,7 @@ impl TestRenderer {
         Self {
             log,
             fail_on_run_loop: false,
+            bloom_pass: fireworks_sim::renderer_engine::BloomPass::new_dummy(),
         }
     }
 }
@@ -318,7 +337,7 @@ impl RendererEngine for TestRenderer {
         self.log.borrow_mut().push("renderer.close".into());
     }
     fn bloom_pass_mut(&mut self) -> &mut fireworks_sim::renderer_engine::BloomPass {
-        panic!("TestRenderer does not have a real BloomPass")
+        &mut self.bloom_pass
     }
 }
 

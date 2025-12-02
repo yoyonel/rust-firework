@@ -9,6 +9,8 @@ pub enum BlurMethod {
     Kawase,   // Dual Kawase blur (6 passes: 3 down + 3 up)
 }
 
+pub type CellRect = (f32, f32, f32, f32);
+
 /// Bloom post-processing effect
 ///
 /// Implements an Unreal-style bloom with:
@@ -31,6 +33,7 @@ pub struct BloomPass {
     kawase_downsample_shader: GLuint,
     kawase_upsample_shader: GLuint,
     composition_shader: GLuint,
+    passthrough_shader: GLuint, // For displaying comparison textures without processing
 
     // VAO (required for Core Profile even without VBOs)
     dummy_vao: GLuint,
@@ -47,6 +50,7 @@ pub struct BloomPass {
     loc_comp_bloom: GLint,
     loc_comp_intensity: GLint,
     loc_tone_mapping_mode: GLint,
+    loc_passthrough_texture: GLint,
 
     // Configuration
     pub intensity: f32,
@@ -55,6 +59,12 @@ pub struct BloomPass {
     pub downsample_factor: u32, // 1 = full res, 2 = half res, 4 = quarter res
     pub blur_method: BlurMethod,
     pub tone_mapping_mode: ToneMappingMode,
+
+    // Comparison mode
+    pub comparison_mode: bool,
+    comparison_fbo: GLuint,
+    comparison_textures: [GLuint; 5], // One texture per tone mapping
+    comparison_shader: GLuint,
 
     // Window size
     width: i32,
@@ -215,6 +225,73 @@ impl BloomPass {
                 "assets/shaders/bloom/bloom_composition.frag.glsl",
             )?;
 
+            // Compile comparison shader (MRT)
+            let comparison_shader = try_compile_shader_program_from_files(
+                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
+                "assets/shaders/bloom/bloom_composition_compare.frag.glsl",
+            )?;
+
+            // Compile passthrough shader (for displaying comparison textures)
+            let passthrough_shader = try_compile_shader_program_from_files(
+                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
+                "assets/shaders/bloom/passthrough.frag.glsl",
+            )?;
+
+            // Create comparison mode resources (FBO + 5 textures)
+            let mut comparison_fbo = 0;
+            let mut comparison_textures = [0; 5];
+
+            gl::GenFramebuffers(1, &mut comparison_fbo);
+            gl::GenTextures(5, comparison_textures.as_mut_ptr());
+
+            gl::BindFramebuffer(gl::FRAMEBUFFER, comparison_fbo);
+
+            for (i, &tex) in comparison_textures.iter().enumerate() {
+                gl::BindTexture(gl::TEXTURE_2D, tex);
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGBA as i32,
+                    width,
+                    height,
+                    0,
+                    gl::RGBA,
+                    gl::UNSIGNED_BYTE,
+                    std::ptr::null(),
+                );
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+                gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+
+                // Attach to FBO
+                gl::FramebufferTexture2D(
+                    gl::FRAMEBUFFER,
+                    gl::COLOR_ATTACHMENT0 + i as u32,
+                    gl::TEXTURE_2D,
+                    tex,
+                    0,
+                );
+            }
+
+            // Set draw buffers for MRT
+            let draw_buffers = [
+                gl::COLOR_ATTACHMENT0,
+                gl::COLOR_ATTACHMENT1,
+                gl::COLOR_ATTACHMENT2,
+                gl::COLOR_ATTACHMENT3,
+                gl::COLOR_ATTACHMENT4,
+            ];
+            gl::DrawBuffers(5, draw_buffers.as_ptr());
+
+            // Check FBO status
+            let status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
+            if status != gl::FRAMEBUFFER_COMPLETE {
+                return Err(format!("Comparison FBO incomplete: {}", status));
+            }
+
+            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+
             // Cache uniform locations
             let loc_blur_texture = gl::GetUniformLocation(blur_shader, crate::cstr!("uTexture"));
             let loc_blur_direction =
@@ -238,6 +315,9 @@ impl BloomPass {
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uBloomIntensity"));
             let loc_tone_mapping_mode =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uToneMappingMode"));
+
+            let loc_passthrough_texture =
+                gl::GetUniformLocation(passthrough_shader, crate::cstr!("uTexture"));
 
             // Create dummy VAO for fullscreen quad rendering (Core Profile requirement)
             let mut dummy_vao = 0;
@@ -267,17 +347,66 @@ impl BloomPass {
                 loc_comp_bloom,
                 loc_comp_intensity,
                 loc_tone_mapping_mode,
+                loc_passthrough_texture,
+                passthrough_shader,
                 intensity: 2.0,
                 blur_iterations: 5,
                 enabled: true,
                 downsample_factor,
                 blur_method: BlurMethod::Gaussian, // Default to Gaussian
                 tone_mapping_mode: ToneMappingMode::ACES, // Default to ACES
+                comparison_mode: false,
+                comparison_fbo,
+                comparison_textures,
+                comparison_shader,
                 width,
                 height,
                 blur_width,
                 blur_height,
             })
+        }
+    }
+
+    /// Creates a dummy BloomPass for testing (no OpenGL calls)
+    pub fn new_dummy() -> Self {
+        Self {
+            hdr_fbo: 0,
+            hdr_texture: 0,
+            bright_texture: 0,
+            hdr_depth_rbo: 0,
+            ping_pong_fbo: [0; 2],
+            ping_pong_textures: [0; 2],
+            blur_shader: 0,
+            kawase_downsample_shader: 0,
+            kawase_upsample_shader: 0,
+            composition_shader: 0,
+            passthrough_shader: 0,
+            dummy_vao: 0,
+            loc_blur_texture: 0,
+            loc_blur_direction: 0,
+            loc_kawase_down_texture: 0,
+            loc_kawase_down_halfpixel: 0,
+            loc_kawase_up_texture: 0,
+            loc_kawase_up_halfpixel: 0,
+            loc_comp_scene: 0,
+            loc_comp_bloom: 0,
+            loc_comp_intensity: 0,
+            loc_tone_mapping_mode: 0,
+            loc_passthrough_texture: 0,
+            intensity: 1.0,
+            blur_iterations: 1,
+            enabled: false,
+            downsample_factor: 1,
+            blur_method: BlurMethod::Gaussian,
+            tone_mapping_mode: ToneMappingMode::ACES,
+            comparison_mode: false,
+            comparison_fbo: 0,
+            comparison_textures: [0; 5],
+            comparison_shader: 0,
+            width: 800,
+            height: 600,
+            blur_width: 400,
+            blur_height: 300,
         }
     }
 
@@ -328,6 +457,143 @@ impl BloomPass {
 
         // Re-enable depth test
         gl::Enable(gl::DEPTH_TEST);
+    }
+
+    /// Renders all tone mappings to comparison textures and displays them in a 2x3 grid
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly.
+    pub unsafe fn render_comparison(&self) {
+        if !self.comparison_mode {
+            return;
+        }
+
+        // Disable depth test for post-processing
+        gl::Disable(gl::DEPTH_TEST);
+
+        // Apply blur first (same as normal rendering)
+        match self.blur_method {
+            BlurMethod::Gaussian => self.apply_gaussian_blur(),
+            BlurMethod::Kawase => self.apply_kawase_blur(),
+        }
+
+        // Restore full resolution viewport
+        gl::Viewport(0, 0, self.width, self.height);
+
+        // Step 1: Render to comparison FBO with MRT to generate all 5 tone mappings
+        gl::BindFramebuffer(gl::FRAMEBUFFER, self.comparison_fbo);
+        gl::UseProgram(self.comparison_shader);
+
+        // Bind scene texture
+        gl::ActiveTexture(gl::TEXTURE0);
+        gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture);
+        gl::Uniform1i(
+            gl::GetUniformLocation(self.comparison_shader, crate::cstr!("uSceneTexture")),
+            0,
+        );
+
+        // Bind bloom texture
+        gl::ActiveTexture(gl::TEXTURE1);
+        gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
+        gl::Uniform1i(
+            gl::GetUniformLocation(self.comparison_shader, crate::cstr!("uBloomTexture")),
+            1,
+        );
+
+        gl::Uniform1f(
+            gl::GetUniformLocation(self.comparison_shader, crate::cstr!("uBloomIntensity")),
+            self.intensity,
+        );
+
+        self.render_fullscreen_quad();
+
+        // Step 2: Display the 5 textures in a 2x3 grid on the main framebuffer
+        gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+        gl::Clear(gl::COLOR_BUFFER_BIT);
+
+        // Use passthrough shader to display textures as-is (already tone-mapped)
+        gl::UseProgram(self.passthrough_shader);
+
+        // Grid layout: 2 columns, 3 rows
+        let cols = 2;
+        let rows = 3;
+        let cell_width = self.width as f32 / cols as f32;
+        let cell_height = self.height as f32 / rows as f32;
+
+        for (i, &tex_id) in self.comparison_textures.iter().enumerate() {
+            let col = i % cols;
+            let row = i / cols;
+
+            // Calculate cell position
+            let cell_x = (col as f32 * cell_width) as i32;
+            // Flip Y: OpenGL origin is bottom-left, so we need to invert row
+            let cell_y = ((rows - 1 - row) as f32 * cell_height) as i32;
+
+            // Calculate viewport with correct aspect ratio (letterbox if needed)
+            let source_aspect = self.width as f32 / self.height as f32;
+            let cell_aspect = cell_width / cell_height;
+
+            let (vp_w, vp_h, vp_x_offset, vp_y_offset) = if source_aspect > cell_aspect {
+                // Source is wider - letterbox top/bottom
+                let h = cell_width / source_aspect;
+                let y_offset = (cell_height - h) / 2.0;
+                (cell_width as i32, h as i32, 0, y_offset as i32)
+            } else {
+                // Source is taller - letterbox left/right
+                let w = cell_height * source_aspect;
+                let x_offset = (cell_width - w) / 2.0;
+                (w as i32, cell_height as i32, x_offset as i32, 0)
+            };
+
+            gl::Viewport(cell_x + vp_x_offset, cell_y + vp_y_offset, vp_w, vp_h);
+
+            // Bind the comparison texture
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, tex_id);
+            gl::Uniform1i(self.loc_passthrough_texture, 0);
+
+            // Render fullscreen quad for this viewport
+            self.render_fullscreen_quad();
+        }
+
+        // Restore full viewport
+        gl::Viewport(0, 0, self.width, self.height);
+
+        // Re-enable depth test
+        gl::Enable(gl::DEPTH_TEST);
+    }
+
+    /// Returns the comparison textures (Reinhard, Reinhard Extended, ACES, Uncharted2, Khronos)
+    pub fn get_comparison_textures(&self) -> &[GLuint; 5] {
+        &self.comparison_textures
+    }
+
+    /// Returns grid layout info for displaying labels
+    /// Returns: (cell_positions, labels) where cell_positions are (x, y, width, height) in pixels
+    pub fn get_comparison_grid_info(&self) -> (Vec<CellRect>, Vec<&'static str>) {
+        let labels = vec![
+            "Reinhard",
+            "Reinhard Extended",
+            "ACES",
+            "Uncharted 2",
+            "Khronos PBR",
+        ];
+
+        let cols = 2;
+        let rows = 3;
+        let cell_width = self.width as f32 / cols as f32;
+        let cell_height = self.height as f32 / rows as f32;
+
+        let mut positions = Vec::new();
+        for i in 0..5 {
+            let col = i % cols;
+            let row = i / cols;
+            let x = col as f32 * cell_width;
+            let y = row as f32 * cell_height;
+            positions.push((x, y, cell_width, cell_height));
+        }
+
+        (positions, labels)
     }
 
     /// Applies Gaussian blur (separable, ping-pong)
@@ -673,6 +939,22 @@ impl BloomPass {
         if self.dummy_vao != 0 {
             gl::DeleteVertexArrays(1, &self.dummy_vao);
             self.dummy_vao = 0;
+        }
+        if self.comparison_fbo != 0 {
+            gl::DeleteFramebuffers(1, &self.comparison_fbo);
+            self.comparison_fbo = 0;
+        }
+        if self.comparison_textures[0] != 0 {
+            gl::DeleteTextures(5, self.comparison_textures.as_ptr());
+            self.comparison_textures = [0; 5];
+        }
+        if self.comparison_shader != 0 {
+            gl::DeleteProgram(self.comparison_shader);
+            self.comparison_shader = 0;
+        }
+        if self.passthrough_shader != 0 {
+            gl::DeleteProgram(self.passthrough_shader);
+            self.passthrough_shader = 0;
         }
     }
 

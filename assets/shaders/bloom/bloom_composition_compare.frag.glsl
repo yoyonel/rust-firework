@@ -1,35 +1,30 @@
 #version 330 core
 
 in vec2 vTexCoord;
-out vec4 FragColor;
+
+// Multiple render targets - one for each tone mapping
+layout(location = 0) out vec4 FragColor0; // Reinhard
+layout(location = 1) out vec4 FragColor1; // Reinhard Extended
+layout(location = 2) out vec4 FragColor2; // ACES
+layout(location = 3) out vec4 FragColor3; // Uncharted 2
+layout(location = 4) out vec4 FragColor4; // Khronos PBR
 
 uniform sampler2D uSceneTexture;
 uniform sampler2D uBloomTexture;
 uniform float uBloomIntensity;
-uniform int uToneMappingMode;
 
-// 0 = Reinhard
-// 1 = Reinhard Extended
-// 2 = ACES
-// 3 = Uncharted 2
-// 4 = Khronos PBR (AgX removed)
-// 5 = Khronos PBR Neutral
+// --- Tone Mapping Functions ---
 
-// --- 1. Reinhard Tone Mapping ---
 vec3 reinhard(vec3 color) {
     return color / (color + vec3(1.0));
 }
 
-// --- 2. Reinhard Extended Tone Mapping ---
-// Allows high luminance to burn out to white
 vec3 reinhardExtended(vec3 color) {
-    float whitePoint = 4.0; // Max luminance that maps to 1.0
+    float whitePoint = 4.0;
     vec3 numerator = color * (vec3(1.0) + (color / (whitePoint * whitePoint)));
     return numerator / (vec3(1.0) + color);
 }
 
-// --- 3. ACES Filmic Tone Mapping ---
-// Narkowicz approximation
 vec3 aces(vec3 color) {
     const float a = 2.51;
     const float b = 0.03;
@@ -39,7 +34,6 @@ vec3 aces(vec3 color) {
     return clamp((color * (a * color + b)) / (color * (c * color + d) + e), 0.0, 1.0);
 }
 
-// --- 4. Uncharted 2 (Hable) Tone Mapping ---
 vec3 uncharted2Tonemap(vec3 x) {
     float A = 0.15;
     float B = 0.50;
@@ -57,7 +51,6 @@ vec3 uncharted2(vec3 color) {
     return curr * whiteScale;
 }
 
-// --- 5. Khronos PBR Neutral Tone Mapping ---
 vec3 khronosPBR(vec3 color) {
     const float startCompression = 0.8 - 0.04;
     const float desaturation = 0.15;
@@ -82,29 +75,19 @@ void main() {
     vec3 bloomColor = texture(uBloomTexture, vTexCoord).rgb;
     
     // Additive blending with intensity control
-    vec3 result = sceneColor + bloomColor * uBloomIntensity;
+    vec3 hdrColor = sceneColor + bloomColor * uBloomIntensity;
     
-    // Apply tone mapping
-    if (uToneMappingMode == 0) {
-        result = reinhard(result);
-    } else if (uToneMappingMode == 1) {
-        result = reinhardExtended(result);
-    } else if (uToneMappingMode == 2) {
-        result = aces(result);
-    } else if (uToneMappingMode == 3) {
-        result = uncharted2(result);
-    } else if (uToneMappingMode == 4) {
-        // AgX removed - fallback to Khronos
-        result = khronosPBR(result);
-    } else if (uToneMappingMode == 5) {
-        result = khronosPBR(result);
-    } else {
-        // Fallback to ACES
-        result = aces(result);
-    }
+    // Apply each tone mapping and gamma correction
+    vec3 result0 = pow(reinhard(hdrColor), vec3(1.0 / 2.2));
+    vec3 result1 = pow(reinhardExtended(hdrColor), vec3(1.0 / 2.2));
+    vec3 result2 = pow(aces(hdrColor), vec3(1.0 / 2.2));
+    vec3 result3 = pow(uncharted2(hdrColor), vec3(1.0 / 2.2));
+    vec3 result4 = pow(khronosPBR(hdrColor), vec3(1.0 / 2.2));
     
-    // Gamma correction
-    result = pow(result, vec3(1.0 / 2.2));
-    
-    FragColor = vec4(result, 1.0);
+    // Output to multiple render targets
+    FragColor0 = vec4(result0, 1.0);
+    FragColor1 = vec4(result1, 1.0);
+    FragColor2 = vec4(result2, 1.0);
+    FragColor3 = vec4(result3, 1.0);
+    FragColor4 = vec4(result4, 1.0);
 }
