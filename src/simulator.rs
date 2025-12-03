@@ -328,29 +328,21 @@ where
             let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
             let ui = imgui_system.glfw.frame(window, &mut imgui_system.context);
 
-            if self.console.open {
-                self.console.draw(
-                    ui,
-                    &mut self.audio_engine,
-                    &mut self.physic_engine,
-                    &self.commands_registry,
-                );
-            }
-
+            // Draw comparison labels first (background layer)
             if comparison_active {
                 let (positions, labels) = self
                     .renderer_engine
                     .bloom_pass_mut()
                     .get_comparison_grid_info();
 
+                // Use background draw list instead of foreground to allow console to be on top
+                let draw_list = ui.get_background_draw_list();
+
                 for ((x, y, _w, _h), &label) in positions.iter().zip(labels.iter()) {
                     // Position text at top-left of each cell with some padding
                     let text_x = x + 10.0;
                     let text_y = y + 10.0;
 
-                    // Draw text with background for better visibility using ForegroundDrawList
-                    // This ensures text is always on top, even over other ImGui windows
-                    let draw_list = ui.get_foreground_draw_list();
                     let text_size = ui.calc_text_size(label);
                     let padding = 5.0;
 
@@ -370,6 +362,16 @@ where
                     // Text
                     draw_list.add_text([text_x, text_y], [1.0, 1.0, 1.0, 1.0], label);
                 }
+            }
+
+            // Draw console last (foreground layer) so it appears on top
+            if self.console.open {
+                self.console.draw(
+                    ui,
+                    &mut self.audio_engine,
+                    &mut self.physic_engine,
+                    &self.commands_registry,
+                );
             }
 
             // Get references again after draw
