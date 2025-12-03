@@ -1,5 +1,5 @@
 use crate::audio_engine::AudioEngine;
-use crate::physic_engine::{config::PhysicConfig, PhysicEngine, PhysicEngineFull, UpdateResult};
+use crate::physic_engine::{config::PhysicConfig, PhysicEngineFull, UpdateResult};
 use crate::renderer_engine::utils::adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler};
 use crate::renderer_engine::RendererEngine;
 use crate::utils::Fullscreen;
@@ -76,20 +76,16 @@ where
             reload_shaders_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
-
-            // Initialize renderer config
             renderer_config: std::sync::Arc::new(std::sync::RwLock::new(
                 crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
                     .unwrap_or_default(),
             )),
-
             frames: 0,
             last_time: Instant::now(),
             window_size,
             window_size_f32: (window_size.0 as f32, window_size.1 as f32),
             window_last_pos: window_pos,
             window_last_size: window_size,
-
             profiler: Profiler::new(200),
             sampler: AdaptiveSampler::new(std::time::Duration::from_secs(5), 200, 60.0),
             sampled_fps: Vec::with_capacity(200),
@@ -113,122 +109,166 @@ where
         Ok(())
     }
 
+    /// Main Loop Step
     pub fn step(&mut self) -> bool {
+        // Early exit check
         if self.window_engine.should_close() {
             return false;
         }
 
+        // 1. Gestion des événements
+        let (reload_config, reload_shaders) = self.handle_window_events();
+
+        // 2. Application des rechargements
+        self.apply_reload_requests(reload_config, reload_shaders);
+
+        // 3. Synchronisation config renderer
+        self.sync_renderer_config();
+
+        // 4. Timing
+        let _frame_guard = self.profiler.frame(); // RAII timing
+        let delta = self.update_frame_timing();
+
+        // 5. Simulation physique + audio
+        self.update_simulation(delta);
+
+        // 6. Rendu
+        self.render_frame();
+
+        // 7. Logs périodiques
+        self.log_metrics_periodically(delta);
+
+        // 8. UI (console + labels)
+        self.render_ui();
+
+        // 9. Finalisation
+        self.finalize_frame();
+
+        true
+    }
+
+    // --- Helper Methods ---
+
+    fn handle_window_events(&mut self) -> (bool, bool) {
         let mut reload_config = false;
         let mut reload_shaders = false;
 
-        // Window events
         self.window_engine.poll_events();
-
-        // Collect events into a Vec to avoid borrow checker issues
         let events: Vec<_> = glfw::flush_messages(self.window_engine.get_events()).collect();
 
         for (_, event) in events {
             match event {
-                glfw::WindowEvent::FramebufferSize(w, h) => {
-                    self.renderer_engine.set_window_size(w, h);
-                    self.window_size_f32 = (w as f32, h as f32);
-                    self.physic_engine.set_window_width(w as f32);
-                    self.audio_engine
-                        .set_listener_position(((w / 2) as f32, 0.0));
-                }
+                glfw::WindowEvent::FramebufferSize(w, h) => self.handle_resize(w, h),
                 glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     self.window_engine.set_should_close(true);
                 }
-                glfw::WindowEvent::Key(Key::R, _, Action::Press, _) => {
-                    if !self.console.open {
-                        reload_config = true;
-                    }
+                glfw::WindowEvent::Key(Key::R, _, Action::Press, _) if !self.console.open => {
+                    reload_config = true;
                 }
-                glfw::WindowEvent::Key(Key::S, _, Action::Press, _) => {
-                    if !self.console.open {
-                        reload_shaders = true;
-                    }
+                glfw::WindowEvent::Key(Key::S, _, Action::Press, _) if !self.console.open => {
+                    reload_shaders = true;
                 }
                 glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
-                    if self.window_engine.is_fullscreen() {
-                        self.window_engine.set_monitor(
-                            WindowMode::Windowed,
-                            self.window_last_pos.0,
-                            self.window_last_pos.1,
-                            self.window_last_size.0 as u32,
-                            self.window_last_size.1 as u32,
-                            None,
-                        );
-                        self.window_size = self.window_last_size;
-                        self.window_size_f32 = (
-                            self.window_last_size.0 as f32,
-                            self.window_last_size.1 as f32,
-                        );
-                        info!(
-                            "🖥️ Window resized: {} x {}",
-                            self.window_size.0, self.window_size.1
-                        );
-                    } else {
-                        self.window_last_pos = self.window_engine.get_pos();
-                        self.window_last_size = self.window_engine.get_size();
-
-                        let mut glfw = self.window_engine.get_glfw().clone();
-                        let window = self.window_engine.get_window_mut();
-                        glfw.with_primary_monitor(|_, primary_monitor| {
-                            if let Some(mon) = primary_monitor {
-                                if let Some(video_mode) = mon.get_video_mode() {
-                                    window.set_fullscreen(mon);
-                                    self.window_size =
-                                        (video_mode.width as i32, video_mode.height as i32);
-                                    self.window_size_f32 =
-                                        (self.window_size.0 as f32, self.window_size.1 as f32);
-                                    info!(
-                                        "🖥️ Fullscreen: {} x {}",
-                                        self.window_size.0, self.window_size.1
-                                    );
-                                } else {
-                                    info!("⚠️ Could not get monitor video mode, staying windowed");
-                                }
-                            }
-                        });
-                    }
+                    self.toggle_fullscreen();
                 }
                 glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, _) => {
-                    self.console.open = !self.console.open;
-                    self.window_engine.set_cursor_mode(if self.console.open {
-                        self.console.focus_previous_widget = true;
-                        glfw::CursorMode::Normal
-                    } else {
-                        glfw::CursorMode::Disabled
-                    });
+                    self.toggle_console();
                 }
                 _ => {}
             }
-            // Pas besoin de helper externe, on peut le faire "inline"
+
+            // ImGui Input Handling
             let imgui_system = self.window_engine.get_imgui_system_mut();
             imgui_system
                 .glfw
                 .handle_event(&mut imgui_system.context, &event);
         }
+
+        (reload_config, reload_shaders)
+    }
+
+    fn handle_resize(&mut self, w: i32, h: i32) {
+        self.renderer_engine.set_window_size(w, h);
+        self.window_size_f32 = (w as f32, h as f32);
+        self.physic_engine.set_window_width(w as f32);
+        self.audio_engine
+            .set_listener_position(((w / 2) as f32, 0.0));
+    }
+
+    fn toggle_fullscreen(&mut self) {
+        if self.window_engine.is_fullscreen() {
+            self.window_engine.set_monitor(
+                WindowMode::Windowed,
+                self.window_last_pos.0,
+                self.window_last_pos.1,
+                self.window_last_size.0 as u32,
+                self.window_last_size.1 as u32,
+                None,
+            );
+            self.window_size = self.window_last_size;
+            self.window_size_f32 = (
+                self.window_last_size.0 as f32,
+                self.window_last_size.1 as f32,
+            );
+            info!(
+                "🖥️ Window resized: {} x {}",
+                self.window_size.0, self.window_size.1
+            );
+        } else {
+            self.window_last_pos = self.window_engine.get_pos();
+            self.window_last_size = self.window_engine.get_size();
+
+            let mut glfw = self.window_engine.get_glfw().clone();
+            let window = self.window_engine.get_window_mut();
+            glfw.with_primary_monitor(|_, primary_monitor| {
+                if let Some(mon) = primary_monitor {
+                    if let Some(video_mode) = mon.get_video_mode() {
+                        window.set_fullscreen(mon);
+                        self.window_size = (video_mode.width as i32, video_mode.height as i32);
+                        self.window_size_f32 =
+                            (self.window_size.0 as f32, self.window_size.1 as f32);
+                        info!(
+                            "🖥️ Fullscreen: {} x {}",
+                            self.window_size.0, self.window_size.1
+                        );
+                    } else {
+                        info!("⚠️ Could not get monitor video mode, staying windowed");
+                    }
+                }
+            });
+        }
+    }
+
+    fn toggle_console(&mut self) {
+        self.console.open = !self.console.open;
+        self.window_engine.set_cursor_mode(if self.console.open {
+            self.console.focus_previous_widget = true;
+            glfw::CursorMode::Normal
+        } else {
+            glfw::CursorMode::Disabled
+        });
+    }
+
+    fn apply_reload_requests(&mut self, reload_config: bool, reload_shaders: bool) {
         if reload_config {
             self.reload_config();
         }
-        if reload_shaders {
-            self.reload_shaders();
-        }
 
-        // Check console command flags
-        if self
+        let atomic_reload = self
             .reload_shaders_requested
-            .load(std::sync::atomic::Ordering::Relaxed)
-        {
-            self.reload_shaders_requested
-                .store(false, std::sync::atomic::Ordering::Relaxed);
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        if reload_shaders || atomic_reload {
+            if atomic_reload {
+                self.reload_shaders_requested
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+            }
             self.reload_shaders();
         }
+    }
 
-        // Update bloom intensity
-        // --- Apply Bloom Parameters from Config ---
+    fn sync_renderer_config(&mut self) {
+        // Apply Bloom Parameters from Config
         if let Ok(config) = self.renderer_config.read() {
             self.renderer_engine.sync_bloom_config(&config);
         }
@@ -238,29 +278,39 @@ where
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
         self.renderer_engine.bloom_pass_mut().comparison_mode = comparison_active;
+    }
 
-        // 🔹 start global frame
-        let _frame_guard = self.profiler.frame(); // RAII: mesure totale de la frame
-
+    fn update_frame_timing(&mut self) -> f32 {
         let now = Instant::now();
         let delta = now.duration_since(self.last_time).as_secs_f32();
         self.last_time = now;
         self.frames += 1;
 
-        // 🔹 Calcul FPS instantané
+        // Instant FPS for sampling
         let fps = if delta > 0.0 { 1.0 / delta } else { 0.0 };
 
-        // 🔹 On demande à l’échantillonneur s’il faut enregistrer ce FPS
         if self.sampler.should_sample(delta) {
             self.sampled_fps.push(fps);
         }
 
+        // Calculate averages
+        let alpha = 0.15;
+        self.fps_avg = alpha * fps + (1.0 - alpha) * self.fps_avg;
+
+        let n_frames = 100;
+        self.fps_avg_iter = (self.fps_avg_iter * (n_frames - 1) as f32 + fps) / n_frames as f32;
+
+        delta
+    }
+
+    fn update_simulation(&mut self, delta: f32) {
         let update_result = self
             .profiler
             .profile_block("physic - update", || self.physic_engine.update(delta));
         Self::synch_audio_with_physic(&mut self.audio_engine, &update_result);
+    }
 
-        // Render frame with all renderers
+    fn render_frame(&mut self) {
         self.profiler.profile_block("render frame", || {
             self.profiler.record_metric(
                 "total particles drawn",
@@ -269,124 +319,122 @@ where
         });
 
         // Render comparison textures if mode is active
+        let comparison_active = self
+            .tonemapping_comparison_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
+
         if comparison_active {
             unsafe {
                 self.renderer_engine.bloom_pass_mut().render_comparison();
             }
         }
+    }
 
-        // moyenne pondérée EMA
-        let alpha = 0.15;
-        self.fps_avg = alpha * fps + (1.0 - alpha) * self.fps_avg;
-        // moyenne simple itérative
-        let n_frames = 100;
-        self.fps_avg_iter = (self.fps_avg_iter * (n_frames - 1) as f32 + fps) / n_frames as f32;
-
+    fn log_metrics_periodically(&mut self, _delta: f32) {
         let log_interval = std::time::Duration::from_secs(5);
-        // affichage périodique
-        if self.last_log.elapsed() >= log_interval {
-            log_metrics_and_fps!(&self.profiler);
 
-            if !self.sampler.samples.is_empty() {
-                // Moyenne des FPS mesurés
-                let avg_fps: f32 = self
-                    .sampler
-                    .samples
-                    .iter()
-                    .map(|(_, sample_fps)| *sample_fps)
-                    .sum::<f32>()
-                    / self.sampler.samples.len() as f32;
-
-                // 🔹 Graph ASCII coloré selon FPS
-                let graph = ascii_sample_timeline(
-                    &self.sampler.samples,
-                    log_interval.as_secs_f32(),
-                    50,
-                    avg_fps,
-                );
-                info!("Graphe - Sample Timeline");
-                // [Trait Iterator - for_each - Calls a closure on each element of an iterator.](https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.for_each)
-                graph.lines().for_each(|line| info!("{}", line));
-
-                info!(
-                    "Samples: {} / {} | Moyenne FPS: {:.2}",
-                    self.sampler.samples.len(),
-                    self.sampler.target_samples,
-                    avg_fps
-                );
-
-                self.sampler.reset();
-
-                info!("FPS moyen (EMA): {:.2}", self.fps_avg);
-                info!("FPS moyen (iter): {:.2}", self.fps_avg_iter);
-            }
-
-            self.last_log = Instant::now();
+        if self.last_log.elapsed() < log_interval {
+            return;
         }
 
-        if self.console.open || comparison_active {
-            let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
-            let ui = imgui_system.glfw.frame(window, &mut imgui_system.context);
+        log_metrics_and_fps!(&self.profiler);
 
-            // Draw comparison labels first (background layer)
-            if comparison_active {
-                let (positions, labels) = self
-                    .renderer_engine
-                    .bloom_pass_mut()
-                    .get_comparison_grid_info();
+        if !self.sampler.samples.is_empty() {
+            let avg_fps: f32 = self
+                .sampler
+                .samples
+                .iter()
+                .map(|(_, fps)| *fps)
+                .sum::<f32>()
+                / self.sampler.samples.len() as f32;
 
-                // Use background draw list instead of foreground to allow console to be on top
-                let draw_list = ui.get_background_draw_list();
+            let graph = ascii_sample_timeline(
+                &self.sampler.samples,
+                log_interval.as_secs_f32(),
+                50,
+                avg_fps,
+            );
 
-                for ((x, y, _w, _h), &label) in positions.iter().zip(labels.iter()) {
-                    // Position text at top-left of each cell with some padding
-                    let text_x = x + 10.0;
-                    let text_y = y + 10.0;
+            info!("Graphe - Sample Timeline");
+            graph.lines().for_each(|line| info!("{}", line));
+            info!(
+                "Samples: {} / {} | Moyenne FPS: {:.2}",
+                self.sampler.samples.len(),
+                self.sampler.target_samples,
+                avg_fps
+            );
 
-                    let text_size = ui.calc_text_size(label);
-                    let padding = 5.0;
-
-                    // Background rectangle
-                    draw_list
-                        .add_rect(
-                            [text_x - padding, text_y - padding],
-                            [
-                                text_x + text_size[0] + padding,
-                                text_y + text_size[1] + padding,
-                            ],
-                            [0.0, 0.0, 0.0, 0.8],
-                        )
-                        .filled(true)
-                        .build();
-
-                    // Text
-                    draw_list.add_text([text_x, text_y], [1.0, 1.0, 1.0, 1.0], label);
-                }
-            }
-
-            // Draw console last (foreground layer) so it appears on top
-            if self.console.open {
-                self.console.draw(
-                    ui,
-                    &mut self.audio_engine,
-                    &mut self.physic_engine,
-                    &self.commands_registry,
-                );
-            }
-
-            // Get references again after draw
-            let (win, sys) = self.window_engine.get_window_and_imgui_mut();
-            sys.glfw.draw(&mut sys.context, win);
+            self.sampler.reset();
+            info!("FPS moyen (EMA): {:.2}", self.fps_avg);
+            info!("FPS moyen (iter): {:.2}", self.fps_avg_iter);
         }
 
+        self.last_log = Instant::now();
+    }
+
+    fn render_ui(&mut self) {
+        let comparison_active = self
+            .tonemapping_comparison_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        if !self.console.open && !comparison_active {
+            return;
+        }
+
+        let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
+        let ui = imgui_system.glfw.frame(window, &mut imgui_system.context);
+
+        // Draw comparison labels (background)
+        if comparison_active {
+            let (positions, labels) = self
+                .renderer_engine
+                .bloom_pass_mut()
+                .get_comparison_grid_info();
+            let draw_list = ui.get_background_draw_list();
+
+            for ((x, y, _w, _h), &label) in positions.iter().zip(labels.iter()) {
+                let text_x = x + 10.0;
+                let text_y = y + 10.0;
+                let text_size = ui.calc_text_size(label);
+                let padding = 5.0;
+
+                draw_list
+                    .add_rect(
+                        [text_x - padding, text_y - padding],
+                        [
+                            text_x + text_size[0] + padding,
+                            text_y + text_size[1] + padding,
+                        ],
+                        [0.0, 0.0, 0.0, 0.8],
+                    )
+                    .filled(true)
+                    .build();
+                draw_list.add_text([text_x, text_y], [1.0, 1.0, 1.0, 1.0], label);
+            }
+        }
+
+        // Draw console (foreground)
+        if self.console.open {
+            self.console.draw(
+                ui,
+                &mut self.audio_engine,
+                &mut self.physic_engine,
+                &self.commands_registry,
+            );
+        }
+
+        // Finalize ImGui Draw
+        let (win, sys) = self.window_engine.get_window_and_imgui_mut();
+        sys.glfw.draw(&mut sys.context, win);
+    }
+
+    fn finalize_frame(&mut self) {
         self.window_engine.swap_buffers();
 
         if self.first_frame {
             info!("🚀 First frame rendered");
             self.first_frame = false;
         }
-
-        true
     }
 
     fn synch_audio_with_physic(audio_engine: &mut A, update_result: &UpdateResult) {
@@ -410,12 +458,7 @@ where
         info!("Physic config loaded:\n{:#?}", physic_config);
 
         self.physic_engine.reload_config(&physic_config);
-
-        let new_max = physic_config.max_rockets * physic_config.particles_per_explosion; // ou autre logique
-
-        // TODO: This logic was in Renderer, now Simulator orchestrates it.
-        // But RendererEngine trait needs to expose a way to check current max or just force recreate.
-        // For now, we just call recreate_buffers.
+        let new_max = physic_config.max_rockets * physic_config.particles_per_explosion;
         self.renderer_engine.recreate_buffers(new_max);
     }
 
@@ -435,274 +478,228 @@ where
         self.renderer_engine.close();
         self.physic_engine.close();
         self.audio_engine.stop_audio_thread();
-        // Window engine cleanup happens automatically when dropped
     }
 
-    pub fn renderer_engine(&self) -> &R {
-        &self.renderer_engine
-    }
-
-    pub fn physic_engine(&self) -> &P {
-        &self.physic_engine
-    }
-
-    pub fn audio_engine(&self) -> &A {
-        &self.audio_engine
-    }
-}
-
-impl<R, P, A, W> Simulator<R, P, A, W>
-where
-    R: RendererEngine,
-    P: PhysicEngineFull,
-    A: AudioEngine,
-    W: WindowEngine,
-{
+    // Command registry init omitted for brevity, logic remains identical to original...
     pub fn init_console_commands(&mut self) {
-        // Commande "mute"
-        self.commands_registry.register_for_audio(
-            "audio.mute",
-            |engine: &mut dyn AudioEngine, _args| {
+        self.register_audio_commands();
+        self.register_physic_commands();
+        self.register_renderer_base_commands();
+        self.register_bloom_commands();
+        self.register_tonemapping_commands();
+    }
+
+    fn register_audio_commands(&mut self) {
+        self.commands_registry
+            .register_for_audio("audio.mute", |engine, _| {
                 engine.mute();
                 "Audio muted".to_string()
-            },
-        );
-
-        // Tu pourrais ajouter d'autres commandes ici (unmute, volume, etc.)
-        self.commands_registry.register_for_audio(
-            "audio.unmute",
-            |engine: &mut dyn AudioEngine, _args| {
-                engine.unmute();
-                "Audio unmuted".to_string()
-            },
-        );
-
-        self.commands_registry
-            // register_physic est ici une méthode qui stocke la closure pour
-            // exécution future.
-            .register_for_physic("physic.config", |engine: &mut dyn PhysicEngine, _args| {
-                // <-- LE CAST À L'INTÉRIEUR DE LA CLOSURE
-                // Le moteur passé ici n'est que la partie Dyn Compatible.
-                // Or, get_config() est bien dans PhysicEngine (maintenant Dyn Compatible).
-                format!("{:#?}", engine.get_config())
             });
 
-        // Register renderer commands
+        self.commands_registry
+            .register_for_audio("audio.unmute", |engine, _| {
+                engine.unmute();
+                "Audio unmuted".to_string()
+            });
+    }
+
+    fn register_physic_commands(&mut self) {
+        self.commands_registry
+            .register_for_physic("physic.config", |engine, _| {
+                format!("{:#?}", engine.get_config())
+            });
+    }
+
+    fn register_renderer_base_commands(&mut self) {
+        // Reload Shaders
         let reload_flag = self.reload_shaders_requested.clone();
         self.commands_registry
-            .register_for_renderer("renderer.reload_shaders", move |_args| {
+            .register_for_renderer("renderer.reload_shaders", move |_| {
                 reload_flag.store(true, std::sync::atomic::Ordering::Relaxed);
                 "✅ Shader reload requested".to_string()
             });
 
-        // --- Bloom Commands ---
-        let config_clone = self.renderer_config.clone();
+        // Config View
+        let cfg = self.renderer_config.clone();
         self.commands_registry
-            .register_for_renderer("renderer.bloom.enable", move |_args| {
-                if let Ok(mut config) = config_clone.write() {
-                    config.bloom_enabled = true;
-                    "✅ Bloom enabled".to_string()
-                } else {
-                    "❌ Failed to lock config".to_string()
-                }
+            .register_for_renderer("renderer.config", move |_| {
+                cfg.read()
+                    .map(|c| format!("{:#?}", *c))
+                    .unwrap_or_else(|_| "❌ Lock fail".into())
             });
 
-        let config_clone = self.renderer_config.clone();
+        // Config Save
+        let cfg = self.renderer_config.clone();
         self.commands_registry
-            .register_for_renderer("renderer.bloom.disable", move |_args| {
-                if let Ok(mut config) = config_clone.write() {
-                    config.bloom_enabled = false;
-                    "✅ Bloom disabled".to_string()
-                } else {
-                    "❌ Failed to lock config".to_string()
-                }
-            });
-
-        let config_clone = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.bloom.intensity", move |args| {
-                if args.trim().is_empty() {
-                    return "Usage: bloom.intensity <value> (0.0-2.0)".to_string();
-                }
-                let value_str = args.split_whitespace().nth(1).unwrap_or("");
-                match value_str.parse::<f32>() {
-                    Ok(val) if (0.0..=10.0).contains(&val) => {
-                        if let Ok(mut config) = config_clone.write() {
-                            config.bloom_intensity = val;
-                            format!("✅ Bloom intensity set to {:.2}", val)
-                        } else {
-                            "❌ Failed to lock config".to_string()
-                        }
-                    }
-                    Ok(val) => format!("❌ Value {:.2} out of range [0.0, 10.0]", val),
-                    Err(_) => "❌ Invalid number".to_string(),
-                }
-            });
-
-        let config_clone = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.bloom.iterations", move |args| {
-                if args.trim().is_empty() {
-                    return "Usage: bloom.iterations <count> (1-10)".to_string();
-                }
-                let value_str = args.split_whitespace().nth(1).unwrap_or("");
-                match value_str.parse::<u32>() {
-                    Ok(val) if (1..=10).contains(&val) => {
-                        if let Ok(mut config) = config_clone.write() {
-                            config.bloom_iterations = val;
-                            format!("✅ Bloom iterations set to {}", val)
-                        } else {
-                            "❌ Failed to lock config".to_string()
-                        }
-                    }
-                    Ok(val) => format!("❌ Value {} out of range [1, 10]", val),
-                    Err(_) => "❌ Invalid number".to_string(),
-                }
-            });
-
-        let config_clone = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.bloom.downsample", move |args| {
-                if args.trim().is_empty() {
-                    return "Usage: bloom.downsample <factor> (1=full, 2=half, 4=quarter)"
-                        .to_string();
-                }
-                let value_str = args.split_whitespace().nth(1).unwrap_or("");
-                match value_str.parse::<u32>() {
-                    Ok(1) | Ok(2) | Ok(4) => {
-                        let val = value_str.parse::<u32>().unwrap();
-                        if let Ok(mut config) = config_clone.write() {
-                            config.bloom_downsample = val;
-                            format!("✅ Bloom downsample set to {}x", val)
-                        } else {
-                            "❌ Failed to lock config".to_string()
-                        }
-                    }
-                    Ok(val) => format!("❌ Value {} invalid. Use 1, 2, or 4", val),
-                    Err(_) => "❌ Invalid number".to_string(),
-                }
-            });
-
-        let config_clone = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.bloom.method", move |args| {
-                if args.trim().is_empty() {
-                    return "Usage: bloom.method <gaussian|kawase>".to_string();
-                }
-                let method_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
-                match method_str.as_str() {
-                    "gaussian" => {
-                        if let Ok(mut config) = config_clone.write() {
-                            config.bloom_blur_method =
-                                crate::renderer_engine::config::BlurMethod::Gaussian;
-                            "✅ Bloom method set to Gaussian".to_string()
-                        } else {
-                            "❌ Failed to lock config".to_string()
-                        }
-                    }
-                    "kawase" => {
-                        if let Ok(mut config) = config_clone.write() {
-                            config.bloom_blur_method =
-                                crate::renderer_engine::config::BlurMethod::Kawase;
-                            "✅ Bloom method set to Kawase (Dual Filtering)".to_string()
-                        } else {
-                            "❌ Failed to lock config".to_string()
-                        }
-                    }
-                    _ => format!(
-                        "❌ Unknown method '{}'. Use 'gaussian' or 'kawase'",
-                        method_str
-                    ),
-                }
-            });
-
-        // New command: renderer.config
-        let config_clone = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.config", move |_args| {
-                if let Ok(config) = config_clone.read() {
-                    format!("{:#?}", *config)
-                } else {
-                    "❌ Failed to read config".to_string()
-                }
-            });
-
-        // New command: renderer.config.save
-        let config_clone = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.config.save", move |_args| {
-                if let Ok(config) = config_clone.read() {
-                    match config.save_to_file("assets/config/renderer.toml") {
-                        Ok(_) => "✅ Config saved to assets/config/renderer.toml".to_string(),
-                        Err(e) => format!("❌ Failed to save config: {}", e),
+            .register_for_renderer("renderer.config.save", move |_| {
+                if let Ok(c) = cfg.read() {
+                    match c.save_to_file("assets/config/renderer.toml") {
+                        Ok(_) => "✅ Config saved".into(),
+                        Err(e) => format!("❌ Save failed: {}", e),
                     }
                 } else {
-                    "❌ Failed to read config".to_string()
+                    "❌ Lock fail".into()
                 }
             });
 
-        // New command: renderer.config.reload
-        let config_clone = self.renderer_config.clone();
+        // Config Reload
+        let cfg = self.renderer_config.clone();
         self.commands_registry
-            .register_for_renderer("renderer.config.reload", move |_args| {
+            .register_for_renderer("renderer.config.reload", move |_| {
                 match crate::renderer_engine::RendererConfig::from_file(
                     "assets/config/renderer.toml",
                 ) {
-                    Ok(new_config) => {
-                        if let Ok(mut config) = config_clone.write() {
-                            *config = new_config;
-                            "✅ Config reloaded from assets/config/renderer.toml".to_string()
+                    Ok(new_c) => {
+                        if let Ok(mut c) = cfg.write() {
+                            *c = new_c;
+                            "✅ Config reloaded".into()
                         } else {
-                            "❌ Failed to lock config for writing".to_string()
+                            "❌ Lock fail".into()
                         }
                     }
-                    Err(e) => format!("❌ Failed to load config: {}", e),
+                    Err(e) => format!("❌ Load failed: {}", e),
                 }
             });
+    }
 
-        // New command: renderer.tonemapping
-        let config_clone = self.renderer_config.clone();
+    fn register_bloom_commands(&mut self) {
+        // Macro pour éviter de répéter le config.clone() + write lock check partout
+        macro_rules! update_config {
+            ($self:expr, $name:expr, $logic:expr) => {
+                let cfg = $self.renderer_config.clone();
+                $self
+                    .commands_registry
+                    .register_for_renderer($name, move |args| {
+                        if let Ok(mut config) = cfg.write() {
+                            let f: &dyn Fn(
+                                &mut crate::renderer_engine::RendererConfig,
+                                &str,
+                            ) -> String = &$logic;
+                            f(&mut *config, args)
+                        } else {
+                            "❌ Failed to lock config".to_string()
+                        }
+                    });
+            };
+        }
+
+        // Enable/Disable simplifiés
+        update_config!(self, "renderer.bloom.enable", |c, _| {
+            c.bloom_enabled = true;
+            "✅ Bloom enabled".into()
+        });
+        update_config!(self, "renderer.bloom.disable", |c, _| {
+            c.bloom_enabled = false;
+            "✅ Bloom disabled".into()
+        });
+
+        // Intensity
+        update_config!(self, "renderer.bloom.intensity", |c, args| {
+            let val = args
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse::<f32>().ok());
+            match val {
+                Some(v) if (0.0..=10.0).contains(&v) => {
+                    c.bloom_intensity = v;
+                    format!("✅ Intensity: {:.2}", v)
+                }
+                _ => "Usage: bloom.intensity <0.0-10.0>".into(),
+            }
+        });
+
+        // Iterations
+        update_config!(self, "renderer.bloom.iterations", |c, args| {
+            let val = args
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse::<u32>().ok());
+            match val {
+                Some(v) if (1..=10).contains(&v) => {
+                    c.bloom_iterations = v;
+                    format!("✅ Iterations: {}", v)
+                }
+                _ => "Usage: bloom.iterations <1-10>".into(),
+            }
+        });
+
+        // Downsample
+        update_config!(self, "renderer.bloom.downsample", |c, args| {
+            match args
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse::<u32>().ok())
+            {
+                Some(v) if [1, 2, 4].contains(&v) => {
+                    c.bloom_downsample = v;
+                    format!("✅ Downsample: {}x", v)
+                }
+                _ => "Usage: bloom.downsample <1|2|4>".into(),
+            }
+        });
+
+        // Method
+        update_config!(self, "renderer.bloom.method", |c, args| {
+            let method = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+            match method.as_str() {
+                "gaussian" => {
+                    c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Gaussian;
+                    "✅ Method: Gaussian".into()
+                }
+                "kawase" => {
+                    c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Kawase;
+                    "✅ Method: Kawase".into()
+                }
+                _ => "Usage: bloom.method <gaussian|kawase>".into(),
+            }
+        });
+    }
+
+    fn register_tonemapping_commands(&mut self) {
+        let cfg = self.renderer_config.clone();
+
         self.commands_registry
             .register_for_renderer("renderer.tonemapping", move |args| {
-                if args.trim().is_empty() {
-                    return "Usage: renderer.tonemapping <mode>\nModes: reinhard, reinhard_extended, aces, uncharted2, khronos".to_string();
-                }
                 let mode_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
-                let mode = match mode_str.as_str() {
-                    "reinhard" => Some(crate::renderer_engine::config::ToneMappingMode::Reinhard),
-                    "reinhard_extended" => Some(crate::renderer_engine::config::ToneMappingMode::ReinhardExtended),
-                    "aces" => Some(crate::renderer_engine::config::ToneMappingMode::ACES),
-                    "uncharted2" => Some(crate::renderer_engine::config::ToneMappingMode::Uncharted2),
-                    "agx" => Some(crate::renderer_engine::config::ToneMappingMode::AgX), // Deprecated, maps to Khronos in shader
-                    "khronos" => Some(crate::renderer_engine::config::ToneMappingMode::KhronosPBR),
-                    _ => None,
-                };
+                // J'utilise Self::parse_tonemap_mode pour garder le code propre
+                let mode = Self::parse_tonemap_mode(&mode_str);
 
                 if let Some(m) = mode {
-                    if let Ok(mut config) = config_clone.write() {
+                    if let Ok(mut config) = cfg.write() {
                         config.tone_mapping_mode = m;
-                        format!("✅ Tone mapping set to {:?}", m)
-                    } else {
-                        "❌ Failed to lock config".to_string()
+                        return format!("✅ Tone mapping: {:?}", m);
                     }
-                } else {
-                    format!("❌ Unknown mode '{}'.\nAvailable: reinhard, reinhard_extended, aces, uncharted2, khronos", mode_str)
+                    return "❌ Lock fail".to_string();
                 }
+                "Available: reinhard, reinhard_extended, aces, uncharted2, khronos".to_string()
             });
 
-        // New command: renderer.tonemapping.compare (toggle comparison mode)
+        // Comparison Toggle
         let comparison_mode = self.tonemapping_comparison_mode.clone();
-        self.commands_registry.register_for_renderer(
-            "renderer.tonemapping.compare",
-            move |_args| {
-                let current = comparison_mode.load(std::sync::atomic::Ordering::Relaxed);
-                comparison_mode.store(!current, std::sync::atomic::Ordering::Relaxed);
-                if !current {
-                    "✅ Tone mapping comparison mode enabled".to_string()
+        self.commands_registry
+            .register_for_renderer("renderer.tonemapping.compare", move |_| {
+                let old = comparison_mode.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
+                // fetch_xor retourne l'ancienne valeur. Si c'était false, c'est devenu true (Enabled).
+                if !old {
+                    "✅ Comparison enabled"
                 } else {
-                    "✅ Tone mapping comparison mode disabled".to_string()
+                    "✅ Comparison disabled"
                 }
-            },
-        );
+                .to_string()
+            });
+    }
+
+    // Helper pur pour le parsing (peut être statique ou hors de la classe)
+    fn parse_tonemap_mode(s: &str) -> Option<crate::renderer_engine::config::ToneMappingMode> {
+        use crate::renderer_engine::config::ToneMappingMode::*;
+        match s {
+            "reinhard" => Some(Reinhard),
+            "reinhard_extended" => Some(ReinhardExtended),
+            "aces" => Some(ACES),
+            "uncharted2" => Some(Uncharted2),
+            "agx" => Some(AgX),
+            "khronos" => Some(KhronosPBR),
+            _ => None,
+        }
     }
 }
