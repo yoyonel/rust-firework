@@ -19,7 +19,7 @@ uniform float uTexRatio;
 
 mat3 build_world_matrix(float size, float angle) {
     // Position du sommet quad dans l'espace clip (avec taille)
-    float scale = size * (2.0 + 5.0 * vAlpha);
+    float scale = size;
     
     float sx = scale * uTexRatio;
     float sy = scale * 1.0;            
@@ -61,7 +61,7 @@ void main() {
     // On reconstruit les coordonnées UV du quad (-1.0 → -1.0) -> (0.0, 0.0)
     vUV = aQuad * 0.5 + 0.5;            
 
-    mat3 mat_model = build_world_matrix(size, angle);
+    mat3 mat_model = build_world_matrix(size * (2.0 + 5.0 * vAlpha), angle);
     vec2 world_pos = (mat_model * vec3(aQuad, 1.0)).xy;
 
     // Clip space
