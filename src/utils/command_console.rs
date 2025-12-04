@@ -121,7 +121,7 @@ impl<'a> imgui::InputTextCallbackHandler for CombinedInputHandler<'a> {
     // CHAR_FILTER LOGIC
     fn char_filter(&mut self, c: char) -> Option<char> {
         match c {
-            '²' | '~' => None,
+            '²' | '~' | '`' => None,
             other => Some(other),
         }
     }
@@ -316,7 +316,7 @@ impl Console {
                 self.draw_scrolling_region(ui);
 
                 // 3. Suggestions Region
-                self.draw_suggestions_region(ui);
+                self.draw_suggestions_region(ui, registry);
 
                 ui.separator();
 
@@ -379,7 +379,7 @@ impl Console {
             });
     }
 
-    fn draw_suggestions_region(&self, ui: &imgui::Ui) {
+    fn draw_suggestions_region(&self, ui: &imgui::Ui, registry: &CommandRegistry) {
         ui.child_window("suggestions")
             .size([0.0, SUGGESTION_BOX_HEIGHT])
             .build(|| {
@@ -388,6 +388,19 @@ impl Console {
                     for (i, suggestion) in self.autocomplete_suggestions.iter().enumerate() {
                         if i == self.selected_suggestion {
                             ui.text_colored([1.0, 1.0, 0.0, 1.0], suggestion);
+
+                            // Try to find a hint for this command
+                            let cmd_key = suggestion.trim();
+                            // If the suggestion is "cmd arg", we might want the hint for "cmd".
+                            // But usually hints are for the command itself.
+                            // If we are completing arguments, the suggestion is "cmd arg".
+                            // The hint might still be relevant if we extract the cmd part.
+                            let cmd_name = cmd_key.split_whitespace().next().unwrap_or(cmd_key);
+
+                            if let Some(hint) = registry.get_hint(cmd_name) {
+                                ui.same_line();
+                                ui.text_colored([0.6, 0.6, 0.6, 1.0], hint);
+                            }
                         } else {
                             ui.text(suggestion);
                         }
@@ -522,39 +535,39 @@ impl Console {
             return;
         }
 
-        let input = self.input.trim();
+        let input = self.input.trim_start();
 
         // Check if we're completing an argument (space after command name)
         if let Some(space_pos) = input.find(' ') {
             let cmd_name = &input[..space_pos];
-            let arg_part = &input[space_pos + 1..];
+            let arg_part = input[space_pos + 1..].trim();
 
-            // Special handling for commands with known argument values
-            let arg_suggestions: Vec<&str> = match cmd_name {
-                "renderer.bloom.method" => vec!["gaussian", "kawase"],
-                "renderer.tonemapping" => vec![
-                    "reinhard",
-                    "reinhard_extended",
-                    "aces",
-                    "uncharted2",
-                    "khronos",
-                ],
-                _ => vec![],
-            };
+            let arg_suggestions = registry.get_arg_suggestions(cmd_name);
 
             if !arg_suggestions.is_empty() {
                 // Filter and score argument suggestions
-                let mut scored_args: Vec<(i64, String)> = arg_suggestions
-                    .iter()
-                    .filter_map(|arg| {
-                        self.matcher
-                            .fuzzy_match(arg, arg_part)
-                            .map(|score| (score, format!("{} {}", cmd_name, arg)))
-                    })
-                    .collect();
+                let mut scored_args: Vec<(i64, String)> = if arg_part.is_empty() {
+                    // Show all options if no argument typed yet
+                    arg_suggestions
+                        .iter()
+                        .map(|arg| (0, format!("{} {}", cmd_name, arg)))
+                        .collect()
+                } else {
+                    arg_suggestions
+                        .iter()
+                        .filter_map(|arg| {
+                            self.matcher
+                                .fuzzy_match(arg, arg_part)
+                                .map(|score| (score, format!("{} {}", cmd_name, arg)))
+                        })
+                        .collect()
+                };
 
-                // Sort by score descending
-                scored_args.sort_by(|a, b| b.0.cmp(&a.0));
+                // Sort by score descending, then length ascending
+                scored_args.sort_by(|a, b| match b.0.cmp(&a.0) {
+                    std::cmp::Ordering::Equal => a.1.len().cmp(&b.1.len()),
+                    other => other,
+                });
 
                 self.autocomplete_suggestions = scored_args
                     .into_iter()
@@ -582,12 +595,23 @@ impl Console {
             })
             .collect();
 
-        // 3. Sort by Score (descending)
-        scored_suggestions.sort_by(|a, b| b.0.cmp(&a.0));
+        // 3. Sort by Score (descending), then length ascending
+        scored_suggestions.sort_by(|a, b| match b.0.cmp(&a.0) {
+            std::cmp::Ordering::Equal => a.1.len().cmp(&b.1.len()),
+            other => other,
+        });
 
         // 4. Update console suggestions
-        self.autocomplete_suggestions =
-            scored_suggestions.into_iter().map(|(_, cmd)| cmd).collect();
+        self.autocomplete_suggestions = scored_suggestions
+            .into_iter()
+            .map(|(_, cmd)| {
+                if !registry.get_arg_suggestions(&cmd).is_empty() {
+                    format!("{} ", cmd)
+                } else {
+                    cmd
+                }
+            })
+            .collect();
 
         // Reset selection index
         self.selected_suggestion = 0;
@@ -602,6 +626,8 @@ pub struct CommandRegistry {
     commands_audio: HashMap<String, Box<AudioCommandFn>>,
     commands_physic: HashMap<String, Box<PhysicCommandFn>>,
     commands_renderer: HashMap<String, Box<RendererCommandFn>>,
+    arg_suggestions: HashMap<String, Vec<String>>,
+    hints: HashMap<String, String>,
 }
 
 impl Default for CommandRegistry {
@@ -616,6 +642,8 @@ impl CommandRegistry {
             commands_audio: HashMap::new(),
             commands_physic: HashMap::new(),
             commands_renderer: HashMap::new(),
+            arg_suggestions: HashMap::new(),
+            hints: HashMap::new(),
         }
     }
 
@@ -640,6 +668,28 @@ impl CommandRegistry {
     {
         self.commands_renderer
             .insert(name.to_string(), Box::new(func));
+    }
+
+    pub fn register_args(&mut self, name: &str, args: Vec<&str>) {
+        self.arg_suggestions.insert(
+            name.to_string(),
+            args.iter().map(|s| s.to_string()).collect(),
+        );
+    }
+
+    pub fn get_arg_suggestions(&self, name: &str) -> &[String] {
+        self.arg_suggestions
+            .get(name)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[])
+    }
+
+    pub fn register_hint(&mut self, name: &str, hint: &str) {
+        self.hints.insert(name.to_string(), hint.to_string());
+    }
+
+    pub fn get_hint(&self, name: &str) -> Option<&String> {
+        self.hints.get(name)
     }
 
     pub fn execute(
