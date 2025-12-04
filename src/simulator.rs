@@ -178,10 +178,18 @@ where
             }
 
             // ImGui Input Handling
-            let imgui_system = self.window_engine.get_imgui_system_mut();
-            imgui_system
-                .glfw
-                .handle_event(&mut imgui_system.context, &event);
+            // ImGui Input Handling
+            let is_key_event = matches!(
+                event,
+                glfw::WindowEvent::Key(_, _, _, _) | glfw::WindowEvent::Char(_)
+            );
+
+            if self.console.open || !is_key_event {
+                let imgui_system = self.window_engine.get_imgui_system_mut();
+                imgui_system
+                    .glfw
+                    .handle_event(&mut imgui_system.context, &event);
+            }
         }
 
         (reload_config, reload_shaders)
@@ -466,10 +474,10 @@ where
         info!("🔄 Reloading shaders...");
         match self.renderer_engine.reload_shaders() {
             Ok(_) => {
-                self.console.log("✅ Shaders reloaded successfully");
+                self.console.log("-> Shaders reloaded successfully");
             }
             Err(e) => {
-                self.console.log(format!("❌ Shader reload failed:\n{}", e));
+                self.console.log(format!("x Shader reload failed:\n{}", e));
             }
         }
     }
@@ -516,7 +524,7 @@ where
         self.commands_registry
             .register_for_renderer("renderer.reload_shaders", move |_| {
                 reload_flag.store(true, std::sync::atomic::Ordering::Relaxed);
-                "✅ Shader reload requested".to_string()
+                "-> Shader reload requested".to_string()
             });
 
         // Config View
@@ -525,7 +533,7 @@ where
             .register_for_renderer("renderer.config", move |_| {
                 cfg.read()
                     .map(|c| format!("{:#?}", *c))
-                    .unwrap_or_else(|_| "❌ Lock fail".into())
+                    .unwrap_or_else(|_| "x Lock fail".into())
             });
 
         // Config Save
@@ -534,11 +542,11 @@ where
             .register_for_renderer("renderer.config.save", move |_| {
                 if let Ok(c) = cfg.read() {
                     match c.save_to_file("assets/config/renderer.toml") {
-                        Ok(_) => "✅ Config saved".into(),
-                        Err(e) => format!("❌ Save failed: {}", e),
+                        Ok(_) => "-> Config saved".into(),
+                        Err(e) => format!("x Save failed: {}", e),
                     }
                 } else {
-                    "❌ Lock fail".into()
+                    "x Lock fail".into()
                 }
             });
 
@@ -552,12 +560,12 @@ where
                     Ok(new_c) => {
                         if let Ok(mut c) = cfg.write() {
                             *c = new_c;
-                            "✅ Config reloaded".into()
+                            "-> Config reloaded".into()
                         } else {
-                            "❌ Lock fail".into()
+                            "x Lock fail".into()
                         }
                     }
-                    Err(e) => format!("❌ Load failed: {}", e),
+                    Err(e) => format!("x Load failed: {}", e),
                 }
             });
     }
@@ -577,7 +585,7 @@ where
                             ) -> String = &$logic;
                             f(&mut *config, args)
                         } else {
-                            "❌ Failed to lock config".to_string()
+                            "x Failed to lock config".to_string()
                         }
                     });
             };
@@ -586,11 +594,11 @@ where
         // Enable/Disable simplifiés
         update_config!(self, "renderer.bloom.enable", |c, _| {
             c.bloom_enabled = true;
-            "✅ Bloom enabled".into()
+            "-> Bloom enabled".into()
         });
         update_config!(self, "renderer.bloom.disable", |c, _| {
             c.bloom_enabled = false;
-            "✅ Bloom disabled".into()
+            "-> Bloom disabled".into()
         });
 
         // Intensity
@@ -602,11 +610,13 @@ where
             match val {
                 Some(v) if (0.0..=10.0).contains(&v) => {
                     c.bloom_intensity = v;
-                    format!("✅ Intensity: {:.2}", v)
+                    format!("-> Intensity: {:.2}", v)
                 }
                 _ => "Usage: bloom.intensity <0.0-10.0>".into(),
             }
         });
+        self.commands_registry
+            .register_hint("renderer.bloom.intensity", "Usage: <0.0-10.0>");
 
         // Iterations
         update_config!(self, "renderer.bloom.iterations", |c, args| {
@@ -617,11 +627,13 @@ where
             match val {
                 Some(v) if (1..=10).contains(&v) => {
                     c.bloom_iterations = v;
-                    format!("✅ Iterations: {}", v)
+                    format!("-> Iterations: {}", v)
                 }
                 _ => "Usage: bloom.iterations <1-10>".into(),
             }
         });
+        self.commands_registry
+            .register_hint("renderer.bloom.iterations", "Usage: <1-10>");
 
         // Downsample
         update_config!(self, "renderer.bloom.downsample", |c, args| {
@@ -632,11 +644,15 @@ where
             {
                 Some(v) if [1, 2, 4].contains(&v) => {
                     c.bloom_downsample = v;
-                    format!("✅ Downsample: {}x", v)
+                    format!("-> Downsample: {}x", v)
                 }
                 _ => "Usage: bloom.downsample <1|2|4>".into(),
             }
         });
+        self.commands_registry
+            .register_args("renderer.bloom.downsample", vec!["1", "2", "4"]);
+        self.commands_registry
+            .register_hint("renderer.bloom.downsample", "Usage: <1|2|4>");
 
         // Method
         update_config!(self, "renderer.bloom.method", |c, args| {
@@ -644,15 +660,19 @@ where
             match method.as_str() {
                 "gaussian" => {
                     c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Gaussian;
-                    "✅ Method: Gaussian".into()
+                    "-> Method: Gaussian".into()
                 }
                 "kawase" => {
                     c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Kawase;
-                    "✅ Method: Kawase".into()
+                    "-> Method: Kawase".into()
                 }
                 _ => "Usage: bloom.method <gaussian|kawase>".into(),
             }
         });
+        self.commands_registry
+            .register_args("renderer.bloom.method", vec!["gaussian", "kawase"]);
+        self.commands_registry
+            .register_hint("renderer.bloom.method", "Usage: <gaussian|kawase>");
     }
 
     fn register_tonemapping_commands(&mut self) {
@@ -667,12 +687,23 @@ where
                 if let Some(m) = mode {
                     if let Ok(mut config) = cfg.write() {
                         config.tone_mapping_mode = m;
-                        return format!("✅ Tone mapping: {:?}", m);
+                        return format!("-> Tone mapping: {:?}", m);
                     }
-                    return "❌ Lock fail".to_string();
+                    return "x Lock fail".to_string();
                 }
                 "Available: reinhard, reinhard_extended, aces, uncharted2, khronos".to_string()
             });
+        self.commands_registry.register_args(
+            "renderer.tonemapping",
+            vec![
+                "reinhard",
+                "reinhard_extended",
+                "aces",
+                "uncharted2",
+                "agx",
+                "khronos",
+            ],
+        );
 
         // Comparison Toggle
         let comparison_mode = self.tonemapping_comparison_mode.clone();
@@ -681,9 +712,9 @@ where
                 let old = comparison_mode.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
                 // fetch_xor retourne l'ancienne valeur. Si c'était false, c'est devenu true (Enabled).
                 if !old {
-                    "✅ Comparison enabled"
+                    "-> Comparison enabled"
                 } else {
-                    "✅ Comparison disabled"
+                    "-> Comparison disabled"
                 }
                 .to_string()
             });
