@@ -1,4 +1,5 @@
 use crate::physic_engine::config::PhysicConfig;
+use crate::physic_engine::explosion_shape::ExplosionShape;
 use crate::physic_engine::particle::Particle;
 use crate::physic_engine::types::UpdateResult;
 use crate::physic_engine::ParticleType;
@@ -58,6 +59,53 @@ pub trait PhysicEngine {
     fn reload_config(&mut self, config: &PhysicConfig) -> bool;
 
     fn get_config(&self) -> &PhysicConfig;
+
+    /// Définit la forme des explosions (sphérique par défaut, ou basée sur image).
+    fn set_explosion_shape(&mut self, shape: ExplosionShape);
+
+    /// Retourne la forme d'explosion actuelle.
+    fn get_explosion_shape(&self) -> &ExplosionShape;
+
+    /// Charge une image d'explosion avec des paramètres personnalisés.
+    ///
+    /// # Arguments
+    /// * `path` - Chemin vers l'image PNG noir & blanc
+    /// * `scale` - Taille de l'image projetée en pixels monde
+    /// * `flight_time` - Temps de vol des particules en secondes
+    ///
+    /// # Returns
+    /// `Ok(())` si le chargement réussit, `Err(message)` sinon.
+    fn load_explosion_image(
+        &mut self,
+        path: &str,
+        scale: f32,
+        flight_time: f32,
+    ) -> Result<(), String>;
+
+    /// Charge une image d'explosion et l'ajoute à la liste des formes possibles avec un poids.
+    ///
+    /// # Arguments
+    /// * `path` - Chemin vers l'image PNG noir & blanc
+    /// * `scale` - Taille de l'image projetée
+    /// * `flight_time` - Temps de vol
+    /// * `weight` - Poids relatif (pourcentage de chance d'être choisi)
+    fn load_explosion_image_weighted(
+        &mut self,
+        path: &str,
+        scale: f32,
+        flight_time: f32,
+        weight: f32,
+    ) -> Result<(), String>;
+
+    /// Modifie le poids d'une image existante dans la configuration MultiImage.
+    ///
+    /// # Arguments
+    /// * `name` - Nom de l'image (file_stem)
+    /// * `weight` - Nouveau poids
+    fn set_explosion_image_weight(&mut self, name: &str, weight: f32) -> Result<(), String>;
+
+    /// Helper for upcasting from dyn PhysicEngineFull or other subtraits
+    fn as_physic_engine(&self) -> &dyn PhysicEngine;
 }
 
 pub trait PhysicEngineFull: PhysicEngine + PhysicEngineIterator {}

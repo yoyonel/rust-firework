@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::physic_engine::{
     config::PhysicConfig,
+    explosion_shape::ExplosionShape,
     particle::Particle,
     particles_pools::{ParticlesPool, ParticlesPoolsForRockets, PoolKind},
     ParticleType,
@@ -117,11 +118,18 @@ impl Rocket {
     }
 
     /// Met à jour la fusée (mouvement, trails, explosions)
+    ///
+    /// # Arguments
+    /// * `dt` - Delta time en secondes
+    /// * `particles_pools` - Pools de particules pour explosions et trails
+    /// * `config` - Configuration physique
+    /// * `explosion_shape` - Forme de l'explosion (sphérique ou image)
     pub fn update(
         &mut self,
         dt: f32,
         particles_pools: &mut ParticlesPoolsForRockets,
         config: &PhysicConfig,
+        explosion_shape: &ExplosionShape,
     ) {
         if !self.active {
             return;
@@ -141,6 +149,7 @@ impl Rocket {
             GRAVITY,
             &mut particles_pools.particles_pool_for_explosions,
             config,
+            explosion_shape,
         );
         self.remove_inactive_rockets(particles_pools);
 
@@ -294,9 +303,10 @@ impl Rocket {
         gravity: Vec2,
         particles_pool: &mut ParticlesPool,
         config: &PhysicConfig,
+        explosion_shape: &ExplosionShape,
     ) {
         if !self.exploded && self.vel.y <= config.explosion_threshold {
-            self.trigger_explosion(particles_pool);
+            self.trigger_explosion(particles_pool, gravity, explosion_shape);
         }
 
         if let Some(range) = &self.explosion_particle_indices {
@@ -314,7 +324,12 @@ impl Rocket {
     }
 
     #[inline(always)]
-    fn trigger_explosion(&mut self, particles_pool: &mut ParticlesPool) {
+    fn trigger_explosion(
+        &mut self,
+        particles_pool: &mut ParticlesPool,
+        gravity: Vec2,
+        explosion_shape: &ExplosionShape,
+    ) {
         self.exploded = true;
 
         if self.explosion_particle_indices.is_none() {
@@ -323,23 +338,90 @@ impl Rocket {
 
         if let Some(range) = &self.explosion_particle_indices {
             let slice = particles_pool.get_particles_mut(range);
-            for p in slice.iter_mut() {
-                let angle = self.rng.random_range(0.0..(2.0 * std::f32::consts::PI));
-                let speed = self.rng.random_range(60.0..200.0);
-                let life = self.rng.random_range(0.75..1.5);
 
-                *p = Particle {
-                    pos: self.pos,
-                    vel: Vec2::from_angle(angle) * speed,
-                    color: self.color,
-                    life,
-                    max_life: life,
-                    size: self.rng.random_range(3.0..6.0),
-                    active: true,
-                    angle,
-                    particle_type: ParticleType::Explosion,
-                };
+            if let Some(image_shape) = explosion_shape.sample(&mut self.rng) {
+                self.trigger_image_explosion(slice, gravity, image_shape);
+            } else {
+                self.trigger_spherical_explosion(slice);
             }
+        }
+    }
+
+    /// Explosion sphérique classique : directions aléatoires uniformes
+    #[inline(always)]
+    fn trigger_spherical_explosion(&mut self, slice: &mut [Particle]) {
+        for p in slice.iter_mut() {
+            let angle = self.rng.random_range(0.0..(2.0 * std::f32::consts::PI));
+            let speed = self.rng.random_range(60.0..200.0);
+            let life = self.rng.random_range(0.75..1.5);
+
+            *p = Particle {
+                pos: self.pos,
+                vel: Vec2::from_angle(angle) * speed,
+                color: self.color,
+                life,
+                max_life: life,
+                size: self.rng.random_range(3.0..6.0),
+                active: true,
+                angle,
+                particle_type: ParticleType::Explosion,
+            };
+        }
+    }
+
+    /// Explosion basée sur une image : les particules ciblent des positions
+    /// échantillonnées depuis l'image, avec calcul balistique pour compenser la gravité.
+    /// La forme est orientée selon la direction de la fusée.
+    #[inline(always)]
+    fn trigger_image_explosion(
+        &mut self,
+        slice: &mut [Particle],
+        _gravity: Vec2,
+        image_shape: &crate::physic_engine::explosion_shape::ImageShape,
+    ) {
+        let flight_time = image_shape.flight_time();
+
+        // Le centre de l'explosion est la position de la fusée
+        // L'image se forme autour de ce point
+        let explosion_center = self.pos;
+
+        // Calcul de l'angle de rotation basé sur la direction de la fusée
+        // Le "haut" de l'image (Y positif) sera aligné avec la direction de la fusée
+        // On soustrait π/2 car l'image par défaut a Y vers le haut,
+        // et atan2 retourne 0 pour la direction X+ (vers la droite)
+        let rocket_angle = self.vel.y.atan2(self.vel.x) - std::f32::consts::FRAC_PI_2;
+        let cos_a = rocket_angle.cos();
+        let sin_a = rocket_angle.sin();
+
+        for (i, p) in slice.iter_mut().enumerate() {
+            // Position cible dans l'espace monde, avec rotation
+            let target_pos =
+                image_shape.get_target_position_rotated(i, explosion_center, cos_a, sin_a);
+
+            // 1. Calcul de la vitesse d'expansion (pour aller du centre vers la cible)
+            // On ignore la gravité ici car on veut juste la composante d'éclatement.
+            // BOOST: On multiplie par 1.3 pour rendre l'explosion plus vive et dynamique !
+            let expansion_velocity =
+                image_shape.compute_initial_velocity(self.pos, target_pos, Vec2::ZERO) * 3.0;
+
+            // 2. Conservation du mouvement : on ajoute la vitesse de la fusée
+            // Ainsi le centre de la forme continue sur la trajectoire balistique de la fusée
+            let final_velocity = self.vel + expansion_velocity;
+
+            // L'angle est calculé depuis la direction finale
+            let angle = final_velocity.y.atan2(final_velocity.x);
+
+            *p = Particle {
+                pos: self.pos,
+                vel: final_velocity,
+                color: self.color,
+                life: flight_time,
+                max_life: flight_time,
+                size: self.rng.random_range(3.0..6.0),
+                active: true,
+                angle,
+                particle_type: ParticleType::Explosion,
+            };
         }
     }
 

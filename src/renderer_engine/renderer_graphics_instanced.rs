@@ -2,10 +2,12 @@ use log::{debug, info};
 
 use crate::cstr;
 use crate::physic_engine::{ParticleType, PhysicEngineIterator};
-use crate::renderer_engine::{
-    tools::compile_shader_program, types::ParticleGPU, utils::texture::load_texture,
-};
+use crate::renderer_engine::shader::compile_shader_program_from_files;
+use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture};
 use crate::utils::human_bytes::HumanBytes;
+
+const VERTEX_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.vert.glsl";
+const FRAGMENT_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.frag.glsl";
 
 pub struct RendererGraphicsInstanced {
     vao: u32,
@@ -19,6 +21,7 @@ pub struct RendererGraphicsInstanced {
     loc_size: i32,
     loc_tex: i32,
     texture_id: u32,
+    tex_ratio: f32, // Stocke le ratio de texture pour le reload
 
     max_particles_on_gpu: usize,
 
@@ -32,8 +35,8 @@ impl RendererGraphicsInstanced {
         particle_type: ParticleType,
         texture_path: &str,
     ) -> Self {
-        let (vertex_src, fragment_src) = RendererGraphicsInstanced::src_shaders_instanced_quads();
-        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
+        let shader_program =
+            unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
         let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
@@ -61,6 +64,7 @@ impl RendererGraphicsInstanced {
                 loc_size,
                 loc_tex,
                 texture_id,
+                tex_ratio: tex_width as f32 / tex_height as f32,
                 max_particles_on_gpu,
                 particle_type,
             }
@@ -130,6 +134,7 @@ impl RendererGraphicsInstanced {
                 max_life: p.max_life,
                 size: p.size,
                 angle: p.angle,
+                brightness: 0.0, // Bloom disabled for rockets
             };
             count += 1;
         }
@@ -198,6 +203,13 @@ impl RendererGraphicsInstanced {
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn close(&mut self) {
+        // Unmap the persistent buffer BEFORE deleting it
+        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::UnmapBuffer(gl::ARRAY_BUFFER);
+            self.mapped_ptr = std::ptr::null_mut();
+        }
+
         if self.vbo_particles != 0 {
             gl::DeleteBuffers(1, &self.vbo_particles);
             self.vbo_particles = 0;
@@ -210,6 +222,10 @@ impl RendererGraphicsInstanced {
             gl::DeleteVertexArrays(1, &self.vao);
             self.vao = 0;
         }
+        if self.texture_id != 0 {
+            gl::DeleteTextures(1, &self.texture_id);
+            self.texture_id = 0;
+        }
         if self.shader_program != 0 {
             gl::DeleteProgram(self.shader_program);
             self.shader_program = 0;
@@ -217,97 +233,48 @@ impl RendererGraphicsInstanced {
         debug!("Graphic Engine for Instanced Rendering closed and reset.");
     }
 
-    fn src_shaders_instanced_quads() -> (&'static str, &'static str) {
-        let vertex_src = r#"
-        #version 330 core
+    /// Recharge les shaders depuis les fichiers et recompile le programme shader.
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        use crate::renderer_engine::shader::try_compile_shader_program_from_files;
+        use log::error;
 
-        // === Quad unité (4 sommets pour TRIANGLE_STRIP)
-        layout(location = 0) in vec2 aQuad;
+        match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
+            Ok(new_program) => {
+                // Supprimer l'ancien programme shader
+                if self.shader_program != 0 {
+                    gl::DeleteProgram(self.shader_program);
+                }
 
-        // === Attributs instanciés (1 par particule)
-        layout(location = 1) in vec2 aPos;
-        layout(location = 2) in vec3 aColor;
-        layout(location = 3) in vec4 aLifeMaxLifeSizeAngle;
+                // Utiliser le nouveau programme
+                self.shader_program = new_program;
 
-        out vec3 vColor;
-        out float vAlpha;
-        out vec2 vUV;
+                // Mettre à jour les uniform locations
+                self.loc_size = gl::GetUniformLocation(self.shader_program, cstr!("uSize"));
+                self.loc_tex = gl::GetUniformLocation(self.shader_program, cstr!("uTexture"));
 
-        uniform vec2 uSize;
-        uniform float uTexRatio;
+                // Remettre à jour le ratio de texture
+                gl::UseProgram(self.shader_program);
+                gl::Uniform1f(
+                    gl::GetUniformLocation(self.shader_program, cstr!("uTexRatio")),
+                    self.tex_ratio,
+                );
 
-        mat3 build_world_matrix(float size, float angle) {
-            // Position du sommet quad dans l'espace clip (avec taille)
-            float scale = size * (2.0 + 5.0 * vAlpha);
-            
-            float sx = scale * uTexRatio;
-            float sy = scale * 1.0;            
-
-            mat3 mat_scale = mat3(
-                sx, 0.0, 0.0,
-                0.0, sy, 0.0,
-                0.0, 0.0, 1.0
-            );
-
-            float s = sin(angle);
-            float c = cos(angle);
-            mat3 mat_rotation = mat3(
-                c, -s, 0.0,
-                s,  c, 0.0,
-                0.0, 0.0, 1.0
-            );
-            
-            mat3 mat_translation = mat3(
-                1.0, 0.0, 0.0,
-                0.0, 1.0, 0.0,
-                aPos.x, aPos.y, 1.0
-            );
-
-            return mat_translation * mat_rotation * mat_scale;
+                info!("✅ Instanced textured quad shaders reloaded successfully");
+                Ok(())
+            }
+            Err(e) => {
+                error!(
+                    "❌ Failed to reload instanced textured quad shaders:\n{}",
+                    e
+                );
+                Err(e)
+            }
         }
-
-        void main() {
-            float life = aLifeMaxLifeSizeAngle.x;
-            float max_life = aLifeMaxLifeSizeAngle.y;
-            float size = aLifeMaxLifeSizeAngle.z;
-            float angle = aLifeMaxLifeSizeAngle.w;
-
-            // Ratio de vie (comme avant)
-            vAlpha = clamp(life / max(max_life, 0.0001), 0.0, 1.0);
-            vColor = aColor;
-
-            // On reconstruit les coordonnées UV du quad (-1.0 → -1.0) -> (0.0, 0.0)
-            vUV = aQuad * 0.5 + 0.5;            
-        
-            mat3 mat_model = build_world_matrix(size, angle);
-            vec2 world_pos = (mat_model * vec3(aQuad, 1.0)).xy;
-
-            // Clip space
-            float x = world_pos.x / uSize.x * 2.0 - 1.0;
-            float y = world_pos.y / uSize.y * 2.0 - 1.0;
-            gl_Position = vec4(x, y, 0.0, 1.0);
-        }        
-        "#;
-
-        let fragment_src = r#"
-        #version 330 core
-
-        in vec3 vColor;
-        in float vAlpha;
-        in vec2 vUV;
-
-        out vec4 FragColor;
-
-        uniform sampler2D uTexture;
-
-        void main() {
-            if (vAlpha <= 0.0) discard;
-            FragColor = vec4(vColor, vAlpha) * texture(uTexture, vUV);
-        }
-        "#;
-        (vertex_src, fragment_src)
     }
-
     unsafe fn setup_gpu_buffers(
         max_particles_on_gpu: usize,
     ) -> (u32, u32, u32, *mut ParticleGPU, isize) {
@@ -401,6 +368,10 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
         window_size: (f32, f32),
     ) {
         self.render_particles_with_persistent_buffer(count, window_size);
+    }
+
+    unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        self.reload_shaders()
     }
 
     unsafe fn close(&mut self) {

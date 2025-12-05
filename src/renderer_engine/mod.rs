@@ -13,11 +13,16 @@ pub use self::renderer_graphics_instanced::RendererGraphicsInstanced;
 pub mod tools;
 pub use self::tools::show_opengl_context_info;
 
+pub mod shader;
+pub use self::shader::compile_shader_program;
+
 pub mod types;
 pub use self::types::ParticleGPU;
 
-pub mod utils;
-pub use self::utils::glfw_window;
+pub mod config;
+pub use self::config::RendererConfig;
 
-pub mod command_console;
-pub use self::command_console::Console;
+pub mod utils;
+
+pub mod bloom;
+pub use self::bloom::BloomPass;

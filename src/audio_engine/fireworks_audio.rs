@@ -28,6 +28,28 @@ use std::sync::{Arc, Condvar, Mutex}; // Thread-safe shared state
 use std::thread;
 use std::time::{Duration, Instant};
 
+/// Errors that can occur during audio thread initialization
+#[derive(Debug)]
+enum AudioThreadError {
+    NoDevice,
+    StreamBuildFailed(cpal::BuildStreamError),
+    StreamPlayFailed(cpal::PlayStreamError),
+}
+
+impl std::fmt::Display for AudioThreadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            AudioThreadError::NoDevice => write!(f, "No audio output device available"),
+            AudioThreadError::StreamBuildFailed(e) => {
+                write!(f, "Failed to build audio stream: {}", e)
+            }
+            AudioThreadError::StreamPlayFailed(e) => {
+                write!(f, "Failed to start audio stream: {}", e)
+            }
+        }
+    }
+}
+
 pub struct FireworksAudio3D {
     rocket_data: Vec<[f32; 2]>,
     explosion_data: Vec<[f32; 2]>,
@@ -45,18 +67,21 @@ pub struct FireworksAudio3D {
 
 impl FireworksAudio3D {
     /// Initialize the engine with WAV paths, sample rate, and max voices
-    pub fn new(config: FireworksAudioConfig) -> Self {
+    ///
+    /// # Errors
+    /// Returns error if audio files cannot be loaded or sample rates cannot be determined
+    pub fn new(config: FireworksAudioConfig) -> anyhow::Result<Self> {
         // Load WAV data
-        let mut rocket_data = load_audio(&config.rocket_path);
-        let mut explosion_data = load_audio(&config.explosion_path);
+        let mut rocket_data = load_audio(&config.rocket_path)?;
+        let mut explosion_data = load_audio(&config.explosion_path)?;
 
         // Resample to target sample rate
         let rocket_sr = WavReader::open(&config.rocket_path)
-            .unwrap()
+            .map_err(|e| anyhow::anyhow!("Failed to read rocket audio spec: {}", e))?
             .spec()
             .sample_rate;
         let explosion_sr = WavReader::open(&config.explosion_path)
-            .unwrap()
+            .map_err(|e| anyhow::anyhow!("Failed to read explosion audio spec: {}", e))?
             .spec()
             .sample_rate;
 
@@ -68,7 +93,7 @@ impl FireworksAudio3D {
 
         let global_gain = config.settings.global_gain();
 
-        Self {
+        Ok(Self {
             rocket_data,
             explosion_data,
             listener_pos: config.listener_pos,
@@ -81,7 +106,7 @@ impl FireworksAudio3D {
             // doppler_receiver: config.doppler_receiver,
             // doppler_states: config.doppler_states,
             global_gain,
-        }
+        })
     }
 
     // =========================
@@ -199,206 +224,251 @@ impl FireworksAudio3D {
             // local state inside audio thread
             let mut _rocket_states: HashMap<u64, RocketAudioState> = HashMap::new();
 
-            let host = cpal::default_host();
-            let device = host.default_output_device().unwrap();
-            let config = cpal::StreamConfig {
-                channels: 2,
-                sample_rate: cpal::SampleRate(sr),
-                buffer_size: cpal::BufferSize::Fixed(block_size as u32),
-            };
+            // Try to initialize audio hardware
+            let audio_result: Result<(), AudioThreadError> = (|| {
+                let host = cpal::default_host();
+                let device = host
+                    .default_output_device()
+                    .ok_or(AudioThreadError::NoDevice)?;
 
-            let voices_clone = voices.clone();
+                let config = cpal::StreamConfig {
+                    channels: 2,
+                    sample_rate: cpal::SampleRate(sr),
+                    buffer_size: cpal::BufferSize::Fixed(block_size as u32),
+                };
 
-            // Preallocate buffers
-            let mut acc = vec![[0.0; 2]; block_size];
-            let mut chunk = vec![[0.0; 2]; block_size];
+                let voices_clone = voices.clone();
 
-            let export_writer_callback = export_writer_arc.clone(); // clone pour usage dans le callback
+                // Preallocate buffers
+                let mut acc = vec![[0.0; 2]; block_size];
+                let mut chunk = vec![[0.0; 2]; block_size];
 
-            // Déclarer un compteur global pour les blocs audio
-            let block_index = Arc::new(AtomicU64::new(0));
+                let export_writer_callback = export_writer_arc.clone();
+                let block_index = Arc::new(AtomicU64::new(0));
 
-            let stream = device
-                .build_output_stream(
-                    &config,
-                    move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                        // 🔹 start global frame
-                        let _audio_frame_guard = profiler.measure("audio_frame");
+                let stream = device
+                    .build_output_stream(
+                        &config,
+                        move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                            // 🔹 start global frame
+                            let _audio_frame_guard = profiler.measure("audio_frame");
 
-                        let frames = data.len() / 2;
+                            let frames = data.len() / 2;
 
-                        // Redimensionnement dynamique
-                        if acc.len() < frames {
-                            debug!(
-                                "Audio buffer resized: acc.len={} → frames={}",
-                                acc.len(),
-                                frames
-                            );
-                            acc.resize(frames, [0.0; 2]);
-                        }
-                        if chunk.len() < frames {
-                            debug!(
-                                "Audio buffer resized: chunk.len={} → frames={}",
-                                chunk.len(),
-                                frames
-                            );
-                            chunk.resize(frames, [0.0; 2]);
-                        }
-
-                        // Reset accumulator
-                        unsafe {
-                            std::ptr::write_bytes(acc.as_mut_ptr(), 0, frames);
-                        }
-
-                        for f in acc.iter_mut().take(frames) {
-                            f[0] = 0.0;
-                            f[1] = 0.0;
-                        }
-
-                        // Enqueue pending sounds
-                        {
-                            let mut q = queue.lock().unwrap();
-                            let mut voices_lock = voices_clone.lock().unwrap();
-                            while let Some(req) = q.pop_front() {
-                                if let Some(v) = voices_lock.iter_mut().find(|v| !v.active) {
-                                    v.reset_from_request(&req);
-                                    let latency = Instant::now().duration_since(req.sent_at);
-                                    profiler.record_metric("audio latency", latency);
-                                }
+                            // Redimensionnement dynamique
+                            if acc.len() < frames {
+                                debug!(
+                                    "Audio buffer resized: acc.len={} → frames={}",
+                                    acc.len(),
+                                    frames
+                                );
+                                acc.resize(frames, [0.0; 2]);
                             }
-                            let nb_actives_voices = voices_lock.iter().filter(|v| v.active).count();
-                            profiler.record_metric("nb_actives_voices", nb_actives_voices);
-                        }
+                            if chunk.len() < frames {
+                                debug!(
+                                    "Audio buffer resized: chunk.len={} → frames={}",
+                                    chunk.len(),
+                                    frames
+                                );
+                                chunk.resize(frames, [0.0; 2]);
+                            }
 
-                        // Process each active voice
-                        {
-                            let _guard = profiler.measure("process_active_voices");
-                            let mut voices_lock = voices_clone.lock().unwrap();
-                            for v in voices_lock.iter_mut() {
-                                if !v.active || v.data.is_none() {
-                                    continue;
-                                }
+                            // Reset accumulator
+                            unsafe {
+                                std::ptr::write_bytes(acc.as_mut_ptr(), 0, frames);
+                            }
 
-                                let total_len = v.data.as_ref().unwrap().len();
-                                let start = v.pos;
-                                if start >= total_len {
-                                    v.active = false;
-                                    v.data = None;
-                                    continue;
-                                }
+                            for f in acc.iter_mut().take(frames) {
+                                f[0] = 0.0;
+                                f[1] = 0.0;
+                            }
 
-                                let n = (total_len - start).min(frames).min(chunk.len());
-                                chunk[..n]
-                                    .copy_from_slice(&v.data.as_ref().unwrap()[start..start + n]);
-
-                                // Apply fade-in/fade-out
-                                for (i, item) in chunk.iter_mut().enumerate().take(n) {
-                                    if start + i < v.fade_in_samples {
-                                        let alpha = (start + i) as f32 / v.fade_in_samples as f32;
-                                        item[0] *= alpha;
-                                        item[1] *= alpha;
-                                    }
-                                    let rem = total_len - (start + i);
-                                    if rem < v.fade_out_samples {
-                                        let alpha = rem as f32 / v.fade_out_samples as f32;
-                                        item[0] *= alpha;
-                                        item[1] *= alpha;
+                            // Enqueue pending sounds
+                            {
+                                let mut q = queue.lock().expect("Failed to lock play queue");
+                                let mut voices_lock =
+                                    voices_clone.lock().expect("Failed to lock voices");
+                                while let Some(req) = q.pop_front() {
+                                    if let Some(v) = voices_lock.iter_mut().find(|v| !v.active) {
+                                        v.reset_from_request(&req);
+                                        let latency = Instant::now().duration_since(req.sent_at);
+                                        profiler.record_metric("audio latency", latency);
                                     }
                                 }
+                                let nb_actives_voices =
+                                    voices_lock.iter().filter(|v| v.active).count();
+                                profiler.record_metric("nb_actives_voices", nb_actives_voices);
+                            }
 
-                                // Low-pass filter
-                                for ch in 0..2 {
-                                    let mut prev = v.filter_state[ch];
-                                    for item in chunk.iter_mut().take(n) {
-                                        let x = item[ch];
-                                        let y = prev + v.filter_a * (x - prev);
-                                        item[ch] = y;
-                                        prev = y;
+                            // Process each active voice
+                            {
+                                let _guard = profiler.measure("process_active_voices");
+                                let mut voices_lock =
+                                    voices_clone.lock().expect("Failed to lock voices");
+                                for v in voices_lock.iter_mut() {
+                                    if !v.active || v.data.is_none() {
+                                        continue;
                                     }
-                                    v.filter_state[ch] = prev;
-                                }
 
-                                // Mix into accumulator
-                                for (i, item) in chunk.iter_mut().enumerate().take(n) {
-                                    acc[i][0] += item[0] * v.user_gain;
-                                    acc[i][1] += item[1] * v.user_gain;
-                                }
+                                    let total_len =
+                                        v.data.as_ref().expect("Voice data should exist").len();
+                                    let start = v.pos;
+                                    if start >= total_len {
+                                        v.active = false;
+                                        v.data = None;
+                                        continue;
+                                    }
 
-                                v.pos += n;
-                                if v.pos >= total_len {
-                                    v.active = false;
-                                    v.data = None;
+                                    let n = (total_len - start).min(frames).min(chunk.len());
+                                    chunk[..n].copy_from_slice(
+                                        &v.data.as_ref().expect("Voice data should exist")
+                                            [start..start + n],
+                                    );
+
+                                    // Apply fade-in/fade-out
+                                    for (i, item) in chunk.iter_mut().enumerate().take(n) {
+                                        if start + i < v.fade_in_samples {
+                                            let alpha =
+                                                (start + i) as f32 / v.fade_in_samples as f32;
+                                            item[0] *= alpha;
+                                            item[1] *= alpha;
+                                        }
+                                        let rem = total_len - (start + i);
+                                        if rem < v.fade_out_samples {
+                                            let alpha = rem as f32 / v.fade_out_samples as f32;
+                                            item[0] *= alpha;
+                                            item[1] *= alpha;
+                                        }
+                                    }
+
+                                    // Low-pass filter
+                                    for ch in 0..2 {
+                                        let mut prev = v.filter_state[ch];
+                                        for item in chunk.iter_mut().take(n) {
+                                            let x = item[ch];
+                                            let y = prev + v.filter_a * (x - prev);
+                                            item[ch] = y;
+                                            prev = y;
+                                        }
+                                        v.filter_state[ch] = prev;
+                                    }
+
+                                    // Mix into accumulator
+                                    for (i, item) in chunk.iter_mut().enumerate().take(n) {
+                                        acc[i][0] += item[0] * v.user_gain;
+                                        acc[i][1] += item[1] * v.user_gain;
+                                    }
+
+                                    v.pos += n;
+                                    if v.pos >= total_len {
+                                        v.active = false;
+                                        v.data = None;
+                                    }
                                 }
                             }
-                        }
 
-                        // Write to CPAL buffer with global gain and soft clipping
-                        profiler.profile_block("write_cpal_buffer", || {
-                            for (i, sample) in acc.iter_mut().take(frames).enumerate() {
-                                data[2 * i] = (sample[0] * global_gain).tanh();
-                                data[2 * i + 1] = (sample[1] * global_gain).tanh();
+                            // Write to CPAL buffer with global gain and soft clipping
+                            profiler.profile_block("write_cpal_buffer", || {
+                                for (i, sample) in acc.iter_mut().take(frames).enumerate() {
+                                    data[2 * i] = (sample[0] * global_gain).tanh();
+                                    data[2 * i + 1] = (sample[1] * global_gain).tanh();
+                                }
+                            });
+
+                            if let Some(writer_arc) = &export_writer_callback {
+                                // 🔹 Reuse 'data' instead of recalculating
+                                let mut frames_vec = Vec::with_capacity(frames);
+                                for i in 0..frames {
+                                    frames_vec.push([data[2 * i], data[2 * i + 1]]);
+                                }
+
+                                let block_number = block_index.fetch_add(1, Ordering::Relaxed);
+                                let block = AudioBlock {
+                                    index: block_number,
+                                    frames: frames_vec,
+                                };
+                                writer_arc
+                                    .lock()
+                                    .expect("Failed to lock writer")
+                                    .push_block(block);
                             }
-                        });
 
-                        if let Some(writer_arc) = &export_writer_callback {
-                            // 🔹 Reuse 'data' instead of recalculating
-                            let mut frames_vec = Vec::with_capacity(frames);
-                            for i in 0..frames {
-                                frames_vec.push([data[2 * i], data[2 * i + 1]]);
+                            drop(_audio_frame_guard);
+
+                            // affichage périodique
+                            if last_log.elapsed() >= log_interval {
+                                log_metrics!(&profiler);
+                                last_log = Instant::now();
                             }
+                        },
+                        move |err| eprintln!("CPAL error: {:?}", err),
+                        None,
+                    )
+                    .map_err(AudioThreadError::StreamBuildFailed)?;
 
-                            let block_number = block_index.fetch_add(1, Ordering::Relaxed);
-                            let block = AudioBlock {
-                                index: block_number,
-                                frames: frames_vec,
-                            };
-                            writer_arc.lock().unwrap().push_block(block);
-                        }
+                stream.play().map_err(AudioThreadError::StreamPlayFailed)?;
 
-                        drop(_audio_frame_guard);
+                // 🔊 Thread audio: attente jusqu'à signal de stop
+                let (lock, cvar) = &*running_pair_clone;
+                let mut running = lock.lock().expect("Failed to lock running state");
+                info!("🔊 Thread audio: en attente ...");
+                while *running {
+                    let result = cvar
+                        .wait_timeout(running, Duration::from_millis(500))
+                        .expect("Failed to wait on condvar");
+                    running = result.0;
+                }
 
-                        // affichage périodique
-                        if last_log.elapsed() >= log_interval {
-                            log_metrics!(&profiler);
-                            last_log = Instant::now();
-                        }
-                    },
-                    move |err| eprintln!("CPAL error: {:?}", err),
-                    None,
-                )
-                .unwrap();
-            stream.play().unwrap();
+                // ▸ Push final silence pour éviter ALSA underrun
+                {
+                    if let Some(writer_arc) = &export_writer_arc {
+                        let silence_block = vec![[0.0; 2]; block_size];
+                        let block = AudioBlock {
+                            index: 0,
+                            frames: silence_block,
+                        };
+                        writer_arc
+                            .lock()
+                            .expect("Failed to lock writer")
+                            .push_block(block);
+                    }
+                }
 
-            // 🔊 Thread audio: attente jusqu’à signal de stop
-            let (lock, cvar) = &*running_pair_clone;
-            let mut running = lock.lock().unwrap();
-            info!("🔊 Thread audio: en attente ...");
-            while *running {
-                let result = cvar
-                    .wait_timeout(running, Duration::from_millis(500))
-                    .unwrap();
-                running = result.0;
-            }
+                // Drop du stream pour fermer CPAL proprement
+                drop(stream);
+                info!("🔇 Thread audio: terminé");
 
-            // ▸ Push final silence pour éviter ALSA underrun
-            {
-                if let Some(writer_arc) = &export_writer_arc {
-                    let silence_block = vec![[0.0; 2]; block_size];
-                    let block = AudioBlock {
-                        index: 0,
-                        frames: silence_block,
-                    };
-                    writer_arc.lock().unwrap().push_block(block);
+                Ok(())
+            })();
+
+            // Handle audio initialization result
+            match audio_result {
+                Ok(()) => {
+                    // Audio thread completed successfully
+                }
+                Err(e) => {
+                    log::warn!(
+                        "⚠️ Audio thread failed to initialize: {}. Running in silent mode.",
+                        e
+                    );
+                    log::warn!("   The application will continue without audio output.");
+
+                    // Silent mode: just wait for stop signal
+                    let (lock, cvar) = &*running_pair_clone;
+                    let mut running = lock.lock().expect("Failed to lock running state");
+                    while *running {
+                        let result = cvar
+                            .wait_timeout(running, Duration::from_millis(500))
+                            .expect("Failed to wait on condvar");
+                        running = result.0;
+                    }
+                    info!("🔇 Silent mode audio thread: terminé");
                 }
             }
 
-            // Drop du stream pour fermer CPAL proprement
-            drop(stream);
-            info!("🔇 Thread audio: terminé");
-
             // 🔹 Stop et flush final du writer
             if let Some(writer_arc) = export_writer_arc {
-                writer_arc.lock().unwrap().stop();
+                writer_arc.lock().expect("Failed to lock writer").stop();
             }
         });
     }
@@ -452,6 +522,10 @@ impl AudioEngine for FireworksAudio3D {
         self.set_volume(self.settings.global_gain());
         self.settings.global_gain()
     }
+
+    fn as_audio_engine(&self) -> &dyn AudioEngine {
+        self
+    }
 }
 
 #[cfg(test)]
@@ -502,6 +576,7 @@ mod tests {
             // doppler_receiver: Some(doppler_queue.receiver.clone()),
             // doppler_states: Vec::new(),
         })
+        .expect("Failed to build test audio engine")
     }
 
     #[test]

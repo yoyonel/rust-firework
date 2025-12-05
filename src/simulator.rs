@@ -1,46 +1,485 @@
 use crate::audio_engine::AudioEngine;
-use crate::physic_engine::{PhysicEngine, PhysicEngineFull};
-use crate::renderer_engine::command_console::CommandRegistry;
+use crate::physic_engine::{config::PhysicConfig, PhysicEngineFull, UpdateResult};
+use crate::renderer_engine::utils::adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler};
 use crate::renderer_engine::RendererEngine;
+use crate::utils::Fullscreen;
+use crate::window_engine::WindowEngine;
+use crate::{log_metrics_and_fps, profiler::Profiler};
+use crate::{CommandRegistry, Console};
+use glfw::{Action, Key, WindowMode};
+use imgui_glfw_rs::glfw;
+use log::{debug, info};
+use std::time::Instant;
 
-pub struct Simulator<R, P, A>
+pub struct Simulator<R, P, A, W>
 where
     R: RendererEngine,
     P: PhysicEngineFull,
     A: AudioEngine,
+    W: WindowEngine,
 {
     renderer_engine: R,
     physic_engine: P,
     pub audio_engine: A,
     pub commands_registry: CommandRegistry,
+
+    // Window & Loop management
+    window_engine: W,
+    pub console: Console,
+
+    // Flags for console commands
+    reload_shaders_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
+
+    // Renderer configuration
+    renderer_config: std::sync::Arc<std::sync::RwLock<crate::renderer_engine::RendererConfig>>,
+
+    frames: u64,
+    last_time: Instant,
+
+    // Window state
+    window_size: (i32, i32),
+    window_size_f32: (f32, f32),
+    window_last_pos: (i32, i32),
+    window_last_size: (i32, i32),
+
+    // Loop state
+    profiler: Profiler,
+    sampler: AdaptiveSampler,
+    sampled_fps: Vec<f32>,
+    fps_avg: f32,
+    fps_avg_iter: f32,
+    last_log: Instant,
+    first_frame: bool,
+
+    // Tone mapping comparison
+    pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
 }
 
-impl<R, P, A> Simulator<R, P, A>
+impl<R, P, A, W> Simulator<R, P, A, W>
 where
     R: RendererEngine,
     P: PhysicEngineFull,
     A: AudioEngine,
+    W: WindowEngine,
 {
-    pub fn new(renderer_engine: R, physic_engine: P, audio_engine: A) -> Self {
+    pub fn new(renderer_engine: R, physic_engine: P, audio_engine: A, window_engine: W) -> Self {
+        let window_size = window_engine.get_size();
+        let window_pos = window_engine.get_pos();
+
         Self {
             renderer_engine,
             physic_engine,
             audio_engine,
             commands_registry: CommandRegistry::new(),
+            window_engine,
+            console: Console::new(),
+            reload_shaders_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                false,
+            )),
+            renderer_config: std::sync::Arc::new(std::sync::RwLock::new(
+                crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
+                    .unwrap_or_default(),
+            )),
+            frames: 0,
+            last_time: Instant::now(),
+            window_size,
+            window_size_f32: (window_size.0 as f32, window_size.1 as f32),
+            window_last_pos: window_pos,
+            window_last_size: window_size,
+            profiler: Profiler::new(200),
+            sampler: AdaptiveSampler::new(std::time::Duration::from_secs(5), 200, 60.0),
+            sampled_fps: Vec::with_capacity(200),
+            fps_avg: 0.0,
+            fps_avg_iter: 0.0,
+            last_log: Instant::now(),
+            first_frame: true,
+            tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
+                false,
+            )),
         }
     }
 
-    pub fn run(&mut self, export_path: Option<&str>) -> anyhow::Result<()> {
-        self.audio_engine.start_audio_thread(export_path);
+    pub fn run(&mut self, export_path: Option<String>) -> anyhow::Result<()> {
+        self.audio_engine.start_audio_thread(export_path.as_deref());
+        self.audio_engine
+            .set_listener_position((self.window_size_f32.0 / 2.0, 0.0));
 
-        // On passe les références mutables des moteurs au Renderer
-        self.renderer_engine.run_loop(
-            &mut self.physic_engine,
-            &mut self.audio_engine,
-            &self.commands_registry,
-        )?;
+        while self.step() {}
 
         Ok(())
+    }
+
+    /// Main Loop Step
+    pub fn step(&mut self) -> bool {
+        // Early exit check
+        if self.window_engine.should_close() {
+            return false;
+        }
+
+        // 1. Gestion des événements
+        let (reload_config, reload_shaders) = self.handle_window_events();
+
+        // 2. Application des rechargements
+        self.apply_reload_requests(reload_config, reload_shaders);
+
+        // 3. Synchronisation config renderer
+        self.sync_renderer_config();
+
+        // 4. Timing
+        let _frame_guard = self.profiler.frame(); // RAII timing
+        let delta = self.update_frame_timing();
+
+        // 5. Simulation physique + audio
+        self.update_simulation(delta);
+
+        // 6. Rendu
+        self.render_frame();
+
+        // 7. Logs périodiques
+        self.log_metrics_periodically(delta);
+
+        // 8. UI (console + labels)
+        self.render_ui();
+
+        // 9. Finalisation
+        self.finalize_frame();
+
+        true
+    }
+
+    // --- Helper Methods ---
+
+    fn handle_window_events(&mut self) -> (bool, bool) {
+        let mut reload_config = false;
+        let mut reload_shaders = false;
+
+        self.window_engine.poll_events();
+        let events: Vec<_> = glfw::flush_messages(self.window_engine.get_events()).collect();
+
+        for (_, event) in events {
+            match event {
+                glfw::WindowEvent::FramebufferSize(w, h) => self.handle_resize(w, h),
+                glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
+                    self.window_engine.set_should_close(true);
+                }
+                glfw::WindowEvent::Key(Key::R, _, Action::Press, _) if !self.console.open => {
+                    reload_config = true;
+                }
+                glfw::WindowEvent::Key(Key::S, _, Action::Press, _) if !self.console.open => {
+                    reload_shaders = true;
+                }
+                glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
+                    self.toggle_fullscreen();
+                }
+                glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, _) => {
+                    self.toggle_console();
+                }
+                _ => {}
+            }
+
+            // ImGui Input Handling
+            // ImGui Input Handling
+            let is_key_event = matches!(
+                event,
+                glfw::WindowEvent::Key(_, _, _, _) | glfw::WindowEvent::Char(_)
+            );
+
+            if self.console.open || !is_key_event {
+                let imgui_system = self.window_engine.get_imgui_system_mut();
+                imgui_system
+                    .glfw
+                    .handle_event(&mut imgui_system.context, &event);
+            }
+        }
+
+        (reload_config, reload_shaders)
+    }
+
+    fn handle_resize(&mut self, w: i32, h: i32) {
+        self.renderer_engine.set_window_size(w, h);
+        self.window_size_f32 = (w as f32, h as f32);
+        self.physic_engine.set_window_width(w as f32);
+        self.audio_engine
+            .set_listener_position(((w / 2) as f32, 0.0));
+    }
+
+    fn toggle_fullscreen(&mut self) {
+        if self.window_engine.is_fullscreen() {
+            self.window_engine.set_monitor(
+                WindowMode::Windowed,
+                self.window_last_pos.0,
+                self.window_last_pos.1,
+                self.window_last_size.0 as u32,
+                self.window_last_size.1 as u32,
+                None,
+            );
+            self.window_size = self.window_last_size;
+            self.window_size_f32 = (
+                self.window_last_size.0 as f32,
+                self.window_last_size.1 as f32,
+            );
+            info!(
+                "🖥️ Window resized: {} x {}",
+                self.window_size.0, self.window_size.1
+            );
+        } else {
+            self.window_last_pos = self.window_engine.get_pos();
+            self.window_last_size = self.window_engine.get_size();
+
+            let mut glfw = self.window_engine.get_glfw().clone();
+            let window = self.window_engine.get_window_mut();
+            glfw.with_primary_monitor(|_, primary_monitor| {
+                if let Some(mon) = primary_monitor {
+                    if let Some(video_mode) = mon.get_video_mode() {
+                        window.set_fullscreen(mon);
+                        self.window_size = (video_mode.width as i32, video_mode.height as i32);
+                        self.window_size_f32 =
+                            (self.window_size.0 as f32, self.window_size.1 as f32);
+                        info!(
+                            "🖥️ Fullscreen: {} x {}",
+                            self.window_size.0, self.window_size.1
+                        );
+                    } else {
+                        info!("⚠️ Could not get monitor video mode, staying windowed");
+                    }
+                }
+            });
+        }
+    }
+
+    fn toggle_console(&mut self) {
+        self.console.open = !self.console.open;
+        self.window_engine.set_cursor_mode(if self.console.open {
+            self.console.focus_previous_widget = true;
+            glfw::CursorMode::Normal
+        } else {
+            glfw::CursorMode::Disabled
+        });
+    }
+
+    fn apply_reload_requests(&mut self, reload_config: bool, reload_shaders: bool) {
+        if reload_config {
+            self.reload_config();
+        }
+
+        let atomic_reload = self
+            .reload_shaders_requested
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        if reload_shaders || atomic_reload {
+            if atomic_reload {
+                self.reload_shaders_requested
+                    .store(false, std::sync::atomic::Ordering::Relaxed);
+            }
+            self.reload_shaders();
+        }
+    }
+
+    fn sync_renderer_config(&mut self) {
+        // Apply Bloom Parameters from Config
+        if let Ok(config) = self.renderer_config.read() {
+            self.renderer_engine.sync_bloom_config(&config);
+        }
+
+        // Sync comparison mode with BloomPass
+        let comparison_active = self
+            .tonemapping_comparison_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
+        self.renderer_engine.bloom_pass_mut().comparison_mode = comparison_active;
+    }
+
+    fn update_frame_timing(&mut self) -> f32 {
+        let now = Instant::now();
+        let delta = now.duration_since(self.last_time).as_secs_f32();
+        self.last_time = now;
+        self.frames += 1;
+
+        // Instant FPS for sampling
+        let fps = if delta > 0.0 { 1.0 / delta } else { 0.0 };
+
+        if self.sampler.should_sample(delta) {
+            self.sampled_fps.push(fps);
+        }
+
+        // Calculate averages
+        let alpha = 0.15;
+        self.fps_avg = alpha * fps + (1.0 - alpha) * self.fps_avg;
+
+        let n_frames = 100;
+        self.fps_avg_iter = (self.fps_avg_iter * (n_frames - 1) as f32 + fps) / n_frames as f32;
+
+        delta
+    }
+
+    fn update_simulation(&mut self, delta: f32) {
+        let update_result = self
+            .profiler
+            .profile_block("physic - update", || self.physic_engine.update(delta));
+        Self::synch_audio_with_physic(&mut self.audio_engine, &update_result);
+    }
+
+    fn render_frame(&mut self) {
+        self.profiler.profile_block("render frame", || {
+            self.profiler.record_metric(
+                "total particles drawn",
+                self.renderer_engine.render_frame(&self.physic_engine),
+            );
+        });
+
+        // Render comparison textures if mode is active
+        let comparison_active = self
+            .tonemapping_comparison_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        if comparison_active {
+            unsafe {
+                self.renderer_engine.bloom_pass_mut().render_comparison();
+            }
+        }
+    }
+
+    fn log_metrics_periodically(&mut self, _delta: f32) {
+        let log_interval = std::time::Duration::from_secs(5);
+
+        if self.last_log.elapsed() < log_interval {
+            return;
+        }
+
+        log_metrics_and_fps!(&self.profiler);
+
+        if !self.sampler.samples.is_empty() {
+            let avg_fps: f32 = self
+                .sampler
+                .samples
+                .iter()
+                .map(|(_, fps)| *fps)
+                .sum::<f32>()
+                / self.sampler.samples.len() as f32;
+
+            let graph = ascii_sample_timeline(
+                &self.sampler.samples,
+                log_interval.as_secs_f32(),
+                50,
+                avg_fps,
+            );
+
+            info!("Graphe - Sample Timeline");
+            graph.lines().for_each(|line| info!("{}", line));
+            info!(
+                "Samples: {} / {} | Moyenne FPS: {:.2}",
+                self.sampler.samples.len(),
+                self.sampler.target_samples,
+                avg_fps
+            );
+
+            self.sampler.reset();
+            info!("FPS moyen (EMA): {:.2}", self.fps_avg);
+            info!("FPS moyen (iter): {:.2}", self.fps_avg_iter);
+        }
+
+        self.last_log = Instant::now();
+    }
+
+    fn render_ui(&mut self) {
+        let comparison_active = self
+            .tonemapping_comparison_mode
+            .load(std::sync::atomic::Ordering::Relaxed);
+
+        if !self.console.open && !comparison_active {
+            return;
+        }
+
+        let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
+        let ui = imgui_system.glfw.frame(window, &mut imgui_system.context);
+
+        // Draw comparison labels (background)
+        if comparison_active {
+            let (positions, labels) = self
+                .renderer_engine
+                .bloom_pass_mut()
+                .get_comparison_grid_info();
+            let draw_list = ui.get_background_draw_list();
+
+            for ((x, y, _w, _h), &label) in positions.iter().zip(labels.iter()) {
+                let text_x = x + 10.0;
+                let text_y = y + 10.0;
+                let text_size = ui.calc_text_size(label);
+                let padding = 5.0;
+
+                draw_list
+                    .add_rect(
+                        [text_x - padding, text_y - padding],
+                        [
+                            text_x + text_size[0] + padding,
+                            text_y + text_size[1] + padding,
+                        ],
+                        [0.0, 0.0, 0.0, 0.8],
+                    )
+                    .filled(true)
+                    .build();
+                draw_list.add_text([text_x, text_y], [1.0, 1.0, 1.0, 1.0], label);
+            }
+        }
+
+        // Draw console (foreground)
+        if self.console.open {
+            self.console.draw(
+                ui,
+                &mut self.audio_engine,
+                &mut self.physic_engine,
+                &self.commands_registry,
+            );
+        }
+
+        // Finalize ImGui Draw
+        let (win, sys) = self.window_engine.get_window_and_imgui_mut();
+        sys.glfw.draw(&mut sys.context, win);
+    }
+
+    fn finalize_frame(&mut self) {
+        self.window_engine.swap_buffers();
+
+        if self.first_frame {
+            info!("🚀 First frame rendered");
+            self.first_frame = false;
+        }
+    }
+
+    fn synch_audio_with_physic(audio_engine: &mut A, update_result: &UpdateResult) {
+        if let Some(rocket) = &update_result.new_rocket {
+            debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
+            audio_engine.play_rocket((rocket.pos.x, rocket.pos.y), 0.8);
+        }
+
+        for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
+            debug!(
+                "💥 Explosion triggered: {} at ({}, {})",
+                i, expl.pos.x, expl.pos.y
+            );
+            audio_engine.play_explosion((expl.pos.x, expl.pos.y), 1.0);
+        }
+    }
+
+    pub fn reload_config(&mut self) {
+        let physic_config =
+            PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
+        info!("Physic config loaded:\n{:#?}", physic_config);
+
+        self.physic_engine.reload_config(&physic_config);
+        let new_max = physic_config.max_rockets * physic_config.particles_per_explosion;
+        self.renderer_engine.recreate_buffers(new_max);
+    }
+
+    pub fn reload_shaders(&mut self) {
+        info!("🔄 Reloading shaders...");
+        match self.renderer_engine.reload_shaders() {
+            Ok(_) => {
+                self.console.log("-> Shaders reloaded successfully");
+            }
+            Err(e) => {
+                self.console.log(format!("x Shader reload failed:\n{}", e));
+            }
+        }
     }
 
     pub fn close(&mut self) {
@@ -49,52 +488,602 @@ where
         self.audio_engine.stop_audio_thread();
     }
 
-    pub fn renderer_engine(&self) -> &R {
-        &self.renderer_engine
-    }
-
-    pub fn physic_engine(&self) -> &P {
-        &self.physic_engine
-    }
-
-    pub fn audio_engine(&self) -> &A {
-        &self.audio_engine
-    }
-}
-
-impl<R, P, A> Simulator<R, P, A>
-where
-    R: RendererEngine,
-    P: PhysicEngineFull,
-    A: AudioEngine,
-{
+    // Command registry init omitted for brevity, logic remains identical to original...
     pub fn init_console_commands(&mut self) {
-        // Commande "mute"
-        self.commands_registry.register_for_audio(
-            "audio.mute",
-            |engine: &mut dyn AudioEngine, _args| {
+        self.register_audio_commands();
+        self.register_physic_commands();
+        self.register_renderer_base_commands();
+        self.register_bloom_commands();
+        self.register_tonemapping_commands();
+    }
+
+    fn register_audio_commands(&mut self) {
+        self.commands_registry
+            .register_for_audio("audio.mute", |engine, _| {
                 engine.mute();
                 "Audio muted".to_string()
-            },
-        );
-
-        // Tu pourrais ajouter d'autres commandes ici (unmute, volume, etc.)
-        self.commands_registry.register_for_audio(
-            "audio.unmute",
-            |engine: &mut dyn AudioEngine, _args| {
-                engine.unmute();
-                "Audio unmuted".to_string()
-            },
-        );
+            });
 
         self.commands_registry
-            // register_physic est ici une méthode qui stocke la closure pour
-            // exécution future.
-            .register_for_physic("physic.config", |engine: &mut dyn PhysicEngine, _args| {
-                // <-- LE CAST À L'INTÉRIEUR DE LA CLOSURE
-                // Le moteur passé ici n'est que la partie Dyn Compatible.
-                // Or, get_config() est bien dans PhysicEngine (maintenant Dyn Compatible).
+            .register_for_audio("audio.unmute", |engine, _| {
+                engine.unmute();
+                "Audio unmuted".to_string()
+            });
+    }
+
+    fn register_physic_commands(&mut self) {
+        self.commands_registry
+            .register_for_physic("physic.config", |engine, _| {
                 format!("{:#?}", engine.get_config())
             });
+
+        // --- Explosion Shape Commands ---
+
+        // Display current explosion shape
+        self.commands_registry
+            .register_for_physic("physic.explosion.shape", |engine, args| {
+                let arg = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+
+                if arg.is_empty() {
+                    // Show current shape info
+                    match engine.get_explosion_shape() {
+                        crate::physic_engine::ExplosionShape::Spherical => {
+                            "Current explosion shape: spherical".to_string()
+                        }
+                        crate::physic_engine::ExplosionShape::Image(img) => {
+                            format!(
+                                "Current explosion shape: image - {}\n  Points: {}\n  Scale: {:.1}\n  Flight time: {:.2}s",
+                                img.file_stem,
+                                img.sampled_points.len(),
+                                img.scale,
+                                img.flight_time
+                            )
+                        }
+                        crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                            format!(
+                                "Current explosion shape: MultiImage ({} images)\n{}",
+                                shapes.len(),
+                                shapes
+                                    .iter()
+                                    .map(|(s, w)| format!(
+                                        "  - {} (w={:.1}, scale={:.1}, t={:.2}s)",
+                                        s.file_stem, w, s.scale, s.flight_time
+                                    ))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            )
+                        }
+                    }
+                } else {
+                    match arg.as_str() {
+                        "spherical" => {
+                            engine
+                                .set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+                            "-> Explosion shape: spherical".to_string()
+                        }
+                        _ => "Usage: physic.explosion.shape [spherical]\nUse physic.explosion.image <path> <scale> <flight_time> to load an image".to_string()
+                    }
+                }
+            });
+        self.commands_registry
+            .register_args("physic.explosion.shape", vec!["spherical"]);
+        self.commands_registry
+            .register_hint("physic.explosion.shape", "Usage: [spherical]");
+
+        // Load explosion image with parameters
+        // Usage: physic.explosion.image <path> [scale] [flight_time]
+        self.commands_registry
+            .register_for_physic("physic.explosion.image", |engine, args| {
+                let parts: Vec<&str> = args.split_whitespace().collect();
+
+                if parts.len() < 2 {
+                    return "Usage: physic.explosion.image <path> [scale] [flight_time]\n\
+                            Defaults: scale=150.0, flight_time=1.5\n\
+                            Examples:\n  \
+                            physic.explosion.image assets/textures/explosion_shapes/heart.png\n  \
+                            physic.explosion.image assets/textures/explosion_shapes/star.png 200 2.0".to_string();
+                }
+
+                let path = parts[1];
+                let scale = parts.get(2).and_then(|s| s.parse::<f32>().ok()).unwrap_or(150.0);
+                let flight_time = parts.get(3).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.5);
+
+                match engine.load_explosion_image(path, scale, flight_time) {
+                    Ok(()) => format!("-> Loaded: {} (scale={:.1}, flight_time={:.2}s)", path, scale, flight_time),
+                    Err(e) => format!("x Failed to load image: {}", e)
+                }
+            });
+        self.commands_registry.register_hint(
+            "physic.explosion.image",
+            "Usage: <path> [scale=150] [flight_time=1.5]",
+        );
+
+        // Add weighted explosion image
+        // Usage: physic.explosion.add <path> <weight> [scale] [flight_time]
+        self.commands_registry
+            .register_for_physic("physic.explosion.add", |engine, args| {
+                let parts: Vec<&str> = args.split_whitespace().collect();
+
+                if parts.len() < 3 {
+                    return "Usage: physic.explosion.add <path> <weight> [scale] [flight_time]\n\
+                            Defaults: scale=150.0, flight_time=1.5\n\
+                            Example: physic.explosion.add assets/textures/explosion_shapes/heart.png 5.0".to_string();
+                }
+
+                let path = parts[1];
+                let weight = parts.get(2).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.0);
+                let scale = parts.get(3).and_then(|s| s.parse::<f32>().ok()).unwrap_or(150.0);
+                let flight_time = parts.get(4).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.5);
+
+                match engine.load_explosion_image_weighted(path, scale, flight_time, weight) {
+                    Ok(()) => format!("-> Added: {} (weight={:.1}, scale={:.1}, flight_time={:.2}s)", path, weight, scale, flight_time),
+                    Err(e) => format!("x Failed to add image: {}", e)
+                }
+            });
+        self.commands_registry.register_hint(
+            "physic.explosion.add",
+            "Usage: <path> <weight> [scale] [flight_time]",
+        );
+
+        // Show statistics for weighted images
+        self.commands_registry
+            .register_for_physic("physic.explosion.stats", |engine, _| {
+                match engine.get_explosion_shape() {
+                    crate::physic_engine::ExplosionShape::Spherical => {
+                        "Explosion Mode: Spherical (100%)".to_string()
+                    }
+                    crate::physic_engine::ExplosionShape::Image(img) => {
+                        format!("Explosion Mode: Single Image (100%)\n  - {}", img.file_stem)
+                    }
+                    crate::physic_engine::ExplosionShape::MultiImage {
+                        shapes,
+                        total_weight,
+                    } => {
+                        if *total_weight <= 0.0 {
+                            return "Explosion Mode: MultiImage (Error: Total weight <= 0)"
+                                .to_string();
+                        }
+
+                        let mut output = format!(
+                            "Explosion Mode: MultiImage (Total Weight: {:.2})\n",
+                            total_weight
+                        );
+                        output.push_str("Probability Distribution:\n");
+
+                        // Sort by weight/probability descending for better readability
+                        let mut stats: Vec<_> = shapes.iter().collect();
+                        stats.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+
+                        for (shape, weight) in stats {
+                            let percentage = (weight / total_weight) * 100.0;
+                            output.push_str(&format!(
+                                "  - {:<20} : {:>6.2}% (Weight: {:.2})\n",
+                                shape.file_stem, percentage, weight
+                            ));
+                        }
+                        output
+                    }
+                }
+            });
+
+        // Register dynamic arguments for weight command to suggest loaded image names
+        self.commands_registry
+            .register_dynamic_args("physic.explosion.weight", |_, physic| {
+                if let crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } =
+                    physic.get_explosion_shape()
+                {
+                    shapes.iter().map(|(s, _)| s.file_stem.clone()).collect()
+                } else {
+                    vec![]
+                }
+            });
+
+        // Set weight for specific image in MultiImage
+        self.commands_registry
+            .register_for_physic("physic.explosion.weight", |engine, args| {
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                if parts.len() < 3 {
+                    return "Usage: physic.explosion.weight <name> <new_weight>\n\
+                        Example: physic.explosion.weight heart 2.5"
+                        .to_string();
+                }
+
+                let name = parts[1];
+                let weight = match parts[2].parse::<f32>() {
+                    Ok(v) if v >= 0.0 => v,
+                    _ => return "Weight must be a positive number".to_string(),
+                };
+
+                match engine.set_explosion_image_weight(name, weight) {
+                    Ok(()) => format!("-> Updated weight for '{}' to {:.2}", name, weight),
+                    Err(e) => format!("x Failed: {}", e),
+                }
+            });
+        self.commands_registry
+            .register_hint("physic.explosion.weight", "Usage: <name> <weight>");
+
+        // Set scale for current image explosion
+        self.commands_registry
+            .register_for_physic("physic.explosion.scale", |engine, args| {
+                let scale_str = args.split_whitespace().nth(1).unwrap_or("");
+
+                if scale_str.is_empty() {
+                    // Show current scale
+                    return match engine.get_explosion_shape() {
+                        crate::physic_engine::ExplosionShape::Image(img) => {
+                            format!("Current scale: {:.1}", img.scale)
+                        }
+                        crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                            let scales: Vec<String> = shapes
+                                .iter()
+                                .map(|(s, _)| format!("{:.1}", s.scale))
+                                .collect();
+                            format!("Current scales: [{}]", scales.join(", "))
+                        }
+                        _ => "No image explosion loaded.".to_string(),
+                    };
+                }
+
+                let scale = match scale_str.parse::<f32>() {
+                    Ok(v) if v > 0.0 => v,
+                    _ => {
+                        return "Usage: physic.explosion.scale <value> (positive number)"
+                            .to_string()
+                    }
+                };
+
+                // Modify scale of current image shape
+                match engine.get_explosion_shape().clone() {
+                    crate::physic_engine::ExplosionShape::Image(mut img) => {
+                        img.scale = scale;
+                        engine
+                            .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(img));
+                        format!("-> Scale: {:.1}", scale)
+                    }
+                    crate::physic_engine::ExplosionShape::MultiImage {
+                        mut shapes,
+                        total_weight,
+                    } => {
+                        for (s, _) in shapes.iter_mut() {
+                            s.scale = scale;
+                        }
+                        engine.set_explosion_shape(
+                            crate::physic_engine::ExplosionShape::MultiImage {
+                                shapes,
+                                total_weight,
+                            },
+                        );
+                        format!("-> Scale set to {:.1} for all images", scale)
+                    }
+                    _ => "No image explosion loaded.".to_string(),
+                }
+            });
+        self.commands_registry
+            .register_hint("physic.explosion.scale", "Usage: <50-500>");
+
+        // Set flight_time for current image explosion
+        self.commands_registry.register_for_physic(
+            "physic.explosion.flight_time",
+            |engine, args| {
+                let time_str = args.split_whitespace().nth(1).unwrap_or("");
+
+                if time_str.is_empty() {
+                    // Show current flight_time
+                    return match engine.get_explosion_shape() {
+                        crate::physic_engine::ExplosionShape::Image(img) => {
+                            format!("Current flight_time: {:.2}s", img.flight_time)
+                        }
+                        crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                            let times: Vec<String> = shapes
+                                .iter()
+                                .map(|(s, _)| format!("{:.2}s", s.flight_time))
+                                .collect();
+                            format!("Current flight_times: [{}]", times.join(", "))
+                        }
+                        _ => "No image explosion loaded.".to_string(),
+                    };
+                }
+
+                let flight_time = match time_str.parse::<f32>() {
+                    Ok(v) if v > 0.0 => v,
+                    _ => {
+                        return "Usage: physic.explosion.flight_time <seconds> (positive number)"
+                            .to_string()
+                    }
+                };
+
+                // Modify flight_time of current image shape
+                match engine.get_explosion_shape().clone() {
+                    crate::physic_engine::ExplosionShape::Image(mut img) => {
+                        img.flight_time = flight_time;
+                        engine
+                            .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(img));
+                        format!("-> Flight time: {:.2}s", flight_time)
+                    }
+                    crate::physic_engine::ExplosionShape::MultiImage {
+                        mut shapes,
+                        total_weight,
+                    } => {
+                        for (s, _) in shapes.iter_mut() {
+                            s.flight_time = flight_time;
+                        }
+                        engine.set_explosion_shape(
+                            crate::physic_engine::ExplosionShape::MultiImage {
+                                shapes,
+                                total_weight,
+                            },
+                        );
+                        format!("-> Flight time set to {:.2}s for all images", flight_time)
+                    }
+                    _ => "No image explosion loaded.".to_string(),
+                }
+            },
+        );
+        self.commands_registry
+            .register_hint("physic.explosion.flight_time", "Usage: <0.5-5.0>");
+
+        // Presets for common shapes
+        self.commands_registry
+            .register_for_physic("physic.explosion.preset", |engine, args| {
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                let preset = parts.get(1).unwrap_or(&"").to_lowercase();
+                // Check if a weight (3rd argument) is provided
+                let weight_arg = parts.get(2).and_then(|s| s.parse::<f32>().ok());
+
+                let (path, scale, flight_time) = match preset.as_str() {
+                    "heart" => ("assets/textures/explosion_shapes/heart.png", 150.0, 1.5),
+                    "star" => ("assets/textures/explosion_shapes/star.png", 180.0, 1.5),
+                    "smiley" => ("assets/textures/explosion_shapes/smiley.png", 200.0, 2.0),
+                    "note" => ("assets/textures/explosion_shapes/note.png", 160.0, 1.5),
+                    "ring" => ("assets/textures/explosion_shapes/ring.png", 190.0, 1.8),
+                    _ => {
+                        return "Available presets: heart, star, smiley, note, ring".to_string();
+                    }
+                };
+
+                if let Some(weight) = weight_arg {
+                    // ADD weighted preset
+                    match engine.load_explosion_image_weighted(path, scale, flight_time, weight) {
+                        Ok(()) => format!(
+                            "-> Preset '{}' added (weight={:.1}, scale={:.1}, time={:.2}s)",
+                            preset, weight, scale, flight_time
+                        ),
+                        Err(e) => format!("x Failed to add preset '{}': {}", preset, e),
+                    }
+                } else {
+                    // LOAD single preset (replaces existing)
+                    match engine.load_explosion_image(path, scale, flight_time) {
+                        Ok(()) => format!(
+                            "-> Preset '{}' loaded (scale={:.1}, time={:.2}s)",
+                            preset, scale, flight_time
+                        ),
+                        Err(e) => format!("x Failed to load preset '{}': {}", preset, e),
+                    }
+                }
+            });
+        self.commands_registry.register_args(
+            "physic.explosion.preset",
+            vec!["heart", "star", "smiley", "note", "ring"],
+        );
+        self.commands_registry
+            .register_hint("physic.explosion.preset", "Usage: <preset> [weight]");
+    }
+
+    fn register_renderer_base_commands(&mut self) {
+        // Reload Shaders
+        let reload_flag = self.reload_shaders_requested.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.reload_shaders", move |_| {
+                reload_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                "-> Shader reload requested".to_string()
+            });
+
+        // Config View
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config", move |_| {
+                cfg.read()
+                    .map(|c| format!("{:#?}", *c))
+                    .unwrap_or_else(|_| "x Lock fail".into())
+            });
+
+        // Config Save
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config.save", move |_| {
+                if let Ok(c) = cfg.read() {
+                    match c.save_to_file("assets/config/renderer.toml") {
+                        Ok(_) => "-> Config saved".into(),
+                        Err(e) => format!("x Save failed: {}", e),
+                    }
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+
+        // Config Reload
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.config.reload", move |_| {
+                match crate::renderer_engine::RendererConfig::from_file(
+                    "assets/config/renderer.toml",
+                ) {
+                    Ok(new_c) => {
+                        if let Ok(mut c) = cfg.write() {
+                            *c = new_c;
+                            "-> Config reloaded".into()
+                        } else {
+                            "x Lock fail".into()
+                        }
+                    }
+                    Err(e) => format!("x Load failed: {}", e),
+                }
+            });
+    }
+
+    fn register_bloom_commands(&mut self) {
+        // Macro pour éviter de répéter le config.clone() + write lock check partout
+        macro_rules! update_config {
+            ($self:expr, $name:expr, $logic:expr) => {
+                let cfg = $self.renderer_config.clone();
+                $self
+                    .commands_registry
+                    .register_for_renderer($name, move |args| {
+                        if let Ok(mut config) = cfg.write() {
+                            let f: &dyn Fn(
+                                &mut crate::renderer_engine::RendererConfig,
+                                &str,
+                            ) -> String = &$logic;
+                            f(&mut *config, args)
+                        } else {
+                            "x Failed to lock config".to_string()
+                        }
+                    });
+            };
+        }
+
+        // Enable/Disable simplifiés
+        update_config!(self, "renderer.bloom.enable", |c, _| {
+            c.bloom_enabled = true;
+            "-> Bloom enabled".into()
+        });
+        update_config!(self, "renderer.bloom.disable", |c, _| {
+            c.bloom_enabled = false;
+            "-> Bloom disabled".into()
+        });
+
+        // Intensity
+        update_config!(self, "renderer.bloom.intensity", |c, args| {
+            let val = args
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse::<f32>().ok());
+            match val {
+                Some(v) if (0.0..=10.0).contains(&v) => {
+                    c.bloom_intensity = v;
+                    format!("-> Intensity: {:.2}", v)
+                }
+                _ => "Usage: bloom.intensity <0.0-10.0>".into(),
+            }
+        });
+        self.commands_registry
+            .register_hint("renderer.bloom.intensity", "Usage: <0.0-10.0>");
+
+        // Iterations
+        update_config!(self, "renderer.bloom.iterations", |c, args| {
+            let val = args
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse::<u32>().ok());
+            match val {
+                Some(v) if (1..=10).contains(&v) => {
+                    c.bloom_iterations = v;
+                    format!("-> Iterations: {}", v)
+                }
+                _ => "Usage: bloom.iterations <1-10>".into(),
+            }
+        });
+        self.commands_registry
+            .register_hint("renderer.bloom.iterations", "Usage: <1-10>");
+
+        // Downsample
+        update_config!(self, "renderer.bloom.downsample", |c, args| {
+            match args
+                .split_whitespace()
+                .nth(1)
+                .and_then(|s| s.parse::<u32>().ok())
+            {
+                Some(v) if [1, 2, 4].contains(&v) => {
+                    c.bloom_downsample = v;
+                    format!("-> Downsample: {}x", v)
+                }
+                _ => "Usage: bloom.downsample <1|2|4>".into(),
+            }
+        });
+        self.commands_registry
+            .register_args("renderer.bloom.downsample", vec!["1", "2", "4"]);
+        self.commands_registry
+            .register_hint("renderer.bloom.downsample", "Usage: <1|2|4>");
+
+        // Method
+        update_config!(self, "renderer.bloom.method", |c, args| {
+            let method = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+            match method.as_str() {
+                "gaussian" => {
+                    c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Gaussian;
+                    "-> Method: Gaussian".into()
+                }
+                "kawase" => {
+                    c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Kawase;
+                    "-> Method: Kawase".into()
+                }
+                _ => "Usage: bloom.method <gaussian|kawase>".into(),
+            }
+        });
+        self.commands_registry
+            .register_args("renderer.bloom.method", vec!["gaussian", "kawase"]);
+        self.commands_registry
+            .register_hint("renderer.bloom.method", "Usage: <gaussian|kawase>");
+    }
+
+    fn register_tonemapping_commands(&mut self) {
+        let cfg = self.renderer_config.clone();
+
+        self.commands_registry
+            .register_for_renderer("renderer.tonemapping", move |args| {
+                let mode_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+                // J'utilise Self::parse_tonemap_mode pour garder le code propre
+                let mode = Self::parse_tonemap_mode(&mode_str);
+
+                if let Some(m) = mode {
+                    if let Ok(mut config) = cfg.write() {
+                        config.tone_mapping_mode = m;
+                        return format!("-> Tone mapping: {:?}", m);
+                    }
+                    return "x Lock fail".to_string();
+                }
+                "Available: reinhard, reinhard_extended, aces, uncharted2, khronos".to_string()
+            });
+        self.commands_registry.register_args(
+            "renderer.tonemapping",
+            vec![
+                "reinhard",
+                "reinhard_extended",
+                "aces",
+                "uncharted2",
+                "agx",
+                "khronos",
+            ],
+        );
+
+        // Comparison Toggle
+        let comparison_mode = self.tonemapping_comparison_mode.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.tonemapping.compare", move |_| {
+                let old = comparison_mode.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
+                // fetch_xor retourne l'ancienne valeur. Si c'était false, c'est devenu true (Enabled).
+                if !old {
+                    "-> Comparison enabled"
+                } else {
+                    "-> Comparison disabled"
+                }
+                .to_string()
+            });
+    }
+
+    // Helper pur pour le parsing (peut être statique ou hors de la classe)
+    fn parse_tonemap_mode(s: &str) -> Option<crate::renderer_engine::config::ToneMappingMode> {
+        use crate::renderer_engine::config::ToneMappingMode::*;
+        match s {
+            "reinhard" => Some(Reinhard),
+            "reinhard_extended" => Some(ReinhardExtended),
+            "aces" => Some(ACES),
+            "uncharted2" => Some(Uncharted2),
+            "agx" => Some(AgX),
+            "khronos" => Some(KhronosPBR),
+            _ => None,
+        }
     }
 }

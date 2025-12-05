@@ -1,18 +1,76 @@
 use fireworks_sim::audio_engine::AudioEngine;
 use fireworks_sim::physic_engine::config::PhysicConfig;
+use fireworks_sim::physic_engine::explosion_shape::ExplosionShape;
 use fireworks_sim::physic_engine::particle::Particle;
 use fireworks_sim::physic_engine::types::UpdateResult;
 use fireworks_sim::physic_engine::{
     ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
-use fireworks_sim::renderer_engine::command_console::CommandRegistry;
 use fireworks_sim::renderer_engine::RendererEngine;
+
+use anyhow::Result;
+use fireworks_sim::window_engine::{ImguiSystem, WindowEngine, WindowEvents};
+use glfw::{CursorMode, WindowMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
 // --- Shared Types ---
 #[allow(dead_code)]
 pub type SharedLog = Rc<RefCell<Vec<String>>>;
+
+// --- Dummy Window Engine ---
+
+#[allow(dead_code)]
+pub struct DummyWindowEngine;
+
+impl WindowEngine for DummyWindowEngine {
+    fn init(_width: i32, _height: i32, _title: &str) -> Result<Self> {
+        Ok(Self)
+    }
+
+    fn poll_events(&mut self) {}
+    fn swap_buffers(&mut self) {}
+    fn should_close(&self) -> bool {
+        false
+    }
+    fn set_should_close(&mut self, _value: bool) {}
+    fn get_size(&self) -> (i32, i32) {
+        (800, 600)
+    }
+    fn get_pos(&self) -> (i32, i32) {
+        (0, 0)
+    }
+    fn is_fullscreen(&self) -> bool {
+        false
+    }
+    fn set_monitor(
+        &mut self,
+        _mode: WindowMode,
+        _xpos: i32,
+        _ypos: i32,
+        _width: u32,
+        _height: u32,
+        _refresh_rate: Option<u32>,
+    ) {
+    }
+    fn set_cursor_mode(&mut self, _mode: CursorMode) {}
+    fn make_current(&mut self) {}
+    fn get_glfw(&self) -> &glfw::Glfw {
+        panic!("DummyWindowEngine does not have a real GLFW instance")
+    }
+    fn get_window_mut(&mut self) -> &mut glfw::PWindow {
+        panic!("DummyWindowEngine does not have a real window")
+    }
+    fn get_events(&self) -> &WindowEvents {
+        panic!("DummyWindowEngine does not have real events")
+    }
+    fn get_imgui_system_mut(&mut self) -> &mut ImguiSystem {
+        panic!("DummyWindowEngine does not have a real imgui system")
+    }
+    fn get_window_and_imgui_mut(&mut self) -> (&mut glfw::PWindow, &mut ImguiSystem) {
+        panic!("DummyWindowEngine does not have real window/imgui")
+    }
+}
 
 // --- Dummy Mocks (Minimal implementation, no logging) ---
 
@@ -32,12 +90,17 @@ impl AudioEngine for DummyAudio {
     fn unmute(&mut self) -> f32 {
         1.0
     }
+
+    fn as_audio_engine(&self) -> &dyn AudioEngine {
+        self
+    }
 }
 
 #[allow(dead_code)]
 pub struct DummyPhysic {
     pub config: PhysicConfig,
     pub particles: Vec<Particle>,
+    pub explosion_shape: ExplosionShape,
 }
 
 impl Default for DummyPhysic {
@@ -45,6 +108,7 @@ impl Default for DummyPhysic {
         Self {
             config: PhysicConfig::default(),
             particles: Vec::new(),
+            explosion_shape: ExplosionShape::default(),
         }
     }
 }
@@ -63,6 +127,36 @@ impl PhysicEngine for DummyPhysic {
     }
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+    fn set_explosion_shape(&mut self, shape: ExplosionShape) {
+        self.explosion_shape = shape;
+    }
+    fn get_explosion_shape(&self) -> &ExplosionShape {
+        &self.explosion_shape
+    }
+    fn load_explosion_image(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+    ) -> Result<(), String> {
+        Ok(()) // Mock: always succeeds
+    }
+    fn load_explosion_image_weighted(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+        _weight: f32,
+    ) -> Result<(), String> {
+        Ok(()) // Mock: always succeeds
+    }
+    fn set_explosion_image_weight(&mut self, _name: &str, _weight: f32) -> Result<(), String> {
+        Ok(()) // Mock: always succeeds
+    }
+
+    fn as_physic_engine(&self) -> &dyn PhysicEngine {
+        self
     }
 }
 
@@ -88,20 +182,40 @@ impl PhysicEngineIterator for DummyPhysic {
 impl PhysicEngineFull for DummyPhysic {}
 
 #[allow(dead_code)]
-pub struct DummyRenderer;
+pub struct DummyRenderer {
+    pub bloom_pass: fireworks_sim::renderer_engine::BloomPass,
+}
+
+#[allow(dead_code)]
+impl DummyRenderer {
+    pub fn new() -> Self {
+        Self {
+            bloom_pass: fireworks_sim::renderer_engine::BloomPass::new_dummy(),
+        }
+    }
+}
+
+impl Default for DummyRenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[allow(dead_code)]
 impl RendererEngine for DummyRenderer {
-    fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
-        &mut self,
-        _physic: &mut P,
-        _audio: &mut A,
-        _registry: &CommandRegistry,
-    ) -> anyhow::Result<()> {
+    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P) -> usize {
+        0
+    }
+    fn set_window_size(&mut self, _width: i32, _height: i32) {}
+    fn recreate_buffers(&mut self, _max_particles: usize) {}
+    fn reload_shaders(&mut self) -> Result<(), String> {
         Ok(())
     }
-
     fn close(&mut self) {
         println!("Closing renderer...");
+    }
+    fn bloom_pass_mut(&mut self) -> &mut fireworks_sim::renderer_engine::BloomPass {
+        &mut self.bloom_pass
     }
 }
 
@@ -151,8 +265,12 @@ impl AudioEngine for TestAudio {
         self.log.borrow_mut().push("mute called".into());
     }
     fn unmute(&mut self) -> f32 {
-        self.log.borrow_mut().push("unmute called".into());
+        self.log.borrow_mut().push("audio.unmute".into());
         1.0
+    }
+
+    fn as_audio_engine(&self) -> &dyn AudioEngine {
+        self
     }
 }
 
@@ -161,6 +279,7 @@ pub struct TestPhysic {
     pub log: SharedLog,
     pub config: PhysicConfig,
     pub fail_on_update: bool,
+    pub explosion_shape: ExplosionShape,
 }
 
 #[allow(dead_code)]
@@ -170,6 +289,7 @@ impl TestPhysic {
             log,
             config: PhysicConfig::default(),
             fail_on_update: false,
+            explosion_shape: ExplosionShape::default(),
         }
     }
 }
@@ -197,6 +317,44 @@ impl PhysicEngine for TestPhysic {
     fn get_config(&self) -> &PhysicConfig {
         &self.config
     }
+    fn set_explosion_shape(&mut self, shape: ExplosionShape) {
+        self.explosion_shape = shape;
+    }
+    fn get_explosion_shape(&self) -> &ExplosionShape {
+        &self.explosion_shape
+    }
+    fn load_explosion_image(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+    ) -> Result<(), String> {
+        self.log
+            .borrow_mut()
+            .push("physic.load_explosion_image".into());
+        Ok(()) // Mock: always succeeds
+    }
+    fn load_explosion_image_weighted(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+        _weight: f32,
+    ) -> Result<(), String> {
+        self.log
+            .borrow_mut()
+            .push("physic.load_explosion_image_weighted".into());
+        Ok(()) // Mock: always succeeds
+    }
+    fn set_explosion_image_weight(&mut self, _name: &str, _weight: f32) -> Result<(), String> {
+        self.log
+            .borrow_mut()
+            .push("physic.set_explosion_image_weight".into());
+        Ok(()) // Mock: always succeeds
+    }
+    fn as_physic_engine(&self) -> &dyn PhysicEngine {
+        self
+    }
 }
 
 impl PhysicEngineIterator for TestPhysic {
@@ -220,6 +378,7 @@ impl PhysicEngineFull for TestPhysic {}
 pub struct TestRenderer {
     pub log: SharedLog,
     pub fail_on_run_loop: bool,
+    pub bloom_pass: fireworks_sim::renderer_engine::BloomPass,
 }
 
 #[allow(dead_code)]
@@ -228,32 +387,38 @@ impl TestRenderer {
         Self {
             log,
             fail_on_run_loop: false,
+            bloom_pass: fireworks_sim::renderer_engine::BloomPass::new_dummy(),
         }
     }
 }
 
 impl RendererEngine for TestRenderer {
-    fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
-        &mut self,
-        physic: &mut P,
-        audio: &mut A,
-        _registry: &CommandRegistry,
-    ) -> anyhow::Result<()> {
-        self.log.borrow_mut().push("renderer.run_loop.start".into());
+    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P) -> usize {
+        self.log.borrow_mut().push("renderer.render_frame".into());
         if self.fail_on_run_loop {
-            return Err(anyhow::anyhow!("RendererEngine simulated failure"));
+            panic!("RendererEngine simulated failure");
         }
-
-        // Simule une frame
-        physic.update(0.016);
-        audio.play_rocket((0.0, 0.0), 1.0);
-
-        self.log.borrow_mut().push("renderer.run_loop.end".into());
+        0
+    }
+    fn set_window_size(&mut self, _width: i32, _height: i32) {
+        self.log
+            .borrow_mut()
+            .push("renderer.set_window_size".into());
+    }
+    fn recreate_buffers(&mut self, _max_particles: usize) {
+        self.log
+            .borrow_mut()
+            .push("renderer.recreate_buffers".into());
+    }
+    fn reload_shaders(&mut self) -> Result<(), String> {
+        self.log.borrow_mut().push("renderer.reload_shaders".into());
         Ok(())
     }
-
     fn close(&mut self) {
         self.log.borrow_mut().push("renderer.close".into());
+    }
+    fn bloom_pass_mut(&mut self) -> &mut fireworks_sim::renderer_engine::BloomPass {
+        &mut self.bloom_pass
     }
 }
 

@@ -1,15 +1,17 @@
-use crate::audio_engine::AudioEngine;
-use crate::physic_engine::PhysicEngineFull;
-use crate::renderer_engine::command_console::CommandRegistry;
-
-use anyhow::Result;
+use crate::physic_engine::PhysicEngineIterator;
+use crate::renderer_engine::{BloomPass, RendererConfig};
 
 pub trait RendererEngine {
-    fn run_loop<P: PhysicEngineFull, A: AudioEngine>(
-        &mut self,
-        physic: &mut P,
-        audio: &mut A,
-        commands_registry: &CommandRegistry,
-    ) -> Result<()>;
+    fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize;
+    fn set_window_size(&mut self, width: i32, height: i32);
+    fn recreate_buffers(&mut self, max_particles: usize);
+    fn reload_shaders(&mut self) -> Result<(), String>;
     fn close(&mut self);
+    fn bloom_pass_mut(&mut self) -> &mut BloomPass;
+
+    /// Synchronizes bloom configuration from RendererConfig
+    /// Default implementation does nothing (for test mocks)
+    fn sync_bloom_config(&mut self, _config: &RendererConfig) {
+        // Default: no-op for test mocks
+    }
 }

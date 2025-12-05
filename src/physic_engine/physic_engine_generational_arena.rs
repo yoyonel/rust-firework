@@ -6,6 +6,7 @@ use std::sync::atomic::Ordering;
 
 use crate::physic_engine::{
     config::PhysicConfig,
+    explosion_shape::ExplosionShape,
     particle::Particle,
     particles_pools::ParticlesPoolsForRockets,
     rocket::{Rocket, ROCKET_ID_COUNTER},
@@ -30,6 +31,9 @@ pub struct PhysicEngineFireworks {
     rocket_margin_max_x: f32,
 
     particles_pools_for_rockets: ParticlesPoolsForRockets,
+
+    /// Forme des explosions (sphérique ou basée sur image)
+    explosion_shape: ExplosionShape,
 }
 
 impl PhysicEngineFireworks {
@@ -67,6 +71,7 @@ impl PhysicEngineFireworks {
                 config.particles_per_explosion,
                 config.particles_per_trail,
             ),
+            explosion_shape: ExplosionShape::default(),
         };
 
         engine.next_rocket_interval = engine.compute_next_interval();
@@ -171,7 +176,12 @@ impl PhysicEngineFireworks {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
 
-                rocket.update(dt, &mut self.particles_pools_for_rockets, &self.config);
+                rocket.update(
+                    dt,
+                    &mut self.particles_pools_for_rockets,
+                    &self.config,
+                    &self.explosion_shape,
+                );
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
@@ -290,6 +300,98 @@ impl PhysicEngine for PhysicEngineFireworks {
 
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+
+    fn set_explosion_shape(&mut self, shape: ExplosionShape) {
+        self.explosion_shape = shape;
+    }
+
+    fn get_explosion_shape(&self) -> &ExplosionShape {
+        &self.explosion_shape
+    }
+
+    fn load_explosion_image(
+        &mut self,
+        path: &str,
+        scale: f32,
+        flight_time: f32,
+    ) -> Result<(), String> {
+        let n_samples = self.config.particles_per_explosion;
+
+        match crate::physic_engine::explosion_shape::ImageShape::from_image(
+            path,
+            n_samples,
+            scale,
+            flight_time,
+        ) {
+            Ok(shape) => {
+                self.explosion_shape = ExplosionShape::Image(shape);
+                Ok(())
+            }
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    fn load_explosion_image_weighted(
+        &mut self,
+        path: &str,
+        scale: f32,
+        flight_time: f32,
+        weight: f32,
+    ) -> Result<(), String> {
+        let n_samples = self.config.particles_per_explosion;
+
+        let shape = crate::physic_engine::explosion_shape::ImageShape::from_image(
+            path,
+            n_samples,
+            scale,
+            flight_time,
+        )
+        .map_err(|e| e.to_string())?;
+
+        match &mut self.explosion_shape {
+            ExplosionShape::MultiImage {
+                shapes,
+                total_weight,
+            } => {
+                shapes.push((shape, weight));
+                *total_weight += weight;
+            }
+            _ => {
+                // If not already MultiImage, switch to it with this single image
+                self.explosion_shape = ExplosionShape::MultiImage {
+                    shapes: vec![(shape, weight)],
+                    total_weight: weight,
+                };
+            }
+        }
+        Ok(())
+    }
+
+    fn set_explosion_image_weight(&mut self, name: &str, new_weight: f32) -> Result<(), String> {
+        match &mut self.explosion_shape {
+            ExplosionShape::MultiImage {
+                shapes,
+                total_weight,
+            } => {
+                if let Some((_, weight)) = shapes.iter_mut().find(|(s, _)| s.file_stem == name) {
+                    *total_weight -= *weight;
+                    *weight = new_weight;
+                    *total_weight += *weight;
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Image '{}' not found in current MultiImage set",
+                        name
+                    ))
+                }
+            }
+            _ => Err("Current explosion shape is not MultiImage".to_string()),
+        }
+    }
+
+    fn as_physic_engine(&self) -> &dyn PhysicEngine {
+        self
     }
 }
 

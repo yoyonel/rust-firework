@@ -1,0 +1,6 @@
+bloom_enabled = true
+bloom_intensity = 1.25
+bloom_iterations = 5
+bloom_downsample = 2
+bloom_blur_method = "Gaussian"
+tone_mapping_mode = "ACES"

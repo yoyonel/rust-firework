@@ -9,6 +9,7 @@ use fireworks_sim::physic_engine::config::PhysicConfig;
 use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
 use fireworks_sim::renderer_engine::renderer::Renderer;
 use fireworks_sim::utils::show_rust_core_dependencies;
+use fireworks_sim::window_engine::{GlfwWindowEngine, WindowEngine};
 use fireworks_sim::Simulator;
 
 /// Main entry point for the Fireworks Simulator application.
@@ -58,21 +59,29 @@ fn main() -> Result<()> {
         // doppler_states: Vec::new(),
         // export_in_wav: true,
     };
-    let audio_engine = FireworksAudio3D::new(audio_config);
+    let audio_engine = FireworksAudio3D::new(audio_config)?;
 
     let window_width = 1024;
+    let window_height = 800;
+
+    // 1. Init Window & Context
+    let window_engine = GlfwWindowEngine::init(window_width, window_height, "Fireworks Simulator")?;
+
+    // 2. Init Renderer (now that GL context is ready)
+    let renderer_engine = Renderer::new(window_width, window_height, &physic_config)?;
 
     let physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
 
-    let renderer_engine = Renderer::new(window_width, 800, "Fireworks Simulator", &physic_config)?;
-
-    // ----------------------------
-    // Initialisation du simulateur
-    // ----------------------------
+    // 3. Init Simulator
     info!("🚀 Starting Fireworks Simulator...");
-    let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine);
+    let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
+
     simulator.init_console_commands();
-    let _ = simulator.run(export_path.as_ref().map(|p| p.to_str().unwrap()));
+    let _ = simulator.run(
+        export_path
+            .as_ref()
+            .map(|p| p.to_string_lossy().into_owned()),
+    );
     simulator.close();
 
     Ok(())

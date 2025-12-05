@@ -47,6 +47,7 @@ fft = []
 no_simd = []                       # Force le mode scalaire
 simd = []                          # Active le code SIMD
 test_helpers = []
+interactive_tests = []
 
 [build-dependencies]
 cargo_metadata = "0.23.1"
@@ -54,7 +55,8 @@ cargo_metadata = "0.23.1"
 # https://doc.rust-lang.org/cargo/reference/profiles.html?highlight=lto#default-profiles
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html?highlight=lto#release
-# [profile.release]
+[profile.release]
+debug = true
 
 # https://doc.rust-lang.org/cargo/reference/profiles.html?highlight=lto#release
 # inclut les symboles de débugage, utiles pour Heaptrack

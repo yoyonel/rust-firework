@@ -121,29 +121,34 @@ impl<'a> imgui::InputTextCallbackHandler for CombinedInputHandler<'a> {
     // CHAR_FILTER LOGIC
     fn char_filter(&mut self, c: char) -> Option<char> {
         match c {
-            '²' | '~' => None,
+            '²' | '~' | '`' => None,
             other => Some(other),
         }
     }
 
     // COMPLETION_HANDLER LOGIC
-    fn on_completion(&mut self, mut _data: imgui::TextCallbackData) {
+    fn on_completion(&mut self, mut data: imgui::TextCallbackData) {
         if self.suggestions.is_empty() {
             return;
         }
 
-        // 1. Instantiate Cycler and load current state
+        // Apply the currently selected suggestion to the input buffer
+        let selected_suggestion = &self.suggestions[*self.selected_suggestion_index];
+
+        // Clear current input
+        let current_len = data.str().len();
+        data.remove_chars(0, current_len);
+
+        // Insert selected suggestion
+        data.insert_chars(0, selected_suggestion);
+
+        // Move to next suggestion for next TAB press (cycling behavior)
         let mut cycler = SelectionCycler::new(self.suggestions);
         cycler.current_index = *self.selected_suggestion_index;
 
-        // 2. Execute idiomatic action (rotation)
         if cycler.next_cyclic().is_some() {
-            // 3. Save updated state
             *self.selected_suggestion_index = cycler.get_index();
         }
-
-        // Reminder: Here we ONLY rotate the index.
-        // Text application is handled by ENTER or TAB key in Console::draw.
     }
 
     // HISTORY_HANDLER LOGIC
@@ -230,8 +235,6 @@ pub struct Console {
     // History
     history: Vec<String>,         // Command history
     history_index: Option<usize>, // Current position in history
-
-    window: Option<()>,
 }
 
 impl Default for Console {
@@ -257,12 +260,48 @@ impl Console {
             matcher: SkimMatcherV2::default(),
             history: Vec::new(),
             history_index: None,
-            window: None,
         }
     }
 
     pub fn log(&mut self, text: impl Into<String>) {
         self.output.push(text.into());
+    }
+
+    // ========== Test accessors ==========
+    /// Sets the input text (for testing autocomplete without ImGui)
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn set_input(&mut self, text: &str) {
+        self.input = text.to_string();
+    }
+
+    /// Gets the current input text
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_input(&self) -> &str {
+        &self.input
+    }
+
+    /// Gets the current autocomplete suggestions
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_suggestions(&self) -> &[String] {
+        &self.autocomplete_suggestions
+    }
+
+    /// Gets the currently selected suggestion index
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_selected_suggestion(&self) -> usize {
+        self.selected_suggestion
+    }
+
+    /// Gets the output log
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_output(&self) -> &[String] {
+        &self.output
+    }
+
+    /// Gets the command history
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_history(&self) -> &[String] {
+        &self.history
     }
 }
 
@@ -292,8 +331,7 @@ impl Console {
         let window_height = ui.io().display_size[1];
         let console_height = window_height * 0.50;
 
-        self.window = ui
-            .window("Console")
+        ui.window("Console")
             .size([window_width, console_height], imgui::Condition::Always)
             .position([0.0, 0.0], imgui::Condition::Always)
             .movable(false)
@@ -311,7 +349,7 @@ impl Console {
                 self.draw_scrolling_region(ui);
 
                 // 3. Suggestions Region
-                self.draw_suggestions_region(ui);
+                self.draw_suggestions_region(ui, registry);
 
                 ui.separator();
 
@@ -374,7 +412,7 @@ impl Console {
             });
     }
 
-    fn draw_suggestions_region(&self, ui: &imgui::Ui) {
+    fn draw_suggestions_region(&self, ui: &imgui::Ui, registry: &CommandRegistry) {
         ui.child_window("suggestions")
             .size([0.0, SUGGESTION_BOX_HEIGHT])
             .build(|| {
@@ -383,6 +421,19 @@ impl Console {
                     for (i, suggestion) in self.autocomplete_suggestions.iter().enumerate() {
                         if i == self.selected_suggestion {
                             ui.text_colored([1.0, 1.0, 0.0, 1.0], suggestion);
+
+                            // Try to find a hint for this command
+                            let cmd_key = suggestion.trim();
+                            // If the suggestion is "cmd arg", we might want the hint for "cmd".
+                            // But usually hints are for the command itself.
+                            // If we are completing arguments, the suggestion is "cmd arg".
+                            // The hint might still be relevant if we extract the cmd part.
+                            let cmd_name = cmd_key.split_whitespace().next().unwrap_or(cmd_key);
+
+                            if let Some(hint) = registry.get_hint(cmd_name) {
+                                ui.same_line();
+                                ui.text_colored([0.6, 0.6, 0.6, 1.0], hint);
+                            }
                         } else {
                             ui.text(suggestion);
                         }
@@ -426,7 +477,7 @@ impl Console {
 
         // Update Autocomplete if text changed
         if input_modified {
-            self.update_autocomplete(registry);
+            self.update_autocomplete_internal(registry, audio, physic);
         }
 
         // Command Submission
@@ -458,7 +509,7 @@ impl Console {
             return;
         }
 
-        let result = self.execute_command(&command, audio, physic, registry);
+        let result = self.execute_command_internal(&command, audio, physic, registry);
 
         // Display and cleanup
         self.output.push(format!("> {}", command));
@@ -472,7 +523,20 @@ impl Console {
         self.autocomplete_suggestions.clear();
     }
 
-    fn execute_command<P: PhysicEngine, A: AudioEngine>(
+    /// Executes a command and returns the result
+    #[cfg(feature = "interactive_tests")]
+    pub fn execute_command<P: PhysicEngine, A: AudioEngine>(
+        &mut self,
+        input: &str,
+        audio: &mut A,
+        physic: &mut P,
+        registry: &CommandRegistry,
+    ) -> String {
+        self.execute_command_internal(input, audio, physic, registry)
+    }
+
+    /// Internal implementation of execute_command
+    fn execute_command_internal<P: PhysicEngine, A: AudioEngine>(
         &mut self,
         input: &str,
         audio: &mut A,
@@ -510,15 +574,79 @@ impl Console {
 }
 
 impl Console {
-    fn update_autocomplete(&mut self, registry: &CommandRegistry) {
+    /// Updates autocomplete suggestions based on current input
+    #[cfg(feature = "interactive_tests")]
+    pub fn update_autocomplete<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
+        &mut self,
+        registry: &CommandRegistry,
+        audio: &A,
+        physic: &P,
+    ) {
+        self.update_autocomplete_internal(registry, audio, physic);
+    }
+
+    /// Internal implementation of update_autocomplete
+    fn update_autocomplete_internal<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
+        &mut self,
+        registry: &CommandRegistry,
+        audio: &A,
+        physic: &P,
+    ) {
         if self.input.is_empty() {
             self.autocomplete_suggestions.clear();
             self.selected_suggestion = 0;
             return;
         }
 
-        let input = self.input.trim();
+        let input = self.input.trim_start();
 
+        // Check if we're completing an argument (space after command name)
+        if let Some(space_pos) = input.find(' ') {
+            let cmd_name = &input[..space_pos];
+            let arg_part = input[space_pos + 1..].trim();
+
+            let arg_suggestions = registry.get_arg_suggestions_combined(
+                cmd_name,
+                audio.as_audio_engine(),
+                physic.as_physic_engine(),
+            );
+
+            if !arg_suggestions.is_empty() {
+                // Filter and score argument suggestions
+                let mut scored_args: Vec<(i64, String)> = if arg_part.is_empty() {
+                    // Show all options if no argument typed yet
+                    arg_suggestions
+                        .iter()
+                        .map(|arg| (0, format!("{} {}", cmd_name, arg)))
+                        .collect()
+                } else {
+                    arg_suggestions
+                        .iter()
+                        .filter_map(|arg| {
+                            self.matcher
+                                .fuzzy_match(arg, arg_part)
+                                .map(|score| (score, format!("{} {}", cmd_name, arg)))
+                        })
+                        .collect()
+                };
+
+                // Sort by score descending, then length ascending
+                scored_args.sort_by(|a, b| match b.0.cmp(&a.0) {
+                    std::cmp::Ordering::Equal => a.1.len().cmp(&b.1.len()),
+                    other => other,
+                });
+
+                self.autocomplete_suggestions = scored_args
+                    .into_iter()
+                    .map(|(_, suggestion)| suggestion)
+                    .collect();
+
+                self.selected_suggestion = 0;
+                return;
+            }
+        }
+
+        // Default: command name completion
         // 1. Collect ALL possible commands (Registry + Internal)
         let command_list_iter = registry
             .get_commands()
@@ -534,12 +662,23 @@ impl Console {
             })
             .collect();
 
-        // 3. Sort by Score (descending)
-        scored_suggestions.sort_by(|a, b| b.0.cmp(&a.0));
+        // 3. Sort by Score (descending), then length ascending
+        scored_suggestions.sort_by(|a, b| match b.0.cmp(&a.0) {
+            std::cmp::Ordering::Equal => a.1.len().cmp(&b.1.len()),
+            other => other,
+        });
 
         // 4. Update console suggestions
-        self.autocomplete_suggestions =
-            scored_suggestions.into_iter().map(|(_, cmd)| cmd).collect();
+        self.autocomplete_suggestions = scored_suggestions
+            .into_iter()
+            .map(|(_, cmd)| {
+                if !registry.get_arg_suggestions(&cmd).is_empty() {
+                    format!("{} ", cmd)
+                } else {
+                    cmd
+                }
+            })
+            .collect();
 
         // Reset selection index
         self.selected_suggestion = 0;
@@ -548,10 +687,17 @@ impl Console {
 
 type AudioCommandFn = dyn Fn(&mut dyn AudioEngine, &str) -> String + 'static;
 type PhysicCommandFn = dyn Fn(&mut dyn PhysicEngine, &str) -> String + 'static;
+type RendererCommandFn = dyn Fn(&str) -> String + 'static;
+type DynamicArgProviderFn = dyn Fn(&dyn AudioEngine, &dyn PhysicEngine) -> Vec<String> + 'static;
 
 pub struct CommandRegistry {
     commands_audio: HashMap<String, Box<AudioCommandFn>>,
     commands_physic: HashMap<String, Box<PhysicCommandFn>>,
+    commands_renderer: HashMap<String, Box<RendererCommandFn>>,
+    arg_suggestions: HashMap<String, Vec<String>>,
+    // Dynamic suggestions provider: (Audio, Physic) -> Suggestions
+    dynamic_arg_providers: HashMap<String, Box<DynamicArgProviderFn>>,
+    hints: HashMap<String, String>,
 }
 
 impl Default for CommandRegistry {
@@ -565,6 +711,10 @@ impl CommandRegistry {
         Self {
             commands_audio: HashMap::new(),
             commands_physic: HashMap::new(),
+            commands_renderer: HashMap::new(),
+            arg_suggestions: HashMap::new(),
+            dynamic_arg_providers: HashMap::new(),
+            hints: HashMap::new(),
         }
     }
 
@@ -583,13 +733,64 @@ impl CommandRegistry {
             .insert(name.to_string(), Box::new(func));
     }
 
+    pub fn register_for_renderer<F>(&mut self, name: &str, func: F)
+    where
+        F: Fn(&str) -> String + 'static,
+    {
+        self.commands_renderer
+            .insert(name.to_string(), Box::new(func));
+    }
+
+    pub fn register_args(&mut self, name: &str, args: Vec<&str>) {
+        self.arg_suggestions.insert(
+            name.to_string(),
+            args.iter().map(|s| s.to_string()).collect(),
+        );
+    }
+
+    pub fn register_dynamic_args<F>(&mut self, name: &str, provider: F)
+    where
+        F: Fn(&dyn AudioEngine, &dyn PhysicEngine) -> Vec<String> + 'static,
+    {
+        self.dynamic_arg_providers
+            .insert(name.to_string(), Box::new(provider));
+    }
+
+    pub fn get_arg_suggestions(&self, name: &str) -> &[String] {
+        self.arg_suggestions.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    // New method that combines static and dynamic suggestions
+    pub fn get_arg_suggestions_combined(
+        &self,
+        name: &str,
+        audio: &dyn AudioEngine,
+        physic: &dyn PhysicEngine,
+    ) -> Vec<String> {
+        let mut suggestions = self.get_arg_suggestions(name).to_vec();
+
+        if let Some(provider) = self.dynamic_arg_providers.get(name) {
+            suggestions.extend(provider(audio, physic));
+        }
+
+        suggestions
+    }
+
+    pub fn register_hint(&mut self, name: &str, hint: &str) {
+        self.hints.insert(name.to_string(), hint.to_string());
+    }
+
+    pub fn get_hint(&self, name: &str) -> Option<&String> {
+        self.hints.get(name)
+    }
+
     pub fn execute(
         &self,
         audio_engine: &mut dyn AudioEngine,
         physic_engine: &mut dyn PhysicEngine,
-        input: &str,
+        input_str: &str,
     ) -> String {
-        let input = input.trim();
+        let input = input_str.trim();
         let cmd_name_with_args = input.split_whitespace().next().unwrap_or("");
 
         if cmd_name_with_args.is_empty() {
@@ -620,6 +821,11 @@ impl CommandRegistry {
                     return func(physic_engine, input);
                 }
             }
+            "renderer" => {
+                if let Some(func) = self.commands_renderer.get(cmd_key) {
+                    return func(input);
+                }
+            }
             _ => return format!("Unknown engine prefix '{}'.", prefix),
         }
 
@@ -635,6 +841,7 @@ impl CommandRegistry {
         self.commands_audio
             .keys()
             .chain(self.commands_physic.keys())
+            .chain(self.commands_renderer.keys())
             .cloned()
             .collect()
     }

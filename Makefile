@@ -60,7 +60,7 @@ coverage:
 	@xdg-open $(COVERAGE_DIR)/index.html 2>/dev/null || open $(COVERAGE_DIR)/index.html 2>/dev/null || true
 
 coverage-without-tests:
-	@$(XVFB) $(CARGO) llvm-cov --ignore-filename-regex "tests/"
+	@$(XVFB) $(CARGO) llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1
 
 # -----------------------------------------
 # 📦 Build optimisé

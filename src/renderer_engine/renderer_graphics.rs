@@ -1,7 +1,8 @@
 use log::{debug, info};
 
 use crate::physic_engine::PhysicEngineIterator;
-use crate::renderer_engine::{tools::compile_shader_program, types::ParticleGPU};
+use crate::renderer_engine::shader::compile_shader_program_from_files;
+use crate::renderer_engine::types::ParticleGPU;
 use crate::utils::human_bytes::HumanBytes;
 
 macro_rules! cstr {
@@ -9,6 +10,9 @@ macro_rules! cstr {
         concat!($s, "\0").as_ptr() as *const i8
     };
 }
+
+const VERTEX_SHADER_PATH: &str = "assets/shaders/point_rendering.vert.glsl";
+const FRAGMENT_SHADER_PATH: &str = "assets/shaders/point_rendering.frag.glsl";
 
 pub struct RendererGraphics {
     pub vao: u32,
@@ -25,8 +29,8 @@ pub struct RendererGraphics {
 
 impl RendererGraphics {
     pub fn new(max_particles_on_gpu: usize) -> Self {
-        let (vertex_src, fragment_src) = RendererGraphics::src_shaders_particles();
-        let shader_program = unsafe { compile_shader_program(vertex_src, fragment_src) };
+        let shader_program =
+            unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
         let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
 
@@ -44,48 +48,6 @@ impl RendererGraphics {
                 max_particles_on_gpu,
             }
         }
-    }
-
-    pub fn src_shaders_particles() -> (&'static str, &'static str) {
-        let vertex_src = r#"
-        #version 330 core
-        layout(location = 0) in vec4 aPos;
-        layout(location = 1) in vec3 aColor;
-        layout(location = 2) in vec2 aLifeMaxLife;
-
-        out vec3 vertexColor;
-        out float alpha;
-
-        uniform vec2 uSize;
-
-        void main() {
-            float a = clamp(aLifeMaxLife.x / max(aLifeMaxLife.y, 0.0001), 0.0, 1.0);
-            alpha = a;
-            vertexColor = aColor;
-
-            float x = aPos.x / uSize.x * 2.0 - 1.0;
-            float y = aPos.y / uSize.y * 2.0 - 1.0;
-            gl_Position = vec4(x, y, 0.0, 1.0);
-
-            gl_PointSize = 2.0 + 5.0 * a;
-        }
-        "#;
-
-        let fragment_src = r#"
-        #version 330 core
-        in vec3 vertexColor;
-        in float alpha;
-        out vec4 FragColor;
-
-        void main() {
-            vec2 uv = gl_PointCoord - vec2(0.5);
-            float dist = dot(uv, uv);
-            if(dist > 0.25) discard;
-            float falloff = smoothstep(0.25, 0.0, dist);
-            FragColor = vec4(vertexColor, alpha * falloff);
-        }
-        "#;
-        (vertex_src, fragment_src)
     }
 
     unsafe fn setup_gpu_buffers(
@@ -198,6 +160,8 @@ impl RendererGraphics {
                 max_life: p.max_life,
                 size: p.size,
                 angle: p.angle,
+                // Brightness based on life ratio with exponential decay (quartic)
+                brightness: (p.life / p.max_life).powi(4),
             };
             count += 1;
         }
@@ -262,6 +226,13 @@ impl RendererGraphics {
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn close(&mut self) {
+        // Unmap the persistent buffer BEFORE deleting it
+        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::UnmapBuffer(gl::ARRAY_BUFFER);
+            self.mapped_ptr = std::ptr::null_mut();
+        }
+
         if self.vbo_particles != 0 {
             gl::DeleteBuffers(1, &self.vbo_particles);
             self.vbo_particles = 0;
@@ -275,6 +246,38 @@ impl RendererGraphics {
             self.shader_program = 0;
         }
         debug!("Graphic Engine for Points Rendering closed and reset.");
+    }
+
+    /// Recharge les shaders depuis les fichiers et recompile le programme shader.
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        use crate::renderer_engine::shader::try_compile_shader_program_from_files;
+        use log::error;
+
+        match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
+            Ok(new_program) => {
+                // Supprimer l'ancien programme shader
+                if self.shader_program != 0 {
+                    gl::DeleteProgram(self.shader_program);
+                }
+
+                // Utiliser le nouveau programme
+                self.shader_program = new_program;
+
+                // Mettre à jour les uniform locations
+                self.loc_size = gl::GetUniformLocation(self.shader_program, cstr!("uSize"));
+
+                info!("✅ Point rendering shaders reloaded successfully");
+                Ok(())
+            }
+            Err(e) => {
+                error!("❌ Failed to reload point rendering shaders:\n{}", e);
+                Err(e)
+            }
+        }
     }
 }
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
@@ -294,6 +297,10 @@ impl ParticleGraphicsRenderer for RendererGraphics {
         window_size: (f32, f32),
     ) {
         self.render_particles_with_persistent_buffer(count, window_size);
+    }
+
+    unsafe fn reload_shaders(&mut self) -> Result<(), String> {
+        self.reload_shaders()
     }
 
     unsafe fn close(&mut self) {

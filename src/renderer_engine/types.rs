@@ -27,6 +27,7 @@ use std::mem;
 ///
 /// | Location | Type   | Champs                     |
 /// |:---------:|:-------|:---------------------------|
+/// |:---------:|:-------|----------------------------|
 /// | `0`       | `vec2` | `pos_x`, `pos_y`          |
 /// | `1`       | `vec3` | `col_r`, `col_g`, `col_b` |
 /// | `2`       | `float`| `life`                    |
@@ -62,6 +63,10 @@ pub struct ParticleGPU {
 
     /// Angle de rotation de la particule.
     pub angle: f32,
+
+    /// Multiplicateur de luminosité pour HDR (1.0 = normal, >1.0 = bloom).
+    /// Calculé côté CPU basé sur la vitesse/accélération de la particule.
+    pub brightness: f32,
 }
 
 impl ParticleGPU {
@@ -107,6 +112,17 @@ impl ParticleGPU {
                 offset_of!(Self, life) as *const _,
             );
             gl::EnableVertexAttribArray(2);
+
+            // Attribut 3 : brightness (multiplicateur HDR)
+            gl::VertexAttribPointer(
+                3,
+                1,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, brightness) as *const _,
+            );
+            gl::EnableVertexAttribArray(3);
         }
     }
 
@@ -149,6 +165,18 @@ impl ParticleGPU {
             );
             gl::EnableVertexAttribArray(3);
             gl::VertexAttribDivisor(3, 1);
+
+            // layout(location = 4) : brightness (multiplicateur HDR)
+            gl::VertexAttribPointer(
+                4,
+                1,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                offset_of!(Self, brightness) as *const _,
+            );
+            gl::EnableVertexAttribArray(4);
+            gl::VertexAttribDivisor(4, 1);
         }
     }
 }
