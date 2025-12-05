@@ -266,6 +266,43 @@ impl Console {
     pub fn log(&mut self, text: impl Into<String>) {
         self.output.push(text.into());
     }
+
+    // ========== Test accessors ==========
+    /// Sets the input text (for testing autocomplete without ImGui)
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn set_input(&mut self, text: &str) {
+        self.input = text.to_string();
+    }
+
+    /// Gets the current input text
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_input(&self) -> &str {
+        &self.input
+    }
+
+    /// Gets the current autocomplete suggestions
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_suggestions(&self) -> &[String] {
+        &self.autocomplete_suggestions
+    }
+
+    /// Gets the currently selected suggestion index
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_selected_suggestion(&self) -> usize {
+        self.selected_suggestion
+    }
+
+    /// Gets the output log
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_output(&self) -> &[String] {
+        &self.output
+    }
+
+    /// Gets the command history
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_history(&self) -> &[String] {
+        &self.history
+    }
 }
 
 impl Console {
@@ -440,7 +477,7 @@ impl Console {
 
         // Update Autocomplete if text changed
         if input_modified {
-            self.update_autocomplete(registry);
+            self.update_autocomplete_internal(registry);
         }
 
         // Command Submission
@@ -472,7 +509,7 @@ impl Console {
             return;
         }
 
-        let result = self.execute_command(&command, audio, physic, registry);
+        let result = self.execute_command_internal(&command, audio, physic, registry);
 
         // Display and cleanup
         self.output.push(format!("> {}", command));
@@ -486,7 +523,20 @@ impl Console {
         self.autocomplete_suggestions.clear();
     }
 
-    fn execute_command<P: PhysicEngine, A: AudioEngine>(
+    /// Executes a command and returns the result
+    #[cfg(feature = "interactive_tests")]
+    pub fn execute_command<P: PhysicEngine, A: AudioEngine>(
+        &mut self,
+        input: &str,
+        audio: &mut A,
+        physic: &mut P,
+        registry: &CommandRegistry,
+    ) -> String {
+        self.execute_command_internal(input, audio, physic, registry)
+    }
+
+    /// Internal implementation of execute_command
+    fn execute_command_internal<P: PhysicEngine, A: AudioEngine>(
         &mut self,
         input: &str,
         audio: &mut A,
@@ -524,7 +574,14 @@ impl Console {
 }
 
 impl Console {
-    fn update_autocomplete(&mut self, registry: &CommandRegistry) {
+    /// Updates autocomplete suggestions based on current input
+    #[cfg(feature = "interactive_tests")]
+    pub fn update_autocomplete(&mut self, registry: &CommandRegistry) {
+        self.update_autocomplete_internal(registry);
+    }
+
+    /// Internal implementation of update_autocomplete
+    fn update_autocomplete_internal(&mut self, registry: &CommandRegistry) {
         if self.input.is_empty() {
             self.autocomplete_suggestions.clear();
             self.selected_suggestion = 0;
