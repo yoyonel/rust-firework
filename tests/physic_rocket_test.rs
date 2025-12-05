@@ -1,4 +1,5 @@
 use fireworks_sim::physic_engine::config::PhysicConfig;
+use fireworks_sim::physic_engine::explosion_shape::ExplosionShape;
 use fireworks_sim::physic_engine::particles_pools::ParticlesPoolsForRockets;
 use fireworks_sim::physic_engine::rocket::Rocket;
 use rand::SeedableRng;
@@ -111,6 +112,7 @@ fn test_remove_inactive_rockets_when_all_particles_inactive() {
         config.particles_per_explosion,
         config.particles_per_trail,
     );
+    let explosion_shape = ExplosionShape::default();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut rocket = Rocket::new(&mut rng);
@@ -118,7 +120,7 @@ fn test_remove_inactive_rockets_when_all_particles_inactive() {
 
     // Simuler jusqu'à l'explosion (augmenter le nombre de frames)
     for _ in 0..500 {
-        rocket.update(0.016, &mut pools, &config);
+        rocket.update(0.016, &mut pools, &config, &explosion_shape);
         if rocket.exploded {
             break;
         }
@@ -132,7 +134,7 @@ fn test_remove_inactive_rockets_when_all_particles_inactive() {
 
     // Simuler jusqu'à ce que toutes les particules soient inactives
     for _ in 0..500 {
-        rocket.update(0.016, &mut pools, &config);
+        rocket.update(0.016, &mut pools, &config, &explosion_shape);
         if !rocket.active {
             break;
         }
@@ -153,6 +155,7 @@ fn test_remove_inactive_rockets_stays_active_with_active_particles() {
         config.particles_per_explosion,
         config.particles_per_trail,
     );
+    let explosion_shape = ExplosionShape::default();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut rocket = Rocket::new(&mut rng);
@@ -160,7 +163,7 @@ fn test_remove_inactive_rockets_stays_active_with_active_particles() {
 
     // Simuler jusqu'à l'explosion (augmenter le nombre de frames)
     for _ in 0..500 {
-        rocket.update(0.016, &mut pools, &config);
+        rocket.update(0.016, &mut pools, &config, &explosion_shape);
         if rocket.exploded {
             break;
         }
@@ -169,7 +172,7 @@ fn test_remove_inactive_rockets_stays_active_with_active_particles() {
     assert!(rocket.exploded, "Rocket should have exploded");
 
     // Juste après l'explosion, il devrait y avoir des particules actives
-    rocket.update(0.016, &mut pools, &config);
+    rocket.update(0.016, &mut pools, &config, &explosion_shape);
     assert!(
         rocket.active,
         "Rocket should stay active with active particles"
@@ -188,6 +191,7 @@ fn test_update_head_particle_position_matches_rocket() {
         config.particles_per_explosion,
         config.particles_per_trail,
     );
+    let explosion_shape = ExplosionShape::default();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut rocket = Rocket::new(&mut rng);
@@ -195,7 +199,7 @@ fn test_update_head_particle_position_matches_rocket() {
 
     // Simuler quelques frames
     for _ in 0..10 {
-        rocket.update(0.016, &mut pools, &config);
+        rocket.update(0.016, &mut pools, &config, &explosion_shape);
 
         let head = rocket.head_particle();
 
@@ -215,13 +219,14 @@ fn test_update_head_particle_angle_calculation() {
         config.particles_per_explosion,
         config.particles_per_trail,
     );
+    let explosion_shape = ExplosionShape::default();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut rocket = Rocket::new(&mut rng);
     rocket.reset(&config, 1920.0);
 
     // Avant le premier update, la fusée monte
-    rocket.update(0.016, &mut pools, &config);
+    rocket.update(0.016, &mut pools, &config, &explosion_shape);
     let head = rocket.head_particle();
 
     // L'angle devrait être défini (non NaN)
@@ -252,6 +257,7 @@ fn test_reset_reinitializes_rocket_state() {
         config.particles_per_explosion,
         config.particles_per_trail,
     );
+    let explosion_shape = ExplosionShape::default();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut rocket = Rocket::new(&mut rng);
@@ -259,7 +265,7 @@ fn test_reset_reinitializes_rocket_state() {
 
     // Simuler jusqu'à l'explosion (augmenter le nombre de frames)
     for _ in 0..500 {
-        rocket.update(0.016, &mut pools, &config);
+        rocket.update(0.016, &mut pools, &config, &explosion_shape);
         if rocket.exploded {
             break;
         }
@@ -315,6 +321,7 @@ fn test_rocket_full_lifecycle() {
         config.particles_per_explosion,
         config.particles_per_trail,
     );
+    let explosion_shape = ExplosionShape::default();
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut rocket = Rocket::new(&mut rng);
@@ -325,7 +332,7 @@ fn test_rocket_full_lifecycle() {
 
     // Simuler jusqu'à désactivation complète
     for frame in 0..1000 {
-        rocket.update(0.016, &mut pools, &config);
+        rocket.update(0.016, &mut pools, &config, &explosion_shape);
 
         if rocket.exploded && exploded_frame.is_none() {
             exploded_frame = Some(frame);
