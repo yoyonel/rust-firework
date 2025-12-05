@@ -339,13 +339,10 @@ impl Rocket {
         if let Some(range) = &self.explosion_particle_indices {
             let slice = particles_pool.get_particles_mut(range);
 
-            match explosion_shape {
-                ExplosionShape::Spherical => {
-                    self.trigger_spherical_explosion(slice);
-                }
-                ExplosionShape::Image(image_shape) => {
-                    self.trigger_image_explosion(slice, gravity, image_shape);
-                }
+            if let Some(image_shape) = explosion_shape.sample(&mut self.rng) {
+                self.trigger_image_explosion(slice, gravity, image_shape);
+            } else {
+                self.trigger_spherical_explosion(slice);
             }
         }
     }
