@@ -10,4 +10,6 @@ pub trait AudioEngine {
 
     fn mute(&mut self);
     fn unmute(&mut self) -> f32;
+
+    fn as_audio_engine(&self) -> &dyn AudioEngine;
 }

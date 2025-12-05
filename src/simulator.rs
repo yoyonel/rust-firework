@@ -539,11 +539,26 @@ where
                                 img.flight_time
                             )
                         }
+                        crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                            format!(
+                                "Current explosion shape: MultiImage ({} images)\n{}",
+                                shapes.len(),
+                                shapes
+                                    .iter()
+                                    .map(|(s, w)| format!(
+                                        "  - {} (w={:.1}, scale={:.1}, t={:.2}s)",
+                                        s.file_stem, w, s.scale, s.flight_time
+                                    ))
+                                    .collect::<Vec<_>>()
+                                    .join("\n")
+                            )
+                        }
                     }
                 } else {
                     match arg.as_str() {
                         "spherical" => {
-                            engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+                            engine
+                                .set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
                             "-> Explosion shape: spherical".to_string()
                         }
                         _ => "Usage: physic.explosion.shape [spherical]\nUse physic.explosion.image <path> <scale> <flight_time> to load an image".to_string()
@@ -583,6 +598,112 @@ where
             "Usage: <path> [scale=150] [flight_time=1.5]",
         );
 
+        // Add weighted explosion image
+        // Usage: physic.explosion.add <path> <weight> [scale] [flight_time]
+        self.commands_registry
+            .register_for_physic("physic.explosion.add", |engine, args| {
+                let parts: Vec<&str> = args.split_whitespace().collect();
+
+                if parts.len() < 3 {
+                    return "Usage: physic.explosion.add <path> <weight> [scale] [flight_time]\n\
+                            Defaults: scale=150.0, flight_time=1.5\n\
+                            Example: physic.explosion.add assets/textures/explosion_shapes/heart.png 5.0".to_string();
+                }
+
+                let path = parts[1];
+                let weight = parts.get(2).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.0);
+                let scale = parts.get(3).and_then(|s| s.parse::<f32>().ok()).unwrap_or(150.0);
+                let flight_time = parts.get(4).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.5);
+
+                match engine.load_explosion_image_weighted(path, scale, flight_time, weight) {
+                    Ok(()) => format!("-> Added: {} (weight={:.1}, scale={:.1}, flight_time={:.2}s)", path, weight, scale, flight_time),
+                    Err(e) => format!("x Failed to add image: {}", e)
+                }
+            });
+        self.commands_registry.register_hint(
+            "physic.explosion.add",
+            "Usage: <path> <weight> [scale] [flight_time]",
+        );
+
+        // Show statistics for weighted images
+        self.commands_registry
+            .register_for_physic("physic.explosion.stats", |engine, _| {
+                match engine.get_explosion_shape() {
+                    crate::physic_engine::ExplosionShape::Spherical => {
+                        "Explosion Mode: Spherical (100%)".to_string()
+                    }
+                    crate::physic_engine::ExplosionShape::Image(img) => {
+                        format!("Explosion Mode: Single Image (100%)\n  - {}", img.file_stem)
+                    }
+                    crate::physic_engine::ExplosionShape::MultiImage {
+                        shapes,
+                        total_weight,
+                    } => {
+                        if *total_weight <= 0.0 {
+                            return "Explosion Mode: MultiImage (Error: Total weight <= 0)"
+                                .to_string();
+                        }
+
+                        let mut output = format!(
+                            "Explosion Mode: MultiImage (Total Weight: {:.2})\n",
+                            total_weight
+                        );
+                        output.push_str("Probability Distribution:\n");
+
+                        // Sort by weight/probability descending for better readability
+                        let mut stats: Vec<_> = shapes.iter().collect();
+                        stats.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
+
+                        for (shape, weight) in stats {
+                            let percentage = (weight / total_weight) * 100.0;
+                            output.push_str(&format!(
+                                "  - {:<20} : {:>6.2}% (Weight: {:.2})\n",
+                                shape.file_stem, percentage, weight
+                            ));
+                        }
+                        output
+                    }
+                }
+            });
+
+        // Register dynamic arguments for weight command to suggest loaded image names
+        self.commands_registry
+            .register_dynamic_args("physic.explosion.weight", |_, physic| {
+                if let crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } =
+                    physic.get_explosion_shape()
+                {
+                    shapes.iter().map(|(s, _)| s.file_stem.clone()).collect()
+                } else {
+                    vec![]
+                }
+            });
+
+        // Set weight for specific image in MultiImage
+        self.commands_registry
+            .register_for_physic("physic.explosion.weight", |engine, args| {
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                if parts.len() < 3 {
+                    return "Usage: physic.explosion.weight <name> <new_weight>\n\
+                        Example: physic.explosion.weight heart 2.5"
+                        .to_string();
+                }
+
+                let name = parts[1];
+                let weight = match parts[2].parse::<f32>() {
+                    Ok(v) if v >= 0.0 => v,
+                    _ => return "Weight must be a positive number".to_string(),
+                };
+
+                match engine.set_explosion_image_weight(name, weight) {
+                    Ok(()) => format!("-> Updated weight for '{}' to {:.2}", name, weight),
+                    Err(e) => format!("x Failed: {}", e),
+                }
+            });
+        self.commands_registry
+            .register_hint("physic.explosion.weight", "Usage: <name> <weight>");
+
         // Set scale for current image explosion
         self.commands_registry
             .register_for_physic("physic.explosion.scale", |engine, args| {
@@ -594,8 +715,14 @@ where
                         crate::physic_engine::ExplosionShape::Image(img) => {
                             format!("Current scale: {:.1}", img.scale)
                         }
-                        _ => "No image explosion loaded. Use physic.explosion.image first."
-                            .to_string(),
+                        crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                            let scales: Vec<String> = shapes
+                                .iter()
+                                .map(|(s, _)| format!("{:.1}", s.scale))
+                                .collect();
+                            format!("Current scales: [{}]", scales.join(", "))
+                        }
+                        _ => "No image explosion loaded.".to_string(),
                     };
                 }
 
@@ -615,7 +742,22 @@ where
                             .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(img));
                         format!("-> Scale: {:.1}", scale)
                     }
-                    _ => "No image explosion loaded. Use physic.explosion.image first.".to_string(),
+                    crate::physic_engine::ExplosionShape::MultiImage {
+                        mut shapes,
+                        total_weight,
+                    } => {
+                        for (s, _) in shapes.iter_mut() {
+                            s.scale = scale;
+                        }
+                        engine.set_explosion_shape(
+                            crate::physic_engine::ExplosionShape::MultiImage {
+                                shapes,
+                                total_weight,
+                            },
+                        );
+                        format!("-> Scale set to {:.1} for all images", scale)
+                    }
+                    _ => "No image explosion loaded.".to_string(),
                 }
             });
         self.commands_registry
@@ -633,8 +775,14 @@ where
                         crate::physic_engine::ExplosionShape::Image(img) => {
                             format!("Current flight_time: {:.2}s", img.flight_time)
                         }
-                        _ => "No image explosion loaded. Use physic.explosion.image first."
-                            .to_string(),
+                        crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                            let times: Vec<String> = shapes
+                                .iter()
+                                .map(|(s, _)| format!("{:.2}s", s.flight_time))
+                                .collect();
+                            format!("Current flight_times: [{}]", times.join(", "))
+                        }
+                        _ => "No image explosion loaded.".to_string(),
                     };
                 }
 
@@ -654,7 +802,22 @@ where
                             .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(img));
                         format!("-> Flight time: {:.2}s", flight_time)
                     }
-                    _ => "No image explosion loaded. Use physic.explosion.image first.".to_string(),
+                    crate::physic_engine::ExplosionShape::MultiImage {
+                        mut shapes,
+                        total_weight,
+                    } => {
+                        for (s, _) in shapes.iter_mut() {
+                            s.flight_time = flight_time;
+                        }
+                        engine.set_explosion_shape(
+                            crate::physic_engine::ExplosionShape::MultiImage {
+                                shapes,
+                                total_weight,
+                            },
+                        );
+                        format!("-> Flight time set to {:.2}s for all images", flight_time)
+                    }
+                    _ => "No image explosion loaded.".to_string(),
                 }
             },
         );
@@ -664,7 +827,10 @@ where
         // Presets for common shapes
         self.commands_registry
             .register_for_physic("physic.explosion.preset", |engine, args| {
-                let preset = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+                let parts: Vec<&str> = args.split_whitespace().collect();
+                let preset = parts.get(1).unwrap_or(&"").to_lowercase();
+                // Check if a weight (3rd argument) is provided
+                let weight_arg = parts.get(2).and_then(|s| s.parse::<f32>().ok());
 
                 let (path, scale, flight_time) = match preset.as_str() {
                     "heart" => ("assets/textures/explosion_shapes/heart.png", 150.0, 1.5),
@@ -677,22 +843,32 @@ where
                     }
                 };
 
-                match engine.load_explosion_image(path, scale, flight_time) {
-                    Ok(()) => format!(
-                        "-> Preset '{}' loaded (scale={:.1}, time={:.2}s)",
-                        preset, scale, flight_time
-                    ),
-                    Err(e) => format!("x Failed to load preset '{}': {}", preset, e),
+                if let Some(weight) = weight_arg {
+                    // ADD weighted preset
+                    match engine.load_explosion_image_weighted(path, scale, flight_time, weight) {
+                        Ok(()) => format!(
+                            "-> Preset '{}' added (weight={:.1}, scale={:.1}, time={:.2}s)",
+                            preset, weight, scale, flight_time
+                        ),
+                        Err(e) => format!("x Failed to add preset '{}': {}", preset, e),
+                    }
+                } else {
+                    // LOAD single preset (replaces existing)
+                    match engine.load_explosion_image(path, scale, flight_time) {
+                        Ok(()) => format!(
+                            "-> Preset '{}' loaded (scale={:.1}, time={:.2}s)",
+                            preset, scale, flight_time
+                        ),
+                        Err(e) => format!("x Failed to load preset '{}': {}", preset, e),
+                    }
                 }
             });
         self.commands_registry.register_args(
             "physic.explosion.preset",
             vec!["heart", "star", "smiley", "note", "ring"],
         );
-        self.commands_registry.register_hint(
-            "physic.explosion.preset",
-            "Usage: <heart|star|smiley|note|ring>",
-        );
+        self.commands_registry
+            .register_hint("physic.explosion.preset", "Usage: <preset> [weight]");
     }
 
     fn register_renderer_base_commands(&mut self) {

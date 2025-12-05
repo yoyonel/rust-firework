@@ -397,8 +397,12 @@ mod console_integration_tests {
         let mut console = Console::new();
         let registry = CommandRegistry::new();
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         console.set_input("");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         assert!(console.get_suggestions().is_empty());
         assert_eq!(console.get_selected_suggestion(), 0);
@@ -414,9 +418,13 @@ mod console_integration_tests {
         registry.register_for_audio("audio.unmute", |_, _| "".to_string());
         registry.register_for_renderer("renderer.bloom", |_| "".to_string());
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         // Search for "audio"
         console.set_input("audio");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         let suggestions = console.get_suggestions();
         assert!(suggestions.len() >= 2);
@@ -433,9 +441,13 @@ mod console_integration_tests {
         registry.register_for_renderer("renderer.bloom.intensity", |_| "".to_string());
         registry.register_for_renderer("renderer.bloom.threshold", |_| "".to_string());
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         // Fuzzy match "blint" should match "bloom.intensity"
         console.set_input("blint");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         let suggestions = console.get_suggestions();
         assert!(!suggestions.is_empty());
@@ -449,9 +461,13 @@ mod console_integration_tests {
         let mut console = Console::new();
         let registry = CommandRegistry::new();
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         // Search for "cl" should match "clear"
         console.set_input("cl");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         let suggestions = console.get_suggestions();
         assert!(suggestions.iter().any(|s| s == "clear"));
@@ -466,9 +482,13 @@ mod console_integration_tests {
         registry.register_for_renderer("renderer.bloom.method", |_| "".to_string());
         registry.register_args("renderer.bloom.method", vec!["gaussian", "kawase"]);
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         // Type command with space to trigger arg completion
         console.set_input("renderer.bloom.method ");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         let suggestions = console.get_suggestions();
         assert_eq!(suggestions.len(), 2);
@@ -488,9 +508,13 @@ mod console_integration_tests {
             vec!["reinhard", "aces", "filmic", "uncharted2"],
         );
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         // Partial arg match
         console.set_input("renderer.tonemapping ac");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         let suggestions = console.get_suggestions();
         assert!(!suggestions.is_empty());
@@ -507,9 +531,13 @@ mod console_integration_tests {
         registry.register_for_renderer("renderer.bloom.method", |_| "".to_string());
         registry.register_args("renderer.bloom.method", vec!["gaussian"]);
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         // Commands with args should have trailing space
         console.set_input("renderer.bloom");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         let suggestions = console.get_suggestions();
         // The command with arg_suggestions should end with a space
@@ -644,8 +672,12 @@ mod console_integration_tests {
         let mut console = Console::new();
         let registry = CommandRegistry::new();
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         console.set_input("xyznonexistent");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         // No matches should result in empty suggestions
         assert!(console.get_suggestions().is_empty());
@@ -660,8 +692,12 @@ mod console_integration_tests {
         registry.register_for_audio("audio.a", |_, _| "".to_string());
         registry.register_for_audio("audio.b", |_, _| "".to_string());
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         console.set_input("audio");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
 
         // Selection should be reset to 0
         assert_eq!(console.get_selected_suggestion(), 0);
@@ -676,14 +712,18 @@ mod console_integration_tests {
         registry.register_for_audio("audio.mute", |_, _| "".to_string());
         registry.register_for_renderer("renderer.bloom", |_| "".to_string());
 
+        let log = Rc::new(RefCell::new(vec![]));
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
+
         // First search
         console.set_input("audio");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
         let first_suggestions = console.get_suggestions().len();
 
         // Second search with different input
         console.set_input("renderer");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
         let second_suggestions = console.get_suggestions().len();
 
         // Suggestions should be different
@@ -692,7 +732,7 @@ mod console_integration_tests {
 
         // Third search clear
         console.set_input("");
-        console.update_autocomplete(&registry);
+        console.update_autocomplete(&registry, &audio, &physic);
         assert!(console.get_suggestions().is_empty());
     }
 }

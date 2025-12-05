@@ -477,7 +477,7 @@ impl Console {
 
         // Update Autocomplete if text changed
         if input_modified {
-            self.update_autocomplete_internal(registry);
+            self.update_autocomplete_internal(registry, audio, physic);
         }
 
         // Command Submission
@@ -576,12 +576,22 @@ impl Console {
 impl Console {
     /// Updates autocomplete suggestions based on current input
     #[cfg(feature = "interactive_tests")]
-    pub fn update_autocomplete(&mut self, registry: &CommandRegistry) {
-        self.update_autocomplete_internal(registry);
+    pub fn update_autocomplete<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
+        &mut self,
+        registry: &CommandRegistry,
+        audio: &A,
+        physic: &P,
+    ) {
+        self.update_autocomplete_internal(registry, audio, physic);
     }
 
     /// Internal implementation of update_autocomplete
-    fn update_autocomplete_internal(&mut self, registry: &CommandRegistry) {
+    fn update_autocomplete_internal<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
+        &mut self,
+        registry: &CommandRegistry,
+        audio: &A,
+        physic: &P,
+    ) {
         if self.input.is_empty() {
             self.autocomplete_suggestions.clear();
             self.selected_suggestion = 0;
@@ -595,7 +605,11 @@ impl Console {
             let cmd_name = &input[..space_pos];
             let arg_part = input[space_pos + 1..].trim();
 
-            let arg_suggestions = registry.get_arg_suggestions(cmd_name);
+            let arg_suggestions = registry.get_arg_suggestions_combined(
+                cmd_name,
+                audio.as_audio_engine(),
+                physic.as_physic_engine(),
+            );
 
             if !arg_suggestions.is_empty() {
                 // Filter and score argument suggestions
@@ -674,12 +688,15 @@ impl Console {
 type AudioCommandFn = dyn Fn(&mut dyn AudioEngine, &str) -> String + 'static;
 type PhysicCommandFn = dyn Fn(&mut dyn PhysicEngine, &str) -> String + 'static;
 type RendererCommandFn = dyn Fn(&str) -> String + 'static;
+type DynamicArgProviderFn = dyn Fn(&dyn AudioEngine, &dyn PhysicEngine) -> Vec<String> + 'static;
 
 pub struct CommandRegistry {
     commands_audio: HashMap<String, Box<AudioCommandFn>>,
     commands_physic: HashMap<String, Box<PhysicCommandFn>>,
     commands_renderer: HashMap<String, Box<RendererCommandFn>>,
     arg_suggestions: HashMap<String, Vec<String>>,
+    // Dynamic suggestions provider: (Audio, Physic) -> Suggestions
+    dynamic_arg_providers: HashMap<String, Box<DynamicArgProviderFn>>,
     hints: HashMap<String, String>,
 }
 
@@ -696,6 +713,7 @@ impl CommandRegistry {
             commands_physic: HashMap::new(),
             commands_renderer: HashMap::new(),
             arg_suggestions: HashMap::new(),
+            dynamic_arg_providers: HashMap::new(),
             hints: HashMap::new(),
         }
     }
@@ -730,8 +748,32 @@ impl CommandRegistry {
         );
     }
 
+    pub fn register_dynamic_args<F>(&mut self, name: &str, provider: F)
+    where
+        F: Fn(&dyn AudioEngine, &dyn PhysicEngine) -> Vec<String> + 'static,
+    {
+        self.dynamic_arg_providers
+            .insert(name.to_string(), Box::new(provider));
+    }
+
     pub fn get_arg_suggestions(&self, name: &str) -> &[String] {
         self.arg_suggestions.get(name).map_or(&[], Vec::as_slice)
+    }
+
+    // New method that combines static and dynamic suggestions
+    pub fn get_arg_suggestions_combined(
+        &self,
+        name: &str,
+        audio: &dyn AudioEngine,
+        physic: &dyn PhysicEngine,
+    ) -> Vec<String> {
+        let mut suggestions = self.get_arg_suggestions(name).to_vec();
+
+        if let Some(provider) = self.dynamic_arg_providers.get(name) {
+            suggestions.extend(provider(audio, physic));
+        }
+
+        suggestions
     }
 
     pub fn register_hint(&mut self, name: &str, hint: &str) {

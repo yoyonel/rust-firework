@@ -15,8 +15,42 @@ pub enum ExplosionShape {
     /// Explosion sphérique classique (directions aléatoires uniformes)
     #[default]
     Spherical,
-    /// Explosion basée sur une image N&B
+    /// Explosion basée sur une image N&B unique
     Image(ImageShape),
+    /// Plusieurs images avec des poids (probabilités) respectifs
+    MultiImage {
+        shapes: Vec<(ImageShape, f32)>,
+        total_weight: f32,
+    },
+}
+
+impl ExplosionShape {
+    /// Retourne une forme d'image échantillonnée aléatoirement selon les poids,
+    /// ou None si la forme est sphérique.
+    pub fn sample(&self, rng: &mut impl Rng) -> Option<&ImageShape> {
+        match self {
+            ExplosionShape::Spherical => None,
+            ExplosionShape::Image(shape) => Some(shape),
+            ExplosionShape::MultiImage {
+                shapes,
+                total_weight,
+            } => {
+                if shapes.is_empty() {
+                    return None;
+                }
+                let target = rng.random_range(0.0..*total_weight);
+                let mut current = 0.0;
+                for (shape, weight) in shapes {
+                    current += weight;
+                    if target <= current {
+                        return Some(shape);
+                    }
+                }
+                // Fallback (ne devrait pas arriver avec une logique flottante correcte, sauf rounding)
+                Some(&shapes.last().unwrap().0)
+            }
+        }
+    }
 }
 
 /// Forme d'explosion basée sur une image noir & blanc.
@@ -283,5 +317,57 @@ mod tests {
         let target1 = shape.get_target_position(1, center);
         assert!((target1.x - 300.0).abs() < 0.001); // 400 - 0.5 * 200
         assert!((target1.y - 300.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_multi_image_sampling() {
+        use rand::SeedableRng;
+        // Use a deterministic RNG for testing
+        let mut rng = rand::rngs::StdRng::seed_from_u64(42);
+
+        let shape1 = ImageShape {
+            file_stem: "shape1".to_string(),
+            sampled_points: vec![],
+            scale: 1.0,
+            flight_time: 1.0,
+        };
+        let shape2 = ImageShape {
+            file_stem: "shape2".to_string(),
+            sampled_points: vec![],
+            scale: 1.0,
+            flight_time: 1.0,
+        };
+
+        let multi = ExplosionShape::MultiImage {
+            shapes: vec![
+                (shape1.clone(), 1.0), // Weight 1.0
+                (shape2.clone(), 3.0), // Weight 3.0 (3x more likely)
+            ],
+            total_weight: 4.0,
+        };
+
+        let mut counts = std::collections::HashMap::new();
+        let samples = 10_000;
+
+        for _ in 0..samples {
+            if let Some(s) = multi.sample(&mut rng) {
+                *counts.entry(s.file_stem.clone()).or_insert(0) += 1;
+            }
+        }
+
+        let count1 = *counts.get("shape1").unwrap_or(&0);
+        let count2 = *counts.get("shape2").unwrap_or(&0);
+
+        // Expect rough ratio of 1:3
+        // shape1 ~ 2500, shape2 ~ 7500
+        let ratio = count2 as f32 / count1 as f32;
+
+        println!(
+            "Counts: shape1={}, shape2={}, ratio={}",
+            count1, count2, ratio
+        );
+
+        // Allow some variance, but 10k samples should be close
+        assert!(ratio > 2.5 && ratio < 3.5, "Ratio should be around 3.0");
     }
 }

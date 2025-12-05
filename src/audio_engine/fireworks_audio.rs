@@ -522,6 +522,10 @@ impl AudioEngine for FireworksAudio3D {
         self.set_volume(self.settings.global_gain());
         self.settings.global_gain()
     }
+
+    fn as_audio_engine(&self) -> &dyn AudioEngine {
+        self
+    }
 }
 
 #[cfg(test)]

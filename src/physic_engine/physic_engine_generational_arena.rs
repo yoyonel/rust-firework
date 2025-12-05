@@ -331,6 +331,68 @@ impl PhysicEngine for PhysicEngineFireworks {
             Err(e) => Err(e.to_string()),
         }
     }
+
+    fn load_explosion_image_weighted(
+        &mut self,
+        path: &str,
+        scale: f32,
+        flight_time: f32,
+        weight: f32,
+    ) -> Result<(), String> {
+        let n_samples = self.config.particles_per_explosion;
+
+        let shape = crate::physic_engine::explosion_shape::ImageShape::from_image(
+            path,
+            n_samples,
+            scale,
+            flight_time,
+        )
+        .map_err(|e| e.to_string())?;
+
+        match &mut self.explosion_shape {
+            ExplosionShape::MultiImage {
+                shapes,
+                total_weight,
+            } => {
+                shapes.push((shape, weight));
+                *total_weight += weight;
+            }
+            _ => {
+                // If not already MultiImage, switch to it with this single image
+                self.explosion_shape = ExplosionShape::MultiImage {
+                    shapes: vec![(shape, weight)],
+                    total_weight: weight,
+                };
+            }
+        }
+        Ok(())
+    }
+
+    fn set_explosion_image_weight(&mut self, name: &str, new_weight: f32) -> Result<(), String> {
+        match &mut self.explosion_shape {
+            ExplosionShape::MultiImage {
+                shapes,
+                total_weight,
+            } => {
+                if let Some((_, weight)) = shapes.iter_mut().find(|(s, _)| s.file_stem == name) {
+                    *total_weight -= *weight;
+                    *weight = new_weight;
+                    *total_weight += *weight;
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "Image '{}' not found in current MultiImage set",
+                        name
+                    ))
+                }
+            }
+            _ => Err("Current explosion shape is not MultiImage".to_string()),
+        }
+    }
+
+    fn as_physic_engine(&self) -> &dyn PhysicEngine {
+        self
+    }
 }
 
 impl PhysicEngineFull for PhysicEngineFireworks {}
