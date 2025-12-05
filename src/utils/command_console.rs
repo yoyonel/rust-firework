@@ -235,8 +235,6 @@ pub struct Console {
     // History
     history: Vec<String>,         // Command history
     history_index: Option<usize>, // Current position in history
-
-    window: Option<()>,
 }
 
 impl Default for Console {
@@ -262,7 +260,6 @@ impl Console {
             matcher: SkimMatcherV2::default(),
             history: Vec::new(),
             history_index: None,
-            window: None,
         }
     }
 
@@ -297,8 +294,7 @@ impl Console {
         let window_height = ui.io().display_size[1];
         let console_height = window_height * 0.50;
 
-        self.window = ui
-            .window("Console")
+        ui.window("Console")
             .size([window_width, console_height], imgui::Condition::Always)
             .position([0.0, 0.0], imgui::Condition::Always)
             .movable(false)
@@ -678,10 +674,7 @@ impl CommandRegistry {
     }
 
     pub fn get_arg_suggestions(&self, name: &str) -> &[String] {
-        self.arg_suggestions
-            .get(name)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[])
+        self.arg_suggestions.get(name).map_or(&[], Vec::as_slice)
     }
 
     pub fn register_hint(&mut self, name: &str, hint: &str) {
