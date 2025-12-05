@@ -532,7 +532,8 @@ where
                         }
                         crate::physic_engine::ExplosionShape::Image(img) => {
                             format!(
-                                "Current explosion shape: image\n  Points: {}\n  Scale: {:.1}\n  Flight time: {:.2}s",
+                                "Current explosion shape: image - {}\n  Points: {}\n  Scale: {:.1}\n  Flight time: {:.2}s",
+                                img.file_stem,
                                 img.sampled_points.len(),
                                 img.scale,
                                 img.flight_time

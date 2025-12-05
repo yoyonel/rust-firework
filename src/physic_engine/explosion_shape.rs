@@ -25,6 +25,7 @@ pub enum ExplosionShape {
 /// définir les positions cibles des particules d'explosion.
 #[derive(Debug, Clone)]
 pub struct ImageShape {
+    pub file_stem: String,
     /// Points échantillonnés, normalisés dans l'espace [-0.5, 0.5] x [-0.5, 0.5]
     /// Le centre de l'image correspond à (0, 0)
     pub sampled_points: Vec<Vec2>,
@@ -54,7 +55,8 @@ impl ImageShape {
         scale: f32,
         flight_time: f32,
     ) -> anyhow::Result<Self> {
-        let img = image::open(Path::new(path))
+        let path_to_img = Path::new(path);
+        let img = image::open(path_to_img)
             .map_err(|e| anyhow::anyhow!("Échec du chargement de l'image '{}': {}", path, e))?;
 
         let gray = img.to_luma8();
@@ -122,6 +124,11 @@ impl ImageShape {
         );
 
         Ok(Self {
+            file_stem: path_to_img
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown")
+                .to_string(),
             sampled_points,
             scale,
             flight_time,
@@ -220,6 +227,7 @@ mod tests {
     #[test]
     fn test_compute_initial_velocity_no_gravity() {
         let shape = ImageShape {
+            file_stem: "test".to_string(),
             sampled_points: vec![Vec2::new(0.5, 0.5)],
             scale: 100.0,
             flight_time: 1.0,
@@ -239,6 +247,7 @@ mod tests {
     #[test]
     fn test_compute_initial_velocity_with_gravity() {
         let shape = ImageShape {
+            file_stem: "test".to_string(),
             sampled_points: vec![Vec2::new(0.0, 0.0)],
             scale: 100.0,
             flight_time: 1.0,
@@ -259,6 +268,7 @@ mod tests {
     #[test]
     fn test_get_target_position() {
         let shape = ImageShape {
+            file_stem: "test".to_string(),
             sampled_points: vec![Vec2::new(0.5, 0.0), Vec2::new(-0.5, 0.0)],
             scale: 200.0,
             flight_time: 1.0,
