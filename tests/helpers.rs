@@ -1,5 +1,6 @@
 use fireworks_sim::audio_engine::AudioEngine;
 use fireworks_sim::physic_engine::config::PhysicConfig;
+use fireworks_sim::physic_engine::explosion_shape::ExplosionShape;
 use fireworks_sim::physic_engine::particle::Particle;
 use fireworks_sim::physic_engine::types::UpdateResult;
 use fireworks_sim::physic_engine::{
@@ -95,6 +96,7 @@ impl AudioEngine for DummyAudio {
 pub struct DummyPhysic {
     pub config: PhysicConfig,
     pub particles: Vec<Particle>,
+    pub explosion_shape: ExplosionShape,
 }
 
 impl Default for DummyPhysic {
@@ -102,6 +104,7 @@ impl Default for DummyPhysic {
         Self {
             config: PhysicConfig::default(),
             particles: Vec::new(),
+            explosion_shape: ExplosionShape::default(),
         }
     }
 }
@@ -120,6 +123,20 @@ impl PhysicEngine for DummyPhysic {
     }
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+    fn set_explosion_shape(&mut self, shape: ExplosionShape) {
+        self.explosion_shape = shape;
+    }
+    fn get_explosion_shape(&self) -> &ExplosionShape {
+        &self.explosion_shape
+    }
+    fn load_explosion_image(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+    ) -> Result<(), String> {
+        Ok(()) // Mock: always succeeds
     }
 }
 
@@ -238,6 +255,7 @@ pub struct TestPhysic {
     pub log: SharedLog,
     pub config: PhysicConfig,
     pub fail_on_update: bool,
+    pub explosion_shape: ExplosionShape,
 }
 
 #[allow(dead_code)]
@@ -247,6 +265,7 @@ impl TestPhysic {
             log,
             config: PhysicConfig::default(),
             fail_on_update: false,
+            explosion_shape: ExplosionShape::default(),
         }
     }
 }
@@ -273,6 +292,23 @@ impl PhysicEngine for TestPhysic {
     }
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+    fn set_explosion_shape(&mut self, shape: ExplosionShape) {
+        self.explosion_shape = shape;
+    }
+    fn get_explosion_shape(&self) -> &ExplosionShape {
+        &self.explosion_shape
+    }
+    fn load_explosion_image(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+    ) -> Result<(), String> {
+        self.log
+            .borrow_mut()
+            .push("physic.load_explosion_image".into());
+        Ok(()) // Mock: always succeeds
     }
 }
 

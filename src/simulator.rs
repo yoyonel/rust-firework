@@ -516,6 +516,182 @@ where
             .register_for_physic("physic.config", |engine, _| {
                 format!("{:#?}", engine.get_config())
             });
+
+        // --- Explosion Shape Commands ---
+
+        // Display current explosion shape
+        self.commands_registry
+            .register_for_physic("physic.explosion.shape", |engine, args| {
+                let arg = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+
+                if arg.is_empty() {
+                    // Show current shape info
+                    match engine.get_explosion_shape() {
+                        crate::physic_engine::ExplosionShape::Spherical => {
+                            "Current explosion shape: spherical".to_string()
+                        }
+                        crate::physic_engine::ExplosionShape::Image(img) => {
+                            format!(
+                                "Current explosion shape: image\n  Points: {}\n  Scale: {:.1}\n  Flight time: {:.2}s",
+                                img.sampled_points.len(),
+                                img.scale,
+                                img.flight_time
+                            )
+                        }
+                    }
+                } else {
+                    match arg.as_str() {
+                        "spherical" => {
+                            engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+                            "-> Explosion shape: spherical".to_string()
+                        }
+                        _ => "Usage: physic.explosion.shape [spherical]\nUse physic.explosion.image <path> <scale> <flight_time> to load an image".to_string()
+                    }
+                }
+            });
+        self.commands_registry
+            .register_args("physic.explosion.shape", vec!["spherical"]);
+        self.commands_registry
+            .register_hint("physic.explosion.shape", "Usage: [spherical]");
+
+        // Load explosion image with parameters
+        // Usage: physic.explosion.image <path> [scale] [flight_time]
+        self.commands_registry
+            .register_for_physic("physic.explosion.image", |engine, args| {
+                let parts: Vec<&str> = args.split_whitespace().collect();
+
+                if parts.len() < 2 {
+                    return "Usage: physic.explosion.image <path> [scale] [flight_time]\n\
+                            Defaults: scale=150.0, flight_time=1.5\n\
+                            Examples:\n  \
+                            physic.explosion.image assets/textures/explosion_shapes/heart.png\n  \
+                            physic.explosion.image assets/textures/explosion_shapes/star.png 200 2.0".to_string();
+                }
+
+                let path = parts[1];
+                let scale = parts.get(2).and_then(|s| s.parse::<f32>().ok()).unwrap_or(150.0);
+                let flight_time = parts.get(3).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.5);
+
+                match engine.load_explosion_image(path, scale, flight_time) {
+                    Ok(()) => format!("-> Loaded: {} (scale={:.1}, flight_time={:.2}s)", path, scale, flight_time),
+                    Err(e) => format!("x Failed to load image: {}", e)
+                }
+            });
+        self.commands_registry.register_hint(
+            "physic.explosion.image",
+            "Usage: <path> [scale=150] [flight_time=1.5]",
+        );
+
+        // Set scale for current image explosion
+        self.commands_registry
+            .register_for_physic("physic.explosion.scale", |engine, args| {
+                let scale_str = args.split_whitespace().nth(1).unwrap_or("");
+
+                if scale_str.is_empty() {
+                    // Show current scale
+                    return match engine.get_explosion_shape() {
+                        crate::physic_engine::ExplosionShape::Image(img) => {
+                            format!("Current scale: {:.1}", img.scale)
+                        }
+                        _ => "No image explosion loaded. Use physic.explosion.image first."
+                            .to_string(),
+                    };
+                }
+
+                let scale = match scale_str.parse::<f32>() {
+                    Ok(v) if v > 0.0 => v,
+                    _ => {
+                        return "Usage: physic.explosion.scale <value> (positive number)"
+                            .to_string()
+                    }
+                };
+
+                // Modify scale of current image shape
+                match engine.get_explosion_shape().clone() {
+                    crate::physic_engine::ExplosionShape::Image(mut img) => {
+                        img.scale = scale;
+                        engine
+                            .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(img));
+                        format!("-> Scale: {:.1}", scale)
+                    }
+                    _ => "No image explosion loaded. Use physic.explosion.image first.".to_string(),
+                }
+            });
+        self.commands_registry
+            .register_hint("physic.explosion.scale", "Usage: <50-500>");
+
+        // Set flight_time for current image explosion
+        self.commands_registry.register_for_physic(
+            "physic.explosion.flight_time",
+            |engine, args| {
+                let time_str = args.split_whitespace().nth(1).unwrap_or("");
+
+                if time_str.is_empty() {
+                    // Show current flight_time
+                    return match engine.get_explosion_shape() {
+                        crate::physic_engine::ExplosionShape::Image(img) => {
+                            format!("Current flight_time: {:.2}s", img.flight_time)
+                        }
+                        _ => "No image explosion loaded. Use physic.explosion.image first."
+                            .to_string(),
+                    };
+                }
+
+                let flight_time = match time_str.parse::<f32>() {
+                    Ok(v) if v > 0.0 => v,
+                    _ => {
+                        return "Usage: physic.explosion.flight_time <seconds> (positive number)"
+                            .to_string()
+                    }
+                };
+
+                // Modify flight_time of current image shape
+                match engine.get_explosion_shape().clone() {
+                    crate::physic_engine::ExplosionShape::Image(mut img) => {
+                        img.flight_time = flight_time;
+                        engine
+                            .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(img));
+                        format!("-> Flight time: {:.2}s", flight_time)
+                    }
+                    _ => "No image explosion loaded. Use physic.explosion.image first.".to_string(),
+                }
+            },
+        );
+        self.commands_registry
+            .register_hint("physic.explosion.flight_time", "Usage: <0.5-5.0>");
+
+        // Presets for common shapes
+        self.commands_registry
+            .register_for_physic("physic.explosion.preset", |engine, args| {
+                let preset = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+
+                let (path, scale, flight_time) = match preset.as_str() {
+                    "heart" => ("assets/textures/explosion_shapes/heart.png", 150.0, 1.5),
+                    "star" => ("assets/textures/explosion_shapes/star.png", 180.0, 1.5),
+                    "smiley" => ("assets/textures/explosion_shapes/smiley.png", 200.0, 2.0),
+                    "note" => ("assets/textures/explosion_shapes/note.png", 160.0, 1.5),
+                    "ring" => ("assets/textures/explosion_shapes/ring.png", 190.0, 1.8),
+                    _ => {
+                        return "Available presets: heart, star, smiley, note, ring".to_string();
+                    }
+                };
+
+                match engine.load_explosion_image(path, scale, flight_time) {
+                    Ok(()) => format!(
+                        "-> Preset '{}' loaded (scale={:.1}, time={:.2}s)",
+                        preset, scale, flight_time
+                    ),
+                    Err(e) => format!("x Failed to load preset '{}': {}", preset, e),
+                }
+            });
+        self.commands_registry.register_args(
+            "physic.explosion.preset",
+            vec!["heart", "star", "smiley", "note", "ring"],
+        );
+        self.commands_registry.register_hint(
+            "physic.explosion.preset",
+            "Usage: <heart|star|smiley|note|ring>",
+        );
     }
 
     fn register_renderer_base_commands(&mut self) {
