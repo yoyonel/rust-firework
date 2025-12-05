@@ -5,7 +5,7 @@
 # rocket_interval_variation = 0.75
 # rocket_max_next_interval = 0.5
 #
-max_rockets = 2048
+max_rockets = 512
 particles_per_explosion = 256
 particles_per_trail = 64
 rocket_interval_mean = 0.025
