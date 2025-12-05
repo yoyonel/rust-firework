@@ -81,6 +81,31 @@ pub trait PhysicEngine {
         scale: f32,
         flight_time: f32,
     ) -> Result<(), String>;
+
+    /// Charge une image d'explosion et l'ajoute à la liste des formes possibles avec un poids.
+    ///
+    /// # Arguments
+    /// * `path` - Chemin vers l'image PNG noir & blanc
+    /// * `scale` - Taille de l'image projetée
+    /// * `flight_time` - Temps de vol
+    /// * `weight` - Poids relatif (pourcentage de chance d'être choisi)
+    fn load_explosion_image_weighted(
+        &mut self,
+        path: &str,
+        scale: f32,
+        flight_time: f32,
+        weight: f32,
+    ) -> Result<(), String>;
+
+    /// Modifie le poids d'une image existante dans la configuration MultiImage.
+    ///
+    /// # Arguments
+    /// * `name` - Nom de l'image (file_stem)
+    /// * `weight` - Nouveau poids
+    fn set_explosion_image_weight(&mut self, name: &str, weight: f32) -> Result<(), String>;
+
+    /// Helper for upcasting from dyn PhysicEngineFull or other subtraits
+    fn as_physic_engine(&self) -> &dyn PhysicEngine;
 }
 
 pub trait PhysicEngineFull: PhysicEngine + PhysicEngineIterator {}

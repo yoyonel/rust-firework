@@ -90,6 +90,10 @@ impl AudioEngine for DummyAudio {
     fn unmute(&mut self) -> f32 {
         1.0
     }
+
+    fn as_audio_engine(&self) -> &dyn AudioEngine {
+        self
+    }
 }
 
 #[allow(dead_code)]
@@ -137,6 +141,22 @@ impl PhysicEngine for DummyPhysic {
         _flight_time: f32,
     ) -> Result<(), String> {
         Ok(()) // Mock: always succeeds
+    }
+    fn load_explosion_image_weighted(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+        _weight: f32,
+    ) -> Result<(), String> {
+        Ok(()) // Mock: always succeeds
+    }
+    fn set_explosion_image_weight(&mut self, _name: &str, _weight: f32) -> Result<(), String> {
+        Ok(()) // Mock: always succeeds
+    }
+
+    fn as_physic_engine(&self) -> &dyn PhysicEngine {
+        self
     }
 }
 
@@ -245,8 +265,12 @@ impl AudioEngine for TestAudio {
         self.log.borrow_mut().push("mute called".into());
     }
     fn unmute(&mut self) -> f32 {
-        self.log.borrow_mut().push("unmute called".into());
+        self.log.borrow_mut().push("audio.unmute".into());
         1.0
+    }
+
+    fn as_audio_engine(&self) -> &dyn AudioEngine {
+        self
     }
 }
 
@@ -309,6 +333,27 @@ impl PhysicEngine for TestPhysic {
             .borrow_mut()
             .push("physic.load_explosion_image".into());
         Ok(()) // Mock: always succeeds
+    }
+    fn load_explosion_image_weighted(
+        &mut self,
+        _path: &str,
+        _scale: f32,
+        _flight_time: f32,
+        _weight: f32,
+    ) -> Result<(), String> {
+        self.log
+            .borrow_mut()
+            .push("physic.load_explosion_image_weighted".into());
+        Ok(()) // Mock: always succeeds
+    }
+    fn set_explosion_image_weight(&mut self, _name: &str, _weight: f32) -> Result<(), String> {
+        self.log
+            .borrow_mut()
+            .push("physic.set_explosion_image_weight".into());
+        Ok(()) // Mock: always succeeds
+    }
+    fn as_physic_engine(&self) -> &dyn PhysicEngine {
+        self
     }
 }
 
