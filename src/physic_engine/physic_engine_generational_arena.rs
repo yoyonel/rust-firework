@@ -339,6 +339,40 @@ impl PhysicEngine for PhysicEngineFireworks {
         flight_time: f32,
         weight: f32,
     ) -> Result<(), String> {
+        // Optimization: If weight is <= 0, we treat this as a removal request.
+        if weight <= 0.0 {
+            let stem = std::path::Path::new(path)
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or("unknown");
+
+            let mut to_spherical = false;
+            match &mut self.explosion_shape {
+                ExplosionShape::MultiImage {
+                    shapes,
+                    total_weight,
+                } => {
+                    if let Some(pos) = shapes.iter().position(|(s, _)| s.file_stem == stem) {
+                        let (_, removed_weight) = shapes.remove(pos);
+                        *total_weight -= removed_weight;
+                        if shapes.is_empty() {
+                            to_spherical = true;
+                        }
+                    }
+                }
+                ExplosionShape::Image(existing) => {
+                    if existing.file_stem == stem {
+                        to_spherical = true;
+                    }
+                }
+                _ => {}
+            }
+            if to_spherical {
+                self.explosion_shape = ExplosionShape::Spherical;
+            }
+            return Ok(());
+        }
+
         let n_samples = self.config.particles_per_explosion;
 
         let shape = crate::physic_engine::explosion_shape::ImageShape::from_image(
@@ -354,11 +388,40 @@ impl PhysicEngine for PhysicEngineFireworks {
                 shapes,
                 total_weight,
             } => {
-                shapes.push((shape, weight));
-                *total_weight += weight;
+                if let Some((existing_shape, existing_weight)) = shapes
+                    .iter_mut()
+                    .find(|(s, _)| s.file_stem == shape.file_stem)
+                {
+                    // Update existing shape parameters and weight
+                    *total_weight -= *existing_weight;
+                    *existing_shape = shape;
+                    *existing_weight = weight;
+                    *total_weight += weight;
+                } else {
+                    // Add new shape
+                    shapes.push((shape, weight));
+                    *total_weight += weight;
+                }
+            }
+            ExplosionShape::Image(existing_shape) => {
+                if existing_shape.file_stem == shape.file_stem {
+                    // Just switch mode to MultiImage but it's the same image updated
+                    self.explosion_shape = ExplosionShape::MultiImage {
+                        shapes: vec![(shape, weight)],
+                        total_weight: weight,
+                    };
+                } else {
+                    // Preserve the single image by promoting it to the first element of MultiImage
+                    // We assume a default weight of 1.0 for the existing image if none was explicit.
+                    let old_shape = existing_shape.clone();
+                    self.explosion_shape = ExplosionShape::MultiImage {
+                        shapes: vec![(old_shape, 1.0), (shape, weight)],
+                        total_weight: 1.0 + weight,
+                    };
+                }
             }
             _ => {
-                // If not already MultiImage, switch to it with this single image
+                // If Spherical (or other), just switch to MultiImage with this single new weighted image
                 self.explosion_shape = ExplosionShape::MultiImage {
                     shapes: vec![(shape, weight)],
                     total_weight: weight,

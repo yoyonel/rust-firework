@@ -82,5 +82,54 @@ mod tests {
         // 5. Update non-existent image
         let res = engine.set_explosion_image_weight("unknown", 1.0);
         assert!(res.is_err());
+
+        // 6. Reload existing image (Upsert behavior check)
+        // Loading heart again with weight 2.0. Should not add duplicate, just update.
+        let res = engine.load_explosion_image_weighted(dummy_path_1, 150.0, 1.5, 2.0);
+        assert!(res.is_ok());
+
+        if let ExplosionShape::MultiImage {
+            shapes,
+            total_weight,
+        } = engine.get_explosion_shape()
+        {
+            assert_eq!(shapes.len(), 2, "Should still have 2 shapes, not 3");
+            let heart_entry = shapes.iter().find(|(s, _)| s.file_stem == "heart").unwrap();
+            assert!(
+                (heart_entry.1 - 2.0).abs() < 0.001,
+                "Heart weight should be updated to 2.0"
+            );
+
+            // Total: 2.0 (heart) + 3.0 (star) = 5.0
+            assert!((total_weight - 5.0).abs() < 0.001);
+        } else {
+            panic!("Expected MultiImage");
+        }
+
+        // 7. Remove image by setting weight <= 0
+        // Remove heart
+        let res = engine.load_explosion_image_weighted(dummy_path_1, 150.0, 1.5, 0.0);
+        assert!(res.is_ok());
+
+        if let ExplosionShape::MultiImage {
+            shapes,
+            total_weight,
+        } = engine.get_explosion_shape()
+        {
+            assert_eq!(shapes.len(), 1, "Should have 1 shape left");
+            assert_eq!(shapes[0].0.file_stem, "star");
+            assert!((total_weight - 3.0).abs() < 0.001);
+        } else {
+            panic!("Expected MultiImage after removing one shape");
+        }
+
+        // 8. Remove last image -> Revert to Spherical
+        let res = engine.load_explosion_image_weighted(dummy_path_2, 150.0, 1.5, -1.0); // Test negative too
+        assert!(res.is_ok());
+
+        assert!(
+            matches!(engine.get_explosion_shape(), ExplosionShape::Spherical),
+            "Should revert to Spherical when last shape is removed"
+        );
     }
 }

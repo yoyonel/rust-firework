@@ -572,33 +572,81 @@ where
 
         // Load explosion image with parameters
         // Usage: physic.explosion.image <path> [scale] [flight_time]
+        // Load explosion image with parameters (Now supports weighted MultiImage)
+        // Usage: physic.explosion.image <path> [scale] [flight_time]   -> Single (Replace)
+        // Usage: physic.explosion.image <path> <weight> [scale] [time] -> Multi (Add/Upgrade)
+        // Usage: physic.explosion.image <path> <weight> <path> <weight> ... -> Batch (Replace)
         self.commands_registry
             .register_for_physic("physic.explosion.image", |engine, args| {
                 let parts: Vec<&str> = args.split_whitespace().collect();
+                let params = &parts[1..];
 
-                if parts.len() < 2 {
-                    return "Usage: physic.explosion.image <path> [scale] [flight_time]\n\
-                            Defaults: scale=150.0, flight_time=1.5\n\
-                            Examples:\n  \
-                            physic.explosion.image assets/textures/explosion_shapes/heart.png\n  \
-                            physic.explosion.image assets/textures/explosion_shapes/star.png 200 2.0".to_string();
+                if params.is_empty() {
+                    return "Usage: physic.explosion.image <path> [scale] [flight_time] (Single)\n\
+                            Usage: physic.explosion.image <path> <weight> [scale] [time] (Add)\n\
+                            Usage: physic.explosion.image <path> <weight> <path> <weight> ... (Batch)".to_string();
                 }
 
-                let path = parts[1];
-                let scale = parts.get(2).and_then(|s| s.parse::<f32>().ok()).unwrap_or(150.0);
-                let flight_time = parts.get(3).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.5);
+                // --- 1. Batch Mode (Multiple pairs) ---
+                if params.len() >= 4 && params.len().is_multiple_of(2) {
+                    // Check if every odd argument is a small float (weight)
+                    let looks_like_batch = params.chunks(2).all(|chunk| {
+                         chunk[1].parse::<f32>().map(|w| w < 20.0).unwrap_or(false)
+                    });
 
-                match engine.load_explosion_image(path, scale, flight_time) {
-                    Ok(()) => format!("-> Loaded: {} (scale={:.1}, flight_time={:.2}s)", path, scale, flight_time),
-                    Err(e) => format!("x Failed to load image: {}", e)
+                    if looks_like_batch {
+                        engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+                        let mut results = Vec::new();
+                        for chunk in params.chunks(2) {
+                            let path = chunk[0];
+                            let weight = chunk[1].parse::<f32>().unwrap_or(1.0);
+                             match engine.load_explosion_image_weighted(path, 150.0, 1.5, weight) {
+                                Ok(()) => results.push(format!("{} ({:.1})", path, weight)),
+                                Err(e) => results.push(format!("x {} (Err: {})", path, e)),
+                            }
+                        }
+                        return format!("-> Batch Loaded:\n   {}", results.join("\n   "));
+                    }
+                }
+
+                // --- 2. Single or Add Mode ---
+                let path = params[0];
+                let arg2 = params.get(1).and_then(|s| s.parse::<f32>().ok());
+
+                // Heuristic: If arg2 exists and is < 20.0, we treat it as WEIGHT -> "ADD Mode"
+                if let Some(val) = arg2 {
+                    if val < 20.0 {
+                        // ADD MODE: path weight [scale] [time]
+                        let weight = val;
+                        let scale = params.get(2).and_then(|s| s.parse::<f32>().ok()).unwrap_or(150.0);
+                        let time = params.get(3).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.5);
+
+                         match engine.load_explosion_image_weighted(path, scale, time, weight) {
+                            Ok(()) => format!("-> Added: {} (w={:.1}, s={:.1}, t={:.2}s)", path, weight, scale, time),
+                            Err(e) => format!("x Failed to add: {}", e)
+                        }
+                    } else {
+                        // LEGACY REPLACE MODE: path scale [time]
+                        // val is scale >= 20.0
+                        let scale = val;
+                        let time = params.get(2).and_then(|s| s.parse::<f32>().ok()).unwrap_or(1.5);
+                        match engine.load_explosion_image(path, scale, time) {
+                            Ok(()) => format!("-> Loaded: {} (s={:.1}, t={:.2}s)", path, scale, time),
+                            Err(e) => format!("x Failed to load: {}", e)
+                        }
+                    }
+                } else {
+                    // LEGACY REPLACE MODE: path (default scale/time)
+                    match engine.load_explosion_image(path, 150.0, 1.5) {
+                        Ok(()) => format!("-> Loaded: {} (default)", path),
+                        Err(e) => format!("x Failed to load: {}", e)
+                    }
                 }
             });
-        self.commands_registry.register_hint(
-            "physic.explosion.image",
-            "Usage: <path> [scale=150] [flight_time=1.5]",
-        );
+        self.commands_registry
+            .register_hint("physic.explosion.image", "Usage: <path> [weight|scale] ...");
 
-        // Add weighted explosion image
+        // Add weighted explosion image (Deprecated wrapper around image smart-add)
         // Usage: physic.explosion.add <path> <weight> [scale] [flight_time]
         self.commands_registry
             .register_for_physic("physic.explosion.add", |engine, args| {
@@ -703,6 +751,25 @@ where
             });
         self.commands_registry
             .register_hint("physic.explosion.weight", "Usage: <name> <weight>");
+
+        self.commands_registry
+            .register_current_value("physic.explosion.weight", |_, physic| {
+                match physic.get_explosion_shape() {
+                    crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                        let s = shapes
+                            .iter()
+                            .map(|(img, w)| format!("{}: {:.1}", img.file_stem, w))
+                            .collect::<Vec<_>>()
+                            .join(", ");
+                        if s.len() > 60 {
+                            format!("{}...", &s[..57])
+                        } else {
+                            s
+                        }
+                    }
+                    _ => "N/A".to_string(),
+                }
+            });
 
         // Set scale for current image explosion
         self.commands_registry
@@ -824,43 +891,160 @@ where
         self.commands_registry
             .register_hint("physic.explosion.flight_time", "Usage: <0.5-5.0>");
 
+        self.commands_registry
+            .register_current_value("physic.explosion.shape", |_, physic| {
+                match physic.get_explosion_shape() {
+                    crate::physic_engine::ExplosionShape::Spherical => "Spherical".to_string(),
+                    crate::physic_engine::ExplosionShape::Image(img) => {
+                        format!("Image ({})", img.file_stem)
+                    }
+                    crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                        format!("MultiImage ({} shapes)", shapes.len())
+                    }
+                }
+            });
+
+        // Use same logic for image/preset commands to give context
+        self.commands_registry
+            .register_current_value("physic.explosion.image", |_, physic| {
+                match physic.get_explosion_shape() {
+                    crate::physic_engine::ExplosionShape::Image(img) => img.file_stem.clone(),
+                    crate::physic_engine::ExplosionShape::MultiImage { .. } => {
+                        "MultiImage Mode".to_string()
+                    }
+                    _ => "None".to_string(),
+                }
+            });
+
+        self.commands_registry
+            .register_current_value("physic.explosion.preset", |_, physic| {
+                match physic.get_explosion_shape() {
+                    crate::physic_engine::ExplosionShape::Image(img) => img.file_stem.clone(),
+                    crate::physic_engine::ExplosionShape::MultiImage { .. } => {
+                        "MultiImage Mode".to_string()
+                    }
+                    _ => "None".to_string(),
+                }
+            });
+
+        // --- Current Value Getters for Explosion ---
+        self.commands_registry
+            .register_current_value("physic.explosion.scale", |_, physic| {
+                match physic.get_explosion_shape() {
+                    crate::physic_engine::ExplosionShape::Image(img) => format!("{:.1}", img.scale),
+                    crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                        // Just show range or first
+                        if shapes.is_empty() {
+                            "N/A".to_string()
+                        } else {
+                            format!("{:.1}...", shapes[0].0.scale)
+                        }
+                    }
+                    _ => "N/A".to_string(),
+                }
+            });
+
+        self.commands_registry.register_current_value(
+            "physic.explosion.flight_time",
+            |_, physic| match physic.get_explosion_shape() {
+                crate::physic_engine::ExplosionShape::Image(img) => {
+                    format!("{:.2}s", img.flight_time)
+                }
+                crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+                    if shapes.is_empty() {
+                        "N/A".to_string()
+                    } else {
+                        format!("{:.2}s...", shapes[0].0.flight_time)
+                    }
+                }
+                _ => "N/A".to_string(),
+            },
+        );
+
         // Presets for common shapes
         self.commands_registry
             .register_for_physic("physic.explosion.preset", |engine, args| {
                 let parts: Vec<&str> = args.split_whitespace().collect();
-                let preset = parts.get(1).unwrap_or(&"").to_lowercase();
-                // Check if a weight (3rd argument) is provided
-                let weight_arg = parts.get(2).and_then(|s| s.parse::<f32>().ok());
+                // parts[0] is command name
 
-                let (path, scale, flight_time) = match preset.as_str() {
-                    "heart" => ("assets/textures/explosion_shapes/heart.png", 150.0, 1.5),
-                    "star" => ("assets/textures/explosion_shapes/star.png", 180.0, 1.5),
-                    "smiley" => ("assets/textures/explosion_shapes/smiley.png", 200.0, 2.0),
-                    "note" => ("assets/textures/explosion_shapes/note.png", 160.0, 1.5),
-                    "ring" => ("assets/textures/explosion_shapes/ring.png", 190.0, 1.8),
-                    _ => {
-                        return "Available presets: heart, star, smiley, note, ring".to_string();
+                let params = &parts[1..];
+                if params.is_empty() {
+                    return "Available presets: heart, star, smiley, note, ring\n\
+                             Usage: preset <name> [weight] [<name> <weight> ...]"
+                        .to_string();
+                }
+
+                // Helper to resolve preset data
+                let resolve_preset = |name: &str| -> Option<(&str, f32, f32)> {
+                    match name.to_lowercase().as_str() {
+                        "heart" => Some(("assets/textures/explosion_shapes/heart.png", 150.0, 1.5)),
+                        "star" => Some(("assets/textures/explosion_shapes/star.png", 180.0, 1.5)),
+                        "smiley" => {
+                            Some(("assets/textures/explosion_shapes/smiley.png", 200.0, 2.0))
+                        }
+                        "note" => Some(("assets/textures/explosion_shapes/note.png", 160.0, 1.5)),
+                        "ring" => Some(("assets/textures/explosion_shapes/ring.png", 190.0, 1.8)),
+                        _ => None,
                     }
                 };
 
-                if let Some(weight) = weight_arg {
-                    // ADD weighted preset
-                    match engine.load_explosion_image_weighted(path, scale, flight_time, weight) {
-                        Ok(()) => format!(
-                            "-> Preset '{}' added (weight={:.1}, scale={:.1}, time={:.2}s)",
-                            preset, weight, scale, flight_time
-                        ),
-                        Err(e) => format!("x Failed to add preset '{}': {}", preset, e),
+                // CASE 1: Single Preset (No weight) -> Exact Replace (Single Image)
+                if params.len() == 1 {
+                    let name = params[0];
+                    if let Some((path, scale, flight_time)) = resolve_preset(name) {
+                        match engine.load_explosion_image(path, scale, flight_time) {
+                            Ok(()) => format!(
+                                "-> Preset '{}' loaded (scale={:.1}, time={:.2}s)",
+                                name, scale, flight_time
+                            ),
+                            Err(e) => format!("x Failed to load preset '{}': {}", name, e),
+                        }
+                    } else {
+                        format!("x Unknown preset '{}'", name)
+                    }
+                }
+                // CASE 2: Weighted Presets (One or Multiple pairs) -> Add to MultiImage (Batch Add)
+                else if params.len() >= 2 && params.len().is_multiple_of(2) {
+                    // Note: We do NOT reset to Spherical here anymore.
+                    // This allows mixing presets and images cumulatively.
+                    // To clear, user must run `physic.explosion.shape spherical` or use single-preset replace mode.
+
+                    let mut results = Vec::new();
+
+                    // Iterate pairs
+                    for chunk in params.chunks(2) {
+                        let name = chunk[0];
+                        let weight_str = chunk[1];
+
+                        if let Some((path, scale, flight_time)) = resolve_preset(name) {
+                            if let Ok(weight) = weight_str.parse::<f32>() {
+                                match engine.load_explosion_image_weighted(
+                                    path,
+                                    scale,
+                                    flight_time,
+                                    weight,
+                                ) {
+                                    Ok(()) => results.push(format!("{} ({:.1})", name, weight)),
+                                    Err(e) => {
+                                        results.push(format!("x {} (Err: {})", name, e));
+                                    }
+                                }
+                            } else {
+                                results
+                                    .push(format!("x {} (Invalid weight: {})", name, weight_str));
+                            }
+                        } else {
+                            results.push(format!("x Unknown preset '{}'", name));
+                        }
+                    }
+
+                    if results.is_empty() {
+                        "x No valid presets processed".to_string()
+                    } else {
+                        format!("-> Multi-Preset Added:\n   {}", results.join("\n   "))
                     }
                 } else {
-                    // LOAD single preset (replaces existing)
-                    match engine.load_explosion_image(path, scale, flight_time) {
-                        Ok(()) => format!(
-                            "-> Preset '{}' loaded (scale={:.1}, time={:.2}s)",
-                            preset, scale, flight_time
-                        ),
-                        Err(e) => format!("x Failed to load preset '{}': {}", preset, e),
-                    }
+                    "Usage: preset <name> (Replace) OR preset <name> <weight> ... (Add)".to_string()
                 }
             });
         self.commands_registry.register_args(
@@ -868,7 +1052,7 @@ where
             vec!["heart", "star", "smiley", "note", "ring"],
         );
         self.commands_registry
-            .register_hint("physic.explosion.preset", "Usage: <preset> [weight]");
+            .register_hint("physic.explosion.preset", "Usage: <preset> [weight] ...");
     }
 
     fn register_renderer_base_commands(&mut self) {
@@ -1026,6 +1210,39 @@ where
             .register_args("renderer.bloom.method", vec!["gaussian", "kawase"]);
         self.commands_registry
             .register_hint("renderer.bloom.method", "Usage: <gaussian|kawase>");
+
+        // --- Current Value Getters for Bloom ---
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.bloom.intensity", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.2}", c.bloom_intensity))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.bloom.iterations", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.bloom_iterations))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.bloom.downsample", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}x", c.bloom_downsample))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.bloom.method", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:?}", c.bloom_blur_method))
+                    .unwrap_or("?".to_string())
+            });
     }
 
     fn register_tonemapping_commands(&mut self) {
@@ -1058,6 +1275,14 @@ where
             ],
         );
 
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.tonemapping", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:?}", c.tone_mapping_mode))
+                    .unwrap_or("?".to_string())
+            });
+
         // Comparison Toggle
         let comparison_mode = self.tonemapping_comparison_mode.clone();
         self.commands_registry
@@ -1071,6 +1296,18 @@ where
                 }
                 .to_string()
             });
+
+        let comparison_mode = self.tonemapping_comparison_mode.clone();
+        self.commands_registry.register_current_value(
+            "renderer.tonemapping.compare",
+            move |_, _| {
+                if comparison_mode.load(std::sync::atomic::Ordering::Relaxed) {
+                    "Enabled".to_string()
+                } else {
+                    "Disabled".to_string()
+                }
+            },
+        );
     }
 
     // Helper pur pour le parsing (peut être statique ou hors de la classe)

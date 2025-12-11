@@ -393,6 +393,10 @@ impl Rocket {
         let cos_a = rocket_angle.cos();
         let sin_a = rocket_angle.sin();
 
+        // we can project the image sampling with no (angle) orientation
+        // let cos_a = 1.0;
+        // let sin_a = 0.0;
+
         for (i, p) in slice.iter_mut().enumerate() {
             // Position cible dans l'espace monde, avec rotation
             let target_pos =
@@ -400,16 +404,18 @@ impl Rocket {
 
             // 1. Calcul de la vitesse d'expansion (pour aller du centre vers la cible)
             // On ignore la gravité ici car on veut juste la composante d'éclatement.
-            // BOOST: On multiplie par 1.3 pour rendre l'explosion plus vive et dynamique !
+            // BOOST: On multiplie par 4.0 pour rendre l'explosion plus vive et dynamique !
             let expansion_velocity =
-                image_shape.compute_initial_velocity(self.pos, target_pos, Vec2::ZERO) * 3.0;
+                image_shape.compute_initial_velocity(self.pos, target_pos, Vec2::ZERO) * 4.0;
 
             // 2. Conservation du mouvement : on ajoute la vitesse de la fusée
             // Ainsi le centre de la forme continue sur la trajectoire balistique de la fusée
             let final_velocity = self.vel + expansion_velocity;
 
             // L'angle est calculé depuis la direction finale
-            let angle = final_velocity.y.atan2(final_velocity.x);
+            // let angle = final_velocity.y.atan2(final_velocity.x);
+            // We don't need to compute angle here because we use a Point rendering
+            let angle = 0.0;
 
             *p = Particle {
                 pos: self.pos,
