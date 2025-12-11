@@ -1,0 +1,10 @@
+physic.explosion.image  assets/textures/lanode.png 1
+                        assets/textures/2026.png 1
+                        assets/textures/bonne_annee.png 1 \n
+physic.explosion.preset star 1 heart 1 note 1 \n
+physic.explosion.flight_time 1.00 \n
+physic.explosion.scale 75 \n
+renderer.bloom.iterations 3 \n
+renderer.bloom.intensity 3 \n
+renderer.bloom.downsample 2 \n
+renderer.tonemapping aces

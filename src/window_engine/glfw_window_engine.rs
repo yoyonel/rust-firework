@@ -7,6 +7,7 @@ use imgui_glfw_rs::ImguiGLFW;
 use log::{debug, info};
 
 use crate::renderer_engine::tools::{setup_opengl_debug, show_opengl_context_info};
+use crate::utils::clipboard_backend::make_clipboard_backend;
 use crate::utils::Fullscreen;
 
 pub struct GlfwWindowEngine {
@@ -60,6 +61,7 @@ impl WindowEngine for GlfwWindowEngine {
         }
 
         let mut imgui = ImContext::create();
+
         let font_data =
             std::fs::read("assets/fonts/PerfectDOSVGA437.ttf").expect("Failed to read font file");
         imgui.fonts().add_font(&[imgui::FontSource::TtfData {
@@ -77,6 +79,9 @@ impl WindowEngine for GlfwWindowEngine {
         imgui.style_mut().use_dark_colors();
 
         let imgui_glfw = ImguiGLFW::new(&mut imgui, &mut window);
+
+        // Remplace le backend GLFW (cause d'un panic sur clipboard vide `xsel -bc`)
+        imgui.set_clipboard_backend(make_clipboard_backend());
 
         Ok(Self {
             glfw,
