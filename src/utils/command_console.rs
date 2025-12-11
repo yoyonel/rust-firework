@@ -6,7 +6,7 @@ use crate::AudioEngine;
 use crate::PhysicEngine;
 
 const INTERNAL_COMMANDS: &[&str] = &["clear", "help"];
-const INPUT_BUFFER_GROWTH: usize = 256;
+const INPUT_BUFFER_GROWTH: usize = 2028;
 const SUGGESTION_BOX_HEIGHT: f32 = 80.0;
 const NOISE_TEXTURE_SIZE: usize = 16;
 
@@ -349,7 +349,7 @@ impl Console {
                 self.draw_scrolling_region(ui);
 
                 // 3. Suggestions Region
-                self.draw_suggestions_region(ui, registry);
+                self.draw_suggestions_region(ui, registry, audio, physic);
 
                 ui.separator();
 
@@ -412,7 +412,13 @@ impl Console {
             });
     }
 
-    fn draw_suggestions_region(&self, ui: &imgui::Ui, registry: &CommandRegistry) {
+    fn draw_suggestions_region<P: PhysicEngine, A: AudioEngine>(
+        &self,
+        ui: &imgui::Ui,
+        registry: &CommandRegistry,
+        audio: &A,
+        physic: &P,
+    ) {
         ui.child_window("suggestions")
             .size([0.0, SUGGESTION_BOX_HEIGHT])
             .build(|| {
@@ -433,6 +439,14 @@ impl Console {
                             if let Some(hint) = registry.get_hint(cmd_name) {
                                 ui.same_line();
                                 ui.text_colored([0.6, 0.6, 0.6, 1.0], hint);
+                            }
+
+                            if let Some(val) = registry.get_current_value(cmd_name, audio, physic) {
+                                ui.same_line();
+                                ui.text_colored(
+                                    [0.4, 0.8, 1.0, 1.0],
+                                    format!("(Current: {})", val),
+                                );
                             }
                         } else {
                             ui.text(suggestion);
@@ -689,6 +703,7 @@ type AudioCommandFn = dyn Fn(&mut dyn AudioEngine, &str) -> String + 'static;
 type PhysicCommandFn = dyn Fn(&mut dyn PhysicEngine, &str) -> String + 'static;
 type RendererCommandFn = dyn Fn(&str) -> String + 'static;
 type DynamicArgProviderFn = dyn Fn(&dyn AudioEngine, &dyn PhysicEngine) -> Vec<String> + 'static;
+type CurrentValueProviderFn = dyn Fn(&dyn AudioEngine, &dyn PhysicEngine) -> String + 'static;
 
 pub struct CommandRegistry {
     commands_audio: HashMap<String, Box<AudioCommandFn>>,
@@ -698,6 +713,7 @@ pub struct CommandRegistry {
     // Dynamic suggestions provider: (Audio, Physic) -> Suggestions
     dynamic_arg_providers: HashMap<String, Box<DynamicArgProviderFn>>,
     hints: HashMap<String, String>,
+    current_value_providers: HashMap<String, Box<CurrentValueProviderFn>>,
 }
 
 impl Default for CommandRegistry {
@@ -715,6 +731,7 @@ impl CommandRegistry {
             arg_suggestions: HashMap::new(),
             dynamic_arg_providers: HashMap::new(),
             hints: HashMap::new(),
+            current_value_providers: HashMap::new(),
         }
     }
 
@@ -784,52 +801,113 @@ impl CommandRegistry {
         self.hints.get(name)
     }
 
+    pub fn register_current_value<F>(&mut self, name: &str, provider: F)
+    where
+        F: Fn(&dyn AudioEngine, &dyn PhysicEngine) -> String + 'static,
+    {
+        self.current_value_providers
+            .insert(name.to_string(), Box::new(provider));
+    }
+
+    pub fn get_current_value(
+        &self,
+        name: &str,
+        audio: &dyn AudioEngine,
+        physic: &dyn PhysicEngine,
+    ) -> Option<String> {
+        self.current_value_providers
+            .get(name)
+            .map(|f| f(audio, physic))
+    }
+
     pub fn execute(
         &self,
         audio_engine: &mut dyn AudioEngine,
         physic_engine: &mut dyn PhysicEngine,
         input_str: &str,
     ) -> String {
-        let input = input_str.trim();
-        let cmd_name_with_args = input.split_whitespace().next().unwrap_or("");
+        // Handle potentially multiple commands separated by newlines
+        // If input_str contains newlines, we process each line independently.
+        let lines: Vec<&str> = input_str
+            .split("\\n")
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
 
-        if cmd_name_with_args.is_empty() {
+        if lines.is_empty() {
+            return "".into();
+        }
+
+        // If single line, avoid allocation overhead of vector results
+        if lines.len() == 1 {
+            return self.execute_single_line(audio_engine, physic_engine, lines[0]);
+        }
+
+        let mut results = Vec::with_capacity(lines.len());
+        for line in lines {
+            let res = self.execute_single_line(audio_engine, physic_engine, line);
+            if !res.is_empty() {
+                results.push(res);
+            }
+        }
+        results.join("\n")
+    }
+
+    fn execute_single_line(
+        &self,
+        audio_engine: &mut dyn AudioEngine,
+        physic_engine: &mut dyn PhysicEngine,
+        input: &str,
+    ) -> String {
+        let cmd_key = input.split_whitespace().next().unwrap_or("");
+
+        if cmd_key.is_empty() {
             return "".into();
         }
 
         // Try to split at the first dot. Example: "audio.mute" -> ("audio", "mute")
-        let (prefix, _) = match cmd_name_with_args.split_once('.') {
+        let (prefix, _) = match cmd_key.split_once('.') {
             Some(pair) => pair,
-            None => {
-                return format!(
-                    "Unknown command '{}'. Missing engine prefix.",
-                    cmd_name_with_args
-                )
-            }
+            None => return format!("Unknown command '{}'. Missing engine prefix.", cmd_key),
         };
 
-        let cmd_key = cmd_name_with_args;
-
-        match prefix {
+        let mut result = match prefix {
             "audio" => {
                 if let Some(func) = self.commands_audio.get(cmd_key) {
-                    return func(audio_engine, input);
+                    func(audio_engine, input)
+                } else {
+                    format!("Unknown command '{}'.", cmd_key)
                 }
             }
             "physic" => {
                 if let Some(func) = self.commands_physic.get(cmd_key) {
-                    return func(physic_engine, input);
+                    func(physic_engine, input)
+                } else {
+                    format!("Unknown command '{}'.", cmd_key)
                 }
             }
             "renderer" => {
                 if let Some(func) = self.commands_renderer.get(cmd_key) {
-                    return func(input);
+                    func(input)
+                } else {
+                    format!("Unknown command '{}'.", cmd_key)
                 }
             }
-            _ => return format!("Unknown engine prefix '{}'.", prefix),
+            _ => format!("Unknown engine prefix '{}'.", prefix),
+        };
+
+        // Automatic "Current Value" display mechanism
+        // If the user entered ONLY the command (no arguments)
+        // AND the command returned a Usage hint (implying parameters were expected but missing)
+        // AND we have a registered value provider
+        // THEN append the current value to the output.
+        if input == cmd_key && (result.starts_with("Usage:") || result.starts_with("x ")) {
+            if let Some(val) = self.get_current_value(cmd_key, audio_engine, physic_engine) {
+                result.push_str(&format!("\n-> Current value: {}", val));
+            }
         }
 
-        format!("Unknown command '{}'.", cmd_key)
+        result
     }
 
     // Returns a Vec<String> of all registered command keys.
