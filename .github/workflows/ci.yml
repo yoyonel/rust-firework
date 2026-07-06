@@ -4,9 +4,7 @@ on:
   push:
     # sur chaque push
     branches:
-      - master
-      - develop
-      - "feature/**"
+      - "**"
   pull_request:
     # sur chaque pull request
     branches:
