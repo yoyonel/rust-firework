@@ -40,8 +40,13 @@ run-prime-with-hud:
 # 🧪 Tests unitaires + d'intégration
 # -----------------------------------------
 test:
-	@echo "▶️  Lancement des tests..."
+	@echo "▶️  Lancement des tests unitaires..."
 	@$(XVFB) $(CARGO) test --all --quiet
+
+# Nouvelle cible pour le test d'intégration complet (vidéo + audio)
+test-integration: release
+	@echo "▶️  Lancement du test d'intégration (capture Xvfb + ALSA)..."
+	@./.github/scripts/test_integration.sh
 
 # -----------------------------------------
 # 🧹 Nettoyage
