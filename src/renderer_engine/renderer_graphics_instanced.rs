@@ -5,6 +5,7 @@ use crate::physic_engine::{ParticleType, PhysicEngineIterator};
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture};
 use crate::utils::human_bytes::HumanBytes;
+use crate::{label_gl_object, pop_debug_group, push_debug_group};
 
 const VERTEX_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.vert.glsl";
 const FRAGMENT_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.frag.glsl";
@@ -48,6 +49,9 @@ impl RendererGraphicsInstanced {
                 gl::GetUniformLocation(shader_program, cstr!("uTexRatio")),
                 tex_width as f32 / tex_height as f32,
             );
+
+            label_gl_object!(gl::PROGRAM, shader_program, "Shader_InstancedQuad");
+            label_gl_object!(gl::TEXTURE, texture_id, "Tex_Rocket_Sprite");
         }
 
         // VAO/VBO setup
@@ -180,6 +184,8 @@ impl RendererGraphicsInstanced {
             return;
         }
 
+        push_debug_group!(30, "Draw Instanced Quads");
+
         // Active le shader de rendu des particules
         gl::UseProgram(self.shader_program);
 
@@ -195,6 +201,8 @@ impl RendererGraphicsInstanced {
         //
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_quad);
         gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
+
+        pop_debug_group!();
     }
 
     /// Libère les ressources GPU associées à ce RendererGraphics.
@@ -262,6 +270,8 @@ impl RendererGraphicsInstanced {
                     gl::GetUniformLocation(self.shader_program, cstr!("uTexRatio")),
                     self.tex_ratio,
                 );
+
+                label_gl_object!(gl::PROGRAM, self.shader_program, "Shader_InstancedQuad");
 
                 info!("✅ Instanced textured quad shaders reloaded successfully");
                 Ok(())
@@ -347,6 +357,10 @@ impl RendererGraphicsInstanced {
         ParticleGPU::setup_vertex_attribs_for_instanced_quad();
         // === Nettoyage ===
         gl::BindVertexArray(0);
+
+        label_gl_object!(gl::VERTEX_ARRAY, vao, "VAO_Instanced_Quads");
+        label_gl_object!(gl::BUFFER, vbo_quad, "VBO_Static_Quad");
+        label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Instanced_Data");
 
         (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
     }

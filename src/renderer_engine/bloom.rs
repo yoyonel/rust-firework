@@ -1,5 +1,6 @@
 use crate::renderer_engine::config::{RendererConfig, ToneMappingMode};
 use crate::renderer_engine::shader::try_compile_shader_program_from_files;
+use crate::{label_gl_object, pop_debug_group, push_debug_group};
 use gl::types::*;
 use log::info;
 
@@ -323,6 +324,29 @@ impl BloomPass {
             let mut dummy_vao = 0;
             gl::GenVertexArrays(1, &mut dummy_vao);
 
+            label_gl_object!(gl::FRAMEBUFFER, hdr_fbo, "FBO_HDR_Main");
+            label_gl_object!(gl::TEXTURE, hdr_texture, "Tex_HDR_Scene_Color");
+            label_gl_object!(gl::TEXTURE, bright_texture, "Tex_HDR_Brightness_Mask");
+            label_gl_object!(gl::RENDERBUFFER, hdr_depth_rbo, "RBO_HDR_Depth");
+
+            label_gl_object!(gl::FRAMEBUFFER, ping_pong_fbo[0], "FBO_Blur_Ping");
+            label_gl_object!(gl::FRAMEBUFFER, ping_pong_fbo[1], "FBO_Blur_Pong");
+            label_gl_object!(gl::TEXTURE, ping_pong_textures[0], "Tex_Blur_Ping");
+            label_gl_object!(gl::TEXTURE, ping_pong_textures[1], "Tex_Blur_Pong");
+
+            label_gl_object!(gl::PROGRAM, blur_shader, "Shader_Bloom_Gaussian");
+            label_gl_object!(
+                gl::PROGRAM,
+                kawase_downsample_shader,
+                "Shader_Bloom_Kawase_Down"
+            );
+            label_gl_object!(
+                gl::PROGRAM,
+                kawase_upsample_shader,
+                "Shader_Bloom_Kawase_Up"
+            );
+            label_gl_object!(gl::PROGRAM, composition_shader, "Shader_PostFX_ToneMapping");
+
             info!("✅ Bloom Pass initialized successfully (MRT enabled)");
 
             Ok(Self {
@@ -428,15 +452,18 @@ impl BloomPass {
         gl::Disable(gl::DEPTH_TEST);
 
         // 2. Blur passes - method selection
+        push_debug_group!(1, "PostFX: Bloom Blur Chain");
         match self.blur_method {
             BlurMethod::Gaussian => self.apply_gaussian_blur(),
             BlurMethod::Kawase => self.apply_kawase_blur(),
         }
+        pop_debug_group!();
 
         // Restore full resolution viewport for composition
         gl::Viewport(0, 0, self.width, self.height);
 
         // 3. Final composition (blend scene + bloom)
+        push_debug_group!(2, "PostFX: ToneMapping & Composition");
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
         gl::UseProgram(self.composition_shader);
 
@@ -454,6 +481,7 @@ impl BloomPass {
         gl::Uniform1i(self.loc_tone_mapping_mode, self.tone_mapping_mode as i32);
 
         self.render_fullscreen_quad();
+        pop_debug_group!();
 
         // Re-enable depth test
         gl::Enable(gl::DEPTH_TEST);
@@ -471,6 +499,7 @@ impl BloomPass {
         // Disable depth test for post-processing
         gl::Disable(gl::DEPTH_TEST);
 
+        push_debug_group!(3, "PostFX: Comparison Mode");
         // Apply blur first (same as normal rendering)
         match self.blur_method {
             BlurMethod::Gaussian => self.apply_gaussian_blur(),
@@ -558,6 +587,8 @@ impl BloomPass {
 
         // Restore full viewport
         gl::Viewport(0, 0, self.width, self.height);
+
+        pop_debug_group!(); // End Comparison Mode
 
         // Re-enable depth test
         gl::Enable(gl::DEPTH_TEST);
