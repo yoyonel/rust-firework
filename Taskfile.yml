@@ -77,7 +77,7 @@ tasks:
     deps: [build-profiling]
     cmds:
       - valgrind --tool=callgrind ./target/profiling/{{.APP_NAME}}
-      - sh -c 'callgrind_annotate $$(ls -tr | grep callgrind.out | tail -1) | grep -e "{{.APP_NAME}}::"'
+      - sh -c 'callgrind_annotate $(ls -tr | grep callgrind.out | tail -1) | grep -e "{{.APP_NAME}}::"'
 
   heaptrack:
     desc: "Profiling avec Heaptrack"
