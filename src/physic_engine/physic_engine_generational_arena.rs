@@ -212,10 +212,10 @@ impl PhysicEngineFireworks {
 impl PhysicEngineIterator for PhysicEngineFireworks {
     /// Itère sur toutes les particules de **toutes** les fusées actives.
     ///
-    /// ✔ Aucun `Vec` interne  
-    /// ✔ Aucun `Box<dyn Iterator>`  
-    /// ✔ Zéro allocation  
-    /// ✔ Pipeline d’itérateurs entièrement optimisable par le compilateur  
+    /// ✔ Aucun `Vec` interne
+    /// ✔ Aucun `Box<dyn Iterator>`
+    /// ✔ Zéro allocation
+    /// ✔ Pipeline d’itérateurs entièrement optimisable par le compilateur
     ///
     /// Cette approche est idéale pour un rendu GPU basé sur un buffer mappé persistant :
     /// on produit un flux de particules triées, en lecture séquentielle, permettant
@@ -360,10 +360,8 @@ impl PhysicEngine for PhysicEngineFireworks {
                         }
                     }
                 }
-                ExplosionShape::Image(existing) => {
-                    if existing.file_stem == stem {
-                        to_spherical = true;
-                    }
+                ExplosionShape::Image(existing) if existing.file_stem == stem => {
+                    to_spherical = true;
                 }
                 _ => {}
             }
