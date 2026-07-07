@@ -9,6 +9,22 @@ use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
 use crate::renderer_engine::BloomPass;
 
+/// Macro pour créer une zone Tracy **sans conditionner l'exécution du code**.
+/// Utilisation: `tracy_zone!("nom_zone", 0xRRGGBB);`
+#[cfg(feature = "tracy")]
+macro_rules! tracy_zone {
+    ($name:expr, $color:expr) => {
+        let _span = tracy_client::span!($name);
+        _span.emit_color($color);
+    };
+}
+
+/// Macro vide si Tracy n'est pas activé
+#[cfg(not(feature = "tracy"))]
+macro_rules! tracy_zone {
+    ($name:expr, $color:expr) => {};
+}
+
 // ---------------------------------------------------------
 pub struct Renderer {
     max_particles_on_gpu: usize,
@@ -76,12 +92,23 @@ impl Renderer {
 
     // Helper internal
     unsafe fn render_particles<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
+        tracy_zone!("Renderer::render_particles::all", 0xFF00AA);
+
         let mut total_particles = 0;
         for renderer in &mut self.renderers {
+            let nb;
             // Remplit le buffer GPU
-            let nb = renderer.fill_particle_data_direct(physic);
+            {
+                tracy_zone!("Renderer::fill_buffer", 0x00FFAA);
+                nb = renderer.fill_particle_data_direct(physic);
+            }
+
             // Dessine les particules
-            renderer.render_particles_with_persistent_buffer(nb, self.window_size_f32);
+            {
+                tracy_zone!("Renderer::draw_call", 0xFF0000);
+                renderer.render_particles_with_persistent_buffer(nb, self.window_size_f32);
+            }
+
             total_particles += nb;
         }
         total_particles
@@ -96,18 +123,35 @@ impl Renderer {
 // Trait implementation
 impl RendererEngine for Renderer {
     fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
+        tracy_zone!("Renderer::render_frame", 0x00FF00);
         unsafe {
             if self.bloom_pass.enabled {
+                let particle_count;
                 // Render to HDR framebuffer
-                self.bloom_pass.begin_scene();
-                gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-                gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-                let particle_count = self.render_particles(physic);
+                {
+                    tracy_zone!("Renderer::bloom::begin_scene", 0x00FFFF);
+                    self.bloom_pass.begin_scene();
+                }
 
-                // Apply bloom and render to screen
-                self.bloom_pass.end_scene_and_apply_bloom();
+                {
+                    tracy_zone!("Renderer::clear_HDR_buffer", 0xFF5500);
+                    gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+                }
+
+                {
+                    tracy_zone!("Renderer::render_particles", 0xFF00FF);
+                    particle_count = self.render_particles(physic);
+                }
+
+                {
+                    tracy_zone!("Renderer::bloom::end_scene_and_apply", 0xAA00FF);
+                    // Apply bloom and render to screen
+                    self.bloom_pass.end_scene_and_apply_bloom();
+                }
                 particle_count
             } else {
+                tracy_zone!("Renderer::direct_rendering", 0x00AA00);
                 // Direct rendering without bloom
                 gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
                 gl::ClearColor(0.0, 0.0, 0.0, 1.0);

@@ -38,6 +38,9 @@ imgui-glfw-rs = "0.12.0"
 fuzzy-matcher = "0.3.7"
 copypasta = "0.10.2"
 
+# Tracy (désactivé par défaut, activé via feature)
+tracy-client = { version = "0.18.4", optional = true, features = ["enable", "fibers"] }
+
 [dev-dependencies]
 tempfile = "3.8"
 
@@ -48,6 +51,7 @@ no_simd = []                       # Force le mode scalaire
 simd = []                          # Active le code SIMD
 test_helpers = []
 interactive_tests = []
+tracy = ["tracy-client"]
 
 # =======================================================
 # ⚙️ PROFILS DE COMPILATION
