@@ -39,7 +39,6 @@ fuzzy-matcher = "0.3.7"
 copypasta = "0.10.2"
 
 [dev-dependencies]
-criterion = "0.7.0"
 tempfile = "3.8"
 
 [features]
@@ -73,7 +72,7 @@ panic = "unwind"     # Garde le déroulement de pile par défaut
 inherits = "release"
 debug = true         # Inclut les symboles de debug
 strip = false        # Ne strip PAS les symboles (vital pour cargo bloat/valgrind)
-split-debuginfo = 'packed' 
+split-debuginfo = 'packed'
 
 # 4. ULTRA-SPEED (FPS Maximum pour la simulation de feux d'artifice)
 [profile.ultra-speed]
@@ -89,3 +88,10 @@ opt-level = "z"      # Optimise agressivement pour la taille
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
+[package.metadata.cargo-shear]
+# Pour ignorer les fichiers legacy qui ne sont pas encore intégrés
+ignored-paths = [
+    "src/physic_engine/physic_engine_static_aos.rs",
+    "src/physic_engine/smoke_system.rs"
+]
