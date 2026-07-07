@@ -126,7 +126,7 @@ jobs:
       # --- Étape 5 : Build du projet ---
       - name: Build project
         run: |
-          task release
+          task build-release
 
       # --- Étape 6 : Lancer Xvfb pour les tests graphiques ---
       - name: Start virtual display
