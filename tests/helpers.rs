@@ -97,20 +97,11 @@ impl AudioEngine for DummyAudio {
 }
 
 #[allow(dead_code)]
+#[derive(Default)]
 pub struct DummyPhysic {
     pub config: PhysicConfig,
     pub particles: Vec<Particle>,
     pub explosion_shape: ExplosionShape,
-}
-
-impl Default for DummyPhysic {
-    fn default() -> Self {
-        Self {
-            config: PhysicConfig::default(),
-            particles: Vec::new(),
-            explosion_shape: ExplosionShape::default(),
-        }
-    }
 }
 
 impl PhysicEngine for DummyPhysic {

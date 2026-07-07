@@ -46,11 +46,13 @@ fn test_random_color_in_valid_range() {
 
 #[test]
 fn test_random_vel_respects_config() {
-    let mut config = PhysicConfig::default();
-    config.spawn_rocket_vertical_angle = std::f32::consts::FRAC_PI_2; // π/2 (vertical)
-    config.spawn_rocket_angle_variation = 0.3; // ±0.3 rad
-    config.spawn_rocket_min_speed = 350.0;
-    config.spawn_rocket_max_speed = 500.0;
+    let config = PhysicConfig {
+        spawn_rocket_vertical_angle: std::f32::consts::FRAC_PI_2, // π/2 (vertical)
+        spawn_rocket_angle_variation: 0.3,                        // ±0.3 rad
+        spawn_rocket_min_speed: 350.0,
+        spawn_rocket_max_speed: 500.0,
+        ..Default::default()
+    };
 
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
     let mut rocket = Rocket::new(&mut rng);
@@ -81,23 +83,27 @@ fn test_random_vel_different_configs() {
     let mut rng = rand::rngs::StdRng::seed_from_u64(42);
 
     // Config 1: Vitesse lente
-    let mut config_slow = PhysicConfig::default();
-    config_slow.spawn_rocket_min_speed = 100.0;
-    config_slow.spawn_rocket_max_speed = 200.0;
+    let config_slow = PhysicConfig {
+        spawn_rocket_min_speed: 100.0,
+        spawn_rocket_max_speed: 200.0,
+        ..Default::default()
+    };
 
     let mut rocket = Rocket::new(&mut rng);
     rocket.reset(&config_slow, 1920.0);
     let speed_slow = rocket.vel.length();
-    assert!(speed_slow >= 100.0 && speed_slow <= 200.0);
+    assert!((100.0..=200.0).contains(&speed_slow));
 
     // Config 2: Vitesse rapide
-    let mut config_fast = PhysicConfig::default();
-    config_fast.spawn_rocket_min_speed = 600.0;
-    config_fast.spawn_rocket_max_speed = 800.0;
+    let config_fast = PhysicConfig {
+        spawn_rocket_min_speed: 600.0,
+        spawn_rocket_max_speed: 800.0,
+        ..Default::default()
+    };
 
     rocket.reset(&config_fast, 1920.0);
     let speed_fast = rocket.vel.length();
-    assert!(speed_fast >= 600.0 && speed_fast <= 800.0);
+    assert!((600.0..=800.0).contains(&speed_fast));
 }
 
 // ==================================

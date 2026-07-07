@@ -103,7 +103,7 @@ fn test_all_critical_uniforms_documented() {
         must_restore: bool,
     }
 
-    let uniforms = vec![
+    let uniforms = [
         UniformInfo {
             name: "uSize",
             description: "Particle size multiplier",
@@ -206,7 +206,7 @@ mod regression_tests {
     #[test]
     fn test_reload_logic_must_preserve_all_state() {
         // Liste de tous les états qui doivent être préservés lors d'un reload
-        let states_to_preserve = vec![
+        let states_to_preserve = [
             "shader_program (updated to new)",
             "loc_size (updated to new locations)",
             "loc_tex (updated to new locations)",
