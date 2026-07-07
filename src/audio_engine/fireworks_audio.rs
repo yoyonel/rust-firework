@@ -231,7 +231,7 @@ impl FireworksAudio3D {
         info!("🚀 Starting Audio Engine ...");
 
         let queue = self.play_queue.clone();
-        let voices = Arc::new(Mutex::new(self.voices.clone()));
+        let mut local_voices = self.voices.clone(); // Ownership exclusif pour le thread audio
         let sr = self.sample_rate;
         let block_size = self.block_size;
         let global_gain = self.settings.global_gain();
@@ -274,9 +274,7 @@ impl FireworksAudio3D {
                     buffer_size: cpal::BufferSize::Default,
                 };
 
-                let voices_clone = voices.clone();
-
-                let _garbage_tx_cpal = garbage_tx.clone();
+                let garbage_tx_cpal = garbage_tx.clone();
 
                 // Preallocate buffers
                 let max_supported_frames = block_size.max(16384);
@@ -290,13 +288,13 @@ impl FireworksAudio3D {
                     .build_output_stream(
                         &config,
                         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
-                            // 🔹 Nommage unique du thread dans Tracy
+                            // Nommage unique du thread dans Tracy
                             INIT_CPAL_THREAD.call_once(|| {
                                 #[cfg(feature = "tracy")]
                                 tracy_client::set_thread_name!("CPAL Audio Callback");
                             });
 
-                            // 🔹 start global frame
+                            // start global frame
                             let _audio_frame_guard = profiler.measure("audio_frame");
 
                             let frames = data.len() / 2;
@@ -310,24 +308,23 @@ impl FireworksAudio3D {
                             // 3. Un seul nettoyage propre et vectorisé par LLVM
                             acc[..frames].fill([0.0; 2]);
 
-                            // Enqueue pending sounds
+                            // Dépiler les requêtes ultra-rapidement (O(1) sur le lock)
+                            let mut pending_requests = Vec::new();
                             {
-                                let mut q = {
-                                    tracy_zone!("audio::lock_queue", 0xFF0000);
-                                    queue.lock().expect("Failed to lock play queue")
-                                };
-                                let mut voices_lock = {
-                                    tracy_zone!("audio::lock_voices", 0xFF0000);
-                                    voices_clone.lock().expect("Failed to lock voices")
-                                };
+                                tracy_zone!("audio::lock_queue", 0xFF0000);
+                                let mut q = queue.lock().expect("Failed to lock play queue");
+                                pending_requests.extend(q.drain(..));
+                            } // Le lock est libéré INSTANTANÉMENT !
 
-                                tracy_zone!("audio::dequeue_requests", 0x00FF00);
-                                while let Some(req) = q.pop_front() {
-                                    if let Some(v) = voices_lock.iter_mut().find(|v| !v.active) {
+                            // 2. Assigner les requêtes (Totalement Lock-Free)
+                            {
+                                tracy_zone!("audio::assign_requests", 0x00FF00);
+                                for req in pending_requests {
+                                    if let Some(v) = local_voices.iter_mut().find(|v| !v.active) {
                                         v.reset_from_request(&req);
                                         let latency = Instant::now().duration_since(req.sent_at);
                                         profiler.record_metric("audio latency", latency);
-                                        // Envoi de la latence dans Tracy en tant que graphique continu
+
                                         #[cfg(feature = "tracy")]
                                         tracy_client::plot!(
                                             "Audio: Latency (ms)",
@@ -336,10 +333,9 @@ impl FireworksAudio3D {
                                     }
                                 }
                                 let nb_actives_voices =
-                                    voices_lock.iter().filter(|v| v.active).count();
+                                    local_voices.iter().filter(|v| v.active).count();
                                 profiler.record_metric("nb_actives_voices", nb_actives_voices);
 
-                                // Envoi du nombre de voix actives dans Tracy en tant que graphique continu
                                 #[cfg(feature = "tracy")]
                                 tracy_client::plot!(
                                     "Audio: Active Voices",
@@ -347,21 +343,12 @@ impl FireworksAudio3D {
                                 );
                             }
 
-                            // Process each active voice (🟢 SÉPARATION DU LOCK ET DU CALCUL)
+                            // 3. Traitement DSP (Totalement Lock-Free, le tableau appartient au thread !)
                             {
                                 let _guard = profiler.measure("process_active_voices");
-
-                                // 1. ZONE ROUGE : On mesure UNIQUEMENT le temps d'acquisition du verrou !
-                                // Si cette zone est grande dans Tracy, c'est que ton OpenGL s'accapare le CPU !
-                                let mut voices_lock = {
-                                    tracy_zone!("audio::lock_voices_dsp", 0xFF0000);
-                                    voices_clone.lock().expect("Failed to lock voices")
-                                };
-
-                                // 2. ZONE VIOLETTE : Le vrai travail mathématique DSP (Zéro allocation, Zéro Lock externe)
                                 tracy_zone!("audio::process_dsp", 0xAA00FF);
 
-                                for v in voices_lock.iter_mut() {
+                                for v in local_voices.iter_mut() {
                                     if !v.active || v.data.is_none() {
                                         continue;
                                     }
@@ -373,9 +360,8 @@ impl FireworksAudio3D {
 
                                     if start >= total_len {
                                         v.active = false;
-                                        // 🟢 ZÉRO FREE : Évacuation atomique non-bloquante vers le garbage_tx
                                         if let Some(dead_arc) = v.data.take() {
-                                            let _ = garbage_tx.try_send(dead_arc);
+                                            let _ = garbage_tx_cpal.try_send(dead_arc);
                                         }
                                         continue;
                                     }
@@ -383,7 +369,7 @@ impl FireworksAudio3D {
                                     let n = (total_len - start).min(frames);
                                     let voice_samples = &slice_ref[start..start + n];
 
-                                    // 🟢 SINGLE-PASS DSP dans les registres CPU LLVM
+                                    // SINGLE-PASS DSP
                                     let mut prev_l = v.filter_state[0];
                                     let mut prev_r = v.filter_state[1];
                                     let filter_a = v.filter_a;
@@ -412,6 +398,17 @@ impl FireworksAudio3D {
                                         // 2. Filtre passe-bas IIR
                                         l = prev_l + filter_a * (l - prev_l);
                                         r = prev_r + filter_a * (r - prev_r);
+
+                                        // ANTI-DENORMALS (Flush-to-Zero)
+                                        // Empêche le CPU de s'effondrer (100x plus lent) sur
+                                        // les valeurs microscopiques à la fin des sons.
+                                        if l.abs() < 1e-15 {
+                                            l = 0.0;
+                                        }
+                                        if r.abs() < 1e-15 {
+                                            r = 0.0;
+                                        }
+
                                         prev_l = l;
                                         prev_r = r;
 
@@ -427,11 +424,11 @@ impl FireworksAudio3D {
                                     if v.pos >= total_len {
                                         v.active = false;
                                         if let Some(dead_arc) = v.data.take() {
-                                            let _ = garbage_tx.try_send(dead_arc);
+                                            let _ = garbage_tx_cpal.try_send(dead_arc);
                                         }
                                     }
                                 }
-                            } // <--- voices_lock est relâché proprement ici !
+                            }
 
                             // Write to CPAL buffer with global gain and soft clipping
                             profiler.profile_block("write_cpal_buffer", || {
