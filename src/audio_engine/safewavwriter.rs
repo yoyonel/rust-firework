@@ -42,6 +42,10 @@ impl SafeWavWriter {
             path_string
         );
         let handle = thread::spawn(move || {
+            // 🔹 Nommage direct du thread d'export dans Tracy
+            #[cfg(feature = "tracy")]
+            tracy_client::set_thread_name!("SafeWavWriter Thread");
+
             let spec = WavSpec {
                 channels: 2,
                 sample_rate,

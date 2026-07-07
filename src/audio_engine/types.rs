@@ -2,6 +2,7 @@
 use crate::AudioEngineSettings;
 // use crossbeam::channel::Receiver;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::Instant;
 
 // Global static compteur unique
@@ -30,14 +31,15 @@ impl RocketAudioState {
 #[derive(Clone, Default)]
 pub struct Voice {
     _id: u64,
-    pub active: bool,                // Is the voice currently playing?
-    pub data: Option<Vec<[f32; 2]>>, // Stereo audio samples
-    pub pos: usize,                  // Current sample index
-    pub fade_in_samples: usize,      // Number of samples for fade-in
-    pub fade_out_samples: usize,     // Number of samples for fade-out
-    pub filter_state: [f32; 2],      // Low-pass filter state per channel
-    pub filter_a: f32,               // Low-pass filter coefficient
-    pub user_gain: f32,              // Per-voice gain multiplier
+    pub active: bool, // Is the voice currently playing?
+    // pub data: Option<Vec<[f32; 2]>>, // Stereo audio samples
+    pub data: Option<Arc<Vec<[f32; 2]>>>,
+    pub pos: usize,              // Current sample index
+    pub fade_in_samples: usize,  // Number of samples for fade-in
+    pub fade_out_samples: usize, // Number of samples for fade-out
+    pub filter_state: [f32; 2],  // Low-pass filter state per channel
+    pub filter_a: f32,           // Low-pass filter coefficient
+    pub user_gain: f32,          // Per-voice gain multiplier
 }
 
 impl Voice {
@@ -58,7 +60,8 @@ impl Voice {
 
     fn from_request(req: &PlayRequest) -> Self {
         Self {
-            data: Some(req.data.clone()),
+            // data: Some(req.data.clone()),
+            data: Some(Arc::clone(&req.data)),
             pos: 0,
             active: true,
             fade_in_samples: req.fade_in,
@@ -81,12 +84,13 @@ impl Voice {
 
 /// A request to play a sound, queued for playback in the audio thread
 pub struct PlayRequest {
-    pub data: Vec<[f32; 2]>, // Stereo audio data
-    pub fade_in: usize,      // Fade-in samples
-    pub fade_out: usize,     // Fade-out samples
-    pub gain: f32,           // Per-sound gain
-    pub filter_a: f32,       // Low-pass coefficient
-    pub sent_at: Instant,    // Timestamp of request
+    // pub data: Vec<[f32; 2]>, // Stereo audio data
+    pub data: Arc<Vec<[f32; 2]>>,
+    pub fade_in: usize,   // Fade-in samples
+    pub fade_out: usize,  // Fade-out samples
+    pub gain: f32,        // Per-sound gain
+    pub filter_a: f32,    // Low-pass coefficient
+    pub sent_at: Instant, // Timestamp of request
 }
 
 #[derive(Clone)]
