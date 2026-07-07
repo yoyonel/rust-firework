@@ -681,7 +681,10 @@ impl BloomPass {
     unsafe fn render_fullscreen_quad(&self) {
         gl::BindVertexArray(self.dummy_vao);
         gl::DrawArrays(gl::TRIANGLES, 0, 3);
-        gl::BindVertexArray(0);
+        // ponytail: no unbind to VAO 0 here - core profile treats 0 as "no VAO",
+        // leaving it bound between draws trips GL_INVALID_OPERATION on attrib
+        // queries (e.g. RenderDoc capture). Every caller binds its own VAO
+        // before drawing, so nothing here needs to "clean up" to 0.
     }
 
     /// Recreates framebuffers when window is resized
