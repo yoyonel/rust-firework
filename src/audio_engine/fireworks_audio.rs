@@ -20,13 +20,31 @@ use crate::{log_metrics, profiler::Profiler};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 // use crossbeam::channel::Receiver;
 use hound::WavReader; // WAV file loader
-use log::{debug, info};
+use log::info;
 use std::collections::HashMap;
 use std::collections::VecDeque; // Queue for pending sound events
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex}; // Thread-safe shared state
 use std::thread;
 use std::time::{Duration, Instant};
+
+static INIT_CPAL_THREAD: std::sync::Once = std::sync::Once::new();
+
+/// Macro pour créer une zone Tracy **sans conditionner l'exécution du code**.
+/// Utilisation: `tracy_zone!("nom_zone", 0xRRGGBB);`
+#[cfg(feature = "tracy")]
+macro_rules! tracy_zone {
+    ($name:expr, $color:expr) => {
+        let _span = tracy_client::span!($name);
+        _span.emit_color($color);
+    };
+}
+
+/// Macro vide si Tracy n'est pas activé
+#[cfg(not(feature = "tracy"))]
+macro_rules! tracy_zone {
+    ($name:expr, $color:expr) => {};
+}
 
 /// Errors that can occur during audio thread initialization
 #[derive(Debug)]
@@ -51,8 +69,9 @@ impl std::fmt::Display for AudioThreadError {
 }
 
 pub struct FireworksAudio3D {
-    rocket_data: Vec<[f32; 2]>,
-    explosion_data: Vec<[f32; 2]>,
+    rocket_data: Arc<Vec<[f32; 2]>>,
+    explosion_data: Arc<Vec<[f32; 2]>>,
+
     listener_pos: (f32, f32),
     sample_rate: u32,
     block_size: usize,
@@ -63,6 +82,9 @@ pub struct FireworksAudio3D {
     // doppler_receiver: Option<Receiver<DopplerEvent>>,
     // doppler_states: Vec<DopplerState>,
     global_gain: f32,
+
+    garbage_tx: crossbeam_channel::Sender<Arc<Vec<[f32; 2]>>>,
+    garbage_rx: crossbeam_channel::Receiver<Arc<Vec<[f32; 2]>>>,
 }
 
 impl FireworksAudio3D {
@@ -93,9 +115,12 @@ impl FireworksAudio3D {
 
         let global_gain = config.settings.global_gain();
 
+        let (garbage_tx, garbage_rx) = crossbeam_channel::unbounded();
+
         Ok(Self {
-            rocket_data,
-            explosion_data,
+            rocket_data: Arc::new(rocket_data),
+            explosion_data: Arc::new(explosion_data),
+
             listener_pos: config.listener_pos,
             sample_rate: config.sample_rate,
             block_size: config.block_size,
@@ -106,6 +131,9 @@ impl FireworksAudio3D {
             // doppler_receiver: config.doppler_receiver,
             // doppler_states: config.doppler_states,
             global_gain,
+
+            garbage_tx,
+            garbage_rx,
         })
     }
 
@@ -171,11 +199,18 @@ impl FireworksAudio3D {
             return;
         }
 
+        // Chaque `try_recv` dépile un Arc mort : en sortant de la boucle, le drop() est appelé
+        // par l'OS dans ce thread (UI/Physique), épargnant à 100% le thread CPAL.
+        while let Ok(_dead_buffer) = self.garbage_rx.try_recv() {
+            #[cfg(feature = "tracy")]
+            tracy_zone!("audio::free_garbage_buffer", 0xFF00AA);
+        }
+
         let global_gain = self.global_gain * gain;
 
         let (stereo_data, fade_in, fade_out, filter_a) = self.prepare_voice(data, pos, global_gain);
         let req = PlayRequest {
-            data: stereo_data,
+            data: Arc::new(stereo_data),
             fade_in,
             fade_out,
             gain: global_gain,
@@ -220,6 +255,8 @@ impl FireworksAudio3D {
             None
         };
 
+        let garbage_tx = self.garbage_tx.clone();
+
         thread::spawn(move || {
             // local state inside audio thread
             let mut _rocket_states: HashMap<u64, RocketAudioState> = HashMap::new();
@@ -234,14 +271,17 @@ impl FireworksAudio3D {
                 let config = cpal::StreamConfig {
                     channels: 2,
                     sample_rate: cpal::SampleRate(sr),
-                    buffer_size: cpal::BufferSize::Fixed(block_size as u32),
+                    buffer_size: cpal::BufferSize::Default,
                 };
 
                 let voices_clone = voices.clone();
 
+                let _garbage_tx_cpal = garbage_tx.clone();
+
                 // Preallocate buffers
-                let mut acc = vec![[0.0; 2]; block_size];
-                let mut chunk = vec![[0.0; 2]; block_size];
+                let max_supported_frames = block_size.max(16384);
+                let mut acc = vec![[0.0; 2]; max_supported_frames];
+                let chunk = vec![[0.0; 2]; max_supported_frames];
 
                 let export_writer_callback = export_writer_arc.clone();
                 let block_index = Arc::new(AtomicU64::new(0));
@@ -250,125 +290,152 @@ impl FireworksAudio3D {
                     .build_output_stream(
                         &config,
                         move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                            // 🔹 Nommage unique du thread dans Tracy
+                            INIT_CPAL_THREAD.call_once(|| {
+                                #[cfg(feature = "tracy")]
+                                tracy_client::set_thread_name!("CPAL Audio Callback");
+                            });
+
                             // 🔹 start global frame
                             let _audio_frame_guard = profiler.measure("audio_frame");
 
                             let frames = data.len() / 2;
 
-                            // Redimensionnement dynamique
-                            if acc.len() < frames {
-                                debug!(
-                                    "Audio buffer resized: acc.len={} → frames={}",
-                                    acc.len(),
-                                    frames
-                                );
-                                acc.resize(frames, [0.0; 2]);
-                            }
-                            if chunk.len() < frames {
-                                debug!(
-                                    "Audio buffer resized: chunk.len={} → frames={}",
-                                    chunk.len(),
-                                    frames
-                                );
-                                chunk.resize(frames, [0.0; 2]);
+                            // 2. Dans le callback : vérification de sécurité sans allocation !
+                            if frames > acc.len() || frames > chunk.len() {
+                                log::error!("Buffer under-allocated! Requested {} frames", frames);
+                                return; // Ou gère le cas en clippant à acc.len()
                             }
 
-                            // Reset accumulator
-                            unsafe {
-                                std::ptr::write_bytes(acc.as_mut_ptr(), 0, frames);
-                            }
-
-                            for f in acc.iter_mut().take(frames) {
-                                f[0] = 0.0;
-                                f[1] = 0.0;
-                            }
+                            // 3. Un seul nettoyage propre et vectorisé par LLVM
+                            acc[..frames].fill([0.0; 2]);
 
                             // Enqueue pending sounds
                             {
-                                let mut q = queue.lock().expect("Failed to lock play queue");
-                                let mut voices_lock =
-                                    voices_clone.lock().expect("Failed to lock voices");
+                                let mut q = {
+                                    tracy_zone!("audio::lock_queue", 0xFF0000);
+                                    queue.lock().expect("Failed to lock play queue")
+                                };
+                                let mut voices_lock = {
+                                    tracy_zone!("audio::lock_voices", 0xFF0000);
+                                    voices_clone.lock().expect("Failed to lock voices")
+                                };
+
+                                tracy_zone!("audio::dequeue_requests", 0x00FF00);
                                 while let Some(req) = q.pop_front() {
                                     if let Some(v) = voices_lock.iter_mut().find(|v| !v.active) {
                                         v.reset_from_request(&req);
                                         let latency = Instant::now().duration_since(req.sent_at);
                                         profiler.record_metric("audio latency", latency);
+                                        // Envoi de la latence dans Tracy en tant que graphique continu
+                                        #[cfg(feature = "tracy")]
+                                        tracy_client::plot!(
+                                            "Audio: Latency (ms)",
+                                            latency.as_secs_f64() * 1000.0
+                                        );
                                     }
                                 }
                                 let nb_actives_voices =
                                     voices_lock.iter().filter(|v| v.active).count();
                                 profiler.record_metric("nb_actives_voices", nb_actives_voices);
+
+                                // Envoi du nombre de voix actives dans Tracy en tant que graphique continu
+                                #[cfg(feature = "tracy")]
+                                tracy_client::plot!(
+                                    "Audio: Active Voices",
+                                    nb_actives_voices as f64
+                                );
                             }
 
-                            // Process each active voice
+                            // Process each active voice (🟢 SÉPARATION DU LOCK ET DU CALCUL)
                             {
                                 let _guard = profiler.measure("process_active_voices");
-                                let mut voices_lock =
-                                    voices_clone.lock().expect("Failed to lock voices");
+
+                                // 1. ZONE ROUGE : On mesure UNIQUEMENT le temps d'acquisition du verrou !
+                                // Si cette zone est grande dans Tracy, c'est que ton OpenGL s'accapare le CPU !
+                                let mut voices_lock = {
+                                    tracy_zone!("audio::lock_voices_dsp", 0xFF0000);
+                                    voices_clone.lock().expect("Failed to lock voices")
+                                };
+
+                                // 2. ZONE VIOLETTE : Le vrai travail mathématique DSP (Zéro allocation, Zéro Lock externe)
+                                tracy_zone!("audio::process_dsp", 0xAA00FF);
+
                                 for v in voices_lock.iter_mut() {
                                     if !v.active || v.data.is_none() {
                                         continue;
                                     }
 
-                                    let total_len =
-                                        v.data.as_ref().expect("Voice data should exist").len();
+                                    let slice_ref =
+                                        v.data.as_ref().expect("Voice data should exist");
+                                    let total_len = slice_ref.len();
                                     let start = v.pos;
+
                                     if start >= total_len {
                                         v.active = false;
-                                        v.data = None;
+                                        // 🟢 ZÉRO FREE : Évacuation atomique non-bloquante vers le garbage_tx
+                                        if let Some(dead_arc) = v.data.take() {
+                                            let _ = garbage_tx.try_send(dead_arc);
+                                        }
                                         continue;
                                     }
 
-                                    let n = (total_len - start).min(frames).min(chunk.len());
-                                    chunk[..n].copy_from_slice(
-                                        &v.data.as_ref().expect("Voice data should exist")
-                                            [start..start + n],
-                                    );
+                                    let n = (total_len - start).min(frames);
+                                    let voice_samples = &slice_ref[start..start + n];
 
-                                    // Apply fade-in/fade-out
-                                    for (i, item) in chunk.iter_mut().enumerate().take(n) {
-                                        if start + i < v.fade_in_samples {
+                                    // 🟢 SINGLE-PASS DSP dans les registres CPU LLVM
+                                    let mut prev_l = v.filter_state[0];
+                                    let mut prev_r = v.filter_state[1];
+                                    let filter_a = v.filter_a;
+                                    let gain = v.user_gain;
+
+                                    for (i, sample) in voice_samples.iter().enumerate() {
+                                        let mut l = sample[0];
+                                        let mut r = sample[1];
+
+                                        // 1. Fade in / Fade out à la volée
+                                        let current_pos = start + i;
+                                        if current_pos < v.fade_in_samples {
                                             let alpha =
-                                                (start + i) as f32 / v.fade_in_samples as f32;
-                                            item[0] *= alpha;
-                                            item[1] *= alpha;
+                                                current_pos as f32 / v.fade_in_samples as f32;
+                                            l *= alpha;
+                                            r *= alpha;
+                                        } else {
+                                            let rem = total_len - current_pos;
+                                            if rem < v.fade_out_samples {
+                                                let alpha = rem as f32 / v.fade_out_samples as f32;
+                                                l *= alpha;
+                                                r *= alpha;
+                                            }
                                         }
-                                        let rem = total_len - (start + i);
-                                        if rem < v.fade_out_samples {
-                                            let alpha = rem as f32 / v.fade_out_samples as f32;
-                                            item[0] *= alpha;
-                                            item[1] *= alpha;
-                                        }
+
+                                        // 2. Filtre passe-bas IIR
+                                        l = prev_l + filter_a * (l - prev_l);
+                                        r = prev_r + filter_a * (r - prev_r);
+                                        prev_l = l;
+                                        prev_r = r;
+
+                                        // 3. Accumulation directe
+                                        acc[i][0] += l * gain;
+                                        acc[i][1] += r * gain;
                                     }
 
-                                    // Low-pass filter
-                                    for ch in 0..2 {
-                                        let mut prev = v.filter_state[ch];
-                                        for item in chunk.iter_mut().take(n) {
-                                            let x = item[ch];
-                                            let y = prev + v.filter_a * (x - prev);
-                                            item[ch] = y;
-                                            prev = y;
-                                        }
-                                        v.filter_state[ch] = prev;
-                                    }
-
-                                    // Mix into accumulator
-                                    for (i, item) in chunk.iter_mut().enumerate().take(n) {
-                                        acc[i][0] += item[0] * v.user_gain;
-                                        acc[i][1] += item[1] * v.user_gain;
-                                    }
-
+                                    v.filter_state[0] = prev_l;
+                                    v.filter_state[1] = prev_r;
                                     v.pos += n;
+
                                     if v.pos >= total_len {
                                         v.active = false;
-                                        v.data = None;
+                                        if let Some(dead_arc) = v.data.take() {
+                                            let _ = garbage_tx.try_send(dead_arc);
+                                        }
                                     }
                                 }
-                            }
+                            } // <--- voices_lock est relâché proprement ici !
 
                             // Write to CPAL buffer with global gain and soft clipping
                             profiler.profile_block("write_cpal_buffer", || {
+                                tracy_zone!("audio::soft_clipping", 0xFF5500); // Orange pour l'écriture
                                 for (i, sample) in acc.iter_mut().take(frames).enumerate() {
                                     data[2 * i] = (sample[0] * global_gain).tanh();
                                     data[2 * i + 1] = (sample[1] * global_gain).tanh();
@@ -554,7 +621,7 @@ mod tests {
         }
 
         PlayRequest {
-            data: data_panned,
+            data: std::sync::Arc::new(data_panned),
             fade_in: 1,
             fade_out: 1,
             gain,
@@ -585,7 +652,8 @@ mod tests {
 
         let req = enqueue_sound_test(&engine, (-engine.settings.max_distance(), 0.0), 1.0);
 
-        for sample in &req.data {
+        // for sample in &req.data {
+        for sample in req.data.iter() {
             let ratio = sample[0] / (sample[1] + 1e-8);
             assert!(
                 ratio > 1.0,
@@ -600,7 +668,8 @@ mod tests {
 
         let req = enqueue_sound_test(&engine, (engine.settings.max_distance(), 0.0), 1.0);
 
-        for sample in &req.data {
+        // for sample in &req.data {
+        for sample in req.data.iter() {
             let ratio = sample[1] / (sample[0] + 1e-8);
             assert!(
                 ratio > 1.0,
@@ -615,7 +684,8 @@ mod tests {
 
         let req = enqueue_sound_test(&engine, (0.0, 0.0), 1.0);
 
-        for sample in &req.data {
+        // for sample in &req.data {
+        for sample in req.data.iter() {
             let diff = (sample[0] - sample[1]).abs();
             assert!(diff < 1e-6, "Channels should be equal for center pan");
         }
