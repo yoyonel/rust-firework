@@ -21,8 +21,10 @@ fn test_new_engine_initialization() {
 
 #[test]
 fn test_spawn_rocket_margin_calculation() {
-    let mut config = PhysicConfig::default();
-    config.spawn_rocket_margin = 100.0;
+    let config = PhysicConfig {
+        spawn_rocket_margin: 100.0,
+        ..Default::default()
+    };
 
     // Cas 1: Fenêtre normale
     let _engine = PhysicEngineFireworks::new(&config, 1920.0);
@@ -59,8 +61,11 @@ fn test_spawn_rocket_success() {
 
 #[test]
 fn test_spawn_rocket_exhaustion() {
-    let mut config = PhysicConfig::default();
-    config.max_rockets = 3; // Limite à 3 fusées
+    let config = PhysicConfig {
+        max_rockets: 3,
+        ..Default::default()
+    };
+
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
     // Spawn 3 fusées
@@ -80,9 +85,12 @@ fn test_spawn_rocket_exhaustion() {
 
 #[test]
 fn test_rocket_deactivation_after_lifecycle() {
-    let mut config = PhysicConfig::default();
-    config.max_rockets = 10;
-    config.rocket_interval_mean = 100.0; // Empêcher le spawn automatique
+    let config = PhysicConfig {
+        max_rockets: 10,
+        rocket_interval_mean: 100.0,
+        ..Default::default()
+    };
+
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
     // Spawn une fusée
@@ -108,10 +116,12 @@ fn test_rocket_deactivation_after_lifecycle() {
 
 #[test]
 fn test_compute_next_interval_respects_bounds() {
-    let mut config = PhysicConfig::default();
-    config.rocket_interval_mean = 1.0;
-    config.rocket_interval_variation = 0.3;
-    config.rocket_max_next_interval = 0.5;
+    let config = PhysicConfig {
+        rocket_interval_mean: 1.0,
+        rocket_interval_variation: 0.3,
+        rocket_max_next_interval: 0.5,
+        ..Default::default()
+    };
 
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
@@ -129,10 +139,12 @@ fn test_compute_next_interval_respects_bounds() {
 
 #[test]
 fn test_update_spawns_rocket_after_interval() {
-    let mut config = PhysicConfig::default();
-    config.rocket_interval_mean = 0.1;
-    config.rocket_interval_variation = 0.0;
-    config.rocket_max_next_interval = 0.01;
+    let config = PhysicConfig {
+        rocket_interval_mean: 0.1,
+        rocket_interval_variation: 0.0,
+        rocket_max_next_interval: 0.01,
+        ..Default::default()
+    };
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
     // Update avec dt < intervalle
@@ -174,8 +186,10 @@ fn test_reload_config_no_change() {
 
 #[test]
 fn test_reload_config_with_max_rockets_change() {
-    let mut config = PhysicConfig::default();
-    config.max_rockets = 10;
+    let config = PhysicConfig {
+        max_rockets: 10,
+        ..Default::default()
+    };
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
     // Spawn quelques fusées
@@ -205,14 +219,16 @@ fn test_update_returns_valid_result() {
     let result = engine.update(0.016);
 
     // Le résultat devrait être valide (peut être vide)
-    assert!(result.triggered_explosions.len() == 0 || result.triggered_explosions.len() > 0);
+    assert!(result.triggered_explosions.is_empty() || !result.triggered_explosions.is_empty());
 }
 
 #[test]
 fn test_update_with_multiple_rockets() {
-    let mut config = PhysicConfig::default();
-    config.max_rockets = 100;
-    config.rocket_interval_mean = 100.0; // Empêcher le spawn automatique
+    let config = PhysicConfig {
+        max_rockets: 100,
+        rocket_interval_mean: 100.0, // Empêcher le spawn automatique
+        ..Default::default()
+    };
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
     // Spawn plusieurs fusées
@@ -361,8 +377,10 @@ fn test_iter_active_particles_increases_with_trails() {
 
 #[test]
 fn test_iter_active_heads_not_exploded() {
-    let mut config = PhysicConfig::default();
-    config.rocket_interval_mean = 100.0; // Empêcher le spawn automatique
+    let config = PhysicConfig {
+        rocket_interval_mean: 100.0, // Empêcher le spawn automatique
+        ..Default::default()
+    };
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
     // Spawn 3 fusées
