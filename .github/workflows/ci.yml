@@ -34,6 +34,13 @@ jobs:
           toolchain: ${{ env.RUST_VERSION }}
           components: llvm-tools-preview
 
+      # 🚀 Installation de Taskfile
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       # --- Étape 3 : Installer les outils système ---
       - name: Install system dependencies
         run: |
@@ -105,7 +112,7 @@ jobs:
       - name: Lint project
         run: |
           rustup component add rustfmt clippy
-          make lint
+          task lint
 
       # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
       - name: Install cargo-llvm-cov
@@ -119,7 +126,7 @@ jobs:
       # --- Étape 5 : Build du projet ---
       - name: Build project
         run: |
-          cargo build --release
+          task release
 
       # --- Étape 6 : Lancer Xvfb pour les tests graphiques ---
       - name: Start virtual display
@@ -129,7 +136,6 @@ jobs:
           sleep 2
 
       # --- Étape 8 : Lancer les tests avec coverage ---
-      # cargo llvm-cov --workspace --tests -- --nocapture --test-threads=1
       - name: Run tests with coverage
         run: |
           cargo llvm-cov --features interactive_tests -- --test-threads=1

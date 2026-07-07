@@ -21,27 +21,26 @@ jobs:
     - name: 🛎️ Checkout repository
       uses: actions/checkout@v4
 
+    # 🚀 Installation de Taskfile
+    - name: Install Task
+      uses: arduino/setup-task@v2
+      with:
+        version: 3.x
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+
     # 2️⃣ Setup Docker buildx (pour cache efficace)
     - name: 🧱 Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
 
     # 4️⃣ Build Docker image with inline cache ---
     - name: 🔨 Build Docker image (with cache)
-      run: |
-        docker build \
-          --build-arg USER_ID=$(id -u) \
-          --build-arg GROUP_ID=$(id -g) \
-          --build-arg BUILDKIT_INLINE_CACHE=1 \
-          -t fireworks-ci_integration \
-          -f Dockerfile.ci .
+      run: task ci:build-docker-integration
 
     # 5️⃣ Exécution du test d’intégration
     - name: 🚀 Run integration test
-      run: |
-        mkdir -p output
-        docker run --rm \
-          -v ${{ github.workspace }}/output:/app/output \
-          fireworks-ci_integration
+      env:
+        GITHUB_WORKSPACE: ${{ github.workspace }}
+      run: task ci:run-integration
 
     # 5️⃣ Setup Python + cache UV (gestionnaire de dépendances)
     - name: 🧩 Setup Python environment
@@ -58,13 +57,7 @@ jobs:
 
     # 6️⃣ Run Fireworks Analysis (post-processing)
     - name: 📊 Run Fireworks Analysis
-      run: |
-        echo "📈 Running Fireworks post-analysis..."
-        cd integration/visual_test
-        uv run main.py ../../output/
-        uv run analyze_optical_flow.py ../../output ../../output --fps 6
-      env:
-        PYTHONUNBUFFERED: 1
+      run: task ci:analyze-fireworks
 
     # 6️⃣ Upload des artifacts de sortie (logs, screenshots, audio…)
     - name: 📦 Upload output artifacts
@@ -73,10 +66,3 @@ jobs:
         name: fireworks-output
         path: output/
         retention-days: 7
-    # # 8️⃣ Publish HTML report to GitHub Pages
-    # - name: 🌐 Publish report to GitHub Pages
-    #   uses: peaceiris/actions-gh-pages@v4
-    #   with:
-    #     github_token: ${{ secrets.GITHUB_TOKEN }}
-    #     publish_dir: ./output
-    #     publish_branch: gh-pages
