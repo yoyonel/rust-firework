@@ -188,3 +188,20 @@ tasks:
     cmds:
       - echo "📈 Running Fireworks post-analysis..."
       - cd integration/visual_test && uv run main.py ../../output/ && uv run analyze_optical_flow.py ../../output ../../output --fps 6
+
+  # =========================================
+  # 📊 PROFILING AVEC TRACY
+  # =========================================
+  run-tracy:
+    desc: "Exécute le projet avec Tracy activé (nécessite le serveur Tracy en arrière-plan)"
+    env:
+      RUSTFLAGS: "-C target-cpu=native" # Optimisations pour un profiling précis
+    cmds:
+      - echo "📊 Démarre le serveur Tracy avant de lancer cette commande !"
+      - 'echo "    Exemple: tracy &"'
+      - "{{.CARGO}} run --features tracy --release"
+
+  build-tracy:
+    desc: "Compile avec Tracy activé"
+    cmds:
+      - "{{.CARGO}} build --features tracy --release"

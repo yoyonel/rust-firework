@@ -11,6 +11,40 @@ use imgui_glfw_rs::glfw;
 use log::{debug, info};
 use std::time::Instant;
 
+/// Macro pour créer une zone Tracy **sans conditionner l'exécution du code**.
+/// Utilisation : tracy_zone!("simulator::physics", 0xFF5500, self.update_simulation(delta));
+#[cfg(feature = "tracy")]
+macro_rules! tracy_zone {
+    ($name:expr, $color:expr, $block:expr) => {{
+        let _span = tracy_client::span!($name);
+        _span.emit_color($color);
+        $block
+    }};
+}
+
+/// Macro vide si Tracy n'est pas activé
+#[cfg(not(feature = "tracy"))]
+macro_rules! tracy_zone {
+    ($name:expr, $color:expr, $block:expr) => {
+        $block
+    };
+}
+
+/// Crée une zone Tracy + émet une valeur (pour les métriques).
+#[cfg(feature = "tracy")]
+macro_rules! tracy_zone_with_value {
+    ($name:expr, $color:expr, $value:expr) => {
+        let _span = tracy_client::span!($name);
+        _span.emit_color($color);
+        _span.emit_value($value as u64);
+    };
+}
+
+#[cfg(not(feature = "tracy"))]
+macro_rules! tracy_zone_with_value {
+    ($name:expr, $color:expr, $value:expr) => {};
+}
+
 pub struct Simulator<R, P, A, W>
 where
     R: RendererEngine,
@@ -130,19 +164,35 @@ where
         let delta = self.update_frame_timing();
 
         // 5. Simulation physique + audio
-        self.update_simulation(delta);
+        tracy_zone!(
+            "simulator::physics",
+            0xFF5500, // Orange
+            self.update_simulation(delta)
+        );
 
         // 6. Rendu
-        self.render_frame();
+        tracy_zone!(
+            "simulator::render",
+            0x00FF00, // Vert
+            self.render_frame()
+        );
 
         // 7. Logs périodiques
-        self.log_metrics_periodically(delta);
+        tracy_zone!(
+            "simulator::log_metrics",
+            0xFFFFFF, // Vert
+            self.log_metrics_periodically(delta)
+        );
 
         // 8. UI (console + labels)
-        self.render_ui();
+        tracy_zone!("simulator::render_ui", 0x00FF55, self.render_ui());
 
         // 9. Finalisation
-        self.finalize_frame();
+        tracy_zone!(
+            "simulator::finalize_frame(swap_buffer)",
+            0xFF0055,
+            self.finalize_frame()
+        );
 
         true
     }
@@ -316,15 +366,20 @@ where
             .profiler
             .profile_block("physic - update", || self.physic_engine.update(delta));
         Self::synch_audio_with_physic(&mut self.audio_engine, &update_result);
+
+        tracy_zone_with_value!(
+            "physics::update",
+            0xAA00FF, // Violet
+            update_result.new_rocket.as_ref().map_or(0, |_| 1)
+        );
     }
 
     fn render_frame(&mut self) {
-        self.profiler.profile_block("render frame", || {
-            self.profiler.record_metric(
-                "total particles drawn",
-                self.renderer_engine.render_frame(&self.physic_engine),
-            );
-        });
+        let particles_drawn = self.renderer_engine.render_frame(&self.physic_engine);
+        self.profiler
+            .record_metric("total particles drawn", particles_drawn);
+
+        tracy_zone_with_value!("render_frame::main_pass", 0xFF00FF, particles_drawn); // Magenta
 
         // Render comparison textures if mode is active
         let comparison_active = self
@@ -333,7 +388,11 @@ where
 
         if comparison_active {
             unsafe {
-                self.renderer_engine.bloom_pass_mut().render_comparison();
+                tracy_zone!(
+                    "render_frame::comparison",
+                    0x00FFFF, // Cyan
+                    self.renderer_engine.bloom_pass_mut().render_comparison()
+                );
             }
         }
     }
