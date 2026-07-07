@@ -67,6 +67,12 @@ fn main() -> Result<()> {
     // 1. Init Window & Context
     let window_engine = GlfwWindowEngine::init(window_width, window_height, "Fireworks Simulator")?;
 
+    #[cfg(feature = "tracy")]
+    {
+        tracy_client::Client::start();
+        log::info!("📊 Tracy + Fibers + OpenGL activés");
+    }
+
     // 2. Init Renderer (now that GL context is ready)
     let renderer_engine = Renderer::new(window_width, window_height, &physic_config)?;
 
