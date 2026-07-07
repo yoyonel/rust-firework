@@ -7,66 +7,13 @@
 /// - Avant le fix, reload_shaders() ne restaurait pas l'uniform uTexRatio
 /// - Cela causait la disparition des quads texturés après un reload
 /// - Le fix a ajouté le champ tex_ratio pour stocker cette valeur
-use fireworks_sim::physic_engine::ParticleType;
-
-#[test]
-fn test_renderer_instanced_stores_tex_ratio() {
-    // Ce test vérifie que RendererGraphicsInstanced a bien un champ tex_ratio
-    // qui peut être utilisé pour restaurer l'uniform lors du reload
-
-    // On ne peut pas instancier directement RendererGraphicsInstanced sans contexte OpenGL,
-    // mais on peut vérifier que le type existe et a la bonne structure via la compilation
-
-    // Si ce test compile, cela signifie que:
-    // 1. RendererGraphicsInstanced existe
-    // 2. Le type ParticleType est accessible
-    // 3. La structure est cohérente
-
-    let _particle_type = ParticleType::Trail;
-
-    // Ce test passera tant que la structure existe
-    // Un test plus complet nécessiterait un contexte OpenGL mock
-    assert!(true, "RendererGraphicsInstanced structure is valid");
-}
-
-#[test]
-fn test_tex_ratio_field_exists_via_size() {
-    // Test indirect: vérifier que la taille de la struct inclut le champ tex_ratio
-    // Si le champ tex_ratio est supprimé, la taille de la struct changera
-
-    // RendererGraphicsInstanced contient:
-    // - vao: u32 (4 bytes)
-    // - vbo_particles: u32 (4 bytes)
-    // - vbo_quad: u32 (4 bytes)
-    // - mapped_ptr: *mut ParticleGPU (8 bytes on 64-bit)
-    // - shader_program: u32 (4 bytes)
-    // - loc_size: i32 (4 bytes)
-    // - loc_tex: i32 (4 bytes)
-    // - texture_id: u32 (4 bytes)
-    // - tex_ratio: f32 (4 bytes) <- LE CHAMP CRITIQUE
-    // - max_particles_on_gpu: usize (8 bytes on 64-bit)
-    // - particle_type: ParticleType (depends on enum size)
-
-    // On ne peut pas tester la taille exacte sans instancier,
-    // mais on peut documenter l'importance du champ
-
-    // Taille minimale attendue (sans padding): 4+4+4+8+4+4+4+4+4+8 = 48 bytes + ParticleType
-    let min_expected_size = 48;
-
-    // Note: Ce test est principalement documentaire
-    // Il rappelle aux développeurs que tex_ratio est un champ critique
-    assert!(
-        min_expected_size > 0,
-        "tex_ratio field must be present in RendererGraphicsInstanced for proper shader reload"
-    );
-}
-
+///
 /// Test de documentation: rappelle l'importance de restaurer tous les uniforms
 #[test]
 fn test_shader_reload_must_restore_all_uniforms() {
     // Ce test documente les uniforms qui DOIVENT être restaurés lors d'un reload
 
-    let critical_uniforms = vec![
+    let critical_uniforms = [
         "uSize",     // Taille des particules
         "uTexture",  // Texture sampler
         "uTexRatio", // Ratio de texture (CRITIQUE - causait le bug)
@@ -130,7 +77,7 @@ mod shader_reload_integration {
         let new_shader_compiled = true;
 
         // 4. Uniforms restaurés (CRITIQUE)
-        let uniforms_restored = vec![
+        let uniforms_restored = [
             "uSize",
             "uTexture",
             "uTexRatio", // <- DOIT être restauré

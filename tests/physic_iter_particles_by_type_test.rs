@@ -78,7 +78,7 @@ fn test_iter_particles_by_type_returns_trails() {
 
     // Devrait avoir des particules de traînée
     assert!(
-        trail_particles.len() > 0,
+        !trail_particles.is_empty(),
         "Devrait avoir des particules de traînée après simulation"
     );
 
@@ -113,7 +113,7 @@ fn test_iter_particles_by_type_returns_explosions() {
 
     // Devrait avoir des particules d'explosion
     assert!(
-        explosion_particles.len() > 0,
+        !explosion_particles.is_empty(),
         "Devrait avoir des particules d'explosion après simulation"
     );
 
