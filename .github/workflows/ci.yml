@@ -16,6 +16,8 @@ on:
 
 jobs:
   build-and-test:
+    # Ne s'exécute que si ce n'est pas un push vers une branche ayant une PR ouverte
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     env:
       DISPLAY: :99
