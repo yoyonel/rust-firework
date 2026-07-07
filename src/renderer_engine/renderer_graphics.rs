@@ -4,6 +4,7 @@ use crate::physic_engine::PhysicEngineIterator;
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::renderer_engine::types::ParticleGPU;
 use crate::utils::human_bytes::HumanBytes;
+use crate::{label_gl_object, pop_debug_group, push_debug_group};
 
 macro_rules! cstr {
     ($s:expr) => {
@@ -38,6 +39,12 @@ impl RendererGraphics {
         unsafe {
             let (vao, vbo_particles, mapped_ptr, _buffer_size) =
                 RendererGraphics::setup_gpu_buffers(max_particles_on_gpu);
+
+            // 🏷️ Rendre tes ressources visibles dans RenderDoc
+            label_gl_object!(gl::PROGRAM, shader_program, "Shader_PointRendering");
+            label_gl_object!(gl::VERTEX_ARRAY, vao, "VAO_Particules_Base");
+            label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Particules_Data");
+            label_gl_object!(gl::PROGRAM, shader_program, "Shader_PointRendering");
 
             Self {
                 vao,
@@ -93,6 +100,9 @@ impl RendererGraphics {
         ParticleGPU::setup_vertex_attribs();
         // === Nettoyage ===
         gl::BindVertexArray(0);
+
+        label_gl_object!(gl::VERTEX_ARRAY, vao, "VAO_Points");
+        label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Points_Data");
 
         (vao, vbo_particles, mapped_ptr, buffer_size)
     }
@@ -206,6 +216,8 @@ impl RendererGraphics {
             return;
         }
 
+        push_debug_group!(20, "Draw Points");
+
         // Active le shader de rendu des particules
         gl::UseProgram(self.shader_program);
 
@@ -218,6 +230,8 @@ impl RendererGraphics {
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
         // Dessine les particules sous forme de points
         gl::DrawArrays(gl::POINTS, 0, count as i32);
+
+        pop_debug_group!();
     }
 
     /// Libère les ressources GPU associées à ce RendererGraphics.

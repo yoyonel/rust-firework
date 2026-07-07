@@ -8,6 +8,7 @@ use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
 use crate::renderer_engine::BloomPass;
+use crate::{pop_debug_group, push_debug_group};
 
 /// Macro pour créer une zone Tracy **sans conditionner l'exécution du code**.
 /// Utilisation: `tracy_zone!("nom_zone", 0xRRGGBB);`
@@ -93,6 +94,7 @@ impl Renderer {
     // Helper internal
     unsafe fn render_particles<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
         tracy_zone!("Renderer::render_particles::all", 0xFF00AA);
+        push_debug_group!(10, "Draw All Particles");
 
         let mut total_particles = 0;
         for renderer in &mut self.renderers {
@@ -111,6 +113,9 @@ impl Renderer {
 
             total_particles += nb;
         }
+
+        pop_debug_group!();
+
         total_particles
     }
 
@@ -127,6 +132,9 @@ impl RendererEngine for Renderer {
         unsafe {
             if self.bloom_pass.enabled {
                 let particle_count;
+
+                push_debug_group!(1, "Pass: HDR Scene");
+
                 // Render to HDR framebuffer
                 {
                     tracy_zone!("Renderer::bloom::begin_scene", 0x00FFFF);
@@ -144,6 +152,8 @@ impl RendererEngine for Renderer {
                     particle_count = self.render_particles(physic);
                 }
 
+                pop_debug_group!();
+
                 {
                     tracy_zone!("Renderer::bloom::end_scene_and_apply", 0xAA00FF);
                     // Apply bloom and render to screen
@@ -151,12 +161,18 @@ impl RendererEngine for Renderer {
                 }
                 particle_count
             } else {
+                push_debug_group!(0, "Pass: Forward (No Bloom)");
+
                 tracy_zone!("Renderer::direct_rendering", 0x00AA00);
                 // Direct rendering without bloom
                 gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
                 gl::ClearColor(0.0, 0.0, 0.0, 1.0);
                 gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-                self.render_particles(physic)
+                let count = self.render_particles(physic);
+
+                pop_debug_group!();
+
+                count
             }
         }
     }
