@@ -265,3 +265,6 @@ flamegraph*
 
 # vtune
 r*hs/
+
+# Claude
+.codegraph/
