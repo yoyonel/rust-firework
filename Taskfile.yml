@@ -1,0 +1,190 @@
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+  APP_NAME: fireworks_sim
+  CARGO: cargo
+  COVERAGE_DIR: target/llvm-cov
+  XVFB: xvfb-run -a
+
+tasks:
+  default:
+    desc: "Cible par défaut : Lancement des tests unitaires"
+    cmds:
+      - task: test
+
+  # =========================================
+  # 🦀 DEV / DEBUG
+  # =========================================
+  build-debug:
+    desc: "Compile le projet en mode debug (développement)"
+    cmds:
+      - "{{.CARGO}} build"
+
+  run-debug:
+    desc: "Exécute le projet en mode debug"
+    cmds:
+      - "{{.CARGO}} run"
+
+  # =========================================
+  # 🚀 RELEASE STANDARD
+  # =========================================
+  build-release:
+    desc: "Compile le projet en mode release standard"
+    cmds:
+      - echo "⚙️  Compilation en mode release standard..."
+      - "{{.CARGO}} build --release"
+
+  run-release:
+    desc: "Exécute le projet en mode release standard"
+    cmds:
+      - "{{.CARGO}} run --release"
+
+  # =========================================
+  # ⚡ ULTRA-SPEED (FPS MAX)
+  # =========================================
+  build-ultra-speed:
+    desc: "Compile pour la VITESSE maximale (LTO fat, codegen=1)"
+    cmds:
+      - echo "🏎️ Compilation en mode ULTRA-SPEED..."
+      - "{{.CARGO}} build --profile ultra-speed"
+
+  run-ultra-speed:
+    desc: "Exécute le projet avec les performances maximales"
+    cmds:
+      - "{{.CARGO}} run --profile ultra-speed"
+
+  # =========================================
+  # 📦 ULTRA-SIZE (TAILLE MIN)
+  # =========================================
+  build-ultra-size:
+    desc: "Compile pour la TAILLE minimale (opt-level z)"
+    cmds:
+      - echo "🗜️ Compilation en mode ULTRA-SIZE..."
+      - "{{.CARGO}} build --profile ultra-size"
+
+  # =========================================
+  # 🔬 PROFILING & DEBUG GRAPHIQUE
+  # =========================================
+  build-profiling:
+    internal: true # Ne s'affiche pas dans `task -l`
+    cmds:
+      - "{{.CARGO}} build --profile profiling"
+
+  valgrind-callgrind:
+    desc: "Profiling avec Valgrind"
+    deps: [build-profiling]
+    cmds:
+      - valgrind --tool=callgrind ./target/profiling/{{.APP_NAME}}
+      - sh -c 'callgrind_annotate $$(ls -tr | grep callgrind.out | tail -1) | grep -e "{{.APP_NAME}}::"'
+
+  heaptrack:
+    desc: "Profiling avec Heaptrack"
+    deps: [build-profiling]
+    cmds:
+      - heaptrack ./target/profiling/{{.APP_NAME}}
+
+  run-release-with-hud:
+    desc: "Gallium HUD (Compatible Intel)"
+    env:
+      vblank_mode: "0"
+      __GL_SYNC_TO_VBLANK: "0"
+      GALLIUM_HUD_PERIOD: "0.15"
+      GALLIUM_HUD: "cpu;fps;N vertices submitted"
+    cmds:
+      - "{{.CARGO}} run --release 2>&1"
+
+  run-prime-with-hud:
+    desc: "MangoHub (Compatible NVidia) Raccourci: RIGHT-SHIFT+F10"
+    env:
+      __NV_PRIME_RENDER_OFFLOAD: "1"
+      __GLX_VENDOR_LIBRARY_NAME: nvidia
+      __VK_LAYER_NV_optimus: NVIDIA_onl
+      vblank_mode: "0"
+      __GL_SYNC_TO_VBLANK: "0"
+      RUST_LOG: INFO
+    cmds:
+      - echo "ℹ️🖥️ Using MangoHud, press RSHIFT+F10 for chaging the HUD mode."
+      - mangohud ./target/release/{{.APP_NAME}} 2>&1
+
+  # =========================================
+  # 🧪 TESTS & QUALITÉ
+  # =========================================
+  test:
+    desc: "Lancement des tests unitaires"
+    cmds:
+      - echo "▶️  Lancement des tests unitaires..."
+      - "{{.XVFB}} {{.CARGO}} test --all --quiet"
+
+  test-integration:
+    desc: "Lancement du test d'intégration complet (vidéo + audio)"
+    deps: [build-release]
+    cmds:
+      - echo "▶️  Lancement du test d'intégration (capture Xvfb + ALSA)..."
+      - ./.github/scripts/test_integration.sh
+
+  coverage:
+    desc: "Génération du rapport de couverture avec cargo-llvm-cov"
+    cmds:
+      - echo "📊 Génération du rapport de couverture avec cargo-llvm-cov..."
+      - '{{.XVFB}} {{.CARGO}} llvm-cov --workspace --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/"'
+      - 'echo "✅ Rapport généré : {{.COVERAGE_DIR}}/index.html"'
+      - xdg-open {{.COVERAGE_DIR}}/index.html 2>/dev/null || open {{.COVERAGE_DIR}}/index.html 2>/dev/null || true
+
+  coverage-without-tests:
+    desc: "Exécution de llvm-cov (utilisé en CI)"
+    cmds:
+      - '{{.XVFB}} {{.CARGO}} llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
+
+  fmt:
+    desc: "Vérification du formatage"
+    cmds:
+      - echo "🎨 Vérification du formatage..."
+      - "{{.CARGO}} fmt -- --check"
+
+  clippy:
+    desc: "Vérification statique avec Clippy"
+    cmds:
+      - echo "🕵️  Vérification statique avec Clippy..."
+      - "{{.CARGO}} clippy -- -D warnings"
+
+  lint:
+    desc: "Vérification complète du code (fmt + clippy)"
+    deps: [fmt, clippy]
+
+  # =========================================
+  # 🧹 MAINTENANCE
+  # =========================================
+  clean:
+    desc: "Nettoyage des artefacts"
+    cmds:
+      - echo "🧹 Nettoyage des artefacts..."
+      - "{{.CARGO}} clean"
+
+  remove-unused-dependencies:
+    desc: "Exécute cargo-shear pour retirer les dépendances inutilisées"
+    cmds:
+      - "{{.CARGO}} shear --fix"
+
+  # =========================================
+  # 🤖 Recettes CI/CD
+  # =========================================
+  ci:build-docker-integration:
+    desc: "CI: Build de l'image Docker avec cache inline"
+    cmds:
+      - docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg BUILDKIT_INLINE_CACHE=1 -t fireworks-ci_integration -f Dockerfile.ci .
+
+  ci:run-integration:
+    desc: "CI: Exécution du test d'intégration Docker"
+    cmds:
+      - mkdir -p output
+      - docker run --rm -v {{.GITHUB_WORKSPACE | default "$PWD"}}/output:/app/output fireworks-ci_integration
+
+  ci:analyze-fireworks:
+    desc: "CI: Analyse du flux optique et post-processing"
+    env:
+      PYTHONUNBUFFERED: "1"
+    cmds:
+      - echo "📈 Running Fireworks post-analysis..."
+      - cd integration/visual_test && uv run main.py ../../output/ && uv run analyze_optical_flow.py ../../output ../../output --fps 6

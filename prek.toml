@@ -1,0 +1,10 @@
+[[repos]]
+repo = "https://github.com/python-jsonschema/check-jsonschema"
+rev = "0.28.1"
+
+[[repos.hooks]]
+id = "check-jsonschema"
+name = "Check Taskfile.yml syntax"
+files = "^Taskfile\\.yml$"
+types = ["yaml"]
+args = ["--schemafile", "https://taskfile.dev/schema.json"]
