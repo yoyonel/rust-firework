@@ -50,27 +50,42 @@ simd = []                          # Active le code SIMD
 test_helpers = []
 interactive_tests = []
 
-[build-dependencies]
-cargo_metadata = "0.23.1"
+# =======================================================
+# ⚙️ PROFILS DE COMPILATION
+# https://doc.rust-lang.org/cargo/reference/profiles.html
+# =======================================================
 
-# https://doc.rust-lang.org/cargo/reference/profiles.html?highlight=lto#default-profiles
-
-# https://doc.rust-lang.org/cargo/reference/profiles.html?highlight=lto#release
-[profile.release]
+# 1. DEVELOPPEMENT (Défaut lors de `cargo build` / `cargo run`)
+[profile.dev]
+opt-level = 0
 debug = true
+strip = false
 
-# https://doc.rust-lang.org/cargo/reference/profiles.html?highlight=lto#release
-# inclut les symboles de débugage, utiles pour Heaptrack
-# [profile.dev]
+# 2. RELEASE STANDARD (Bon compromis vitesse d'exécution / temps de compilation)
+[profile.release]
+opt-level = 3
+lto = "thin"         # LTO léger : optimise bien sans prendre des heures
+strip = true         # Supprime les symboles (réduit la taille de 90%)
+panic = "unwind"     # Garde le déroulement de pile par défaut
 
+# 3. PROFILING (Hérite de Release, mais garde les symboles pour l'analyse)
 [profile.profiling]
 inherits = "release"
-debug = true               # inclut les symboles de debug dans le binaire
-lto = true                 # optionnel, améliore les optimisations
-opt-level = 3              # niveau d’optimisation
-split-debuginfo = 'packed' # conserve les symboles dans le binaire (Linux)
+debug = true         # Inclut les symboles de debug
+strip = false        # Ne strip PAS les symboles (vital pour cargo bloat/valgrind)
+split-debuginfo = 'packed' 
 
-# https://bheisler.github.io/criterion.rs/book/getting_started.html#step-1---add-dependency-to-cargotoml
-# [[bench]]
-# harness = false
-# name = "audio_filters"
+# 4. ULTRA-SPEED (FPS Maximum pour la simulation de feux d'artifice)
+[profile.ultra-speed]
+inherits = "release"
+lto = "fat"          # Optimisation complète inter-crates (Compilation lente)
+codegen-units = 1    # Force un seul bloc pour un inlining parfait
+panic = "abort"      # Retire l'unwinding pour soulager le cache L1
+
+# 5. ULTRA-SIZE (Taille de binaire minimale absolue)
+[profile.ultra-size]
+inherits = "release"
+opt-level = "z"      # Optimise agressivement pour la taille
+lto = "fat"
+codegen-units = 1
+panic = "abort"
