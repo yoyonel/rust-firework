@@ -32,9 +32,30 @@ pub unsafe fn compile_shader_program_from_files<P: AsRef<Path>>(
     vertex_path: P,
     fragment_path: P,
 ) -> u32 {
-    let vertex_src = load_shader_from_file(vertex_path);
-    let fragment_src = load_shader_from_file(fragment_path);
-    compile_shader_program(&vertex_src, &fragment_src)
+    let vertex_path_ref = vertex_path.as_ref();
+    let fragment_path_ref = fragment_path.as_ref();
+
+    let vertex_src = load_shader_from_file(vertex_path_ref);
+    let fragment_src = load_shader_from_file(fragment_path_ref);
+
+    // 1. Extraction propre des noms de fichiers pour RenderDoc
+    let vs_label = format!(
+        "VS_{}",
+        vertex_path_ref
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+    );
+    let fs_label = format!(
+        "FS_{}",
+        fragment_path_ref
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+    );
+
+    // 2. Transmission des labels à la fonction de compilation
+    compile_shader_program(&vertex_src, &fragment_src, &vs_label, &fs_label)
 }
 
 /// Tente de compiler un programme shader à partir de fichiers GLSL.
@@ -79,8 +100,24 @@ pub unsafe fn try_compile_shader_program_from_files<P: AsRef<Path>>(
         }
     };
 
+    // Extraction propre des noms de fichiers pour RenderDoc
+    let vs_label = format!(
+        "VS_{}",
+        vertex_path_ref
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+    );
+    let fs_label = format!(
+        "FS_{}",
+        fragment_path_ref
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("unknown")
+    );
+
     // Tenter de compiler
-    try_compile_shader_program(&vertex_src, &fragment_src)
+    try_compile_shader_program(&vertex_src, &fragment_src, &vs_label, &fs_label)
 }
 
 /// Tente de compiler un programme shader à partir de sources.
@@ -88,9 +125,17 @@ pub unsafe fn try_compile_shader_program_from_files<P: AsRef<Path>>(
 ///
 /// # Safety
 /// Cette fonction est unsafe car elle interagit directement avec des pointeurs OpenGL.
-unsafe fn try_compile_shader_program(vertex_src: &str, fragment_src: &str) -> Result<u32, String> {
-    fn try_compile_shader(src: &str, ty: GLenum) -> Result<u32, String> {
+unsafe fn try_compile_shader_program(
+    vertex_src: &str,
+    fragment_src: &str,
+    vs_label: &str,
+    fs_label: &str,
+) -> Result<u32, String> {
+    fn try_compile_shader(src: &str, ty: GLenum, label: &str) -> Result<u32, String> {
         let shader = unsafe { gl::CreateShader(ty) };
+        unsafe {
+            crate::label_gl_object!(gl::SHADER, shader, label);
+        }
         let c_str = CString::new(src).map_err(|e| format!("CString error: {}", e))?;
 
         unsafe {
@@ -126,8 +171,8 @@ unsafe fn try_compile_shader_program(vertex_src: &str, fragment_src: &str) -> Re
         Ok(shader)
     }
 
-    let vs = try_compile_shader(vertex_src, gl::VERTEX_SHADER)?;
-    let fs = try_compile_shader(fragment_src, gl::FRAGMENT_SHADER)?;
+    let vs = try_compile_shader(vertex_src, gl::VERTEX_SHADER, vs_label)?;
+    let fs = try_compile_shader(fragment_src, gl::FRAGMENT_SHADER, fs_label)?;
 
     let program = unsafe { gl::CreateProgram() };
     unsafe {
@@ -159,9 +204,16 @@ unsafe fn try_compile_shader_program(vertex_src: &str, fragment_src: &str) -> Re
 
 /// # Safety
 /// Interagit directement avec des pointeurs OpenGL.
-pub unsafe fn compile_shader_program(vertex_src: &str, fragment_src: &str) -> u32 {
-    fn compile_shader(src: &str, ty: GLenum) -> u32 {
+pub unsafe fn compile_shader_program(
+    vertex_src: &str,
+    fragment_src: &str,
+    vs_label: &str,
+    fs_label: &str,
+) -> u32 {
+    fn compile_shader(src: &str, ty: GLenum, label: &str) -> u32 {
         let shader = unsafe { gl::CreateShader(ty) };
+        unsafe { crate::label_gl_object!(gl::SHADER, shader, label) };
+
         let c_str = CString::new(src).unwrap();
         unsafe {
             gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
@@ -190,8 +242,8 @@ pub unsafe fn compile_shader_program(vertex_src: &str, fragment_src: &str) -> u3
         shader
     }
 
-    let vs = compile_shader(vertex_src, gl::VERTEX_SHADER);
-    let fs = compile_shader(fragment_src, gl::FRAGMENT_SHADER);
+    let vs = compile_shader(vertex_src, gl::VERTEX_SHADER, vs_label);
+    let fs = compile_shader(fragment_src, gl::FRAGMENT_SHADER, fs_label);
 
     let program = unsafe { gl::CreateProgram() };
     unsafe {
