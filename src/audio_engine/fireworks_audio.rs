@@ -6,7 +6,7 @@ use crate::audio_engine::types::{
     Voice,
 };
 use crate::audio_engine::{
-    binauralize_mono,
+    binauralize_mono_fast,
     load_audio,
     resample_linear,
     AudioBlock,
@@ -165,7 +165,7 @@ impl FireworksAudio3D {
         // Spatialization: binaural or panning
         let stereo = if self.settings.use_binaural() {
             let mono: Vec<f32> = data.iter().map(|s| (s[0] + s[1]) / 2.0).collect();
-            binauralize_mono(
+            binauralize_mono_fast(
                 &mono,
                 (pos.0, pos.1, 0.0),
                 (self.listener_pos.0, self.listener_pos.1, 0.0),
@@ -634,7 +634,7 @@ impl AudioEngine for FireworksAudio3D {
 mod tests {
     use super::*;
     // use crate::audio_engine::audio_event::doppler_queue::DopplerQueue;
-    use crate::audio_engine::binaural_processing::binauralize_mono;
+    use crate::audio_engine::binaural_processing::binauralize_mono_fast;
     use crate::audio_engine::settings::AudioEngineSettingsBuilder;
 
     fn dummy_data() -> Vec<[f32; 2]> {
@@ -747,7 +747,7 @@ mod tests {
             .max_ild_db(max_ild_db)
             .build()
             .unwrap();
-        let stereo = binauralize_mono(
+        let stereo = binauralize_mono_fast(
             &mono,
             (src_pos.0, src_pos.1, 0.0),
             (listener_pos.0, listener_pos.1, 0.0),
@@ -818,7 +818,7 @@ mod tests {
         println!("attenuation (distance) = {:.6}", att);
 
         // Appel de la fonction à tester
-        let stereo = binauralize_mono(
+        let stereo = binauralize_mono_fast(
             &mono,
             (src_pos.0, src_pos.1, 0.0),
             (listener_pos.0, listener_pos.1, 0.0),
@@ -906,7 +906,7 @@ mod tests {
             (1.0, far_gain)
         };
 
-        let stereo = binauralize_mono(
+        let stereo = binauralize_mono_fast(
             &mono,
             (src_pos.0, src_pos.1, 0.0),
             (listener_pos.0, listener_pos.1, 0.0),
@@ -961,8 +961,8 @@ mod tests {
             .build()
             .unwrap();
 
-        let stereo_near = binauralize_mono(&mono, near, listener, sr, &settings);
-        let stereo_far = binauralize_mono(&mono, far, listener, sr, &settings);
+        let stereo_near = binauralize_mono_fast(&mono, near, listener, sr, &settings);
+        let stereo_far = binauralize_mono_fast(&mono, far, listener, sr, &settings);
 
         let e_near: f32 = stereo_near.iter().map(|s| s[0].abs() + s[1].abs()).sum();
         let e_far: f32 = stereo_far.iter().map(|s| s[0].abs() + s[1].abs()).sum();
