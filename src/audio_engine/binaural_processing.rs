@@ -1,5 +1,115 @@
 use crate::AudioEngineSettings;
 
+/// Version optimisée "Zero-Branch / Auto-Vectorized" pour le benchmark
+pub fn binauralize_mono_fast(
+    mono: &[f32],
+    src_pos: (f32, f32, f32),
+    listener_pos: (f32, f32, f32),
+    sample_rate: u32,
+    settings: &AudioEngineSettings,
+) -> Vec<[f32; 2]> {
+    let n = mono.len();
+    if n == 0 {
+        return Vec::new();
+    }
+
+    // 1. Calculs géométriques et gains (strictement identiques)
+    let dx = src_pos.0 - listener_pos.0;
+    let dy = src_pos.1 - listener_pos.1;
+    let dz = src_pos.2 - listener_pos.2;
+    let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-6);
+
+    let azimuth = dx.atan2(-dz);
+    let theta = azimuth.abs();
+    let elevation = dy.atan2((dx * dx + dz * dz).sqrt());
+
+    let c = 343.0_f32;
+    let itd = ((settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
+    let ild_db = settings.max_ild_db() * theta.sin() * (1.0 - 0.25 * elevation.sin().abs());
+    let far_gain = 10f32.powf(-ild_db / 20.0);
+    let att = (1.0 - distance / settings.max_distance()).max(0.0);
+
+    let (itd_left, itd_right, gain_left, gain_right) = if azimuth >= 0.0 {
+        (itd, 0.0, att * far_gain, att)
+    } else {
+        (0.0, itd, att, att * far_gain)
+    };
+
+    // 2. Allocation unique du buffer stéréo de sortie
+    let mut stereo = vec![[0.0; 2]; n];
+
+    // 3. Traitement séparé des canaux pour éliminer 100% des conditions dans le Hot Loop
+    process_channel(
+        mono,
+        itd_left * sample_rate as f32,
+        gain_left,
+        &mut stereo,
+        0,
+    );
+    process_channel(
+        mono,
+        itd_right * sample_rate as f32,
+        gain_right,
+        &mut stereo,
+        1,
+    );
+
+    stereo
+}
+
+/// Traitement d'un canal mono vers une voie stéréo sans aucune branche ni conversion de type dans la boucle
+#[inline(always)]
+fn process_channel(
+    mono: &[f32],
+    itd_samples: f32,
+    gain: f32,
+    stereo: &mut [[f32; 2]],
+    channel_idx: usize,
+) {
+    let n = mono.len();
+    let delay_int = itd_samples.floor() as usize;
+    let frac = itd_samples - delay_int as f32;
+
+    // Cas 1 : Pas de retard (ITD = 0), multiplication scalaire simple
+    // LLVM vectorise ceci en instructions `vmulps` pure à vitesse mémoire maximale
+    if delay_int == 0 && frac == 0.0 {
+        for (out, &s) in stereo.iter_mut().zip(mono.iter()) {
+            out[channel_idx] = s * gain;
+        }
+        return;
+    }
+
+    let alpha = 1.0 - frac; // Poids de l'échantillon supérieur
+
+    // Cas 2 : Loop Peeling (Gestion des bords au début du buffer)
+    // Pour les premiers échantillons où le retard pointerait avant l'indice 0, on clamp à mono[0]
+    let peel_end = (delay_int + 1).min(n);
+    let s0_gained = mono[0] * gain;
+    for out in stereo[..peel_end].iter_mut() {
+        out[channel_idx] = s0_gained;
+    }
+
+    // Cas 3 : HOT LOOP SIMD (Le cœur du buffer)
+    // Zéro condition, zéro `min()`, zéro conversion float->int.
+    if peel_end < n {
+        let out_slice = &mut stereo[peel_end..n];
+
+        // Les tranches sources sont contiguës et parfaitement alignées
+        let src_low = &mono[0..(n - peel_end)];
+        let src_high = &mono[1..(n - peel_end + 1)];
+
+        // Grâce à zip() sur des tranches de tailles identiques, LLVM supprime les Bounds Checks (vérifications de limites).
+        // La boucle est déroulée et transformée en instructions FMA vectorielles (AVX2 / NEON).
+        for ((out, &s_low), &s_high) in out_slice
+            .iter_mut()
+            .zip(src_low.iter())
+            .zip(src_high.iter())
+        {
+            out[channel_idx] = (s_low + (s_high - s_low) * alpha) * gain;
+        }
+    }
+}
+
 /// Convert mono audio to binaural stereo using ITD + ILD + elevation awareness (3D)
 pub fn binauralize_mono(
     mono: &[f32],
