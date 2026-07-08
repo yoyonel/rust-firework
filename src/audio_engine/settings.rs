@@ -3,12 +3,13 @@
 // =========================
 
 use derive_builder::Builder;
+use serde::Deserialize;
 
 /// Parameters controlling spatialization, filtering, and volume.
 ///
 /// All fields are private — configuration is done exclusively via the builder:
 ///
-#[derive(Clone, Builder, Debug)]
+#[derive(Clone, Builder, Debug, Deserialize)]
 #[builder(pattern = "owned", build_fn(error = "anyhow::Error"))]
 pub struct AudioEngineSettings {
     /// Human head radius (meters) for ITD calculation
