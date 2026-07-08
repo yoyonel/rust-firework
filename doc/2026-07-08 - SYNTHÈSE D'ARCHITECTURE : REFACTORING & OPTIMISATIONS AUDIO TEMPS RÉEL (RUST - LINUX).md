@@ -1,12 +1,11 @@
 # 2026-07-08 - SYNTHÈSE D'ARCHITECTURE : REFACTORING & OPTIMISATIONS AUDIO TEMPS RÉEL (RUST / LINUX)
 
-Ce document synthétise l'ensemble des refactorings architecturaux, des optimisations DSP et des validations techniques menés sur le moteur audio Rust. L'objectif fondamental a été de transformer un pipeline audio naïf sujet aux XRUNs (décrochages), aux locks système et à une forte latence d'attente en une **architecture Pro-Audio déterministe, zéro-copie, zéro-allocation au runtime et absolument Lock-Free**.
+Ce document synthétise l'ensemble des refactorings architecturaux, des optimisations DSP et des validations techniques menés sur le moteur audio Rust. L'objectif fondamental a été de transformer un pipeline audio naïf sujet aux XRUNs (décrochages), aux locks système et à une forte latence d'attente en une **architecture Pro-Audio déterministe, zéro-copie, zéro-allocation au runtime, absolument Lock-Free et vectorisée matériellement**.
 
 ---
 
 # Prompt de synthèse
 
-```
 Reprend TOUS les refactoring/optimisations qu'on a fait sur l'audio processing (TOUT ce qui est dans cette discussion).
 
 Fait une synthèse complète (dans un bloc unique copiable, donc fait attention aux blocs `...` de ne pas casser le bloc unique !) de ce qu'on a modifié/validé, les motivations/raisons de rearchitecture/refactoring/optimisations et les gains OBSERVÉS (pas spéculés/deviner).
@@ -29,7 +28,9 @@ Liste non exhaustive de points à placer dans cette synthèse:
 * Réduire l'empreinte critique (Minimizing Lock Contention & OS Priority Inversion)
 * L'architecture Lock-Free absolue (Ring Buffers SPSC bornés)
 * Activer la priorité Temps Réel sous Linux (Le standard Pro-Audio)
-```
+* Vectorisation SIMD native (AVX2/NEON) via l'élimination des branches (Zero-Branch DSP)
+
+---
 
 ## 1. DIAGNOSTIC INITIAL : LATENCE AUDIO & DÉCROCHAGES DSP (XRUNS)
 
@@ -60,7 +61,7 @@ Le thread audio ne doit **jamais** dépendre du scheduler général de l'OS ni f
 
 ### Zéro DeadLock & Architecture Lock-Free Absolue (Éradication des Mutex)
 * **Le Problème :** L'architecture initiale conservait une contradiction technique : l'utilisation d'un `Arc<Mutex<VecDeque<PlayRequest>>>` pour transmettre les sons du thread UI/Physique vers le thread DSP. Même si le verrou était relâché rapidement par un `.drain(..)`, cela constituait un risque critique d'**inversion de priorité OS** : si le thread UI était préempté par le noyau Linux pendant qu'il détenait le verrou, le thread audio haute priorité gelait -> XRUN et pics de latence à >50 ms.
-* **La Solution (Refactoring Étape 3) :** Remplacement intégral du `Mutex` et du `VecDeque` par un **Ring Buffer SPSC borné Lock-Free** (`crossbeam_channel::bounded(512)`).
+* **La Solution :** Remplacement intégral du `Mutex` et du `VecDeque` par un **Ring Buffer SPSC borné Lock-Free** (`crossbeam_channel::bounded(512)`).
     * Le producteur (Physique/UI) pousse via `try_send()`. Si le buffer est saturé lors d'un pic catastrophique, l'événement est droppé en silence (stratégie pro-audio de dégradation propre) plutôt que de bloquer.
     * Le consommateur (CPAL) lit directement via `while let Ok(req) = play_rx.try_recv()`.
 * **Gain empirique observé :** Disparition totale des pics d'inversion de priorité. La latence moyenne d'attente a chuté sous la milliseconde : **avg = 705,82 µs**, avec un pic maximal contenu à **max = 1,41 ms**.
@@ -113,7 +114,22 @@ Dans l'architecture initiale, le mixage audio s'effectuait en plusieurs passes s
 
 ---
 
-## 5. INTÉGRATION OS : PRIORITÉ TEMPS RÉEL SOUS LINUX
+## 5. VECTORISATION SIMD NATIVE & ÉLIMINATION DES BRANCHES (ZERO-BRANCH DSP)
+
+### Philosophie "Suckless" : Auto-Vectorisation LLVM sans dépendance
+Pour la spatialisation binaurale 3D (`binauralize_mono`), l'algorithme initial calculait l'interpolation linéaire et le retard ITD échantillon par échantillon. 
+* **Le Problème :** La boucle de traitement contenait un test conditionnel (`if idx <= 0.0`), un clamping (`idx.min()`) et un cast flottant-vers-entier (`as usize`) exécutés $N$ fois par buffer. Ces branchements conditionnels cassaient le pipeline CPU (bulles de prédiction de branchement) et interdisaient formellement à LLVM d'auto-vectoriser le code.
+* **La Solution (Zero-Branch DSP) :** Exploitation de l'invariance de phase. Le retard ITD étant constant sur l'intégralité du quantum audio, la partie entière du décalage (`delay_int`) et le poids d'interpolation (`frac`) sont invariants pour le buffer.
+    * **Loop Peeling :** Extraction de la gestion des bords de buffer hors de la boucle principale.
+    * **Boucle Chaude Contiguë :** Restructuration de la boucle centrale via un `.zip()` de tranches mémoire contiguës. Sans aucun `if`, ni `min()`, ni conversion de type dans le *Hot Loop*, LLVM supprime automatiquement les *Bounds Checks* (vérifications de limites) et compile la boucle en **instructions vectorielles FMA (AVX2 / NEON)**.
+* **Gain empirique mesuré sous Criterion (Buffer de 256 échantillons / 48 kHz) :**
+    * **Temps de traitement par bloc :** Chute de **3 816 ns** à **425 ns** (**~8,98x plus rapide**).
+    * **Débit de traitement (Throughput) :** Explosion de **67 Melem/s** à **602 Melem/s**.
+    * **Impact sur le Budget Tampon :** Pour 32 voix 3D simultanées, la spatialisation complète ne consomme plus que **~13,6 µs**, soit à peine **0,26 %** du budget temps réel de 5,33 ms alloué par PipeWire.
+
+---
+
+## 6. INTÉGRATION OS : PRIORITÉ TEMPS RÉEL SOUS LINUX
 
 Pour blinder le moteur contre les micro-gels causés par l'activité système générale (navigateur web, compilateur Rust en tâche de fond, I/O disque), le thread audio a vocation à être aligné sur les standards Pro-Audio Linux (JACK / PipeWire Pro) :
 * **Activer la priorité Temps Réel :** Promotion du thread de callback audio vers l'ordonnanceur temps réel de Linux sous la politique **`SCHED_FIFO`** ou **`SCHED_RR`** (avec une priorité élevée, ex: 80+).
@@ -121,7 +137,7 @@ Pour blinder le moteur contre les micro-gels causés par l'activité système g�
 
 ---
 
-## 6. TABLEAU SYNTHÉTIQUE DES GAINS OBSERVÉS
+## 7. TABLEAU SYNTHÉTIQUE DES GAINS OBSERVÉS
 
 | Axe d'Optimisation / Refactoring | Problème Architectural Initial | Solution Implémentée | Gain Empirique Observé |
 | :--- | :--- | :--- | :--- |
@@ -131,11 +147,12 @@ Pour blinder le moteur contre les micro-gels causés par l'activité système g�
 | **Gestion Mémoire (Runtime DSP)** | Allocations intermédiaires sur le tas dans le callback (`Vec::new()`, `clone()`). | Dépilage atomique au vol et partage en lecture seule via **`Arc<[f32]>`**. | **0 allocation sur le tas** dans la boucle DSP ; stabilité absolue du temps de traitement par frame. |
 | **Désallocation LOURDE (`Arc::drop`)** | Libération mémoire (`libc_free`) bloquante sur le thread DSP à la mort d'une voix. | Pattern **Garbage Channel** (`garbage_tx.send(...)` vers un thread poubelle). | Élimination de 100% des micro-décrochages lors de la rotation rapide ou du remplacement des assets audio. |
 | **Mixage & Locality (Cache L1/L2)** | Multiples passes de mixage par buffer, provoquant une éviction constante du cache L1. | **Single-Pass Mixing** : fusion des boucles de lecture, gain, pan et sommation. | Réduction drastique de la bande passante mémoire RAM <-> L1 ; baisse mesurable du temps de calcul du buffer. |
+| **Vectorisation SIMD (Zero-Branch)** | Branches (`if`), bounds checks et casts `as usize` bloquant l'auto-vectorisation dans la boucle binaurale. | **Loop Peeling & tranches contiguës** : élimination des invariants de la boucle chaude pour déclencher AVX2/NEON FMA. | Vitesse multipliée par **~9x** (3,81 µs -> 0,42 µs pour 256 samples). Débit maximal mesuré à **602 Melem/s**. |
 | **Ordonnancement Linux (RT)** | Préemption du thread audio par le noyau lors de fortes charges système (compilation...). | Promotion du thread vers la politique **`SCHED_FIFO` / `SCHED_RR`** (Temps Réel). | Immunité complète aux charges CPU externes ; **0 XRUN mesuré** même sous stress test 100% CPU. |
 
 ---
 
-## 7. CHECKLIST POUR RÉINITIALISER LE CONTEXTE DANS UNE NOUVELLE CONVERSATION
+## 8. CHECKLIST POUR RÉINITIALISER LE CONTEXTE DANS UNE NOUVELLE CONVERSATION
 
 Lors de la reprise de ce sujet dans une future session, le modèle devra considérer comme **acquis et non négociables** les axiomes architecturaux suivants :
 1. **Interdiction stricte des verrous :** Pas de `Mutex`, pas de `RwLock`, pas de primitives bloquantes dans le module `audio_engine`. Toute communication inter-threads doit passer via des canaux SPSC Lock-Free ou des atomiques.
@@ -143,3 +160,4 @@ Lors de la reprise de ce sujet dans une future session, le modèle devra consid�
 3. **Obligation du canal de recyclage :** Tout type possédé par référence (`Arc`, `Box`) sortant du cycle de vie du DSP doit obligatoirement transiter par `garbage_tx` pour être désalloué hors du thread audio.
 4. **Conservation de la localité mémoire :** Tout nouveau traitement d'effet (filtre, spatialisation) doit s'intégrer dans l'architecture de mixage *Single-Pass* pour préserver le cache CPU.
 5. **Négociation explicite de latence :** Ne jamais régresser vers `BufferSize::Default` sous Linux ; toujours négocier activement un quantum temps réel auprès d'ALSA/PipeWire.
+6. **Design "SIMD-Friendly" par défaut :** Toute boucle de traitement DSP d'échantillons doit séparer le *peeling* des conditions de bord du cœur du buffer afin de garantir l'auto-vectorisation vectorielle FMA par LLVM sans ajout de crates intrinsics externes.
