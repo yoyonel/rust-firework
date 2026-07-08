@@ -22,7 +22,8 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use hound::WavReader; // WAV file loader
 use log::info;
 use std::collections::HashMap;
-use std::collections::VecDeque; // Queue for pending sound events
+// use std::collections::VecDeque; // Queue for pending sound events
+use crossbeam_channel::{Receiver, Sender};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex}; // Thread-safe shared state
 use std::thread;
@@ -76,7 +77,10 @@ pub struct FireworksAudio3D {
     sample_rate: u32,
     block_size: usize,
     voices: Vec<Voice>,
-    play_queue: Arc<Mutex<VecDeque<PlayRequest>>>,
+
+    play_tx: Sender<PlayRequest>,
+    play_rx: Receiver<PlayRequest>,
+
     settings: AudioEngineSettings,
     running_pair: Arc<(Mutex<bool>, Condvar)>,
     // doppler_receiver: Option<Receiver<DopplerEvent>>,
@@ -117,6 +121,9 @@ impl FireworksAudio3D {
 
         let (garbage_tx, garbage_rx) = crossbeam_channel::unbounded();
 
+        // --- NOUVEAU : Ring buffer SPSC borné pour les requêtes audio ---
+        let (play_tx, play_rx) = crossbeam_channel::bounded(512);
+
         Ok(Self {
             rocket_data: Arc::new(rocket_data),
             explosion_data: Arc::new(explosion_data),
@@ -125,7 +132,10 @@ impl FireworksAudio3D {
             sample_rate: config.sample_rate,
             block_size: config.block_size,
             voices,
-            play_queue: Arc::new(Mutex::new(VecDeque::new())),
+
+            play_tx,
+            play_rx,
+
             settings: config.settings,
             running_pair: Arc::new((Mutex::new(true), Condvar::new())),
             // doppler_receiver: config.doppler_receiver,
@@ -217,7 +227,10 @@ impl FireworksAudio3D {
             filter_a,
             sent_at: Instant::now(), // for monitoring
         };
-        self.play_queue.lock().unwrap().push_back(req);
+
+        if let Err(e) = self.play_tx.try_send(req) {
+            log::warn!("⚠️ Audio play_queue full! Dropping sound event: {:?}", e);
+        }
     }
 
     pub fn play_rocket(&self, pos: (f32, f32), gain: f32) {
@@ -230,7 +243,9 @@ impl FireworksAudio3D {
     pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
         info!("🚀 Starting Audio Engine ...");
 
-        let queue = self.play_queue.clone();
+        // let queue = self.play_queue.clone();
+        let play_rx = self.play_rx.clone();
+
         let mut local_voices = self.voices.clone(); // Ownership exclusif pour le thread audio
         let sr = self.sample_rate;
         let block_size = self.block_size;
@@ -336,19 +351,12 @@ impl FireworksAudio3D {
 
                             // 3. Un seul nettoyage propre et vectorisé par LLVM
                             acc[..frames].fill([0.0; 2]);
-
-                            // Dépiler les requêtes ultra-rapidement (O(1) sur le lock)
-                            let mut pending_requests = Vec::new();
                             {
-                                tracy_zone!("audio::lock_queue", 0xFF0000);
-                                let mut q = queue.lock().expect("Failed to lock play queue");
-                                pending_requests.extend(q.drain(..));
-                            } // Le lock est libéré INSTANTANÉMENT !
+                                tracy_zone!("audio::consume_requests", 0x00FF00);
 
-                            // 2. Assigner les requêtes (Totalement Lock-Free)
-                            {
-                                tracy_zone!("audio::assign_requests", 0x00FF00);
-                                for req in pending_requests {
+                                // Dépilage atomique O(1) et assignation directe à la volée !
+                                // Plus de Vec intermédiaire 'pending_requests' alloué sur le tas !
+                                while let Ok(req) = play_rx.try_recv() {
                                     if let Some(v) = local_voices.iter_mut().find(|v| !v.active) {
                                         v.reset_from_request(&req);
                                         let latency = Instant::now().duration_since(req.sent_at);
@@ -361,6 +369,7 @@ impl FireworksAudio3D {
                                         );
                                     }
                                 }
+
                                 let nb_actives_voices =
                                     local_voices.iter().filter(|v| v.active).count();
                                 profiler.record_metric("nb_actives_voices", nb_actives_voices);
@@ -372,7 +381,7 @@ impl FireworksAudio3D {
                                 );
                             }
 
-                            // 3. Traitement DSP (Totalement Lock-Free, le tableau appartient au thread !)
+                            // 4. Traitement DSP (Totalement Lock-Free, le tableau appartient au thread !)
                             {
                                 let _guard = profiler.measure("process_active_voices");
                                 tracy_zone!("audio::process_dsp", 0xAA00FF);
