@@ -1,5 +1,5 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use fireworks_sim::audio_engine::binaural_processing::binauralize_mono;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use fireworks_sim::audio_engine::binaural_processing::{binauralize_mono, binauralize_mono_fast};
 use fireworks_sim::AudioEngineSettings;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -253,6 +253,63 @@ fn bench_binaural_multi_voice(c: &mut Criterion) {
     group.finish();
 }
 
+fn generate_test_signal(len: usize) -> Vec<f32> {
+    (0..len)
+        .map(|i| (i as f32 * 440.0 * 2.0 * std::f32::consts::PI / 48000.0).sin())
+        .collect()
+}
+
+fn bench_binaural_processing(c: &mut Criterion) {
+    let mut group = c.benchmark_group("Binaural_DSP_Comparison");
+
+    let settings = AudioEngineSettings::default();
+    let sample_rate = 48000;
+
+    // Position source latérale pour forcer un ITD et un ILD maximaux (pire cas CPU)
+    let src_pos = (-500.0, 100.0, 50.0);
+    let listener_pos = (0.0, 0.0, 0.0);
+
+    // Test sur 256 (PipeWire Low-Latency), 1024 (Standard), et 4096 (ALSA Default)
+    for size in [256, 1024, 4096].iter() {
+        let mono_input = generate_test_signal(*size);
+
+        // On informe Criterion du débit de données pour obtenir un affichage en MB/s ou M-samples/s
+        group.throughput(Throughput::Elements(*size as u64));
+
+        // 1. Ancienne méthode (naïve / scalaire avec branches)
+        group.bench_with_input(BenchmarkId::new("Original_Scalar", size), size, |b, _| {
+            b.iter(|| {
+                binauralize_mono(
+                    black_box(&mono_input),
+                    black_box(src_pos),
+                    black_box(listener_pos),
+                    black_box(sample_rate),
+                    black_box(&settings),
+                )
+            });
+        });
+
+        // 2. Nouvelle méthode (Zero-Branch / Auto-Vectorized LLVM)
+        group.bench_with_input(
+            BenchmarkId::new("Refactored_SIMD_Friendly", size),
+            size,
+            |b, _| {
+                b.iter(|| {
+                    binauralize_mono_fast(
+                        black_box(&mono_input),
+                        black_box(src_pos),
+                        black_box(listener_pos),
+                        black_box(sample_rate),
+                        black_box(&settings),
+                    )
+                });
+            },
+        );
+    }
+
+    group.finish();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Registration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -265,5 +322,6 @@ criterion_group!(
     bench_binaural_signal_types,
     bench_binaural_sample_rates,
     bench_binaural_multi_voice,
+    bench_binaural_processing,
 );
 criterion_main!(benches);
