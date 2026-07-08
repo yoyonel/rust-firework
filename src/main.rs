@@ -42,6 +42,7 @@ fn main() -> Result<()> {
     // Paramètres audio par défaut
     let audio_settings = AudioEngineSettings::default();
     // let doppler_queue = DopplerQueue::new();
+    // TODO: AUDIO SETTINGS ! => audio.toml
     let audio_config = FireworksAudioConfig {
         // TODO: meilleur gestion des chemins (assets), avec une lib (python) style pathlib
         rocket_path: "assets/sounds/rocket.wav".into(),
@@ -52,8 +53,9 @@ fn main() -> Result<()> {
         sample_rate: 48000,
         // TODO: étudier l'influence sonore (qualité du rendu) et de performance de ce paramètre block_size
         block_size: 512,
-        // limité à 32 voix, si MAX_ROCKETS "grand", évite le bordel sonore (effet mitraille très désagréable)
-        max_voices: cmp::min(32, physic_config.max_rockets),
+        // plus besoin de limiter (pour l'instant) le nombre de voix car le processing audio est bien plus optimisé
+        // on garde pour l'instant un planché max à 64 avant de faire plus de tests de stabilité/qualité
+        max_voices: cmp::min(64, physic_config.max_rockets),
         settings: audio_settings.clone(),
         // doppler_receiver: Some(doppler_queue.receiver.clone()),
         // doppler_states: Vec::new(),
