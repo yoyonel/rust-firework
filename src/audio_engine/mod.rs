@@ -25,3 +25,6 @@ pub use audio_event::DopplerEvent;
 
 pub mod safewavwriter;
 pub use safewavwriter::{AudioBlock, SafeWavWriter};
+
+pub mod config;
+pub use config::AudioConfig;
