@@ -18,7 +18,7 @@ pub use audio_loading::load_audio;
 pub use audio_loading::resample_linear;
 
 pub mod binaural_processing;
-pub use binaural_processing::binauralize_mono;
+pub use binaural_processing::binauralize_mono_fast;
 
 pub mod audio_event;
 pub use audio_event::DopplerEvent;
