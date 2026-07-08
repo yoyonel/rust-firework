@@ -186,6 +186,8 @@ pub fn generate_noise_texture() -> u32 {
         gl::GenTextures(1, &mut tex_id);
         gl::BindTexture(gl::TEXTURE_2D, tex_id);
 
+        crate::label_gl_object!(gl::TEXTURE, tex_id, "Tex_Console_Noise_Overlay");
+
         let mut data = [0u8; NOISE_TEXTURE_SIZE * NOISE_TEXTURE_SIZE];
 
         for item in &mut data {
