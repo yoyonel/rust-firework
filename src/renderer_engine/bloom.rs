@@ -324,6 +324,7 @@ impl BloomPass {
             let mut dummy_vao = 0;
             gl::GenVertexArrays(1, &mut dummy_vao);
 
+            // 🏷️ LABELLISATION DE TOUTES LES RESSOURCES BLOOM
             label_gl_object!(gl::FRAMEBUFFER, hdr_fbo, "FBO_HDR_Main");
             label_gl_object!(gl::TEXTURE, hdr_texture, "Tex_HDR_Scene_Color");
             label_gl_object!(gl::TEXTURE, bright_texture, "Tex_HDR_Brightness_Mask");
@@ -346,6 +347,20 @@ impl BloomPass {
                 "Shader_Bloom_Kawase_Up"
             );
             label_gl_object!(gl::PROGRAM, composition_shader, "Shader_PostFX_ToneMapping");
+
+            // 👉 AJOUTS DES RESSOURCES MANQUANTES :
+            label_gl_object!(
+                gl::PROGRAM,
+                comparison_shader,
+                "Shader_Bloom_Composition_Compare"
+            );
+            label_gl_object!(gl::PROGRAM, passthrough_shader, "Shader_Bloom_Passthrough");
+            label_gl_object!(gl::FRAMEBUFFER, comparison_fbo, "FBO_Bloom_Comparison");
+            for (i, &tex) in comparison_textures.iter().enumerate() {
+                let label = format!("Tex_Bloom_Compare_Mode_{}", i);
+                label_gl_object!(gl::TEXTURE, tex, &label);
+            }
+            label_gl_object!(gl::VERTEX_ARRAY, dummy_vao, "VAO_Fullscreen_Quad_Dummy");
 
             info!("✅ Bloom Pass initialized successfully (MRT enabled)");
 
