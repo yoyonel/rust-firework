@@ -24,7 +24,9 @@ macro_rules! pop_debug_group {
 macro_rules! label_gl_object {
     ($obj_type:expr, $obj_id:expr, $name:expr) => {
         if gl::ObjectLabel::is_loaded() && $obj_id != 0 {
-            if let Ok(c_str) = std::ffi::CString::new($name) {
+            // .as_bytes() fonctionne par auto-deref nativement sur :
+            // les &str (littéraux), les String, ET les &String !
+            if let Ok(c_str) = std::ffi::CString::new(($name).as_bytes()) {
                 gl::ObjectLabel($obj_type, $obj_id, -1, c_str.as_ptr());
             }
         }
