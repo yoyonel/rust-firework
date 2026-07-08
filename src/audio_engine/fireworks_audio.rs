@@ -268,10 +268,39 @@ impl FireworksAudio3D {
                     .default_output_device()
                     .ok_or(AudioThreadError::NoDevice)?;
 
+                // Sélection adaptative et propre du buffer low-latency
+                let buffer_size = match device.supported_output_configs() {
+                    Ok(mut configs) => {
+                        // On cherche si notre configuration cible (2 channels, 48kHz) supporte un range de buffer
+                        let target_sr = cpal::SampleRate(sr);
+                        let supports_low_latency = configs.any(|c| {
+                            c.channels() == 2
+                                && c.min_sample_rate() <= target_sr
+                                && c.max_sample_rate() >= target_sr
+                                && match c.buffer_size() {
+                                    cpal::SupportedBufferSize::Range { min, max } => {
+                                        *min <= 256 && *max >= 256
+                                    }
+                                    cpal::SupportedBufferSize::Unknown => true,
+                                }
+                        });
+
+                        if supports_low_latency {
+                            cpal::BufferSize::Fixed(256)
+                        } else {
+                            cpal::BufferSize::Default
+                        }
+                    }
+                    Err(e) => {
+                        log::warn!("Impossible d'inspecter les configs audio ({}), fallback sur Fixed(256)", e);
+                        cpal::BufferSize::Fixed(256)
+                    }
+                };
+
                 let config = cpal::StreamConfig {
                     channels: 2,
                     sample_rate: cpal::SampleRate(sr),
-                    buffer_size: cpal::BufferSize::Default,
+                    buffer_size,
                 };
 
                 let garbage_tx_cpal = garbage_tx.clone();
