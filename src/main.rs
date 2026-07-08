@@ -1,10 +1,10 @@
 // Ici on importe depuis la crate lib complète
 use anyhow::Result;
 use log::info;
-use std::{cmp, env, path::PathBuf};
+use std::{env, path::PathBuf};
 
-use fireworks_sim::audio_engine::settings::AudioEngineSettings;
-use fireworks_sim::audio_engine::{FireworksAudio3D, FireworksAudioConfig};
+use fireworks_sim::audio_engine::config::AudioConfig;
+use fireworks_sim::audio_engine::FireworksAudio3D;
 use fireworks_sim::physic_engine::config::PhysicConfig;
 use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
 use fireworks_sim::renderer_engine::renderer::Renderer;
@@ -24,6 +24,9 @@ fn main() -> Result<()> {
     let physic_config = PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
     info!("Physic config loaded:\n{:#?}", physic_config);
 
+    let audio_file_config = AudioConfig::from_file("assets/config/audio.toml").unwrap_or_default();
+    info!("Audio config loaded:\n{:#?}", audio_file_config);
+
     // --------------------------
     // Gestion du chemin d'export audio
     // --------------------------
@@ -40,27 +43,7 @@ fn main() -> Result<()> {
     // Initialisation des moteurs
     // --------------------------
     // Paramètres audio par défaut
-    let audio_settings = AudioEngineSettings::default();
-    // let doppler_queue = DopplerQueue::new();
-    // TODO: AUDIO SETTINGS ! => audio.toml
-    let audio_config = FireworksAudioConfig {
-        // TODO: meilleur gestion des chemins (assets), avec une lib (python) style pathlib
-        rocket_path: "assets/sounds/rocket.wav".into(),
-        explosion_path: "assets/sounds/explosion.wav".into(),
-        // TODO: afficher visuellement la position de l'auditeur
-        listener_pos: (0.0, 0.0),
-        // TODO: faudrait étudier l'influence de ce paramètre et les types de valeurs qu'on peut utiliser (et dans quel intérêt)
-        sample_rate: 48000,
-        // TODO: étudier l'influence sonore (qualité du rendu) et de performance de ce paramètre block_size
-        block_size: 512,
-        // plus besoin de limiter (pour l'instant) le nombre de voix car le processing audio est bien plus optimisé
-        // on garde pour l'instant un planché max à 64 avant de faire plus de tests de stabilité/qualité
-        max_voices: cmp::min(64, physic_config.max_rockets),
-        settings: audio_settings.clone(),
-        // doppler_receiver: Some(doppler_queue.receiver.clone()),
-        // doppler_states: Vec::new(),
-        // export_in_wav: true,
-    };
+    let audio_config = audio_file_config.to_engine_config(physic_config.max_rockets);
     let audio_engine = FireworksAudio3D::new(audio_config)?;
 
     let window_width = 1024;
