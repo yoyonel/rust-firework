@@ -154,6 +154,60 @@ tasks:
     deps: [fmt, clippy]
 
   # =========================================
+  # ⏱️ BENCHMARKS (Criterion.rs)
+  # =========================================
+  bench:
+    desc: "Lance tous les benchmarks Criterion (DSP + Binaural)"
+    cmds:
+      - echo "⏱️  Lancement de tous les benchmarks..."
+      - "{{.CARGO}} bench --no-default-features --features simd"
+
+  bench-dsp:
+    desc: "Benchmarks DSP audio : resample_linear_mono (upsample, downsample, identity, throughput)"
+    cmds:
+      - echo "⏱️  Benchmarks DSP (resample)..."
+      - "{{.CARGO}} bench --no-default-features --features simd --bench audio_dsp_bench"
+
+  bench-binaural:
+    desc: "Benchmarks traitement binaural 3D : binauralize_mono (positions, distances, blocs, multi-voix)"
+    cmds:
+      - echo "⏱️  Benchmarks binaural 3D..."
+      - "{{.CARGO}} bench --no-default-features --features simd --bench audio_binaural_bench"
+
+  bench-save-baseline:
+    desc: "Sauvegarde une baseline de performance (usage: task bench-save-baseline -- my_baseline)"
+    cmds:
+      - echo "💾 Sauvegarde de la baseline '{{.CLI_ARGS}}'..."
+      - "{{.CARGO}} bench --no-default-features --features simd -- --save-baseline {{.CLI_ARGS}}"
+
+  bench-compare:
+    desc: "Compare les performances contre une baseline (usage: task bench-compare -- my_baseline)"
+    cmds:
+      - echo "🔍 Comparaison contre la baseline '{{.CLI_ARGS}}'..."
+      - "{{.CARGO}} bench --no-default-features --features simd -- --baseline {{.CLI_ARGS}}"
+
+  bench-open-report:
+    desc: "Sert le rapport Criterion via HTTP local et ouvre le navigateur (Ctrl+C pour arrêter)"
+    vars:
+      CRITERION_DIR: "{{.ROOT_DIR}}/target/criterion"
+      PORT: "17380"
+      URL: "http://localhost:17380/report/index.html"
+    cmds:
+      - |
+        if [ ! -f "{{.CRITERION_DIR}}/report/index.html" ]; then
+          echo "⚠️  Rapport non trouvé. Lance d'abord : task bench"
+          exit 1
+        fi
+        echo "📊 Démarrage du serveur HTTP sur {{.URL}}"
+        echo "   (Ctrl+C pour arrêter)"
+        cd "{{.CRITERION_DIR}}" && python3 -m http.server {{.PORT}} &
+        SERVER_PID=$!
+        sleep 0.5
+        xdg-open "{{.URL}}" 2>/dev/null || open "{{.URL}}" 2>/dev/null || echo "Ouvre manuellement : {{.URL}}"
+        wait $SERVER_PID
+
+
+  # =========================================
   # 🧹 MAINTENANCE
   # =========================================
   clean:
