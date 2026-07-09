@@ -1,14 +1,15 @@
 use crate::physic_engine::PhysicEngineIterator;
+use crate::renderer_engine::utils::instrumentation::palette;
 use crate::RendererEngine;
 use anyhow::Result;
 use log::info;
 
+use crate::gpu_profile_zone;
 use crate::physic_engine::config::PhysicConfig;
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
 use crate::renderer_engine::BloomPass;
-use crate::{gpu_profile_zone, pop_debug_group, push_debug_group};
 
 /// Macro pour créer une zone Tracy **sans conditionner l'exécution du code**.
 /// Utilisation: `tracy_zone!("nom_zone", 0xRRGGBB);`
@@ -100,32 +101,41 @@ impl Renderer {
     }
 
     // Helper internal
-    unsafe fn render_particles<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
-        tracy_zone!("Renderer::render_particles::all", 0xFF00AA);
-        push_debug_group!(10, "Draw All Particles");
+    unsafe fn render_particles<P: PhysicEngineIterator>(
+        &mut self,
+        physic: &P,
+        profiler: &std::sync::Arc<
+            std::sync::Mutex<crate::renderer_engine::utils::gpu_profiler::GpuProfiler>,
+        >,
+    ) -> usize {
+        // 🟢 RAII unifié (GPU + CPU + RenderDoc). Englobe toute la fonction.
+        gpu_profile_zone!(10, "Draw All Particles", palette::NBODY, profiler);
 
         let mut total_particles = 0;
         for renderer in &mut self.renderers {
             let nb;
-            // Remplit le buffer GPU
+            // Remplit le buffer GPU (Opération purement CPU, on utilise uniquement tracy)
             {
-                tracy_zone!("Renderer::fill_buffer", 0x00FFAA);
+                tracy_zone!("Renderer::fill_buffer", palette::ENV);
                 nb = renderer.fill_particle_data_direct(physic);
             }
 
-            // Dessine les particules
+            // Dessine les particules (Opération hautement GPU, on utilise le profiler complet)
             {
-                tracy_zone!("Renderer::draw_call", 0xFF0000);
+                gpu_profile_zone!(
+                    11,
+                    "Renderer::Particles_with_Persistent_Buffer",
+                    palette::SHOCKWAVE,
+                    profiler
+                );
                 renderer.render_particles_with_persistent_buffer(nb, self.window_size_f32);
             }
 
             total_particles += nb;
         }
 
-        pop_debug_group!();
-
         total_particles
-    }
+    } // ⬅️ Ici, Drop automatique de "Draw All Particles"
 
     /// Returns a mutable reference to the bloom pass for configuration
     pub fn bloom_pass_mut(&mut self) -> &mut BloomPass {
@@ -150,58 +160,40 @@ impl RendererEngine for Renderer {
             }
         }
 
-        // ⏱️ 2. On prend une référence vers l'Arc pour alimenter nos macros sans emprunter self !
-        let profiler = &self.gpu_profiler;
+        // ⏱️ 2. On clone l'Arc (coût nul) pour alimenter nos macros SANS emprunter self !
+        let profiler = self.gpu_profiler.clone();
 
         // Zone globale de la frame
-        gpu_profile_zone!(0, "Renderer::render_frame", 0x00FF00, profiler);
-        tracy_zone!("Renderer::render_frame", 0x00FF00);
+        gpu_profile_zone!(0, "Renderer::render_frame", palette::FRAME, profiler);
 
         unsafe {
             if self.bloom_pass.enabled {
                 let particle_count;
 
-                push_debug_group!(1, "Pass: HDR Scene");
-
                 // Render to HDR framebuffer
                 {
-                    tracy_zone!("Renderer::bloom::begin_scene", 0x00FFFF);
+                    gpu_profile_zone!(1, "Pass: HDR Scene", palette::SCENE, profiler);
                     self.bloom_pass.begin_scene();
-                }
-
-                {
-                    tracy_zone!("Renderer::clear_HDR_buffer", 0xFF5500);
                     gl::ClearColor(0.0, 0.0, 0.0, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-                }
 
+                    particle_count = self.render_particles(physic, &profiler);
+                } // ⬅️ Drop RAII (PopDebugGroup + fin de query GPU)
                 {
-                    tracy_zone!("Renderer::render_particles", 0xFF00FF);
-                    particle_count = self.render_particles(physic);
-                }
-
-                pop_debug_group!();
-
-                {
-                    tracy_zone!("Renderer::bloom::end_scene_and_apply", 0xAA00FF);
+                    gpu_profile_zone!(2, "Pass: Bloom & Composite", palette::BLOOM, profiler);
                     // Apply bloom and render to screen
                     self.bloom_pass.end_scene_and_apply_bloom();
-                }
+                } // ⬅️ Drop RAII
                 particle_count
             } else {
-                push_debug_group!(0, "Pass: Forward (No Bloom)");
+                gpu_profile_zone!(0, "Pass: Forward (No Bloom)", palette::COMPOSITE, profiler);
 
-                tracy_zone!("Renderer::direct_rendering", 0x00AA00);
                 // Direct rendering without bloom
                 gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
                 gl::ClearColor(0.0, 0.0, 0.0, 1.0);
                 gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-                let count = self.render_particles(physic);
-
-                pop_debug_group!();
-
-                count
-            }
+                self.render_particles(physic, &profiler)
+            } // ⬅️ Drop RAII
         }
     }
 
