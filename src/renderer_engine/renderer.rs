@@ -8,7 +8,7 @@ use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
 use crate::renderer_engine::BloomPass;
-use crate::{pop_debug_group, push_debug_group};
+use crate::{gpu_profile_zone, pop_debug_group, push_debug_group};
 
 /// Macro pour créer une zone Tracy **sans conditionner l'exécution du code**.
 /// Utilisation: `tracy_zone!("nom_zone", 0xRRGGBB);`
@@ -29,14 +29,15 @@ macro_rules! tracy_zone {
 // ---------------------------------------------------------
 pub struct Renderer {
     max_particles_on_gpu: usize,
-
     // Window management
     window_size_f32: (f32, f32),
-
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
-
     // Bloom post-processing
     bloom_pass: BloomPass,
+    // moteur de profilage GPU autonome
+    pub gpu_profiler:
+        std::sync::Arc<std::sync::Mutex<crate::renderer_engine::utils::gpu_profiler::GpuProfiler>>,
+    last_gpu_log_time: std::time::Instant,
 }
 
 // ---------------------------------------------------------
@@ -83,11 +84,18 @@ impl Renderer {
         let bloom_pass = BloomPass::new(width, height)
             .map_err(|e| anyhow::anyhow!("Failed to initialize bloom: {}", e))?;
 
+        // 🟢 Initialize OpenGL Ring-Buffer
+        let gpu_profiler = std::sync::Arc::new(std::sync::Mutex::new(unsafe {
+            crate::renderer_engine::utils::gpu_profiler::GpuProfiler::new()
+        }));
+
         Ok(Self {
             window_size_f32: (width as f32, height as f32),
             renderers,
             max_particles_on_gpu,
             bloom_pass,
+            gpu_profiler,
+            last_gpu_log_time: std::time::Instant::now(),
         })
     }
 
@@ -128,7 +136,27 @@ impl Renderer {
 // Trait implementation
 impl RendererEngine for Renderer {
     fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
+        // ⏱️ 1. Récolte asynchrone des chronométrages réels de la frame N-1 et affichage
+        if let Ok(mut profiler) = self.gpu_profiler.lock() {
+            profiler.begin_frame();
+
+            // Echantillonnage à 2 secondes (Throttle anti-flood)
+            if self.last_gpu_log_time.elapsed().as_secs() >= 2 {
+                for result in &profiler.latest_results {
+                    log::info!("⏱️ GPU [{}]: {:.3} ms", result.name, result.duration_ms);
+                }
+                // Réinitialise le chronomètre après affichage
+                self.last_gpu_log_time = std::time::Instant::now();
+            }
+        }
+
+        // ⏱️ 2. On prend une référence vers l'Arc pour alimenter nos macros sans emprunter self !
+        let profiler = &self.gpu_profiler;
+
+        // Zone globale de la frame
+        gpu_profile_zone!(0, "Renderer::render_frame", 0x00FF00, profiler);
         tracy_zone!("Renderer::render_frame", 0x00FF00);
+
         unsafe {
             if self.bloom_pass.enabled {
                 let particle_count;
