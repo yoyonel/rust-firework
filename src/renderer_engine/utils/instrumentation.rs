@@ -1,4 +1,20 @@
-// src/renderer_engine/utils/instrumentation.rs
+/// Palette de couleurs "Nord Theme" pour le profiling Tracy
+pub mod palette {
+    pub const FRAME: u32 = 0xECEFF4;
+    pub const ENV: u32 = 0x88C0D0;
+    pub const SCENE: u32 = 0xD08770;
+    pub const AUTO_EXPOSURE: u32 = 0xEBCB8B;
+    pub const BLOOM: u32 = 0x5E81AC;
+    pub const DOF: u32 = 0xA3BE8C;
+    pub const MOTION_BLUR: u32 = 0xBF616A;
+    pub const COMPOSITE: u32 = 0x81A1C1;
+    pub const POSTPROCESS: u32 = 0xB48EAD;
+    pub const UI: u32 = 0x4C566A;
+    pub const GI_SYNC: u32 = 0x8FBCBB;
+    pub const GI_DEBUG: u32 = 0xB48EAD;
+    pub const NBODY: u32 = 0xD8DEE9;
+    pub const SHOCKWAVE: u32 = 0xE5A3C9;
+}
 
 #[macro_export]
 macro_rules! push_debug_group {
@@ -51,6 +67,8 @@ macro_rules! gpu_profile_zone {
             $id,
             $name,
             $color,
+            file!(),
+            line!(),
         );
     };
 }

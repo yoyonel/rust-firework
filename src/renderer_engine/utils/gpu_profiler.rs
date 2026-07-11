@@ -63,12 +63,13 @@ impl Drop for GpuQueryBuffer {
 pub const GPU_QUERY_BUFFER_COUNT: usize = 2;
 
 /// Métadonnées d'une zone enregistrée pendant la frame courante.
-#[derive(Clone, Copy, Default)]
 pub struct GpuStageRecord {
     pub name: &'static str,
     pub color: u32,
     pub start_query_index: usize,
     pub end_query_index: usize,
+    #[cfg(feature = "tracy")]
+    pub tracy_span: Option<tracy_client::GpuSpan>,
 }
 
 #[derive(Clone, Debug)]
@@ -88,6 +89,8 @@ pub struct GpuProfiler {
     pub read_index: usize,
     pub latest_results: Vec<GpuStageResult>,
     pub enabled: bool,
+    #[cfg(feature = "tracy")]
+    tracy_ctx: Option<tracy_client::GpuContext>,
 }
 
 impl GpuProfiler {
@@ -98,12 +101,31 @@ impl GpuProfiler {
     pub unsafe fn new() -> Self {
         let buffers = [GpuQueryBuffer::new(), GpuQueryBuffer::new()];
 
+        #[cfg(feature = "tracy")]
+        let tracy_ctx = {
+            let mut gl_timestamp: i64 = 0;
+            if gl::GetInteger64v::is_loaded() {
+                gl::GetInteger64v(gl::TIMESTAMP, &mut gl_timestamp);
+            }
+            tracy_client::Client::running().and_then(|client| {
+                client
+                    .new_gpu_context(
+                        Some("OpenGL Main Context"),
+                        tracy_client::GpuContextType::OpenGL,
+                        gl_timestamp,
+                        1.0,
+                    )
+                    .ok()
+            })
+        };
         Self {
             buffers,
             write_index: 0,
             read_index: 1,
             latest_results: Vec::with_capacity(32),
             enabled: true,
+            #[cfg(feature = "tracy")]
+            tracy_ctx,
         }
     }
 
@@ -131,7 +153,7 @@ impl GpuProfiler {
             return;
         }
 
-        let read_buffer = &self.buffers[self.read_index];
+        let read_buffer = &mut self.buffers[self.read_index];
         if read_buffer.records.is_empty() {
             return;
         }
@@ -151,9 +173,10 @@ impl GpuProfiler {
         }
 
         // 2. Lecture garantie sans stall : toutes les requêtes sont prêtes !
-        for record in &read_buffer.records {
-            let start_id = read_buffer.get_query_id(record.start_query_index);
-            let end_id = read_buffer.get_query_id(record.end_query_index);
+        let records_count = read_buffer.records.len();
+        for i in 0..records_count {
+            let start_id = read_buffer.get_query_id(read_buffer.records[i].start_query_index);
+            let end_id = read_buffer.get_query_id(read_buffer.records[i].end_query_index);
 
             let mut start_ts: u64 = 0;
             let mut end_ts: u64 = 0;
@@ -161,17 +184,23 @@ impl GpuProfiler {
             gl::GetQueryObjectui64v(start_id, gl::QUERY_RESULT, &mut start_ts);
             gl::GetQueryObjectui64v(end_id, gl::QUERY_RESULT, &mut end_ts);
 
-            // Calcul sécurisé (saturating_sub évite tout underflow en cas de wrap du timer hardware)
             let duration_ns = end_ts.saturating_sub(start_ts);
             let duration_ms = (duration_ns as f64) / 1_000_000.0;
 
             self.latest_results.push(GpuStageResult {
-                name: record.name,
-                color: record.color,
+                name: read_buffer.records[i].name,
+                color: read_buffer.records[i].color,
                 start_timestamp_ns: start_ts,
                 end_timestamp_ns: end_ts,
                 duration_ms,
             });
+
+            // 🟢 NOUVEAU : On transfère les timestamps du passé à la zone Tracy sauvée à la frame N-1
+            #[cfg(feature = "tracy")]
+            if let Some(span) = read_buffer.records[i].tracy_span.take() {
+                span.upload_timestamp_start(start_ts as i64);
+                span.upload_timestamp_end(end_ts as i64);
+            }
         }
     }
 
@@ -180,7 +209,14 @@ impl GpuProfiler {
     ///
     /// # Safety
     /// Le contexte OpenGL doit être actif.
-    pub unsafe fn start_stage(&mut self, name: &'static str, color: u32) -> Option<usize> {
+    /// Enregistre le timestamp de DÉBUT d'une zone sur le GPU.
+    pub unsafe fn start_stage(
+        &mut self,
+        name: &'static str,
+        color: u32,
+        _file: &'static str,
+        _line: u32,
+    ) -> Option<usize> {
         if !self.enabled || !gl::QueryCounter::is_loaded() {
             return None;
         }
@@ -196,12 +232,20 @@ impl GpuProfiler {
 
         gl::QueryCounter(query_id, gl::TIMESTAMP);
 
+        #[cfg(feature = "tracy")]
+        let tracy_span = self.tracy_ctx.as_ref().and_then(|ctx| {
+            // On utilise les arguments passés depuis la macro
+            ctx.span_alloc_color(name, "GPU", _file, _line, color).ok()
+        });
+
         let record_index = buffer.records.len();
         buffer.records.push(GpuStageRecord {
             name,
             color,
             start_query_index,
             end_query_index: 0,
+            #[cfg(feature = "tracy")]
+            tracy_span,
         });
 
         Some(record_index)
@@ -228,6 +272,12 @@ impl GpuProfiler {
         gl::QueryCounter(query_id, gl::TIMESTAMP);
 
         buffer.records[record_index].end_query_index = end_query_index;
+
+        // On informe Tracy que la commande GPU est poussée
+        #[cfg(feature = "tracy")]
+        if let Some(span) = &mut buffer.records[record_index].tracy_span {
+            span.end_zone();
+        }
     }
 }
 
@@ -239,8 +289,14 @@ pub struct GpuProfileGuard {
 }
 
 impl GpuProfileGuard {
-    pub fn new(profiler: Arc<Mutex<GpuProfiler>>, id: u32, name: &'static str, color: u32) -> Self {
-        // 1. RenderDoc Push Debug Group
+    pub fn new(
+        profiler: Arc<Mutex<GpuProfiler>>,
+        id: u32,
+        name: &'static str,
+        color: u32,
+        _file: &'static str, // 🟢 NOUVEAU
+        _line: u32,          // 🟢 NOUVEAU
+    ) -> Self {
         if gl::PushDebugGroup::is_loaded() {
             if let Ok(c_str) = std::ffi::CString::new(name) {
                 #[allow(unused_unsafe)]
@@ -250,9 +306,9 @@ impl GpuProfileGuard {
             }
         }
 
-        // 2. Enregistrement du début de zone dans notre GpuProfiler
         let record_index = if let Ok(mut lock) = profiler.lock() {
-            unsafe { lock.start_stage(name, color) }
+            // 🟢 NOUVEAU : Transfert au profiler
+            unsafe { lock.start_stage(name, color, _file, _line) }
         } else {
             None
         };

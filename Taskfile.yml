@@ -55,6 +55,11 @@ tasks:
     cmds:
       - "{{.CARGO}} run --profile ultra-speed"
 
+  run-ultra-speed-with-gamemoderun-and-tracy:
+    desc: "Lancement en mode performance maximale absolue sous X11"
+    cmds:
+      - echo "🏎️ Run en mode ULTRA-SPEED + MangoHud + GameModeRun + Tracy ..."
+      - mangohud vblank_mode=0 mesa_glthread=true gamemoderun ./target/release/fireworks_sim
   # =========================================
   # 📦 ULTRA-SIZE (TAILLE MIN)
   # =========================================
