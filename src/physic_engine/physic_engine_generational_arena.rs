@@ -14,6 +14,10 @@ use crate::physic_engine::{
     ParticleType, PhysicEngine, PhysicEngineFull, PhysicEngineIterator,
 };
 
+use crate::audio_engine::DopplerEvent;
+use crossbeam_channel::Sender;
+use std::time::Instant;
+
 #[derive(Debug)]
 pub struct PhysicEngineFireworks {
     rockets: Arena<Rocket>,     // Slots pour toutes les fusées
@@ -34,6 +38,8 @@ pub struct PhysicEngineFireworks {
 
     /// Forme des explosions (sphérique ou basée sur image)
     explosion_shape: ExplosionShape,
+
+    doppler_sender: Option<Sender<DopplerEvent>>,
 }
 
 impl PhysicEngineFireworks {
@@ -72,6 +78,7 @@ impl PhysicEngineFireworks {
                 config.particles_per_trail,
             ),
             explosion_shape: ExplosionShape::default(),
+            doppler_sender: None,
         };
 
         engine.next_rocket_interval = engine.compute_next_interval();
@@ -182,6 +189,19 @@ impl PhysicEngineFireworks {
                     &self.config,
                     &self.explosion_shape,
                 );
+
+                // On n'envoie le Doppler que si la fusée est active ET n'a pas encore explosé !
+                if rocket.active && !rocket.exploded {
+                    if let Some(tx) = &self.doppler_sender {
+                        let _ = tx.try_send(DopplerEvent {
+                            id: rocket.id,
+                            pos: (rocket.pos.x, rocket.pos.y),
+                            vel: (rocket.vel.x, rocket.vel.y), // Crucial pour le calcul de vitesse radiale !
+                            gain: 1.0,
+                            timestamp: Instant::now(),
+                        });
+                    }
+                }
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
                 // on incrémente le compteur d'explosion
@@ -453,6 +473,13 @@ impl PhysicEngine for PhysicEngineFireworks {
 
     fn as_physic_engine(&self) -> &dyn PhysicEngine {
         self
+    }
+
+    fn set_doppler_sender(
+        &mut self,
+        sender: crossbeam_channel::Sender<crate::audio_engine::DopplerEvent>,
+    ) {
+        self.doppler_sender = Some(sender);
     }
 }
 

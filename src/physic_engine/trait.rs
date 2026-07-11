@@ -1,8 +1,10 @@
+use crate::audio_engine::DopplerEvent;
 use crate::physic_engine::config::PhysicConfig;
 use crate::physic_engine::explosion_shape::ExplosionShape;
 use crate::physic_engine::particle::Particle;
 use crate::physic_engine::types::UpdateResult;
 use crate::physic_engine::ParticleType;
+use crossbeam_channel::Sender;
 
 pub trait PhysicEngineIterator {
     // Les types associés ne sont pas nécessaires ici si 'Particle' est importé.
@@ -106,6 +108,10 @@ pub trait PhysicEngine {
 
     /// Helper for upcasting from dyn PhysicEngineFull or other subtraits
     fn as_physic_engine(&self) -> &dyn PhysicEngine;
+
+    // NOUVEAU : Permet de connecter le canal d'émission Doppler.
+    // L'implémentation par défaut vide {} évite de casser d'autres moteurs physiques (ex: static_aos).
+    fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {}
 }
 
 pub trait PhysicEngineFull: PhysicEngine + PhysicEngineIterator {}
