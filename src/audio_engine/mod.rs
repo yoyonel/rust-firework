@@ -1,3 +1,6 @@
+pub mod dsp_processor;
+pub mod macros;
+
 pub mod r#trait;
 pub use r#trait::AudioEngine;
 
