@@ -3,6 +3,8 @@ use crate::audio_engine::{
     binauralize_mono_fast, load_audio, resample_linear, AudioBlock, AudioEngine, SafeWavWriter,
 };
 use crate::profiler::Profiler;
+#[cfg(feature = "tracy")]
+use crate::tracy_zone;
 use crate::AudioEngineSettings;
 // CPAL: cross-platform audio API
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
