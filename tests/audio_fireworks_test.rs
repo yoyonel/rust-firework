@@ -13,6 +13,7 @@ fn build_test_engine() -> FireworksAudio3D {
         block_size: 512,
         max_voices: 32,
         settings: AudioEngineSettings::default(),
+        doppler_receiver: None,
     })
     .expect("Failed to build test audio engine")
 }

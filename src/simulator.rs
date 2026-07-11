@@ -507,7 +507,8 @@ where
     fn synch_audio_with_physic(audio_engine: &mut A, update_result: &UpdateResult) {
         if let Some(rocket) = &update_result.new_rocket {
             debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
-            audio_engine.play_rocket((rocket.pos.x, rocket.pos.y), 0.8);
+            // MODIFIÉ : On utilise play_rocket_with_id en transmettant rocket.id !
+            audio_engine.play_rocket_with_id(rocket.id, (rocket.pos.x, rocket.pos.y), 0.8);
         }
 
         for (i, expl) in update_result.triggered_explosions.iter().enumerate() {

@@ -1,4 +1,5 @@
-use fireworks_sim::audio_engine::AudioEngine;
+use crossbeam_channel::Sender; // NOUVEAU
+use fireworks_sim::audio_engine::{AudioEngine, DopplerEvent}; // MODIFIÉ : ajout de DopplerEvent
 use fireworks_sim::physic_engine::config::PhysicConfig;
 use fireworks_sim::physic_engine::explosion_shape::ExplosionShape;
 use fireworks_sim::physic_engine::particle::Particle;
@@ -83,6 +84,7 @@ impl AudioEngine for DummyAudio {
     }
     fn set_listener_position(&mut self, _pos: (f32, f32)) {}
     fn play_rocket(&self, _pos: (f32, f32), _gain: f32) {}
+    fn play_rocket_with_id(&self, _id: u64, _pos: (f32, f32), _gain: f32) {}
     fn play_explosion(&self, _pos: (f32, f32), _gain: f32) {}
     fn start_audio_thread(&mut self, _export_path: Option<&str>) {}
     fn stop_audio_thread(&mut self) {}
@@ -111,6 +113,7 @@ impl PhysicEngine for DummyPhysic {
             triggered_explosions: &[],
         }
     }
+    fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {}
     fn close(&mut self) {}
     fn set_window_width(&mut self, _width: f32) {}
     fn reload_config(&mut self, _config: &PhysicConfig) -> bool {
@@ -249,6 +252,11 @@ impl AudioEngine for TestAudio {
     fn play_rocket(&self, _pos: (f32, f32), _gain: f32) {
         self.log.borrow_mut().push("play_rocket called".into());
     }
+    fn play_rocket_with_id(&self, _id: u64, _pos: (f32, f32), _gain: f32) {
+        self.log
+            .borrow_mut()
+            .push("play_rocket_with_id called".into());
+    }
     fn play_explosion(&self, _pos: (f32, f32), _gain: f32) {
         self.log.borrow_mut().push("play_explosion called".into());
     }
@@ -295,6 +303,11 @@ impl PhysicEngine for TestPhysic {
             new_rocket: None,
             triggered_explosions: &[],
         }
+    }
+    fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {
+        self.log
+            .borrow_mut()
+            .push("physic.set_doppler_sender".into());
     }
     fn set_window_width(&mut self, _width: f32) {
         self.log.borrow_mut().push("physic.set_width".into());
