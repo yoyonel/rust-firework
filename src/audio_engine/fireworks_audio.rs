@@ -47,6 +47,23 @@ macro_rules! tracy_zone {
     ($name:expr, $color:expr) => {};
 }
 
+/// Macro pour tracer des graphiques dans Tracy sans conditionner le code.
+#[cfg(feature = "tracy")]
+macro_rules! tracy_plot {
+    ($name:expr, $val:expr) => {
+        tracy_client::plot!($name, $val);
+    };
+}
+
+/// Version vide : le `let _ = $val;` informe le compilateur et Clippy que
+/// l'expression est "lue", éliminant tout avertissement sans générer le moindre code machine.
+#[cfg(not(feature = "tracy"))]
+macro_rules! tracy_plot {
+    ($name:expr, $val:expr) => {
+        let _ = $val;
+    };
+}
+
 /// Errors that can occur during audio thread initialization
 #[derive(Debug)]
 enum AudioThreadError {
@@ -83,12 +100,12 @@ pub struct FireworksAudio3D {
 
     settings: AudioEngineSettings,
     running_pair: Arc<(Mutex<bool>, Condvar)>,
-    // doppler_receiver: Option<Receiver<DopplerEvent>>,
-    // doppler_states: Vec<DopplerState>,
     global_gain: f32,
 
     garbage_tx: crossbeam_channel::Sender<Arc<Vec<[f32; 2]>>>,
     garbage_rx: crossbeam_channel::Receiver<Arc<Vec<[f32; 2]>>>,
+
+    doppler_receiver: Option<Receiver<crate::audio_engine::DopplerEvent>>,
 }
 
 impl FireworksAudio3D {
@@ -127,23 +144,18 @@ impl FireworksAudio3D {
         Ok(Self {
             rocket_data: Arc::new(rocket_data),
             explosion_data: Arc::new(explosion_data),
-
             listener_pos: config.listener_pos,
             sample_rate: config.sample_rate,
             block_size: config.block_size,
             voices,
-
             play_tx,
             play_rx,
-
             settings: config.settings,
             running_pair: Arc::new((Mutex::new(true), Condvar::new())),
-            // doppler_receiver: config.doppler_receiver,
-            // doppler_states: config.doppler_states,
             global_gain,
-
             garbage_tx,
             garbage_rx,
+            doppler_receiver: config.doppler_receiver, // MODIFIÉ : Initialisation
         })
     }
 
@@ -204,7 +216,14 @@ impl FireworksAudio3D {
     }
 
     /// Queue a sound for playback
-    fn enqueue_sound(&self, data: &[[f32; 2]], pos: (f32, f32), gain: f32) {
+    fn enqueue_sound(
+        &self,
+        id: u64,
+        data: &[[f32; 2]],
+        pos: (f32, f32),
+        gain: f32,
+        is_dynamic: bool,
+    ) {
         if self.global_gain == 0.0 {
             return;
         }
@@ -218,7 +237,20 @@ impl FireworksAudio3D {
 
         let global_gain = self.global_gain * gain;
 
-        let (stereo_data, fade_in, fade_out, filter_a) = self.prepare_voice(data, pos, global_gain);
+        let (stereo_data, fade_in, fade_out, filter_a) = if is_dynamic {
+            // Pour le Doppler, on envoie la donnée BRUTE (non spatialisée)
+            // On calcule quand même les fades initiaux en fonction de sample_rate
+            let fade_in_samples =
+                (self.sample_rate as f32 * (self.settings.fade_in_ms() / 1000.0)) as usize;
+            let fade_out_samples =
+                (self.sample_rate as f32 * (self.settings.fade_out_ms() / 1000.0)) as usize;
+
+            // Le filtre sera recalculé dynamiquement, on met une valeur par défaut sûre
+            (data.to_owned(), fade_in_samples, fade_out_samples, 0.05)
+        } else {
+            // Pour les explosions statiques, on garde l'optimisation existante (pré-calcul total)
+            self.prepare_voice(data, pos, global_gain)
+        };
         let req = PlayRequest {
             data: Arc::new(stereo_data),
             fade_in,
@@ -226,6 +258,9 @@ impl FireworksAudio3D {
             gain: global_gain,
             filter_a,
             sent_at: Instant::now(), // for monitoring
+            id,                      // NOUVEAU
+            pos,                     // NOUVEAU
+            is_dynamic,              // NOUVEAU
         };
 
         if let Err(e) = self.play_tx.try_send(req) {
@@ -234,10 +269,15 @@ impl FireworksAudio3D {
     }
 
     pub fn play_rocket(&self, pos: (f32, f32), gain: f32) {
-        self.enqueue_sound(&self.rocket_data, pos, gain);
+        self.enqueue_sound(0, &self.explosion_data, pos, gain, false);
     }
+
+    pub fn play_rocket_with_id(&self, id: u64, pos: (f32, f32), gain: f32) {
+        self.enqueue_sound(id, &self.rocket_data, pos, gain, true);
+    }
+
     pub fn play_explosion(&self, pos: (f32, f32), gain: f32) {
-        self.enqueue_sound(&self.explosion_data, pos, gain);
+        self.enqueue_sound(0, &self.rocket_data, pos, gain, false);
     }
 
     pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
@@ -261,7 +301,8 @@ impl FireworksAudio3D {
         // Prépare les données audio à partager avec le thread audio
         let _rocket_data_ref = Arc::new(self.rocket_data.clone()); // Ce qui est zéro copie (le Arc clone est O(1)).
         let _settings = self.settings.clone();
-        let _listener_pos_clone = self.listener_pos; // utile dans prepare_voice_with_doppler
+        let doppler_rx_clone = self.doppler_receiver.clone();
+        let listener_pos_clone = self.listener_pos; // utile dans prepare_voice_with_doppler
 
         let export_writer_arc: Option<Arc<Mutex<SafeWavWriter>>> = if let Some(path) = export_path {
             let writer = Arc::new(Mutex::new(SafeWavWriter::new(path, sr)));
@@ -381,7 +422,54 @@ impl FireworksAudio3D {
                                 );
                             }
 
-                            // 4. Traitement DSP (Totalement Lock-Free, le tableau appartient au thread !)
+                            // 3.5 Interception des événements Doppler
+                            if let Some(doppler_rx) = &doppler_rx_clone {
+                                #[cfg(feature = "tracy")]
+                                tracy_zone!("audio::process_doppler", 0x00AAFF);
+
+                                let mut events_received_in_block = 0;
+
+                                while let Ok(event) = doppler_rx.try_recv() {
+                                    events_received_in_block += 1;
+
+                                    // On cherche la voix dynamique correspondante à cet ID
+                                    if let Some(v) = local_voices
+                                        .iter_mut()
+                                        .find(|v| v.active && v.is_dynamic && v.id == event.id)
+                                    {
+                                        v.world_pos = event.pos;
+                                        v.velocity = event.vel;
+
+                                        // CALCUL PHYSIQUE DU DOPPLER (2D)
+                                        let dx = v.world_pos.0 - listener_pos_clone.0;
+                                        let dy = v.world_pos.1 - listener_pos_clone.1;
+                                        let dist = (dx * dx + dy * dy).sqrt().max(0.001);
+
+                                        // Vecteur direction normalisé
+                                        let dir_x = -dx / dist;
+                                        let dir_y = -dy / dist;
+
+                                        // Vitesse radiale (produit scalaire)
+                                        let v_radial = v.velocity.0 * dir_x + v.velocity.1 * dir_y;
+
+                                        // Facteur Doppler avec c = 343.0 m/s
+                                        let c = 343.0_f32;
+                                        v.playback_rate = (c / (c - v_radial)).clamp(0.25, 4.0);
+
+                                        tracy_plot!(
+                                            "Audio: Doppler Rate (alpha)",
+                                            v.playback_rate as f64
+                                        );
+                                    }
+                                }
+                                profiler.record_metric("doppler_events", events_received_in_block);
+                                tracy_plot!(
+                                    "Audio: Doppler Events/Block",
+                                    events_received_in_block as f64
+                                );
+                            }
+
+                            // 4. Traitement DSP (Totalement Lock-Free !)
                             {
                                 let _guard = profiler.measure("process_active_voices");
                                 tracy_zone!("audio::process_dsp", 0xAA00FF);
@@ -391,41 +479,87 @@ impl FireworksAudio3D {
                                         continue;
                                     }
 
+                                    // --- 4.A CALCUL AU BLOCK-RATE (Uniquement pour les dynamiques) ---
+                                    if v.is_dynamic {
+                                        let dx = v.world_pos.0 - listener_pos_clone.0;
+                                        let dy = v.world_pos.1 - listener_pos_clone.1;
+                                        let distance = (dx * dx + dy * dy).sqrt();
+
+                                        // Atténuation de distance classique
+                                        let att =
+                                            (1.0 - distance / _settings.max_distance()).max(0.0);
+
+                                        // Panning basique 2D (Gauche/Droite)
+                                        let pan = (dx / _settings.max_distance()).clamp(-1.0, 1.0);
+                                        let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+
+                                        // On définit la nouvelle cible de gain pour la fin du bloc
+                                        v.target_gains[0] = angle.cos() * att * v.user_gain;
+                                        v.target_gains[1] = angle.sin() * att * v.user_gain;
+
+                                        // Filtre passe-bas dynamique en fonction de la distance
+                                        let fc = (_settings.f_min()
+                                            + (_settings.f_max() - _settings.f_min())
+                                                * (-_settings.distance_alpha() * distance).exp())
+                                        .clamp(_settings.f_min(), _settings.f_max());
+                                        let dt = 1.0 / sr as f32;
+                                        let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
+                                        v.filter_a = dt / (rc + dt);
+                                    } else {
+                                        // Si statique, le gain est déjà précalculé ou géré par prepare_voice.
+                                        // On force target = current pour annuler l'interpolation.
+                                        v.target_gains[0] = v.user_gain;
+                                        v.target_gains[1] = v.user_gain;
+                                        v.current_gains[0] = v.user_gain;
+                                        v.current_gains[1] = v.user_gain;
+                                    }
+
+                                    // Calcul des "pas" d'interpolation (ramp) par échantillon
+                                    let step_l =
+                                        (v.target_gains[0] - v.current_gains[0]) / frames as f32;
+                                    let step_r =
+                                        (v.target_gains[1] - v.current_gains[1]) / frames as f32;
+
                                     let slice_ref =
                                         v.data.as_ref().expect("Voice data should exist");
                                     let total_len = slice_ref.len();
-                                    let start = v.pos;
 
-                                    if start >= total_len {
-                                        v.active = false;
-                                        if let Some(dead_arc) = v.data.take() {
-                                            let _ = garbage_tx_cpal.try_send(dead_arc);
-                                        }
-                                        continue;
-                                    }
-
-                                    let n = (total_len - start).min(frames);
-                                    let voice_samples = &slice_ref[start..start + n];
-
-                                    // SINGLE-PASS DSP
                                     let mut prev_l = v.filter_state[0];
                                     let mut prev_r = v.filter_state[1];
                                     let filter_a = v.filter_a;
-                                    let gain = v.user_gain;
+                                    let rate = v.playback_rate as f64;
 
-                                    for (i, sample) in voice_samples.iter().enumerate() {
-                                        let mut l = sample[0];
-                                        let mut r = sample[1];
+                                    // Variables locales rapides pour l'interpolation de gain
+                                    let mut cur_gain_l = v.current_gains[0];
+                                    let mut cur_gain_r = v.current_gains[1];
 
-                                        // 1. Fade in / Fade out à la volée
-                                        let current_pos = start + i;
-                                        if current_pos < v.fade_in_samples {
-                                            let alpha =
-                                                current_pos as f32 / v.fade_in_samples as f32;
+                                    // --- 4.B CALCUL AU SAMPLE-RATE ---
+                                    for frame in acc[..frames].iter_mut() {
+                                        let current_pos_f = v.pos;
+                                        let index = current_pos_f as usize;
+
+                                        if index >= total_len {
+                                            break;
+                                        }
+
+                                        let sample0 = slice_ref[index];
+                                        let sample1 = if index + 1 < total_len {
+                                            slice_ref[index + 1]
+                                        } else {
+                                            [0.0, 0.0]
+                                        };
+
+                                        let frac = (current_pos_f - index as f64) as f32;
+
+                                        let mut l = sample0[0] + frac * (sample1[0] - sample0[0]);
+                                        let mut r = sample0[1] + frac * (sample1[1] - sample0[1]);
+
+                                        if index < v.fade_in_samples {
+                                            let alpha = index as f32 / v.fade_in_samples as f32;
                                             l *= alpha;
                                             r *= alpha;
                                         } else {
-                                            let rem = total_len - current_pos;
+                                            let rem = total_len - index;
                                             if rem < v.fade_out_samples {
                                                 let alpha = rem as f32 / v.fade_out_samples as f32;
                                                 l *= alpha;
@@ -433,13 +567,9 @@ impl FireworksAudio3D {
                                             }
                                         }
 
-                                        // 2. Filtre passe-bas IIR
                                         l = prev_l + filter_a * (l - prev_l);
                                         r = prev_r + filter_a * (r - prev_r);
 
-                                        // ANTI-DENORMALS (Flush-to-Zero)
-                                        // Empêche le CPU de s'effondrer (100x plus lent) sur
-                                        // les valeurs microscopiques à la fin des sons.
                                         if l.abs() < 1e-15 {
                                             l = 0.0;
                                         }
@@ -450,16 +580,23 @@ impl FireworksAudio3D {
                                         prev_l = l;
                                         prev_r = r;
 
-                                        // 3. Accumulation directe
-                                        acc[i][0] += l * gain;
-                                        acc[i][1] += r * gain;
+                                        // Avance l'interpolation de gain et l'applique !
+                                        cur_gain_l += step_l;
+                                        cur_gain_r += step_r;
+                                        frame[0] += l * cur_gain_l;
+                                        frame[1] += r * cur_gain_r;
+
+                                        v.pos += rate;
                                     }
 
+                                    // Sauvegarde des états pour le bloc suivant
                                     v.filter_state[0] = prev_l;
                                     v.filter_state[1] = prev_r;
-                                    v.pos += n;
+                                    // La cible actuelle devient le point de départ du prochain bloc
+                                    v.current_gains[0] = v.target_gains[0];
+                                    v.current_gains[1] = v.target_gains[1];
 
-                                    if v.pos >= total_len {
+                                    if v.pos >= total_len as f64 {
                                         v.active = false;
                                         if let Some(dead_arc) = v.data.take() {
                                             let _ = garbage_tx_cpal.try_send(dead_arc);
@@ -595,6 +732,10 @@ impl AudioEngine for FireworksAudio3D {
         self.play_rocket(pos, gain)
     }
 
+    fn play_rocket_with_id(&self, id: u64, pos: (f32, f32), gain: f32) {
+        self.play_rocket_with_id(id, pos, gain)
+    }
+
     fn play_explosion(&self, pos: (f32, f32), gain: f32) {
         self.play_explosion(pos, gain)
     }
@@ -633,7 +774,6 @@ impl AudioEngine for FireworksAudio3D {
 #[cfg(test)]
 mod tests {
     use super::*;
-    // use crate::audio_engine::audio_event::doppler_queue::DopplerQueue;
     use crate::audio_engine::binaural_processing::binauralize_mono_fast;
     use crate::audio_engine::settings::AudioEngineSettingsBuilder;
 
@@ -662,11 +802,14 @@ mod tests {
             gain,
             filter_a: 0.0025,
             sent_at: Instant::now(),
+            // --- NOUVEAUX CHAMPS REQUIS ---
+            id: 0,
+            pos,
+            is_dynamic: false,
         }
     }
 
     fn build_engine() -> FireworksAudio3D {
-        // let doppler_queue = DopplerQueue::new();
         FireworksAudio3D::new(FireworksAudioConfig {
             rocket_path: "assets/sounds/rocket.wav".into(),
             explosion_path: "assets/sounds/explosion.wav".into(),
@@ -675,8 +818,8 @@ mod tests {
             block_size: 1024 * 4,
             max_voices: 16,
             settings: AudioEngineSettings::default(),
-            // doppler_receiver: Some(doppler_queue.receiver.clone()),
-            // doppler_states: Vec::new(),
+            // --- NOUVEAU CHAMP REQUIS ---
+            doppler_receiver: None,
         })
         .expect("Failed to build test audio engine")
     }
@@ -687,7 +830,6 @@ mod tests {
 
         let req = enqueue_sound_test(&engine, (-engine.settings.max_distance(), 0.0), 1.0);
 
-        // for sample in &req.data {
         for sample in req.data.iter() {
             let ratio = sample[0] / (sample[1] + 1e-8);
             assert!(
@@ -703,7 +845,6 @@ mod tests {
 
         let req = enqueue_sound_test(&engine, (engine.settings.max_distance(), 0.0), 1.0);
 
-        // for sample in &req.data {
         for sample in req.data.iter() {
             let ratio = sample[1] / (sample[0] + 1e-8);
             assert!(
@@ -719,7 +860,6 @@ mod tests {
 
         let req = enqueue_sound_test(&engine, (0.0, 0.0), 1.0);
 
-        // for sample in &req.data {
         for sample in req.data.iter() {
             let diff = (sample[0] - sample[1]).abs();
             assert!(diff < 1e-6, "Channels should be equal for center pan");
@@ -861,13 +1001,10 @@ mod tests {
             println!("  [{:02}] {:.6}, {:.6}", i, s[0], s[1]);
         }
 
-        // Assertion plus robuste : on vérifie la somme (global energy) plutôt que chaque échantillon.
-        // Si tu veux vérifier chaque échantillon, on pourrait garder l'ancienne boucle assert,
-        // mais la somme est préférable pour signaux filtrés/delais fractionnaires.
         assert!(
-        sum_left > sum_right,
-        "Canal gauche doit être globalement plus fort que droite pour source à gauche (see debug output above)"
-    );
+            sum_left > sum_right,
+            "Canal gauche doit être globalement plus fort que droite pour source à gauche (see debug output above)"
+        );
     }
 
     // FIXME: il doit y avoir un problème de symétrie avec le filtre audio binaural

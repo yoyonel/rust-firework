@@ -1,8 +1,6 @@
 // Ici on importe depuis la crate lib complète
 use anyhow::Result;
-use log::info;
-use std::{env, path::PathBuf};
-
+use fireworks_sim::audio_engine::audio_event::doppler_queue::DopplerQueue;
 use fireworks_sim::audio_engine::config::AudioConfig;
 use fireworks_sim::audio_engine::FireworksAudio3D;
 use fireworks_sim::physic_engine::config::PhysicConfig;
@@ -10,7 +8,10 @@ use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngine
 use fireworks_sim::renderer_engine::renderer::Renderer;
 use fireworks_sim::utils::show_rust_core_dependencies;
 use fireworks_sim::window_engine::{GlfwWindowEngine, WindowEngine};
+use fireworks_sim::PhysicEngine;
 use fireworks_sim::Simulator;
+use log::info;
+use std::{env, path::PathBuf};
 
 /// Main entry point for the Fireworks Simulator application.
 fn main() -> Result<()> {
@@ -42,8 +43,10 @@ fn main() -> Result<()> {
     // --------------------------
     // Initialisation des moteurs
     // --------------------------
+    let doppler_queue = DopplerQueue::new();
     // Paramètres audio par défaut
-    let audio_config = audio_file_config.to_engine_config(physic_config.max_rockets);
+    let mut audio_config = audio_file_config.to_engine_config(physic_config.max_rockets);
+    audio_config.doppler_receiver = Some(doppler_queue.receiver.clone());
     let audio_engine = FireworksAudio3D::new(audio_config)?;
 
     let window_width = 1024;
@@ -61,7 +64,8 @@ fn main() -> Result<()> {
     // 2. Init Renderer (now that GL context is ready)
     let renderer_engine = Renderer::new(window_width, window_height, &physic_config)?;
 
-    let physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
+    let mut physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
+    physic_engine.set_doppler_sender(doppler_queue.sender.clone());
 
     // 3. Init Simulator
     info!("🚀 Starting Fireworks Simulator...");

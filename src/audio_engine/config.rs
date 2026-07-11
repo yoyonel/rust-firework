@@ -56,6 +56,7 @@ impl AudioConfig {
             // On conserve votre logique de plafonnement dynamique
             max_voices: std::cmp::min(self.max_voices, max_physic_rockets),
             settings,
+            doppler_receiver: None, // NOUVEAU : On initialise le champ à None par défaut
         }
     }
 }
