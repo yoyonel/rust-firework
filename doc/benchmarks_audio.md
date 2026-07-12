@@ -533,6 +533,6 @@ task bench-open-report
 
 - [profiling_guide.md](./profiling_guide.md) — Flamegraph, Callgrind, Heaptrack pour le profiling CPU/RAM
 - [audio.md](./audio.md) — Architecture du thread audio (CPAL, Condvar, voices pool)
-- [2026-07-08 - SYNTHÈSE OPTIMISATIONS AUDIO](./2026-07-08%20-%20SYNTH%C3%88SE%20D%27ARCHITECTURE%20:%20REFACTORING%20&%20OPTIMISATIONS%20AUDIO%20TEMPS%20R%C3%89EL%20%28RUST%20-%20LINUX%29.md) — Historique des optimisations lock-free, FTZ/DAZ, buffer ALSA/PipeWire
+- [2026-07-08 - SYNTHÈSE OPTIMISATIONS AUDIO](./2026-07-08_synthese_architecture_refactoring_audio_temps_reel.md) — Historique des optimisations lock-free, FTZ/DAZ, buffer ALSA/PipeWire
 - [benches/audio_dsp_bench.rs](../benches/audio_dsp_bench.rs) — Code source des benchmarks DSP
 - [benches/audio_binaural_bench.rs](../benches/audio_binaural_bench.rs) — Code source des benchmarks binaural
