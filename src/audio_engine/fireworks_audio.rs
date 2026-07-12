@@ -256,6 +256,11 @@ impl FireworksAudio3D {
 
         thread::spawn(move || {
             let audio_result: Result<(), AudioThreadError> = (|| {
+                #[cfg(target_os = "linux")]
+                unsafe {
+                    libc::pthread_setname_np(libc::pthread_self(), c"cpal_audio_dsp".as_ptr());
+                }
+
                 let host = cpal::default_host();
                 let device = host
                     .default_output_device()
