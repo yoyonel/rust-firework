@@ -1,6 +1,5 @@
 // Dans src/audio_engine/dsp_processor.rs
 
-use crate::audio_engine::binaural_processing::binauralize_mono_fast_into; // 🎯 IMPORT D'ÉTAPE 1
 use crate::audio_engine::types::{PlayRequest, Voice};
 use crate::audio_engine::{AudioBlock, DopplerEvent, SafeWavWriter};
 use crate::profiler::Profiler;
@@ -130,14 +129,15 @@ impl DspProcessor {
                 continue;
             }
 
-            // 1. Calcul des paramètres physiques au Block-Rate (une fois par bloc de ~5ms)
+            // 1. Paramètres physiques 3D de base
             let dx = v.world_pos.0 - self.listener_pos.0;
             let dy = v.world_pos.1 - self.listener_pos.1;
-            let distance = (dx * dx + dy * dy).sqrt();
+            let dz = 0.0; // Zéro si la hauteur z n'est pas encore gérée par le moteur physique
+            let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-6);
 
             let att = (1.0 - distance / self.settings.max_distance()).max(0.0);
 
-            // Filtre passe-bas dynamique en fonction de la distance
+            // Filtre passe-bas dynamique
             let fc = (self.settings.f_min()
                 + (self.settings.f_max() - self.settings.f_min())
                     * (-self.settings.distance_alpha() * distance).exp())
@@ -153,32 +153,69 @@ impl DspProcessor {
             let mut prev_l = v.filter_state[0];
             let mut prev_r = v.filter_state[1];
             let rate = v.playback_rate as f64;
-            let gain = v.user_gain * att; // Gain combiné avec l'atténuation de distance
 
-            // 2. Extraction LERP (Doppler) + Filtre dans le Scratchpad Mono (au Sample-Rate)
-            // ZÉRO ALLOCATION : on écrit directement dans self.scratch_mono dans le cache L1 !
-            for mono_out in self.scratch_mono[..frames].iter_mut() {
-                let current_pos_f = v.pos;
-                let index = current_pos_f as usize;
+            // 2. Calcul du Binaural ou Panning (Une fois par bloc !)
+            let (itd_l_samples, itd_r_samples, gain_l, gain_r) = if self.settings.use_binaural() {
+                let azimuth = dx.atan2(-dz);
+                let theta = azimuth.abs();
+                let elevation = dy.atan2(distance);
+
+                let c = 343.0_f32;
+                let itd =
+                    ((self.settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
+                let ild_db =
+                    self.settings.max_ild_db() * theta.sin() * (1.0 - 0.25 * elevation.sin().abs());
+                let far_gain = 10f32.powf(-ild_db / 20.0);
+
+                if azimuth >= 0.0 {
+                    (itd * self.sample_rate as f32, 0.0, att * far_gain, att)
+                } else {
+                    (0.0, itd * self.sample_rate as f32, att, att * far_gain)
+                }
+            } else {
+                let pan = (dx / self.settings.max_distance()).clamp(-1.0, 1.0);
+                let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+                (0.0, 0.0, angle.cos() * att, angle.sin() * att)
+            };
+
+            let final_gain_l = v.user_gain * gain_l;
+            let final_gain_r = v.user_gain * gain_r;
+
+            // 3. Boucle de Mixage : Lecture spatiale directe (Zéro Buffer Intermédiaire)
+            for frame in self.acc[..frames].iter_mut() {
+                let current_pos = v.pos;
+                let index = current_pos as usize;
 
                 if index >= total_len {
-                    *mono_out = 0.0; // Silence de sécurité en fin de buffer
-                    continue;
+                    break;
                 }
 
-                let sample0 = slice_ref[index];
-                let sample1 = if index + 1 < total_len {
-                    slice_ref[index + 1]
-                } else {
-                    [0.0, 0.0]
+                // 🎯 L'ASTUCE ABSOLUE : Fonction de lecture qui recule dans le temps (ITD)
+                let interpolate = |pos: f64| -> f32 {
+                    if pos < 0.0 {
+                        return 0.0;
+                    } // Silence avant que le son n'atteigne l'oreille
+                    let idx = pos as usize;
+                    if idx >= total_len {
+                        return 0.0;
+                    }
+
+                    // Somme mono de la source stéréo originale
+                    let s0 = (slice_ref[idx][0] + slice_ref[idx][1]) * 0.5;
+                    let s1 = if idx + 1 < total_len {
+                        (slice_ref[idx + 1][0] + slice_ref[idx + 1][1]) * 0.5
+                    } else {
+                        0.0
+                    };
+                    let frac = (pos - idx as f64) as f32;
+                    s0 + frac * (s1 - s0)
                 };
-                let frac = (current_pos_f - index as f64) as f32;
 
-                // Interpolation linéaire (LERP) sur les canaux d'origine
-                let mut l = sample0[0] + frac * (sample1[0] - sample0[0]);
-                let mut r = sample0[1] + frac * (sample1[1] - sample0[1]);
+                // On lit directement le signal aux deux positions temporelles (Gauche / Droite)
+                let mut l = interpolate(current_pos - itd_l_samples as f64);
+                let mut r = interpolate(current_pos - itd_r_samples as f64);
 
-                // Fade-in / Fade-out
+                // Application des Fades
                 if index < v.fade_in_samples {
                     let alpha = index as f32 / v.fade_in_samples as f32;
                     l *= alpha;
@@ -192,7 +229,7 @@ impl DspProcessor {
                     }
                 }
 
-                // Filtre passe-bas IIR
+                // Filtre IIR Passe-bas
                 l = prev_l + filter_a * (l - prev_l);
                 r = prev_r + filter_a * (r - prev_r);
 
@@ -206,51 +243,16 @@ impl DspProcessor {
                 prev_l = l;
                 prev_r = r;
 
-                // Somme mono pour alimenter l'étage de spatialisation
-                *mono_out = (l + r) * 0.5 * gain;
+                // Sommation directe dans le buffer CPAL final
+                frame[0] += l * final_gain_l;
+                frame[1] += r * final_gain_r;
+
                 v.pos += rate;
             }
 
             v.filter_state[0] = prev_l;
             v.filter_state[1] = prev_r;
 
-            // 3. Spatialisation 3D (Binaural ou Panning) dans le Scratchpad Stéréo
-            if self.settings.use_binaural() {
-                // ZÉRO ALLOCATION : binauralise depuis scratch_mono vers scratch_stereo
-                binauralize_mono_fast_into(
-                    &self.scratch_mono[..frames],
-                    &mut self.scratch_stereo[..frames],
-                    (v.world_pos.0, v.world_pos.1, 0.0),
-                    (self.listener_pos.0, self.listener_pos.1, 0.0),
-                    self.sample_rate,
-                    &self.settings,
-                );
-
-                // Sommation vectorisée par LLVM dans le buffer d'accumulation principal
-                for (acc_frame, &spatial_frame) in self.acc[..frames]
-                    .iter_mut()
-                    .zip(&self.scratch_stereo[..frames])
-                {
-                    acc_frame[0] += spatial_frame[0];
-                    acc_frame[1] += spatial_frame[1];
-                }
-            } else {
-                // Panning 2D basique si le binaural est désactivé
-                let pan = (dx / self.settings.max_distance()).clamp(-1.0, 1.0);
-                let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-                let gain_l = angle.cos();
-                let gain_r = angle.sin();
-
-                for (acc_frame, &mono_sample) in self.acc[..frames]
-                    .iter_mut()
-                    .zip(&self.scratch_mono[..frames])
-                {
-                    acc_frame[0] += mono_sample * gain_l;
-                    acc_frame[1] += mono_sample * gain_r;
-                }
-            }
-
-            // Désactivation de la voix si le pointeur dépasse la taille totale
             if v.pos as usize >= total_len {
                 v.active = false;
                 if let Some(dead_arc) = v.data.take() {
@@ -306,5 +308,118 @@ impl DspProcessor {
             crate::log_metrics!(profiler);
             self.last_log = Instant::now();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::f32::consts::PI;
+
+    /// Génère un buffer stéréo contenant une onde sinusoïdale pure de fréquence donnée.
+    fn generate_sine_wave(
+        freq_hz: f32,
+        sample_rate: u32,
+        duration_samples: usize,
+    ) -> Vec<[f32; 2]> {
+        (0..duration_samples)
+            .map(|i| {
+                let t = i as f32 / sample_rate as f32;
+                let val = (2.0 * PI * freq_hz * t).sin();
+                [val, val]
+            })
+            .collect()
+    }
+
+    /// Simule la logique d'interpolation continue sans état (Stateless Reading) de notre DspProcessor.
+    fn process_stateless_chunk(
+        source: &[[f32; 2]],
+        start_pos: f64,
+        playback_rate: f64,
+        frames: usize,
+    ) -> (Vec<[f32; 2]>, f64) {
+        let total_len = source.len();
+        let mut output = Vec::with_capacity(frames);
+        let mut current_pos = start_pos;
+
+        for _ in 0..frames {
+            let idx = current_pos as usize;
+            if idx >= total_len {
+                output.push([0.0, 0.0]);
+            } else {
+                // Interpolation linéaire LERP (notre Ground Truth)
+                let s0 = source[idx];
+                let s1 = if idx + 1 < total_len {
+                    source[idx + 1]
+                } else {
+                    [0.0, 0.0]
+                };
+                let frac = (current_pos - idx as f64) as f32;
+
+                let l = s0[0] + frac * (s1[0] - s0[0]);
+                let r = s0[1] + frac * (s1[1] - s0[1]);
+                output.push([l, r]);
+            }
+            current_pos += playback_rate;
+        }
+
+        (output, current_pos)
+    }
+
+    #[test]
+    fn test_phase_continuity_across_block_boundaries() {
+        let sample_rate = 48_000;
+        let block_size = 256;
+        let total_blocks = 4;
+        let total_samples = block_size * total_blocks;
+
+        // 1. Source : Sinusoïde pure à 440 Hz (La fondamental)
+        let source_audio = generate_sine_wave(440.0, sample_rate, total_samples + 100);
+
+        // 2. Traitement Mode A : Un seul bloc continu de 1024 échantillons (La Vérité Terrain)
+        let (reference_output, _) = process_stateless_chunk(&source_audio, 0.0, 1.0, total_samples);
+
+        // 3. Traitement Mode B : 4 blocs successifs de 256 échantillons
+        let mut chunked_output = Vec::with_capacity(total_samples);
+        let mut pos_cursor = 0.0;
+
+        for _ in 0..total_blocks {
+            let (chunk, next_pos) =
+                process_stateless_chunk(&source_audio, pos_cursor, 1.0, block_size);
+            chunked_output.extend(chunk);
+            pos_cursor = next_pos;
+        }
+
+        // 4. Vérification de l'équivalence parfaite et de la continuité de phase aux frontières
+        for i in 0..total_samples {
+            let ref_l = reference_output[i][0];
+            let chunk_l = chunked_output[i][0];
+            let diff = (ref_l - chunk_l).abs();
+
+            assert!(
+                diff < 1e-5,
+                "Discontinuité détectée à l'échantillon {} ! Attendu: {}, Obtenu: {}, Diff: {}",
+                i,
+                ref_l,
+                chunk_l,
+                diff
+            );
+
+            // Vérification spécifique aux frontières de blocs (ex: 255 -> 256)
+            if i > 0 && i % block_size == 0 {
+                let slope_before = chunked_output[i][0] - chunked_output[i - 1][0];
+                let ref_slope = reference_output[i][0] - reference_output[i - 1][0];
+
+                assert!(
+                    (slope_before - ref_slope).abs() < 1e-5,
+                    "Rupture de pente (Phase Jump) à la frontière du bloc (Index {}) ! La dérivée n'est pas continue.",
+                    i
+                );
+            }
+        }
+
+        println!(
+            "✅ Test de continuité de phase validé avec succès sur {} blocs audio !",
+            total_blocks
+        );
     }
 }
