@@ -40,6 +40,7 @@ copypasta = "0.10.2"
 
 # Tracy (désactivé par défaut, activé via feature)
 tracy-client = { version = "0.18.4", optional = true, features = ["enable", "fibers"] }
+libc = "0.2.186"
 
 [patch.crates-io]
 tracy-client = { path = "../rust_tracy_client/tracy-client" }
