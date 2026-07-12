@@ -49,6 +49,56 @@ fn main() -> Result<()> {
     audio_config.doppler_receiver = Some(doppler_queue.receiver.clone());
     let audio_engine = FireworksAudio3D::new(audio_config)?;
 
+    // =========================================================================
+    // 🎙️ MODE PROFILING : HEADLESS AUDIO STRESS TEST (PERF + HOTSPOT)
+    // =========================================================================
+    let args: Vec<String> = std::env::args().collect();
+    if let Some(pos) = args.iter().position(|a| a == "--headless-audio-stress") {
+        let duration_secs: u64 = args.get(pos + 1).and_then(|s| s.parse().ok()).unwrap_or(10); // 10 secondes par défaut
+
+        info!(
+            "🎧 [PERF MODE] Démarrage du stress-test audio pour {} secondes...",
+            duration_secs
+        );
+        info!("   (Zéro rendu GLFW/OpenGL, saturation des voix actives)");
+
+        use std::thread;
+        use std::time::{Duration, Instant};
+
+        // 1. Initialisation du moteur audio (avec le nombre max de fusées de la physique)
+        let audio_config = audio_file_config.to_engine_config(physic_config.max_rockets);
+        let mut audio_engine = FireworksAudio3D::new(audio_config)?;
+        audio_engine.start_audio_thread(None);
+
+        // 2. Boucle de stress-test dans le thread principal (simule 60 FPS de requêtes)
+        let start_time = Instant::now();
+        let dt = Duration::from_millis(16); // ~60 FPS
+        let mut angle = 0.0_f32;
+
+        while start_time.elapsed().as_secs() < duration_secs {
+            angle += 0.05;
+
+            // Simule des fusées en mouvement circulaire rapide autour de l'auditeur
+            for i in 0..8 {
+                let r = 50.0 + (i as f32 * 20.0);
+                let a = angle + (i as f32 * std::f32::consts::FRAC_PI_4);
+                let pos = (a.cos() * r, a.sin() * r);
+
+                // Exécute les méthodes réelles et disponibles sur votre moteur
+                audio_engine.play_rocket(pos, 0.7);
+                if i % 4 == 0 {
+                    audio_engine.play_explosion(pos, 1.0);
+                }
+            }
+
+            thread::sleep(dt);
+        }
+
+        audio_engine.stop_audio_thread();
+        info!("🏁 [PERF MODE] Stress-test terminé avec succès.");
+        return Ok(());
+    }
+
     let window_width = 1024;
     let window_height = 800;
 

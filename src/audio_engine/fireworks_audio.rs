@@ -282,6 +282,9 @@ impl FireworksAudio3D {
                     export_writer: export_writer_arc.clone(),
                     block_index: 0,
                     acc: vec![[0.0; 2]; max_supported_frames],
+                    // 🎯 INITIALISATION DES TAMPONS DE BROUILLON (ZÉRO ALLOCATION ULTÉRIEURE)
+                    scratch_mono: vec![0.0; max_supported_frames],
+                    scratch_stereo: vec![[0.0; 2]; max_supported_frames],
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
                 };

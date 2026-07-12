@@ -265,3 +265,41 @@ tasks:
     desc: "Compile avec Tracy activé"
     cmds:
       - "{{.CARGO}} build --features tracy --release"
+
+# =========================================
+  # 🎧 PROFILING PERF + HOTSPOT (AUDIO DOPPLER)
+  # =========================================
+  build-perf:
+      desc: "Compile avec les symboles et Frame Pointers pour Linux perf"
+      env:
+        RUSTFLAGS: "-C force-frame-pointers=yes" # Compatible Cargo stable !
+      cmds:
+        - echo "🛠️ Compilation du profil Perf-Friendly..."
+        - "{{.CARGO}} build --profile perf"
+
+  record-perf-audio:
+    desc: "Enregistre 10s de stress-test audio pur avec perf (sans rendu graphique)"
+    deps: [build-perf]
+    vars:
+      PERF_DATA: "target/perf_audio_doppler.data"
+    cmds:
+      - echo "🎙️ Enregistrement haute fréquence (997 Hz) du moteur audio..."
+      # -F 997 : fréquence d'échantillonnage prime pour éviter les résonances avec les boucles
+      # --call-graph fp : utilise les Frame Pointers (ultra léger et précis grâce au profil Cargo)
+      # --sample-cpu : enregistre sur quel cœur CPU le thread tourne (visible dans Hotspot)
+      - perf record -F 997 --call-graph fp --sample-cpu -o {{.PERF_DATA}} ./target/perf/{{.APP_NAME}} --headless-audio-stress 10
+
+  hotspot-audio:
+      desc: "Ouvre l'enregistrement audio directement dans l'interface graphique Hotspot"
+      vars:
+        PERF_DATA: "target/perf_audio_doppler.data"
+      cmds:
+        - |
+          if [ ! -f "{{.PERF_DATA}}" ]; then
+            echo "⚠️ Aucun fichier perf.data trouvé ! Lancement de l'enregistrement..."
+            task record-perf-audio
+          fi
+        - echo "🚀 Lancement de Hotspot GUI..."
+        # Lancement au PREMIER PLAN sans masquer les erreurs.
+        # Si l'AppImage échoue à cause de FUSE, tu verras immédiatement l'erreur dans le terminal !
+        - hotspot {{.PERF_DATA}}
