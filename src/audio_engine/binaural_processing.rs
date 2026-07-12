@@ -1,19 +1,22 @@
 use crate::AudioEngineSettings;
 
-/// Version optimisée "Zero-Branch / Auto-Vectorized" pour le benchmark
-pub fn binauralize_mono_fast(
+/// Version "Zero-Allocation / Zero-Branch / Auto-Vectorized"
+/// Écrit directement le rendu 3D dans un buffer pré-alloué pour éliminer le gras (alloc::vec).
+pub fn binauralize_mono_fast_into(
     mono: &[f32],
+    output_stereo: &mut [[f32; 2]], // 🎯 INJECTION DU BUFFER : Zéro allocation !
     src_pos: (f32, f32, f32),
     listener_pos: (f32, f32, f32),
     sample_rate: u32,
     settings: &AudioEngineSettings,
-) -> Vec<[f32; 2]> {
-    let n = mono.len();
+) {
+    // On sécurise la taille à traiter sans aucun bounds check ultérieur
+    let n = mono.len().min(output_stereo.len());
     if n == 0 {
-        return Vec::new();
+        return;
     }
 
-    // 1. Calculs géométriques et gains (strictement identiques)
+    // 1. Calculs géométriques et gains (strictement inchangés et déterministes)
     let dx = src_pos.0 - listener_pos.0;
     let dy = src_pos.1 - listener_pos.1;
     let dz = src_pos.2 - listener_pos.2;
@@ -35,25 +38,43 @@ pub fn binauralize_mono_fast(
         (0.0, itd, att, att * far_gain)
     };
 
-    // 2. Allocation unique du buffer stéréo de sortie
-    let mut stereo = vec![[0.0; 2]; n];
+    // 2. Travail direct sur la tranche utile du buffer réutilisé
+    let stereo_slice = &mut output_stereo[..n];
 
-    // 3. Traitement séparé des canaux pour éliminer 100% des conditions dans le Hot Loop
+    // Note : Plus besoin de initialiser à zéro via un memset coûteux !
+    // process_channel va directement écraser les anciennes valeurs de la frame précédente.
     process_channel(
-        mono,
+        &mono[..n],
         itd_left * sample_rate as f32,
         gain_left,
-        &mut stereo,
+        stereo_slice,
         0,
     );
     process_channel(
-        mono,
+        &mono[..n],
         itd_right * sample_rate as f32,
         gain_right,
-        &mut stereo,
+        stereo_slice,
         1,
     );
+}
 
+pub fn binauralize_mono_fast(
+    mono: &[f32],
+    src_pos: (f32, f32, f32),
+    listener_pos: (f32, f32, f32),
+    sample_rate: u32,
+    settings: &AudioEngineSettings,
+) -> Vec<[f32; 2]> {
+    let mut stereo = vec![[0.0; 2]; mono.len()];
+    binauralize_mono_fast_into(
+        mono,
+        &mut stereo,
+        src_pos,
+        listener_pos,
+        sample_rate,
+        settings,
+    );
     stereo
 }
 

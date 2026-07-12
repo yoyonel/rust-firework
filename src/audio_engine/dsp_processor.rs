@@ -1,5 +1,6 @@
 // Dans src/audio_engine/dsp_processor.rs
 
+use crate::audio_engine::binaural_processing::binauralize_mono_fast_into; // 🎯 IMPORT D'ÉTAPE 1
 use crate::audio_engine::types::{PlayRequest, Voice};
 use crate::audio_engine::{AudioBlock, DopplerEvent, SafeWavWriter};
 use crate::profiler::Profiler;
@@ -21,6 +22,12 @@ pub struct DspProcessor {
     pub acc: Vec<[f32; 2]>,
     pub last_log: Instant,
     pub log_interval: Duration,
+
+    /// 🎯 TAMPON DE BROUILLON MONO : Alloué 1 seule fois au démarrage.
+    pub scratch_mono: Vec<f32>,
+    /// 🎯 TAMPON DE BROUILLON STÉRÉO : Alloué 1 seule fois au démarrage.
+    /// Reste chaud dans le cache L1/L2 du CPU à chaque bloc audio !
+    pub scratch_stereo: Vec<[f32; 2]>,
 }
 
 impl DspProcessor {
@@ -30,7 +37,10 @@ impl DspProcessor {
         let _audio_frame_guard = profiler.measure("audio_frame");
         let frames = data.len() / 2;
 
-        if frames > self.acc.len() {
+        if frames > self.acc.len()
+            || frames > self.scratch_mono.len()
+            || frames > self.scratch_stereo.len()
+        {
             log::error!("Buffer under-allocated! Requested {} frames", frames);
             return;
         }
@@ -42,10 +52,10 @@ impl DspProcessor {
         self.consume_requests(profiler);
         self.process_doppler(profiler);
 
-        // 3. Rendu DSP
+        // 3. Rendu DSP (Isolé dans Hotspot via #[inline(never)])
         self.process_dsp(frames, profiler);
 
-        // 4. Finalisation et monitoring
+        // 4. Finalisation et monitoring (Soft clipping isolé dans Hotspot)
         self.write_cpal_buffer(data, frames, global_gain, profiler);
         self.export_wav(data, frames);
         self.log_metrics(profiler);
@@ -108,7 +118,9 @@ impl DspProcessor {
         }
     }
 
-    #[inline(always)]
+    /// 🎯 BOÎTE HOTSPOT 1 : Traitement DSP par bloc et par voix (LERP + 3D Binaural)
+    /// L'annotation #[inline(never)] garantit que ce bloc sera visible individuellement dans perf.
+    #[inline(never)]
     fn process_dsp(&mut self, frames: usize, profiler: &Profiler) {
         let _guard = profiler.measure("process_active_voices");
         crate::tracy_zone!("audio::process_dsp", 0xAA00FF);
@@ -118,54 +130,40 @@ impl DspProcessor {
                 continue;
             }
 
-            // --- 4.A CALCUL AU BLOCK-RATE ---
-            if v.is_dynamic {
-                let dx = v.world_pos.0 - self.listener_pos.0;
-                let dy = v.world_pos.1 - self.listener_pos.1;
-                let distance = (dx * dx + dy * dy).sqrt();
+            // 1. Calcul des paramètres physiques au Block-Rate (une fois par bloc de ~5ms)
+            let dx = v.world_pos.0 - self.listener_pos.0;
+            let dy = v.world_pos.1 - self.listener_pos.1;
+            let distance = (dx * dx + dy * dy).sqrt();
 
-                let att = (1.0 - distance / self.settings.max_distance()).max(0.0);
-                let pan = (dx / self.settings.max_distance()).clamp(-1.0, 1.0);
-                let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+            let att = (1.0 - distance / self.settings.max_distance()).max(0.0);
 
-                v.target_gains[0] = angle.cos() * att * v.user_gain;
-                v.target_gains[1] = angle.sin() * att * v.user_gain;
-
-                let fc = (self.settings.f_min()
-                    + (self.settings.f_max() - self.settings.f_min())
-                        * (-self.settings.distance_alpha() * distance).exp())
-                .clamp(self.settings.f_min(), self.settings.f_max());
-                let dt = 1.0 / self.sample_rate as f32;
-                let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
-                v.filter_a = dt / (rc + dt);
-            } else {
-                v.target_gains[0] = v.user_gain;
-                v.target_gains[1] = v.user_gain;
-                v.current_gains[0] = v.user_gain;
-                v.current_gains[1] = v.user_gain;
-            }
-
-            let step_l = (v.target_gains[0] - v.current_gains[0]) / frames as f32;
-            let step_r = (v.target_gains[1] - v.current_gains[1]) / frames as f32;
+            // Filtre passe-bas dynamique en fonction de la distance
+            let fc = (self.settings.f_min()
+                + (self.settings.f_max() - self.settings.f_min())
+                    * (-self.settings.distance_alpha() * distance).exp())
+            .clamp(self.settings.f_min(), self.settings.f_max());
+            let dt = 1.0 / self.sample_rate as f32;
+            let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
+            let filter_a = dt / (rc + dt);
+            v.filter_a = filter_a;
 
             let slice_ref = v.data.as_ref().expect("Voice data should exist");
             let total_len = slice_ref.len();
 
             let mut prev_l = v.filter_state[0];
             let mut prev_r = v.filter_state[1];
-            let filter_a = v.filter_a;
             let rate = v.playback_rate as f64;
+            let gain = v.user_gain * att; // Gain combiné avec l'atténuation de distance
 
-            let mut cur_gain_l = v.current_gains[0];
-            let mut cur_gain_r = v.current_gains[1];
-
-            // --- 4.B CALCUL AU SAMPLE-RATE ---
-            for frame in self.acc[..frames].iter_mut() {
+            // 2. Extraction LERP (Doppler) + Filtre dans le Scratchpad Mono (au Sample-Rate)
+            // ZÉRO ALLOCATION : on écrit directement dans self.scratch_mono dans le cache L1 !
+            for mono_out in self.scratch_mono[..frames].iter_mut() {
                 let current_pos_f = v.pos;
                 let index = current_pos_f as usize;
 
                 if index >= total_len {
-                    break;
+                    *mono_out = 0.0; // Silence de sécurité en fin de buffer
+                    continue;
                 }
 
                 let sample0 = slice_ref[index];
@@ -176,9 +174,11 @@ impl DspProcessor {
                 };
                 let frac = (current_pos_f - index as f64) as f32;
 
+                // Interpolation linéaire (LERP) sur les canaux d'origine
                 let mut l = sample0[0] + frac * (sample1[0] - sample0[0]);
                 let mut r = sample0[1] + frac * (sample1[1] - sample0[1]);
 
+                // Fade-in / Fade-out
                 if index < v.fade_in_samples {
                     let alpha = index as f32 / v.fade_in_samples as f32;
                     l *= alpha;
@@ -192,6 +192,7 @@ impl DspProcessor {
                     }
                 }
 
+                // Filtre passe-bas IIR
                 l = prev_l + filter_a * (l - prev_l);
                 r = prev_r + filter_a * (r - prev_r);
 
@@ -205,20 +206,52 @@ impl DspProcessor {
                 prev_l = l;
                 prev_r = r;
 
-                cur_gain_l += step_l;
-                cur_gain_r += step_r;
-                frame[0] += l * cur_gain_l;
-                frame[1] += r * cur_gain_r;
-
+                // Somme mono pour alimenter l'étage de spatialisation
+                *mono_out = (l + r) * 0.5 * gain;
                 v.pos += rate;
             }
 
             v.filter_state[0] = prev_l;
             v.filter_state[1] = prev_r;
-            v.current_gains[0] = v.target_gains[0];
-            v.current_gains[1] = v.target_gains[1];
 
-            if v.pos >= total_len as f64 {
+            // 3. Spatialisation 3D (Binaural ou Panning) dans le Scratchpad Stéréo
+            if self.settings.use_binaural() {
+                // ZÉRO ALLOCATION : binauralise depuis scratch_mono vers scratch_stereo
+                binauralize_mono_fast_into(
+                    &self.scratch_mono[..frames],
+                    &mut self.scratch_stereo[..frames],
+                    (v.world_pos.0, v.world_pos.1, 0.0),
+                    (self.listener_pos.0, self.listener_pos.1, 0.0),
+                    self.sample_rate,
+                    &self.settings,
+                );
+
+                // Sommation vectorisée par LLVM dans le buffer d'accumulation principal
+                for (acc_frame, &spatial_frame) in self.acc[..frames]
+                    .iter_mut()
+                    .zip(&self.scratch_stereo[..frames])
+                {
+                    acc_frame[0] += spatial_frame[0];
+                    acc_frame[1] += spatial_frame[1];
+                }
+            } else {
+                // Panning 2D basique si le binaural est désactivé
+                let pan = (dx / self.settings.max_distance()).clamp(-1.0, 1.0);
+                let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+                let gain_l = angle.cos();
+                let gain_r = angle.sin();
+
+                for (acc_frame, &mono_sample) in self.acc[..frames]
+                    .iter_mut()
+                    .zip(&self.scratch_mono[..frames])
+                {
+                    acc_frame[0] += mono_sample * gain_l;
+                    acc_frame[1] += mono_sample * gain_r;
+                }
+            }
+
+            // Désactivation de la voix si le pointeur dépasse la taille totale
+            if v.pos as usize >= total_len {
                 v.active = false;
                 if let Some(dead_arc) = v.data.take() {
                     let _ = self.garbage_tx.try_send(dead_arc);
@@ -227,7 +260,9 @@ impl DspProcessor {
         }
     }
 
-    #[inline(always)]
+    /// 🎯 BOÎTE HOTSPOT 2 : Soft Clipping & Écriture CPAL
+    /// L'annotation #[inline(never)] permet de séparer le coût mathématique (.tanh()) du mixage DSP dans perf.
+    #[inline(never)]
     fn write_cpal_buffer(
         &mut self,
         data: &mut [f32],

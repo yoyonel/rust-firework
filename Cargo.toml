@@ -107,6 +107,12 @@ lto = "fat"
 codegen-units = 1
 panic = "abort"
 
+[profile.perf]
+inherits = "release"
+debug = true # Indispensable : conserve les symboles DWARF et numéros de ligne pour Hotspot
+strip = false # Ne pas supprimer les tables de symboles
+opt-level = 3 # Vrai niveau de perf production
+
 [package.metadata.cargo-shear]
 # Pour ignorer les fichiers legacy qui ne sont pas encore intégrés
 ignored-paths = [
