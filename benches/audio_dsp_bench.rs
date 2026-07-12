@@ -1,4 +1,4 @@
-use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 use fireworks_sim::audio_engine::dsp::resample_linear_mono;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -128,6 +128,68 @@ fn bench_resample_one_second(c: &mut Criterion) {
     group.finish();
 }
 
+// Exemple de structure de bench à ajouter pour évaluer le surcoût du LERP fractionnaire
+fn bench_doppler_lerp_resampling(c: &mut Criterion) {
+    let mut group = c.benchmark_group("doppler/lerp_resampling");
+    let input = make_sine(48000, 440.0, 48000); // 1 seconde de buffer brut
+
+    // Facteurs Doppler typiques :
+    // 1.0 = statique (baseline), 1.2 = approche rapide (+20% pitch), 0.8 = éloignement
+    for &alpha in &[0.8_f32, 1.0, 1.2, 2.5] {
+        group.throughput(Throughput::Elements(1024));
+        group.bench_with_input(BenchmarkId::from_parameter(alpha), &alpha, |b, &rate| {
+            b.iter(|| {
+                // Simulation de la boucle interne de votre Voice (1024 frames)
+                let mut pos = 0.0_f64;
+                let mut out = [0.0_f32; 1024];
+                for sample in out.iter_mut() {
+                    let idx = pos as usize;
+                    let frac = (pos - idx as f64) as f32;
+                    let s0 = input[idx % (input.len() - 1)];
+                    let s1 = input[(idx + 1) % input.len()];
+                    *sample = s0 + frac * (s1 - s0);
+                    pos += rate as f64;
+                }
+                criterion::black_box(out);
+            });
+        });
+    }
+    group.finish();
+}
+
+fn bench_doppler_geometry_update(c: &mut Criterion) {
+    let mut group = c.benchmark_group("doppler/geometry_block_update");
+    let listener_pos = (0.0_f32, 0.0_f32);
+    let c_sound = 343.0_f32;
+
+    // Évaluer le coût mathématique pour 1, 16, 64 et 128 sources simultanées
+    for n_voices in [1usize, 16, 64, 128] {
+        let voices: Vec<((f32, f32), (f32, f32))> = (0..n_voices)
+            .map(|i| ((100.0 + i as f32 * 10.0, 50.0), (-50.0, 20.0)))
+            .collect();
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(n_voices),
+            &voices,
+            |b, v_list| {
+                b.iter(|| {
+                    for &(pos, vel) in v_list {
+                        let dx = pos.0 - listener_pos.0;
+                        let dy = pos.1 - listener_pos.1;
+                        let dist = (dx * dx + dy * dy).sqrt().max(0.001);
+                        let dir_x = -dx / dist;
+                        let dir_y = -dy / dist;
+                        let v_radial = vel.0 * dir_x + vel.1 * dir_y;
+                        let alpha = (c_sound / (c_sound - v_radial)).clamp(0.25, 4.0);
+                        criterion::black_box(alpha);
+                    }
+                });
+            },
+        );
+    }
+    group.finish();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Registration
 // ─────────────────────────────────────────────────────────────────────────────
@@ -139,5 +201,7 @@ criterion_group!(
     bench_resample_identity,
     bench_resample_extreme_upsample,
     bench_resample_one_second,
+    bench_doppler_lerp_resampling,
+    bench_doppler_geometry_update,
 );
 criterion_main!(benches);
