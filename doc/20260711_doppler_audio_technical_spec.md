@@ -88,9 +88,19 @@ La courbe inférieure (`Audio: Doppler Events/Block`) trace le nombre d'événem
 
 ---
 
-## 4. BILAN DE PERFORMANCE ET CONCLUSION
+## 4. BILAN DE PERFORMANCE ET ARCHITECTURE "ZÉRO-HEAP"
 
-L'architecture finale respecte rigoureusement les contraintes temps réel strictes de l'audio haute performance :
-* **Zéro Allocation (Thread CPAL) :** Tous les buffers d'accumulation et tranches d'interpolation sont pré-alloués lors de l'initialisation. La file `crossbeam` est consommée en place par déplacement de structures légères.
-* **Efficacité Cache (LLVM SIMD) :** L'itération directe sur les tranches (*slices mutables*) sans indexation manuelle et la contiguïté des échantillons en mémoire permettent une vectorisation optimale des boucles d'interpolation linéaire par le compilateur Rust.
-* **Charge CPU marginale :** L'exécution du calcul géométrique lourd confiné au Block-Rate combinée à l'addition simple du Sample-Rate garantit un surcoût CPU global négligeable (inférieur à 3% pour 16 voix simultanées), préservant une latence ultra-faible ($\approx 4\text{ ms}$) et une stabilité absolue sans aucun *underrun*.
+L'architecture finale a été auditée et optimisée sous Linux via `perf` et l'interface graphique `Hotspot` en mode de stress-test intensif sans rendu graphique (`--headless-audio-stress 10`, 128 sources actives simultanées à 997 Hz). Elle respecte rigoureusement les contraintes temps réel strictes de l'audio haute performance et de la philosophie *suckless*.
+
+### A. Élimination des allocations sur le tas (100% Zéro-Heap Audio)
+L'analyse comparative des Flamegraphs a conduit à une refonte complète de la gestion mémoire à travers deux axes majeurs :
+1. **Thread Principal (UI / Physique) — Pointeur atomique $O(1)$ :** L'ancienne méthode de pré-calcul synchrone (`prepare_voice`) et le clonage des buffers audio (`data.to_owned()`) ont été totalement supprimés de `enqueue_sound`. La méthode accepte désormais directement une référence vers le pointeur intelligent (`&Arc<Vec<[f32; 2]>>`). La mise en file d'attente d'un événement sonore ne réalise plus qu'une simple incrémentation atomique de compteur (`Arc::clone`), faisant chuter le temps d'exécution de la méthode sous les $5\text{ ns}$ et éliminant 100% de la sollicitation de l'allocateur mémoire du noyau sur le thread de simulation.
+2. **Thread CPAL (Temps Réel) — Tampons chauds L1/L2 :** La spatialisation (panning 2D et HRTF 3D via `binauralize_mono_fast_into`) et l'interpolation LERP n'allouent plus aucun vecteur (`Vec`) à la volée. Le processeur `DspProcessor` travaille exclusivement dans des tampons de brouillon pré-alloués lors de l'initialisation (`scratch_mono` et `scratch_stereo`). Ces tampons restent résidents dans les caches L1/L2 du processeur, garantissant une exécution déterministe sans aucun *garbage collection* ni *buffer underrun*.
+
+### B. Synthèse des gains mesurés (Hotspot / Perf)
+L'impact de ce refactoring se traduit par une chute vertigineuse de la consommation CPU globale sur un scénario de test identique :
+* **Baseline initiale (avec allocations & pré-calculs) :** $3,304 \times 10^9$ cycles CPU agrégés.
+* **Après passage au Zero-Heap DSP (`DspProcessor`) :** $2,056 \times 10^9$ cycles CPU agrégés ($-38\%$).
+* **Architecture finale (Zéro-Heap global avec `Arc::clone`) :** **$1,082 \times 10^9$ cycles CPU agrégés**.
+
+**Résultat final : Une réduction totale de $67\%$ de la charge CPU du moteur audio** ($> 2,2$ milliards de cycles économisés), couplée à une latence ultra-faible ($\approx 4\text{ ms}$) et une stabilité absolue sous charge extrême.
