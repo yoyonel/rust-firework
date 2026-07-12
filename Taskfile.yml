@@ -122,6 +122,12 @@ tasks:
       - echo "▶️  Lancement des tests unitaires..."
       - "{{.XVFB}} {{.CARGO}} test --all --quiet"
 
+  test-one:
+    desc: "Lance un test unitaire (lib) spécifique avec affichage"
+    cmds:
+      - echo "▶️ Lancement du test ciblé '{{.CLI_ARGS}}'..."
+      - "{{.XVFB}} {{.CARGO}} test --lib {{.CLI_ARGS}} -- --nocapture"
+
   test-integration:
     desc: "Lancement du test d'intégration complet (vidéo + audio)"
     deps: [build-release]
