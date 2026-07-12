@@ -1,7 +1,5 @@
 use crate::audio_engine::types::{FireworksAudioConfig, PlayRequest, Voice};
-use crate::audio_engine::{
-    binauralize_mono_fast, load_audio, resample_linear, AudioBlock, AudioEngine, SafeWavWriter,
-};
+use crate::audio_engine::{load_audio, resample_linear, AudioBlock, AudioEngine, SafeWavWriter};
 use crate::profiler::Profiler;
 #[cfg(feature = "tracy")]
 use crate::tracy_zone;
@@ -113,67 +111,11 @@ impl FireworksAudio3D {
         })
     }
 
-    // =========================
-    // Prepare a voice for playback
-    // =========================
-    fn prepare_voice(
-        &self,
-        data: &[[f32; 2]],
-        pos: (f32, f32),
-        gain: f32,
-    ) -> (Vec<[f32; 2]>, usize, usize, f32) {
-        // Distance attenuation
-        let dx = pos.0 - self.listener_pos.0;
-        let dy = pos.1 - self.listener_pos.1;
-        let distance = (dx * dx + dy * dy).sqrt();
-        let att = (1.0 - distance / self.settings.max_distance()).max(0.0);
-
-        // Spatialization: binaural or panning
-        let stereo = if self.settings.use_binaural() {
-            let mono: Vec<f32> = data.iter().map(|s| (s[0] + s[1]) / 2.0).collect();
-            binauralize_mono_fast(
-                &mono,
-                (pos.0, pos.1, 0.0),
-                (self.listener_pos.0, self.listener_pos.1, 0.0),
-                self.sample_rate,
-                &self.settings,
-            )
-        } else {
-            let pan = (dx / self.settings.max_distance()).clamp(-1.0, 1.0);
-            let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-            let left_gain = angle.cos() * att * gain;
-            let right_gain = angle.sin() * att * gain;
-            let mut out = data.to_owned();
-            for s in &mut out {
-                s[0] *= left_gain;
-                s[1] *= right_gain;
-            }
-            out
-        };
-
-        // Fade-in/out samples
-        let fade_in_samples =
-            (self.sample_rate as f32 * (self.settings.fade_in_ms() / 1000.0)) as usize;
-        let fade_out_samples =
-            (self.sample_rate as f32 * (self.settings.fade_out_ms() / 1000.0)) as usize;
-
-        // Distance-dependent low-pass filter
-        let fc = (self.settings.f_min()
-            + (self.settings.f_max() - self.settings.f_min())
-                * (-self.settings.distance_alpha() * distance).exp())
-        .clamp(self.settings.f_min(), self.settings.f_max());
-        let dt = 1.0 / self.sample_rate as f32;
-        let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
-        let filter_a = dt / (rc + dt);
-
-        (stereo, fade_in_samples, fade_out_samples, filter_a)
-    }
-
-    /// Queue a sound for playback
+    /// Queue a sound for playback — 100% Zero-Heap Allocation !
     fn enqueue_sound(
         &self,
         id: u64,
-        data: &[[f32; 2]],
+        data: &Arc<Vec<[f32; 2]>>, // 🎯 MODIFICATION : On reçoit la référence vers l'Arc d'origine !
         pos: (f32, f32),
         gain: f32,
         is_dynamic: bool,
@@ -182,8 +124,7 @@ impl FireworksAudio3D {
             return;
         }
 
-        // Chaque `try_recv` dépile un Arc mort : en sortant de la boucle, le drop() est appelé
-        // par l'OS dans ce thread (UI/Physique), épargnant à 100% le thread CPAL.
+        // Nettoyage lock-free du garbage collector (libération par l'OS hors thread CPAL)
         while let Ok(_dead_buffer) = self.garbage_rx.try_recv() {
             #[cfg(feature = "tracy")]
             tracy_zone!("audio::free_garbage_buffer", 0xFF00AA);
@@ -191,30 +132,24 @@ impl FireworksAudio3D {
 
         let global_gain = self.global_gain * gain;
 
-        let (stereo_data, fade_in, fade_out, filter_a) = if is_dynamic {
-            // Pour le Doppler, on envoie la donnée BRUTE (non spatialisée)
-            // On calcule quand même les fades initiaux en fonction de sample_rate
-            let fade_in_samples =
-                (self.sample_rate as f32 * (self.settings.fade_in_ms() / 1000.0)) as usize;
-            let fade_out_samples =
-                (self.sample_rate as f32 * (self.settings.fade_out_ms() / 1000.0)) as usize;
+        // Calcul des fades en nombre d'échantillons
+        let fade_in_samples =
+            (self.sample_rate as f32 * (self.settings.fade_in_ms() / 1000.0)) as usize;
+        let fade_out_samples =
+            (self.sample_rate as f32 * (self.settings.fade_out_ms() / 1000.0)) as usize;
 
-            // Le filtre sera recalculé dynamiquement, on met une valeur par défaut sûre
-            (data.to_owned(), fade_in_samples, fade_out_samples, 0.05)
-        } else {
-            // Pour les explosions statiques, on garde l'optimisation existante (pré-calcul total)
-            self.prepare_voice(data, pos, global_gain)
-        };
+        // 🎯 MAGIE ZERO-HEAP : Arc::clone ne fait qu'incrémenter un compteur atomique O(1) !
+        // Plus de data.to_owned(), plus de prepare_voice(), plus de malloc !
         let req = PlayRequest {
-            data: Arc::new(stereo_data),
-            fade_in,
-            fade_out,
+            data: Arc::clone(data), // ZÉRO ALLOCATION MÉMOIRE : Pointeur partagé !
+            fade_in: fade_in_samples,
+            fade_out: fade_out_samples,
             gain: global_gain,
-            filter_a,
-            sent_at: Instant::now(), // for monitoring
-            id,                      // NOUVEAU
-            pos,                     // NOUVEAU
-            is_dynamic,              // NOUVEAU
+            filter_a: 0.05, // Valeur initiale, recalculée au 1er bloc par DspProcessor
+            sent_at: Instant::now(),
+            id,
+            pos,
+            is_dynamic,
         };
 
         if let Err(e) = self.play_tx.try_send(req) {
@@ -223,6 +158,7 @@ impl FireworksAudio3D {
     }
 
     pub fn play_rocket(&self, pos: (f32, f32), gain: f32) {
+        // En passant &self.explosion_data, on transmet proprement la référence vers l'Arc !
         self.enqueue_sound(0, &self.explosion_data, pos, gain, false);
     }
 
