@@ -1,4 +1,5 @@
 use crate::AudioEngineSettings;
+use glam::{Vec2, Vec3};
 
 pub struct SpatialParams {
     pub itd_left_sec: f32,
@@ -7,23 +8,13 @@ pub struct SpatialParams {
     pub gain_right: f32,
 }
 
-pub fn calculate_spatial_params(
-    dx: f32,
-    dy: f32,
-    dz: f32,
-    settings: &AudioEngineSettings,
-) -> SpatialParams {
-    let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-6);
+pub fn calculate_spatial_params_3d(diff: Vec3, settings: &AudioEngineSettings) -> SpatialParams {
+    let distance = diff.length().max(1e-6);
     let att = (1.0 - distance / settings.max_distance()).max(0.0);
 
     if settings.use_binaural() {
-        // In 2D, depth dz is 0.0, and Y (dy) is depth.
-        // In 3D, depth is dz (listener facing -Z direction, so front is -Z).
-        let (azimuth, elevation) = if dz == 0.0 {
-            (dx.atan2(dy), 0.0_f32)
-        } else {
-            (dx.atan2(-dz), dy.atan2((dx * dx + dz * dz).sqrt()))
-        };
+        let azimuth = diff.x.atan2(-diff.z);
+        let elevation = diff.y.atan2((diff.x * diff.x + diff.z * diff.z).sqrt());
 
         let theta = azimuth.abs();
         let c = 343.0_f32;
@@ -47,7 +38,46 @@ pub fn calculate_spatial_params(
             }
         }
     } else {
-        let pan = (dx / settings.max_distance()).clamp(-1.0, 1.0);
+        let pan = (diff.x / settings.max_distance()).clamp(-1.0, 1.0);
+        let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+        SpatialParams {
+            itd_left_sec: 0.0,
+            itd_right_sec: 0.0,
+            gain_left: angle.cos() * att,
+            gain_right: angle.sin() * att,
+        }
+    }
+}
+
+pub fn calculate_spatial_params_2d(diff: Vec2, settings: &AudioEngineSettings) -> SpatialParams {
+    let distance = diff.length().max(1e-6);
+    let att = (1.0 - distance / settings.max_distance()).max(0.0);
+
+    if settings.use_binaural() {
+        let azimuth = diff.x.atan2(diff.y);
+        let theta = azimuth.abs();
+        let c = 343.0_f32;
+        let itd = ((settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
+        let ild_db = settings.max_ild_db() * theta.sin();
+        let far_gain = 10f32.powf(-ild_db / 20.0);
+
+        if azimuth >= 0.0 {
+            SpatialParams {
+                itd_left_sec: itd,
+                itd_right_sec: 0.0,
+                gain_left: att * far_gain,
+                gain_right: att,
+            }
+        } else {
+            SpatialParams {
+                itd_left_sec: 0.0,
+                itd_right_sec: itd,
+                gain_left: att,
+                gain_right: att * far_gain,
+            }
+        }
+    } else {
+        let pan = (diff.x / settings.max_distance()).clamp(-1.0, 1.0);
         let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
         SpatialParams {
             itd_left_sec: 0.0,
@@ -63,8 +93,8 @@ pub fn calculate_spatial_params(
 pub fn binauralize_mono_fast_into(
     mono: &[f32],
     output_stereo: &mut [[f32; 2]], // 🎯 INJECTION DU BUFFER : Zéro allocation !
-    src_pos: (f32, f32, f32),
-    listener_pos: (f32, f32, f32),
+    src_pos: impl Into<Vec3>,
+    listener_pos: impl Into<Vec3>,
     sample_rate: u32,
     settings: &AudioEngineSettings,
 ) {
@@ -74,12 +104,8 @@ pub fn binauralize_mono_fast_into(
         return;
     }
 
-    // 1. Calculs géométriques et gains (strictement inchangés et déterministes)
-    let dx = src_pos.0 - listener_pos.0;
-    let dy = src_pos.1 - listener_pos.1;
-    let dz = src_pos.2 - listener_pos.2;
-
-    let params = calculate_spatial_params(dx, dy, dz, settings);
+    let diff = src_pos.into() - listener_pos.into();
+    let params = calculate_spatial_params_3d(diff, settings);
 
     // 2. Travail direct sur la tranche utile du buffer réutilisé
     let stereo_slice = &mut output_stereo[..n];
@@ -104,8 +130,8 @@ pub fn binauralize_mono_fast_into(
 
 pub fn binauralize_mono_fast(
     mono: &[f32],
-    src_pos: (f32, f32, f32),
-    listener_pos: (f32, f32, f32),
+    src_pos: impl Into<Vec3>,
+    listener_pos: impl Into<Vec3>,
     sample_rate: u32,
     settings: &AudioEngineSettings,
 ) -> Vec<[f32; 2]> {
@@ -177,17 +203,14 @@ fn process_channel(
 /// Convert mono audio to binaural stereo using ITD + ILD + elevation awareness (3D)
 pub fn binauralize_mono(
     mono: &[f32],
-    src_pos: (f32, f32, f32),      // (x, y, z)
-    listener_pos: (f32, f32, f32), // (x, y, z)
+    src_pos: impl Into<Vec3>,
+    listener_pos: impl Into<Vec3>,
     sample_rate: u32,
     settings: &AudioEngineSettings,
 ) -> Vec<[f32; 2]> {
     let n = mono.len();
-    let dx = src_pos.0 - listener_pos.0;
-    let dy = src_pos.1 - listener_pos.1;
-    let dz = src_pos.2 - listener_pos.2;
-
-    let params = calculate_spatial_params(dx, dy, dz, settings);
+    let diff = src_pos.into() - listener_pos.into();
+    let params = calculate_spatial_params_3d(diff, settings);
 
     let itd_left_samples = params.itd_left_sec * sample_rate as f32;
     let itd_right_samples = params.itd_right_sec * sample_rate as f32;

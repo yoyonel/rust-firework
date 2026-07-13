@@ -49,6 +49,8 @@ pub struct Voice {
     pub user_gain: f32,          // Per-voice gain multiplier
     pub current_gains: [f32; 2], // Gain actuel gauche/droite (pour l'interpolation)
     pub target_gains: [f32; 2],  // Gain cible gauche/droite à atteindre à la fin du bloc
+    pub current_itd: [f32; 2],   // ITD actuel gauche/droite (en échantillons)
+    pub target_itd: [f32; 2],    // ITD cible gauche/droite à la fin du bloc
 }
 
 impl Voice {
@@ -70,6 +72,8 @@ impl Voice {
             user_gain: 1.0,
             current_gains: [1.0, 1.0], // NOUVEAU
             target_gains: [1.0, 1.0],  // NOUVEAU
+            current_itd: [0.0, 0.0],
+            target_itd: [0.0, 0.0],
         }
     }
 
@@ -93,6 +97,8 @@ impl Voice {
             // ou à des valeurs neutres. Le vrai calcul aura lieu au premier bloc.
             current_gains: [0.0, 0.0],
             target_gains: [0.0, 0.0],
+            current_itd: [0.0, 0.0],
+            target_itd: [0.0, 0.0],
         }
     }
 
@@ -118,31 +124,6 @@ pub struct PlayRequest {
     pub id: u64,          // ID de la entité physique (0 si statique)
     pub pos: Vec2,        // Position initiale
     pub is_dynamic: bool, // true si sujet au Doppler
-}
-
-#[derive(Clone)]
-pub struct DopplerState {
-    pub pos: Vec2,
-    pub vel: Vec2,
-    pub voice_index: u64,
-    pub duration_left: f32,   // en secondes
-    pub sample_offset: usize, // position dans l'échantillon audio
-    pub sample_rate: u32,
-    pub rocket_data: Vec<[f32; 2]>, // le son de la rocket
-    pub doppler_factor: f32,
-}
-
-impl DopplerState {
-    /// Met à jour la position selon la vitesse et le delta temps
-    pub fn step(&mut self, dt: f32) {
-        self.pos += self.vel * dt;
-        self.duration_left -= dt;
-    }
-
-    /// Vérifie si le son est terminé
-    pub fn finished(&self) -> bool {
-        self.duration_left <= 0.0 || self.sample_offset >= self.rocket_data.len()
-    }
 }
 
 // =========================

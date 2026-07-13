@@ -145,10 +145,8 @@ impl DspProcessor {
             let rate = v.playback_rate as f64;
 
             // 2. Calcul du Binaural ou Panning (Une fois par bloc !)
-            let params = crate::audio_engine::binaural_processing::calculate_spatial_params(
-                d.x,
-                d.y,
-                0.0,
+            let params = crate::audio_engine::binaural_processing::calculate_spatial_params_2d(
+                d,
                 &self.settings,
             );
 
@@ -162,6 +160,15 @@ impl DspProcessor {
             let start_gain_r = v.current_gains[1];
             let gain_step_l = (target_gain_l - start_gain_l) / frames as f32;
             let gain_step_r = (target_gain_r - start_gain_r) / frames as f32;
+
+            // Initialisation des ITDs si c'est le début du son
+            if v.current_itd == [0.0, 0.0] {
+                v.current_itd = [itd_l_samples, itd_r_samples];
+            }
+            let start_itd_l = v.current_itd[0];
+            let start_itd_r = v.current_itd[1];
+            let itd_step_l = (itd_l_samples - start_itd_l) / frames as f32;
+            let itd_step_r = (itd_r_samples - start_itd_r) / frames as f32;
 
             // 3. Boucle de Mixage : Lecture spatiale directe (Zéro Buffer Intermédiaire)
             for (i, frame) in self.acc[..frames].iter_mut().enumerate() {
@@ -193,9 +200,12 @@ impl DspProcessor {
                     s0 + frac * (s1 - s0)
                 };
 
+                let current_itd_l = start_itd_l + itd_step_l * i as f32;
+                let current_itd_r = start_itd_r + itd_step_r * i as f32;
+
                 // On lit directement le signal aux deux positions temporelles (Gauche / Droite)
-                let mut l = interpolate(current_pos - itd_l_samples as f64);
-                let mut r = interpolate(current_pos - itd_r_samples as f64);
+                let mut l = interpolate(current_pos - current_itd_l as f64);
+                let mut r = interpolate(current_pos - current_itd_r as f64);
 
                 // Application des Fades
                 if index < v.fade_in_samples {
@@ -238,6 +248,8 @@ impl DspProcessor {
             v.filter_state[1] = prev_r;
             v.current_gains[0] = target_gain_l;
             v.current_gains[1] = target_gain_r;
+            v.current_itd[0] = itd_l_samples;
+            v.current_itd[1] = itd_r_samples;
 
             if v.pos as usize >= total_len {
                 v.active = false;
@@ -316,43 +328,14 @@ mod tests {
             .collect()
     }
 
-    /// Simule la logique d'interpolation continue sans état (Stateless Reading) de notre DspProcessor.
-    fn process_stateless_chunk(
-        source: &[[f32; 2]],
-        start_pos: f64,
-        playback_rate: f64,
-        frames: usize,
-    ) -> (Vec<[f32; 2]>, f64) {
-        let total_len = source.len();
-        let mut output = Vec::with_capacity(frames);
-        let mut current_pos = start_pos;
-
-        for _ in 0..frames {
-            let idx = current_pos as usize;
-            if idx >= total_len {
-                output.push([0.0, 0.0]);
-            } else {
-                // Interpolation linéaire LERP (notre Ground Truth)
-                let s0 = source[idx];
-                let s1 = if idx + 1 < total_len {
-                    source[idx + 1]
-                } else {
-                    [0.0, 0.0]
-                };
-                let frac = (current_pos - idx as f64) as f32;
-
-                let l = s0[0] + frac * (s1[0] - s0[0]);
-                let r = s0[1] + frac * (s1[1] - s0[1]);
-                output.push([l, r]);
-            }
-            current_pos += playback_rate;
-        }
-
-        (output, current_pos)
-    }
-
     #[test]
     fn test_phase_continuity_across_block_boundaries() {
+        use crate::audio_engine::types::Voice;
+        use crate::profiler::Profiler;
+        use crate::AudioEngineSettings;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+
         let sample_rate = 48_000;
         let block_size = 256;
         let total_blocks = 4;
@@ -360,19 +343,89 @@ mod tests {
 
         // 1. Source : Sinusoïde pure à 440 Hz (La fondamental)
         let source_audio = generate_sine_wave(440.0, sample_rate, total_samples + 100);
+        let source_arc = Arc::new(source_audio);
+
+        let (_play_tx, play_rx) = crossbeam_channel::unbounded();
+        let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+        let settings = AudioEngineSettings::default();
 
         // 2. Traitement Mode A : Un seul bloc continu de 1024 échantillons (La Vérité Terrain)
-        let (reference_output, _) = process_stateless_chunk(&source_audio, 0.0, 1.0, total_samples);
+        let mut dsp_ref = super::DspProcessor {
+            voices: vec![Voice {
+                id: 1,
+                active: true,
+                data: Some(source_arc.clone()),
+                pos: 0.0,
+                playback_rate: 1.0,
+                is_dynamic: true,
+                world_pos: glam::Vec2::new(0.0, 10.0), // Devant le listener
+                velocity: glam::Vec2::ZERO,
+                fade_in_samples: 0,
+                fade_out_samples: 0,
+                filter_state: [0.0, 0.0],
+                filter_a: 0.0,
+                user_gain: 1.0,
+                current_gains: [0.99, 0.99],
+                target_gains: [0.99, 0.99],
+                current_itd: [0.0, 0.0],
+                target_itd: [0.0, 0.0],
+            }],
+            play_rx: play_rx.clone(),
+            doppler_rx: None,
+            garbage_tx: garbage_tx.clone(),
+            settings: settings.clone(),
+            listener_pos: glam::Vec2::ZERO,
+            sample_rate,
+            export_writer: None,
+            block_index: 0,
+            acc: vec![[0.0; 2]; total_samples],
+            last_log: Instant::now(),
+            log_interval: Duration::from_secs(1),
+        };
+
+        let profiler = Profiler::new(1000);
+        dsp_ref.process_dsp(total_samples, &profiler);
+        let reference_output = dsp_ref.acc.clone();
 
         // 3. Traitement Mode B : 4 blocs successifs de 256 échantillons
-        let mut chunked_output = Vec::with_capacity(total_samples);
-        let mut pos_cursor = 0.0;
+        let mut dsp_chunk = super::DspProcessor {
+            voices: vec![Voice {
+                id: 1,
+                active: true,
+                data: Some(source_arc),
+                pos: 0.0,
+                playback_rate: 1.0,
+                is_dynamic: true,
+                world_pos: glam::Vec2::new(0.0, 10.0),
+                velocity: glam::Vec2::ZERO,
+                fade_in_samples: 0,
+                fade_out_samples: 0,
+                filter_state: [0.0, 0.0],
+                filter_a: 0.0,
+                user_gain: 1.0,
+                current_gains: [0.99, 0.99],
+                target_gains: [0.99, 0.99],
+                current_itd: [0.0, 0.0],
+                target_itd: [0.0, 0.0],
+            }],
+            play_rx,
+            doppler_rx: None,
+            garbage_tx,
+            settings,
+            listener_pos: glam::Vec2::ZERO,
+            sample_rate,
+            export_writer: None,
+            block_index: 0,
+            acc: vec![[0.0; 2]; block_size],
+            last_log: Instant::now(),
+            log_interval: Duration::from_secs(1),
+        };
 
+        let mut chunked_output = Vec::with_capacity(total_samples);
         for _ in 0..total_blocks {
-            let (chunk, next_pos) =
-                process_stateless_chunk(&source_audio, pos_cursor, 1.0, block_size);
-            chunked_output.extend(chunk);
-            pos_cursor = next_pos;
+            dsp_chunk.acc.fill([0.0; 2]);
+            dsp_chunk.process_dsp(block_size, &profiler);
+            chunked_output.extend_from_slice(&dsp_chunk.acc);
         }
 
         // 4. Vérification de l'équivalence parfaite et de la continuité de phase aux frontières
@@ -402,10 +455,5 @@ mod tests {
                 );
             }
         }
-
-        println!(
-            "✅ Test de continuité de phase validé avec succès sur {} blocs audio !",
-            total_blocks
-        );
     }
 }

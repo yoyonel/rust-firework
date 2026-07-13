@@ -159,8 +159,8 @@ impl FireworksAudio3D {
     }
 
     pub fn play_rocket(&self, pos: Vec2, gain: f32) {
-        // En passant &self.explosion_data, on transmet proprement la référence vers l'Arc !
-        self.enqueue_sound(0, &self.explosion_data, pos, gain, false);
+        // En passant &self.rocket_data, on transmet proprement la référence vers l'Arc !
+        self.enqueue_sound(0, &self.rocket_data, pos, gain, false);
     }
 
     pub fn play_rocket_with_id(&self, id: u64, pos: Vec2, gain: f32) {
@@ -168,7 +168,7 @@ impl FireworksAudio3D {
     }
 
     pub fn play_explosion(&self, pos: Vec2, gain: f32) {
-        self.enqueue_sound(0, &self.rocket_data, pos, gain, false);
+        self.enqueue_sound(0, &self.explosion_data, pos, gain, false);
     }
 
     pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
