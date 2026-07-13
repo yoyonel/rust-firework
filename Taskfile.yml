@@ -132,8 +132,8 @@ tasks:
       - 'echo "✅ Rapport généré : {{.COVERAGE_DIR}}/index.html"'
       - xdg-open {{.COVERAGE_DIR}}/index.html 2>/dev/null || open {{.COVERAGE_DIR}}/index.html 2>/dev/null || true
 
-  coverage-without-tests:
-    desc: "Exécution de llvm-cov (utilisé en CI)"
+  ci:coverage:
+    desc: "CI: Run unit/integration tests with coverage under virtual framebuffer"
     cmds:
       - '{{.XVFB}} {{.CARGO}} llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
 
