@@ -23,7 +23,7 @@ Auparavant, les positions et vecteurs de vitesse dans le système audio transita
 
 ### B. Unification de la Spatialisation (Élimination du Code Dupliqué)
 Les calculs géométriques tridimensionnels (ITD, ILD, distance et gains de panoramique) étaient auparavant répétés dans plusieurs fonctions de rendu. Ils ont été centralisés dans une fonction unique et optimisée :
-*   **Fonction Partagée** : [calculate_spatial_params](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/binaural_processing.rs#L8-L56) dans [binaural_processing.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/binaural_processing.rs).
+*   **Fonction Partagée** : `calculate_spatial_params_2d` et `calculate_spatial_params_3d` dans [binaural_processing.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/binaural_processing.rs).
 *   **Correction de la Trigonométrie 2D** : Lorsque la profondeur Z est nulle ($dz = 0.0$), la coordonnée Y de l'écran est correctement interprétée comme l'axe de profondeur (devant/derrière l'auditeur). L'azimut est alors calculé par `dx.atan2(dy)` et l'élévation est fixée à `0.0`. Si Z est non nul, les équations repassent de façon transparente en 3D sphérique classique.
 
 ### C. Interpolation Linéaire des Gains (Suppression des Clics/Pops)
@@ -46,7 +46,21 @@ Le processeur mixe désormais directement ses calculs de voix dans le buffer d'a
 
 ---
 
-## 3. Validation de l'Implémentation
+## 3. Corrections de la Revue de Code Interactive
+
+Lors de la revue de code interactive, les points suivants ont été corrigés pour aligner parfaitement le code avec les spécifications et éliminer les derniers "code smells" :
+
+*   **Correction des Noms Invertis (Mysterious Name)** : Dans `fireworks_audio.rs`, la fonction `play_rocket` jouait par erreur `explosion_data` et `play_explosion` jouait `rocket_data`. Les variables ont été inversées pour restaurer l'association sémantique correcte.
+*   **Nettoyage du Code Mort (`DopplerState`)** : La structure obsolète `DopplerState` et son bloc d'implémentation ont été définitivement supprimés de `types.rs`, conformément à l'abandon spécifié dans les spécifications techniques.
+*   **Migration vers des Vecteurs Structurés (Primitive Obsession)** : Les signatures des fonctions de spatialisation publique (`binauralize_mono`, `binauralize_mono_fast`, etc.) prenaient des tuples 3D `(f32, f32, f32)` pour les positions. Elles acceptent désormais tout type implémentant `Into<glam::Vec3>`, ce qui simplifie les signatures en interne tout en conservant une compatibilité ascendante totale pour les benchmarks et tests existants.
+*   **Suppression des Collisions 3D à $dz == 0.0$** : La fonction `calculate_spatial_params` a été séparée en deux variantes explicites, `calculate_spatial_params_2d` et `calculate_spatial_params_3d`, éliminant le risque qu'une source 3D traversant le plan Z ne soit interprétée à tort comme une source 2D.
+*   **Robustesse du Test de Continuité de Phase** : Le test unitaire `test_phase_continuity_across_block_boundaries` a été réécrit pour instancier et exécuter le véritable `DspProcessor` et sa gestion des voix, au lieu d'un simulateur simplifié local, garantissant une validation rigoureuse du code de production.
+*   **Interpolation Temporelle des Retards (ITD)** : Ajout des champs `current_itd` et `target_itd` sur la structure `Voice` et calcul sample-by-sample de l'ITD interpolé dans la boucle DSP pour éviter toute transition brusque de phase lors des mouvements rapides.
+*   **Correction du Checkout CI/CD** : Correction de `.github/workflows/integration.yml` pour cibler le SHA exact déclencheur (`github.event.workflow_run.head_sha`) lors du checkout du code source, garantissant que les tests d'intégration s'exécutent sur la branche du commit de la Pull Request.
+
+---
+
+## 4. Validation de l'Implémentation
 
 Les modifications ont été rigoureusement testées et validées :
 1.  **Vérification de Compilation et Lints** : `cargo check` et `cargo clippy --all-targets` se terminent avec succès et ne signalent aucun avertissement.
