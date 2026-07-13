@@ -5,6 +5,7 @@
 !src/
 !Cargo.toml
 !Cargo.lock
+!benches/
 
 # Include assets
 !assets/
