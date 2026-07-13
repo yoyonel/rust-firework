@@ -1,6 +1,7 @@
 use crate::audio_engine::DopplerEvent;
 use crate::AudioEngineSettings;
 use crossbeam::channel::Receiver;
+use glam::Vec2;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -10,12 +11,12 @@ static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
 pub struct RocketAudioState {
-    _last_pos: (f32, f32), // dernière position connue côté audio
+    _last_pos: Vec2,       // dernière position connue côté audio
     _last_update: Instant, // dernière time where we processed an event
 }
 
 impl RocketAudioState {
-    fn _new(pos: (f32, f32), t: Instant) -> Self {
+    fn _new(pos: Vec2, t: Instant) -> Self {
         Self {
             _last_pos: pos,
             _last_update: t,
@@ -35,11 +36,11 @@ pub struct Voice {
     // pub data: Option<Vec<[f32; 2]>>, // Stereo audio samples
     pub data: Option<Arc<Vec<[f32; 2]>>>,
 
-    pub pos: f64,              // MODIFIÉ : usize -> f64 pour la lecture fractionnaire
-    pub playback_rate: f32,    // NOUVEAU : Facteur de vitesse (alpha)
-    pub is_dynamic: bool,      // NOUVEAU : Distingue les objets en mouvement (Doppler)
-    pub world_pos: (f32, f32), // NOUVEAU : Position absolue de la source
-    pub velocity: (f32, f32),  // NOUVEAU : Vecteur vitesse (vx, vy)
+    pub pos: f64,           // MODIFIÉ : usize -> f64 pour la lecture fractionnaire
+    pub playback_rate: f32, // NOUVEAU : Facteur de vitesse (alpha)
+    pub is_dynamic: bool,   // NOUVEAU : Distingue les objets en mouvement (Doppler)
+    pub world_pos: Vec2,    // NOUVEAU : Position absolue de la source
+    pub velocity: Vec2,     // NOUVEAU : Vecteur vitesse (vx, vy)
 
     pub fade_in_samples: usize,  // Number of samples for fade-in
     pub fade_out_samples: usize, // Number of samples for fade-out
@@ -60,8 +61,8 @@ impl Voice {
             pos: 0.0,              // MODIFIÉ : 0 -> 0.0
             playback_rate: 1.0,    // NOUVEAU
             is_dynamic: false,     // NOUVEAU
-            world_pos: (0.0, 0.0), // NOUVEAU
-            velocity: (0.0, 0.0),  // NOUVEAU
+            world_pos: Vec2::ZERO, // NOUVEAU
+            velocity: Vec2::ZERO,  // NOUVEAU
             fade_in_samples: 0,
             fade_out_samples: 0,
             filter_state: [0.0, 0.0],
@@ -80,7 +81,7 @@ impl Voice {
             playback_rate: 1.0,         // NOUVEAU
             is_dynamic: req.is_dynamic, // MODIFIÉ : Prend la valeur du request
             world_pos: req.pos,         // MODIFIÉ : Initialise avec la position du request
-            velocity: (0.0, 0.0),       // NOUVEAU
+            velocity: Vec2::ZERO,       // NOUVEAU
             active: true,
             fade_in_samples: req.fade_in,
             fade_out_samples: req.fade_out,
@@ -115,14 +116,14 @@ pub struct PlayRequest {
     pub sent_at: Instant, // Timestamp of request
 
     pub id: u64,          // ID de la entité physique (0 si statique)
-    pub pos: (f32, f32),  // Position initiale
+    pub pos: Vec2,        // Position initiale
     pub is_dynamic: bool, // true si sujet au Doppler
 }
 
 #[derive(Clone)]
 pub struct DopplerState {
-    pub pos: (f32, f32),
-    pub vel: (f32, f32),
+    pub pos: Vec2,
+    pub vel: Vec2,
     pub voice_index: u64,
     pub duration_left: f32,   // en secondes
     pub sample_offset: usize, // position dans l'échantillon audio
@@ -134,8 +135,7 @@ pub struct DopplerState {
 impl DopplerState {
     /// Met à jour la position selon la vitesse et le delta temps
     pub fn step(&mut self, dt: f32) {
-        self.pos.0 += self.vel.0 * dt;
-        self.pos.1 += self.vel.1 * dt;
+        self.pos += self.vel * dt;
         self.duration_left -= dt;
     }
 
@@ -152,7 +152,7 @@ impl DopplerState {
 pub struct FireworksAudioConfig {
     pub rocket_path: String,
     pub explosion_path: String,
-    pub listener_pos: (f32, f32),
+    pub listener_pos: Vec2,
     pub sample_rate: u32,
     pub block_size: usize,
     pub max_voices: usize,

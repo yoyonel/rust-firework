@@ -159,13 +159,18 @@ fn bench_doppler_lerp_resampling(c: &mut Criterion) {
 
 fn bench_doppler_geometry_update(c: &mut Criterion) {
     let mut group = c.benchmark_group("doppler/geometry_block_update");
-    let listener_pos = (0.0_f32, 0.0_f32);
+    let listener_pos = glam::Vec2::ZERO;
     let c_sound = 343.0_f32;
 
     // Évaluer le coût mathématique pour 1, 16, 64 et 128 sources simultanées
     for n_voices in [1usize, 16, 64, 128] {
-        let voices: Vec<((f32, f32), (f32, f32))> = (0..n_voices)
-            .map(|i| ((100.0 + i as f32 * 10.0, 50.0), (-50.0, 20.0)))
+        let voices: Vec<(glam::Vec2, glam::Vec2)> = (0..n_voices)
+            .map(|i| {
+                (
+                    glam::Vec2::new(100.0 + i as f32 * 10.0, 50.0),
+                    glam::Vec2::new(-50.0, 20.0),
+                )
+            })
             .collect();
 
         group.bench_with_input(
@@ -174,12 +179,10 @@ fn bench_doppler_geometry_update(c: &mut Criterion) {
             |b, v_list| {
                 b.iter(|| {
                     for &(pos, vel) in v_list {
-                        let dx = pos.0 - listener_pos.0;
-                        let dy = pos.1 - listener_pos.1;
-                        let dist = (dx * dx + dy * dy).sqrt().max(0.001);
-                        let dir_x = -dx / dist;
-                        let dir_y = -dy / dist;
-                        let v_radial = vel.0 * dir_x + vel.1 * dir_y;
+                        let d = pos - listener_pos;
+                        let dist = d.length().max(0.001);
+                        let dir = -d / dist;
+                        let v_radial = vel.dot(dir);
                         let alpha = (c_sound / (c_sound - v_radial)).clamp(0.25, 4.0);
                         criterion::black_box(alpha);
                     }

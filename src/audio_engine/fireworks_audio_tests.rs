@@ -11,9 +11,9 @@ fn dummy_data() -> Vec<[f32; 2]> {
 }
 
 // Version test-friendly de enqueue_sound qui ignore l'atténuation distance
-fn enqueue_sound_test(engine: &FireworksAudio3D, pos: (f32, f32), gain: f32) -> PlayRequest {
+fn enqueue_sound_test(engine: &FireworksAudio3D, pos: glam::Vec2, gain: f32) -> PlayRequest {
     // Panning simple
-    let dx = pos.0 - engine.listener_pos.0;
+    let dx = pos.x - engine.listener_pos.x;
     let pan = (dx / engine.settings.max_distance()).clamp(-1.0, 1.0);
 
     let mut data_panned = dummy_data();
@@ -42,7 +42,7 @@ fn build_engine() -> FireworksAudio3D {
     FireworksAudio3D::new(FireworksAudioConfig {
         rocket_path: "assets/sounds/rocket.wav".into(),
         explosion_path: "assets/sounds/explosion.wav".into(),
-        listener_pos: (0.0, 0.0),
+        listener_pos: glam::Vec2::ZERO,
         sample_rate: 1000,
         block_size: 1024 * 4,
         max_voices: 16,
@@ -57,7 +57,11 @@ fn build_engine() -> FireworksAudio3D {
 fn test_panning_left() {
     let engine = build_engine();
 
-    let req = enqueue_sound_test(&engine, (-engine.settings.max_distance(), 0.0), 1.0);
+    let req = enqueue_sound_test(
+        &engine,
+        glam::Vec2::new(-engine.settings.max_distance(), 0.0),
+        1.0,
+    );
 
     for sample in req.data.iter() {
         let ratio = sample[0] / (sample[1] + 1e-8);
@@ -72,7 +76,11 @@ fn test_panning_left() {
 fn test_panning_right() {
     let engine = build_engine();
 
-    let req = enqueue_sound_test(&engine, (engine.settings.max_distance(), 0.0), 1.0);
+    let req = enqueue_sound_test(
+        &engine,
+        glam::Vec2::new(engine.settings.max_distance(), 0.0),
+        1.0,
+    );
 
     for sample in req.data.iter() {
         let ratio = sample[1] / (sample[0] + 1e-8);
@@ -87,7 +95,7 @@ fn test_panning_right() {
 fn test_panning_center() {
     let engine = build_engine();
 
-    let req = enqueue_sound_test(&engine, (0.0, 0.0), 1.0);
+    let req = enqueue_sound_test(&engine, glam::Vec2::ZERO, 1.0);
 
     for sample in req.data.iter() {
         let diff = (sample[0] - sample[1]).abs();
@@ -107,8 +115,8 @@ fn test_binaural_center() {
     let head_radius = 0.0875;
     let max_ild_db = 18.0;
     let mono = dummy_mono(10);
-    let src_pos = (0.0, 0.0);
-    let listener_pos = (0.0, 0.0);
+    let src_pos = glam::Vec2::ZERO;
+    let listener_pos = glam::Vec2::ZERO;
 
     let settings = AudioEngineSettingsBuilder::default()
         .max_distance(max_distance)
@@ -118,8 +126,8 @@ fn test_binaural_center() {
         .unwrap();
     let stereo = binauralize_mono_fast(
         &mono,
-        (src_pos.0, src_pos.1, 0.0),
-        (listener_pos.0, listener_pos.1, 0.0),
+        (src_pos.x, src_pos.y, 0.0),
+        (listener_pos.x, listener_pos.y, 0.0),
         sr,
         &settings,
     );
@@ -138,8 +146,8 @@ fn test_binaural_center() {
 fn test_binaural_left_debug() {
     let sr = 48000;
     let mono = dummy_mono(10);
-    let src_pos = (-500.0, 0.0); // X négatif = gauche (selon ta convention x = latéral)
-    let listener_pos = (0.0, 0.0);
+    let src_pos = glam::Vec2::new(-500.0, 0.0); // X négatif = gauche (selon ta convention x = latéral)
+    let listener_pos = glam::Vec2::ZERO;
 
     let settings = AudioEngineSettingsBuilder::default()
         .max_distance(1000.0)
@@ -149,8 +157,8 @@ fn test_binaural_left_debug() {
         .unwrap();
 
     // --- Recalcule et affiche les paramètres intermédiaires pour debug
-    let dx: f32 = src_pos.0 - listener_pos.0; // >0 => droite, <0 => gauche
-    let dy: f32 = src_pos.1 - listener_pos.1; // >0 => haut, <0 => bas
+    let dx: f32 = src_pos.x - listener_pos.x; // >0 => droite, <0 => gauche
+    let dy: f32 = src_pos.y - listener_pos.y; // >0 => haut, <0 => bas
 
     // Convention utilisée dans binauralize_mono : azimuth = dx.atan2(dy)
     let azimuth = dx.atan2(dy); // angle en radians : 0 = front, + = right, - = left
@@ -189,8 +197,8 @@ fn test_binaural_left_debug() {
     // Appel de la fonction à tester
     let stereo = binauralize_mono_fast(
         &mono,
-        (src_pos.0, src_pos.1, 0.0),
-        (listener_pos.0, listener_pos.1, 0.0),
+        (src_pos.x, src_pos.y, 0.0),
+        (listener_pos.x, listener_pos.y, 0.0),
         sr,
         &settings,
     );
@@ -244,8 +252,8 @@ fn test_binaural_right_debug() {
     let mono = vec![1.0; n_samples];
 
     // Source sur l'axe +x -> à droite selon ta convention
-    let src_pos = (500.0, 0.0);
-    let listener_pos = (0.0, 0.0);
+    let src_pos = glam::Vec2::new(500.0, 0.0);
+    let listener_pos = glam::Vec2::ZERO;
 
     let settings = AudioEngineSettingsBuilder::default()
         .max_distance(1000.0)
@@ -255,8 +263,8 @@ fn test_binaural_right_debug() {
         .unwrap();
 
     // on récupère les valeurs internes (recalculées ici pour afficher)
-    let dx: f32 = src_pos.0 - listener_pos.0;
-    let dy: f32 = src_pos.1 - listener_pos.1;
+    let dx: f32 = src_pos.x - listener_pos.x;
+    let dy: f32 = src_pos.y - listener_pos.y;
     let azimuth: f32 = dx.atan2(dy); // NOTE: dx.atan2(dy) => 90deg pour (500,0)
     let theta: f32 = azimuth.abs();
 
@@ -274,8 +282,8 @@ fn test_binaural_right_debug() {
 
     let stereo = binauralize_mono_fast(
         &mono,
-        (src_pos.0, src_pos.1, 0.0),
-        (listener_pos.0, listener_pos.1, 0.0),
+        (src_pos.x, src_pos.y, 0.0),
+        (listener_pos.x, listener_pos.y, 0.0),
         sr,
         &settings,
     );

@@ -1,5 +1,63 @@
 use crate::AudioEngineSettings;
 
+pub struct SpatialParams {
+    pub itd_left_sec: f32,
+    pub itd_right_sec: f32,
+    pub gain_left: f32,
+    pub gain_right: f32,
+}
+
+pub fn calculate_spatial_params(
+    dx: f32,
+    dy: f32,
+    dz: f32,
+    settings: &AudioEngineSettings,
+) -> SpatialParams {
+    let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-6);
+    let att = (1.0 - distance / settings.max_distance()).max(0.0);
+
+    if settings.use_binaural() {
+        // In 2D, depth dz is 0.0, and Y (dy) is depth.
+        // In 3D, depth is dz (listener facing -Z direction, so front is -Z).
+        let (azimuth, elevation) = if dz == 0.0 {
+            (dx.atan2(dy), 0.0_f32)
+        } else {
+            (dx.atan2(-dz), dy.atan2((dx * dx + dz * dz).sqrt()))
+        };
+
+        let theta = azimuth.abs();
+        let c = 343.0_f32;
+        let itd = ((settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
+        let ild_db = settings.max_ild_db() * theta.sin() * (1.0 - 0.25 * elevation.sin().abs());
+        let far_gain = 10f32.powf(-ild_db / 20.0);
+
+        if azimuth >= 0.0 {
+            SpatialParams {
+                itd_left_sec: itd,
+                itd_right_sec: 0.0,
+                gain_left: att * far_gain,
+                gain_right: att,
+            }
+        } else {
+            SpatialParams {
+                itd_left_sec: 0.0,
+                itd_right_sec: itd,
+                gain_left: att,
+                gain_right: att * far_gain,
+            }
+        }
+    } else {
+        let pan = (dx / settings.max_distance()).clamp(-1.0, 1.0);
+        let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
+        SpatialParams {
+            itd_left_sec: 0.0,
+            itd_right_sec: 0.0,
+            gain_left: angle.cos() * att,
+            gain_right: angle.sin() * att,
+        }
+    }
+}
+
 /// Version "Zero-Allocation / Zero-Branch / Auto-Vectorized"
 /// Écrit directement le rendu 3D dans un buffer pré-alloué pour éliminer le gras (alloc::vec).
 pub fn binauralize_mono_fast_into(
@@ -20,23 +78,8 @@ pub fn binauralize_mono_fast_into(
     let dx = src_pos.0 - listener_pos.0;
     let dy = src_pos.1 - listener_pos.1;
     let dz = src_pos.2 - listener_pos.2;
-    let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-6);
 
-    let azimuth = dx.atan2(-dz);
-    let theta = azimuth.abs();
-    let elevation = dy.atan2((dx * dx + dz * dz).sqrt());
-
-    let c = 343.0_f32;
-    let itd = ((settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
-    let ild_db = settings.max_ild_db() * theta.sin() * (1.0 - 0.25 * elevation.sin().abs());
-    let far_gain = 10f32.powf(-ild_db / 20.0);
-    let att = (1.0 - distance / settings.max_distance()).max(0.0);
-
-    let (itd_left, itd_right, gain_left, gain_right) = if azimuth >= 0.0 {
-        (itd, 0.0, att * far_gain, att)
-    } else {
-        (0.0, itd, att, att * far_gain)
-    };
+    let params = calculate_spatial_params(dx, dy, dz, settings);
 
     // 2. Travail direct sur la tranche utile du buffer réutilisé
     let stereo_slice = &mut output_stereo[..n];
@@ -45,15 +88,15 @@ pub fn binauralize_mono_fast_into(
     // process_channel va directement écraser les anciennes valeurs de la frame précédente.
     process_channel(
         &mono[..n],
-        itd_left * sample_rate as f32,
-        gain_left,
+        params.itd_left_sec * sample_rate as f32,
+        params.gain_left,
         stereo_slice,
         0,
     );
     process_channel(
         &mono[..n],
-        itd_right * sample_rate as f32,
-        gain_right,
+        params.itd_right_sec * sample_rate as f32,
+        params.gain_right,
         stereo_slice,
         1,
     );
@@ -139,74 +182,23 @@ pub fn binauralize_mono(
     sample_rate: u32,
     settings: &AudioEngineSettings,
 ) -> Vec<[f32; 2]> {
-    // ---------------------------------------------------------------
-    // 1. Calculs géométriques
-    // ---------------------------------------------------------------
-    let dx = src_pos.0 - listener_pos.0; // droite-gauche
-    let dy = src_pos.1 - listener_pos.1; // haut-bas
-    let dz = src_pos.2 - listener_pos.2; // profondeur (z positif = proche)
-
-    let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-6);
-
-    // Azimut : angle horizontal autour de l’axe vertical (Y)
-    // 0° = face avant, +X = droite
-    let azimuth = dx.atan2(-dz); // inversion du signe z pour avoir +z = vers l’auditeur
-    let theta = azimuth.abs();
-
-    // Élévation : angle vertical (0 = plan horizontal)
-    let elevation = dy.atan2((dx * dx + dz * dz).sqrt());
-
-    // ---------------------------------------------------------------
-    // 2. ITD / ILD
-    // ---------------------------------------------------------------
-    let c = 343.0_f32; // vitesse du son
-    let itd = ((settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
-
-    // ILD selon azimut, modulé légèrement par l’élévation (haut = moins d’atténuation)
-    let ild_db = settings.max_ild_db() * theta.sin() * (1.0 - 0.25 * elevation.sin().abs());
-    let far_gain = 10f32.powf(-ild_db / 20.0);
-
-    // Atténuation avec distance (linéaire simple)
-    let att = (1.0 - distance / settings.max_distance()).max(0.0);
-
-    // ---------------------------------------------------------------
-    // 3. Détermination du côté proche / éloigné
-    // ---------------------------------------------------------------
-    let (itd_left, itd_right, gain_left, gain_right) = if azimuth >= 0.0 {
-        // Source à droite → oreille droite = proche
-        (
-            itd,            // gauche retardée
-            0.0,            // droite sans décalage
-            att * far_gain, // gauche atténuée
-            att,            // droite pleine intensité
-        )
-    } else {
-        // Source à gauche → oreille gauche = proche
-        (
-            0.0,            // gauche sans décalage
-            itd,            // droite retardée
-            att,            // gauche pleine intensité
-            att * far_gain, // droite atténuée
-        )
-    };
-
-    // ---------------------------------------------------------------
-    // 4. Application ITD + ILD sur le signal mono
-    // ---------------------------------------------------------------
     let n = mono.len();
+    let dx = src_pos.0 - listener_pos.0;
+    let dy = src_pos.1 - listener_pos.1;
+    let dz = src_pos.2 - listener_pos.2;
 
-    let itd_left_samples = itd_left * sample_rate as f32;
-    let itd_right_samples = itd_right * sample_rate as f32;
+    let params = calculate_spatial_params(dx, dy, dz, settings);
+
+    let itd_left_samples = params.itd_left_sec * sample_rate as f32;
+    let itd_right_samples = params.itd_right_sec * sample_rate as f32;
 
     let stereo: Vec<[f32; 2]> = (0..n)
         .map(|i| {
             let idx_l = (i as f32) - itd_left_samples;
             let idx_r = (i as f32) - itd_right_samples;
 
-            // let s_left = interpolate_sample(mono, idx_l) * gain_left;
-            // let s_right = interpolate_sample(mono, idx_r) * gain_right;
-            let s_left = interpolate_sample_fast(mono, idx_l) * gain_left;
-            let s_right = interpolate_sample_fast(mono, idx_r) * gain_right;
+            let s_left = interpolate_sample_fast(mono, idx_l) * params.gain_left;
+            let s_right = interpolate_sample_fast(mono, idx_r) * params.gain_right;
 
             [s_left, s_right]
         })
