@@ -73,19 +73,21 @@ impl WindowEngine for DummyWindowEngine {
     }
 }
 
+use glam::Vec2;
+
 // --- Dummy Mocks (Minimal implementation, no logging) ---
 
 #[allow(unused)]
 pub struct DummyAudio;
 
 impl AudioEngine for DummyAudio {
-    fn get_listener_position(&self) -> (f32, f32) {
-        (0.0, 0.0)
+    fn get_listener_position(&self) -> Vec2 {
+        Vec2::ZERO
     }
-    fn set_listener_position(&mut self, _pos: (f32, f32)) {}
-    fn play_rocket(&self, _pos: (f32, f32), _gain: f32) {}
-    fn play_rocket_with_id(&self, _id: u64, _pos: (f32, f32), _gain: f32) {}
-    fn play_explosion(&self, _pos: (f32, f32), _gain: f32) {}
+    fn set_listener_position(&mut self, _pos: Vec2) {}
+    fn play_rocket(&self, _pos: Vec2, _gain: f32) {}
+    fn play_rocket_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {}
+    fn play_explosion(&self, _pos: Vec2, _gain: f32) {}
     fn start_audio_thread(&mut self, _export_path: Option<&str>) {}
     fn stop_audio_thread(&mut self) {}
     fn mute(&mut self) {}
@@ -241,23 +243,23 @@ impl AudioEngine for TestAudio {
     fn stop_audio_thread(&mut self) {
         self.log.borrow_mut().push("audio.stop".into());
     }
-    fn get_listener_position(&self) -> (f32, f32) {
-        (0.0, 0.0)
+    fn get_listener_position(&self) -> Vec2 {
+        Vec2::ZERO
     }
-    fn set_listener_position(&mut self, _pos: (f32, f32)) {
+    fn set_listener_position(&mut self, _pos: Vec2) {
         self.log
             .borrow_mut()
             .push("set_listener_position called".into());
     }
-    fn play_rocket(&self, _pos: (f32, f32), _gain: f32) {
+    fn play_rocket(&self, _pos: Vec2, _gain: f32) {
         self.log.borrow_mut().push("play_rocket called".into());
     }
-    fn play_rocket_with_id(&self, _id: u64, _pos: (f32, f32), _gain: f32) {
+    fn play_rocket_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {
         self.log
             .borrow_mut()
             .push("play_rocket_with_id called".into());
     }
-    fn play_explosion(&self, _pos: (f32, f32), _gain: f32) {
+    fn play_explosion(&self, _pos: Vec2, _gain: f32) {
         self.log.borrow_mut().push("play_explosion called".into());
     }
     fn mute(&mut self) {

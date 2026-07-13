@@ -4,6 +4,7 @@ use crate::profiler::Profiler;
 #[cfg(feature = "tracy")]
 use crate::tracy_zone;
 use crate::AudioEngineSettings;
+use glam::Vec2;
 // CPAL: cross-platform audio API
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 // use crossbeam::channel::Receiver;
@@ -42,7 +43,7 @@ pub struct FireworksAudio3D {
     rocket_data: Arc<Vec<[f32; 2]>>,
     explosion_data: Arc<Vec<[f32; 2]>>,
 
-    listener_pos: (f32, f32),
+    listener_pos: Vec2,
     sample_rate: u32,
     block_size: usize,
     voices: Vec<Voice>,
@@ -116,7 +117,7 @@ impl FireworksAudio3D {
         &self,
         id: u64,
         data: &Arc<Vec<[f32; 2]>>, // 🎯 MODIFICATION : On reçoit la référence vers l'Arc d'origine !
-        pos: (f32, f32),
+        pos: Vec2,
         gain: f32,
         is_dynamic: bool,
     ) {
@@ -157,16 +158,16 @@ impl FireworksAudio3D {
         }
     }
 
-    pub fn play_rocket(&self, pos: (f32, f32), gain: f32) {
+    pub fn play_rocket(&self, pos: Vec2, gain: f32) {
         // En passant &self.explosion_data, on transmet proprement la référence vers l'Arc !
         self.enqueue_sound(0, &self.explosion_data, pos, gain, false);
     }
 
-    pub fn play_rocket_with_id(&self, id: u64, pos: (f32, f32), gain: f32) {
+    pub fn play_rocket_with_id(&self, id: u64, pos: Vec2, gain: f32) {
         self.enqueue_sound(id, &self.rocket_data, pos, gain, true);
     }
 
-    pub fn play_explosion(&self, pos: (f32, f32), gain: f32) {
+    pub fn play_explosion(&self, pos: Vec2, gain: f32) {
         self.enqueue_sound(0, &self.rocket_data, pos, gain, false);
     }
 
@@ -218,9 +219,6 @@ impl FireworksAudio3D {
                     export_writer: export_writer_arc.clone(),
                     block_index: 0,
                     acc: vec![[0.0; 2]; max_supported_frames],
-                    // 🎯 INITIALISATION DES TAMPONS DE BROUILLON (ZÉRO ALLOCATION ULTÉRIEURE)
-                    scratch_mono: vec![0.0; max_supported_frames],
-                    scratch_stereo: vec![[0.0; 2]; max_supported_frames],
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
                 };
@@ -288,15 +286,15 @@ impl FireworksAudio3D {
 }
 
 impl AudioEngine for FireworksAudio3D {
-    fn play_rocket(&self, pos: (f32, f32), gain: f32) {
+    fn play_rocket(&self, pos: Vec2, gain: f32) {
         self.play_rocket(pos, gain)
     }
 
-    fn play_rocket_with_id(&self, id: u64, pos: (f32, f32), gain: f32) {
+    fn play_rocket_with_id(&self, id: u64, pos: Vec2, gain: f32) {
         self.play_rocket_with_id(id, pos, gain)
     }
 
-    fn play_explosion(&self, pos: (f32, f32), gain: f32) {
+    fn play_explosion(&self, pos: Vec2, gain: f32) {
         self.play_explosion(pos, gain)
     }
 
@@ -308,12 +306,12 @@ impl AudioEngine for FireworksAudio3D {
         self.stop_audio_thread()
     }
 
-    fn set_listener_position(&mut self, pos: (f32, f32)) {
+    fn set_listener_position(&mut self, pos: Vec2) {
         self.listener_pos = pos;
         info!("🎧️ Listener position set to: {:?}", self.listener_pos);
     }
 
-    fn get_listener_position(&self) -> (f32, f32) {
+    fn get_listener_position(&self) -> Vec2 {
         self.listener_pos
     }
 

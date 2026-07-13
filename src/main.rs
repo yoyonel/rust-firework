@@ -82,7 +82,7 @@ fn main() -> Result<()> {
             for i in 0..8 {
                 let r = 50.0 + (i as f32 * 20.0);
                 let a = angle + (i as f32 * std::f32::consts::FRAC_PI_4);
-                let pos = (a.cos() * r, a.sin() * r);
+                let pos = glam::Vec2::new(a.cos() * r, a.sin() * r);
 
                 // Exécute les méthodes réelles et disponibles sur votre moteur
                 audio_engine.play_rocket(pos, 0.7);

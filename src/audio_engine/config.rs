@@ -9,7 +9,7 @@ pub struct AudioConfig {
     pub explosion_path: PathBuf,
 
     // Dans TOML, un tuple (f32, f32) est représenté par un tableau [x, y]
-    pub listener_pos: (f32, f32),
+    pub listener_pos: [f32; 2],
 
     pub sample_rate: u32,
     pub block_size: usize,
@@ -26,7 +26,7 @@ impl Default for AudioConfig {
         Self {
             rocket_path: PathBuf::from("assets/sounds/rocket.wav"),
             explosion_path: PathBuf::from("assets/sounds/explosion.wav"),
-            listener_pos: (0.0, 0.0),
+            listener_pos: [0.0, 0.0],
             sample_rate: 48000,
             block_size: 512,
             max_voices: 64,
@@ -50,7 +50,7 @@ impl AudioConfig {
         FireworksAudioConfig {
             rocket_path: self.rocket_path.to_string_lossy().into_owned(),
             explosion_path: self.explosion_path.to_string_lossy().into_owned(),
-            listener_pos: self.listener_pos,
+            listener_pos: glam::Vec2::new(self.listener_pos[0], self.listener_pos[1]),
             sample_rate: self.sample_rate,
             block_size: self.block_size,
             // On conserve votre logique de plafonnement dynamique

@@ -195,8 +195,8 @@ impl PhysicEngineFireworks {
                     if let Some(tx) = &self.doppler_sender {
                         let _ = tx.try_send(DopplerEvent {
                             id: rocket.id,
-                            pos: (rocket.pos.x, rocket.pos.y),
-                            vel: (rocket.vel.x, rocket.vel.y), // Crucial pour le calcul de vitesse radiale !
+                            pos: rocket.pos,
+                            vel: rocket.vel, // Crucial pour le calcul de vitesse radiale !
                             gain: 1.0,
                             timestamp: Instant::now(),
                         });

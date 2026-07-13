@@ -136,7 +136,7 @@ where
     pub fn run(&mut self, export_path: Option<String>) -> anyhow::Result<()> {
         self.audio_engine.start_audio_thread(export_path.as_deref());
         self.audio_engine
-            .set_listener_position((self.window_size_f32.0 / 2.0, 0.0));
+            .set_listener_position(glam::Vec2::new(self.window_size_f32.0 / 2.0, 0.0));
 
         while self.step() {}
 
@@ -250,7 +250,7 @@ where
         self.window_size_f32 = (w as f32, h as f32);
         self.physic_engine.set_window_width(w as f32);
         self.audio_engine
-            .set_listener_position(((w / 2) as f32, 0.0));
+            .set_listener_position(glam::Vec2::new((w / 2) as f32, 0.0));
     }
 
     fn toggle_fullscreen(&mut self) {
@@ -508,7 +508,7 @@ where
         if let Some(rocket) = &update_result.new_rocket {
             debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
             // MODIFIÉ : On utilise play_rocket_with_id en transmettant rocket.id !
-            audio_engine.play_rocket_with_id(rocket.id, (rocket.pos.x, rocket.pos.y), 0.8);
+            audio_engine.play_rocket_with_id(rocket.id, rocket.pos, 0.8);
         }
 
         for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
@@ -516,7 +516,7 @@ where
                 "💥 Explosion triggered: {} at ({}, {})",
                 i, expl.pos.x, expl.pos.y
             );
-            audio_engine.play_explosion((expl.pos.x, expl.pos.y), 1.0);
+            audio_engine.play_explosion(expl.pos, 1.0);
         }
     }
 

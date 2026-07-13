@@ -14,19 +14,13 @@ pub struct DspProcessor {
     pub doppler_rx: Option<Receiver<DopplerEvent>>,
     pub garbage_tx: Sender<Arc<Vec<[f32; 2]>>>,
     pub settings: AudioEngineSettings,
-    pub listener_pos: (f32, f32),
+    pub listener_pos: glam::Vec2,
     pub sample_rate: u32,
     pub export_writer: Option<Arc<Mutex<SafeWavWriter>>>,
     pub block_index: u64,
     pub acc: Vec<[f32; 2]>,
     pub last_log: Instant,
     pub log_interval: Duration,
-
-    /// 🎯 TAMPON DE BROUILLON MONO : Alloué 1 seule fois au démarrage.
-    pub scratch_mono: Vec<f32>,
-    /// 🎯 TAMPON DE BROUILLON STÉRÉO : Alloué 1 seule fois au démarrage.
-    /// Reste chaud dans le cache L1/L2 du CPU à chaque bloc audio !
-    pub scratch_stereo: Vec<[f32; 2]>,
 }
 
 impl DspProcessor {
@@ -36,10 +30,7 @@ impl DspProcessor {
         let _audio_frame_guard = profiler.measure("audio_frame");
         let frames = data.len() / 2;
 
-        if frames > self.acc.len()
-            || frames > self.scratch_mono.len()
-            || frames > self.scratch_stereo.len()
-        {
+        if frames > self.acc.len() {
             log::error!("Buffer under-allocated! Requested {} frames", frames);
             return;
         }
@@ -95,16 +86,19 @@ impl DspProcessor {
                     v.world_pos = event.pos;
                     v.velocity = event.vel;
 
-                    let dx = v.world_pos.0 - self.listener_pos.0;
-                    let dy = v.world_pos.1 - self.listener_pos.1;
-                    let dist = (dx * dx + dy * dy).sqrt().max(0.001);
+                    let d = v.world_pos - self.listener_pos;
+                    let dist = d.length().max(0.001);
 
-                    let dir_x = -dx / dist;
-                    let dir_y = -dy / dist;
-                    let v_radial = v.velocity.0 * dir_x + v.velocity.1 * dir_y;
+                    let dir = -d / dist;
+                    let v_radial = v.velocity.dot(dir);
 
                     let c = 343.0_f32;
-                    v.playback_rate = (c / (c - v_radial)).clamp(0.25, 4.0);
+                    let denominator = c - v_radial;
+                    v.playback_rate = if denominator <= 0.0 {
+                        4.0
+                    } else {
+                        (c / denominator).clamp(0.25, 4.0)
+                    };
 
                     crate::tracy_plot!("Audio: Doppler Rate (alpha)", v.playback_rate as f64);
                 }
@@ -130,12 +124,8 @@ impl DspProcessor {
             }
 
             // 1. Paramètres physiques 3D de base
-            let dx = v.world_pos.0 - self.listener_pos.0;
-            let dy = v.world_pos.1 - self.listener_pos.1;
-            let dz = 0.0; // Zéro si la hauteur z n'est pas encore gérée par le moteur physique
-            let distance = (dx * dx + dy * dy + dz * dz).sqrt().max(1e-6);
-
-            let att = (1.0 - distance / self.settings.max_distance()).max(0.0);
+            let d = v.world_pos - self.listener_pos;
+            let distance = d.length().max(1e-6);
 
             // Filtre passe-bas dynamique
             let fc = (self.settings.f_min()
@@ -155,34 +145,26 @@ impl DspProcessor {
             let rate = v.playback_rate as f64;
 
             // 2. Calcul du Binaural ou Panning (Une fois par bloc !)
-            let (itd_l_samples, itd_r_samples, gain_l, gain_r) = if self.settings.use_binaural() {
-                let azimuth = dx.atan2(-dz);
-                let theta = azimuth.abs();
-                let elevation = dy.atan2(distance);
+            let params = crate::audio_engine::binaural_processing::calculate_spatial_params(
+                d.x,
+                d.y,
+                0.0,
+                &self.settings,
+            );
 
-                let c = 343.0_f32;
-                let itd =
-                    ((self.settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
-                let ild_db =
-                    self.settings.max_ild_db() * theta.sin() * (1.0 - 0.25 * elevation.sin().abs());
-                let far_gain = 10f32.powf(-ild_db / 20.0);
+            let itd_l_samples = params.itd_left_sec * self.sample_rate as f32;
+            let itd_r_samples = params.itd_right_sec * self.sample_rate as f32;
 
-                if azimuth >= 0.0 {
-                    (itd * self.sample_rate as f32, 0.0, att * far_gain, att)
-                } else {
-                    (0.0, itd * self.sample_rate as f32, att, att * far_gain)
-                }
-            } else {
-                let pan = (dx / self.settings.max_distance()).clamp(-1.0, 1.0);
-                let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
-                (0.0, 0.0, angle.cos() * att, angle.sin() * att)
-            };
+            let target_gain_l = v.user_gain * params.gain_left;
+            let target_gain_r = v.user_gain * params.gain_right;
 
-            let final_gain_l = v.user_gain * gain_l;
-            let final_gain_r = v.user_gain * gain_r;
+            let start_gain_l = v.current_gains[0];
+            let start_gain_r = v.current_gains[1];
+            let gain_step_l = (target_gain_l - start_gain_l) / frames as f32;
+            let gain_step_r = (target_gain_r - start_gain_r) / frames as f32;
 
             // 3. Boucle de Mixage : Lecture spatiale directe (Zéro Buffer Intermédiaire)
-            for frame in self.acc[..frames].iter_mut() {
+            for (i, frame) in self.acc[..frames].iter_mut().enumerate() {
                 let current_pos = v.pos;
                 let index = current_pos as usize;
 
@@ -243,15 +225,19 @@ impl DspProcessor {
                 prev_l = l;
                 prev_r = r;
 
-                // Sommation directe dans le buffer CPAL final
-                frame[0] += l * final_gain_l;
-                frame[1] += r * final_gain_r;
+                // Sommation directe avec gains interpolés (LERP) dans le buffer CPAL final
+                let current_g_l = start_gain_l + gain_step_l * i as f32;
+                let current_g_r = start_gain_r + gain_step_r * i as f32;
+                frame[0] += l * current_g_l;
+                frame[1] += r * current_g_r;
 
                 v.pos += rate;
             }
 
             v.filter_state[0] = prev_l;
             v.filter_state[1] = prev_r;
+            v.current_gains[0] = target_gain_l;
+            v.current_gains[1] = target_gain_r;
 
             if v.pos as usize >= total_len {
                 v.active = false;
