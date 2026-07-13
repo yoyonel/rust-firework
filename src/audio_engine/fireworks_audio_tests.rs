@@ -126,8 +126,8 @@ fn test_binaural_center() {
         .unwrap();
     let stereo = binauralize_mono_fast(
         &mono,
-        (src_pos.x, src_pos.y, 0.0),
-        (listener_pos.x, listener_pos.y, 0.0),
+        src_pos.extend(0.0),
+        listener_pos.extend(0.0),
         sr,
         &settings,
     );
@@ -197,8 +197,8 @@ fn test_binaural_left_debug() {
     // Appel de la fonction à tester
     let stereo = binauralize_mono_fast(
         &mono,
-        (src_pos.x, src_pos.y, 0.0),
-        (listener_pos.x, listener_pos.y, 0.0),
+        src_pos.extend(0.0),
+        listener_pos.extend(0.0),
         sr,
         &settings,
     );
@@ -282,8 +282,8 @@ fn test_binaural_right_debug() {
 
     let stereo = binauralize_mono_fast(
         &mono,
-        (src_pos.x, src_pos.y, 0.0),
-        (listener_pos.x, listener_pos.y, 0.0),
+        src_pos.extend(0.0),
+        listener_pos.extend(0.0),
         sr,
         &settings,
     );
@@ -323,10 +323,10 @@ fn test_binaural_right_debug() {
 fn test_binaural_distance_3d() {
     let sr = 48_000;
     let mono = dummy_mono(10);
-    let listener = (0.0, 0.0, 0.0);
+    let listener = glam::Vec3::ZERO;
 
-    let near = (0.0, 0.0, 100.0); // proche devant
-    let far = (0.0, 0.0, -900.0); // loin derrière
+    let near = glam::Vec3::new(0.0, 0.0, 100.0); // proche devant
+    let far = glam::Vec3::new(0.0, 0.0, -900.0); // loin derrière
 
     let settings = AudioEngineSettingsBuilder::default()
         .max_distance(1000.0)
