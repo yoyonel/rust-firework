@@ -26,12 +26,17 @@ WORKDIR /app
 # --- CACHE DEPENDENCIES ---
 # Copy Cargo files only (so dependencies are cached)
 COPY Cargo.toml Cargo.lock ./
-RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+RUN sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
+RUN mkdir -p src benches && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "fn main() {}" > benches/audio_dsp_bench.rs && \
+    echo "fn main() {}" > benches/audio_binaural_bench.rs
 RUN cargo build --release
-RUN rm -rf src
+RUN rm -rf src benches
 
 # Copy full project now
 COPY . .
+RUN sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 
 # Build final release binary
 RUN cargo build --release
