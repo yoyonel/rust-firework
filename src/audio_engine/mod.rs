@@ -1,6 +1,9 @@
 pub mod dsp_processor;
 pub mod macros;
 
+pub mod effect_flags;
+pub use effect_flags::{fx_enabled, AudioEffect, AudioEffectFlags};
+
 pub mod r#trait;
 pub use r#trait::AudioEngine;
 
