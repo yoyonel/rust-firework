@@ -29,15 +29,9 @@ jobs:
       # --- Étape 1 : Checkout du code ---
       - uses: actions/checkout@v4
 
-      # --- Checkout tracy-client from sibling repository ---
-      - name: Checkout rust_tracy_client
-        uses: actions/checkout@v4
-        with:
-          repository: yoyonel/rust_tracy_client
-          path: rust_tracy_client
-
-      - name: Move rust_tracy_client to sibling directory
-        run: mv rust_tracy_client ../rust_tracy_client
+      # --- Étape 2 : Préparer Cargo.toml pour la CI (retirer patch tracy-client local) ---
+      - name: Strip local patches in CI
+        run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 
       # 🦀 2. Installation de Rust toolchain
       - name: Set up Rust
