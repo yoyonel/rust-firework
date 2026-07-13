@@ -106,3 +106,18 @@ La suppression combinée des allocations sur le tas (*heap*) et des tampons inte
 
 ### C. Conclusion
 Le moteur audio `rust-firework` opère désormais dans une **architecture 100% Zéro-Heap (aucune allocation dynamique en boucle chaude) et Zéro Buffer Intermédiaire**. Ce refactoring a permis de **réduire la charge CPU totale du moteur de $67\%$** (plus de $2,2$ milliards de cycles économisés par scénario de test) tout en restaurant une pureté acoustique de référence, une stabilité sans faille (*zéro underrun*) et une latence de restitution minimale ($\approx 4\text{ ms}$).
+
+---
+
+## 5. MISE À JOUR DE LA SPÉCIFICATION ET REFACTORING POST-REVUE (13 JUILLET 2026)
+
+Suite à la revue de code du 13 Juillet 2026, des corrections et raffinements critiques ont été implémentés pour garantir la conformité aux standards de code (Smells) et aux spécifications :
+*   **Unification de la spatialisation** : Extraction de toute la logique trigonométrique 2D/3D (ITD, ILD, distance, gains) dans une fonction centrale et partagée `calculate_spatial_params`. En mode 2D (quand $dz = 0$), l'azimut est maintenant calculé par `dx.atan2(dy)` en utilisant Y comme axe de profondeur et l'élévation à `0.0`, restaurant le bon fonctionnement de la trajectoire audio dans le simulateur 2D.
+*   **Migration vers glam::Vec2** : Remplacement systématique de tous les tuples primitifs `(f32, f32)` par `glam::Vec2` pour les vecteurs positionnels et cinématiques.
+*   **Interpolation de gain (LERP)** : Ajout d'une rampe de gain échantillon par échantillon pour chaque bloc dans le DSP pour éliminer les clics et pops.
+*   **Doppler supersonique** : Clamping du taux Doppler à `4.0` en cas d'approche supérieure ou égale à la vitesse du son.
+*   **Suppression des buffers scratch résiduels** : Nettoyage définitif de `scratch_mono` et `scratch_stereo` du `DspProcessor`.
+
+Pour un compte rendu détaillé de ce refactoring et de l'analyse du profil de performance associé, veuillez vous référer aux documents suivants :
+*   [Rapport de Refactoring](file:///home/latty/Prog/__PERSO__/rust-firework/doc/20260713_audio_engine_refactoring_report.md)
+*   [Analyse des Hotspots CPU post-refactoring](file:///home/latty/Prog/__PERSO__/rust-firework/doc/20260713_audio_performance_profile_analysis.md)
