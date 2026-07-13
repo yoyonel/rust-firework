@@ -241,6 +241,7 @@ tasks:
       PYTHONUNBUFFERED: "1"
     cmds:
       - echo "📈 Running Fireworks post-analysis..."
+      - ffmpeg -i output/output.mp4 -vf "fps=10" output/screenshot_%04d.png
       - cd integration/visual_test && uv run main.py ../../output/ && uv run analyze_optical_flow.py ../../output ../../output --fps 6
 
   # =========================================

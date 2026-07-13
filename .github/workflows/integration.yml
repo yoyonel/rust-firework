@@ -57,6 +57,10 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-uv-
 
+    # 5.5️⃣ Setup FFmpeg
+    - name: 🎥 Set up FFmpeg
+      uses: FedericoCarboni/setup-ffmpeg@v3
+
     # 6️⃣ Run Fireworks Analysis (post-processing)
     - name: 📊 Run Fireworks Analysis
       run: task ci:analyze-fireworks
