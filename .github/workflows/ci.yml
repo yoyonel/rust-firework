@@ -29,6 +29,12 @@ jobs:
       # --- Étape 1 : Checkout du code ---
       - uses: actions/checkout@v4
 
+      # --- Checkout tracy-client from sibling repository ---
+      - uses: actions/checkout@v4
+        with:
+          repository: yoyonel/rust_tracy_client
+          path: ../rust_tracy_client
+
       # 🦀 2. Installation de Rust toolchain
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
