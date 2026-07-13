@@ -323,6 +323,44 @@ fn test_command_registry_default_trait() {
     assert!(registry.get_commands().is_empty());
 }
 
+#[test]
+fn test_console_audio_fx_all() {
+    let mut audio = TestAudio::new(Rc::new(RefCell::new(Vec::new())));
+    let mut physic = TestPhysic::new(Rc::new(RefCell::new(Vec::new())));
+    let mut registry = CommandRegistry::default();
+
+    registry.register_for_audio("audio.fx_all", |engine, input| {
+        let parts: Vec<&str> = input.split_whitespace().collect();
+        match parts.as_slice() {
+            [_, state] => {
+                let enabled = matches!(*state, "on" | "1" | "true");
+                engine.set_all_effects_enabled(enabled);
+                format!(
+                    "All DSP effects -> {}",
+                    if enabled { "ON ✓" } else { "OFF ✗" }
+                )
+            }
+            _ => "Usage: audio.fx_all <on|off>".to_string(),
+        }
+    });
+
+    // Execute with "on"
+    let res = registry.execute(&mut audio, &mut physic, "audio.fx_all on");
+    assert_eq!(res, "All DSP effects -> ON ✓");
+    assert!(audio
+        .log
+        .borrow()
+        .contains(&"set_all_effects_enabled called: true".to_string()));
+
+    // Execute with "off"
+    let res2 = registry.execute(&mut audio, &mut physic, "audio.fx_all off");
+    assert_eq!(res2, "All DSP effects -> OFF ✗");
+    assert!(audio
+        .log
+        .borrow()
+        .contains(&"set_all_effects_enabled called: false".to_string()));
+}
+
 // ============================================================================
 // Console Integration Tests (require OpenGL context via interactive_tests)
 // ============================================================================

@@ -1,3 +1,4 @@
+use crate::audio_engine::effect_flags::{fx_enabled, AudioEffect};
 use crate::AudioEngineSettings;
 use glam::{Vec2, Vec3};
 
@@ -8,11 +9,22 @@ pub struct SpatialParams {
     pub gain_right: f32,
 }
 
-pub fn calculate_spatial_params_3d(diff: Vec3, settings: &AudioEngineSettings) -> SpatialParams {
+pub fn calculate_spatial_params_3d(
+    diff: Vec3,
+    settings: &AudioEngineSettings,
+    fx_mask: u32,
+) -> SpatialParams {
     let distance = diff.length().max(1e-6);
-    let att = (1.0 - distance / settings.max_distance()).max(0.0);
 
-    if settings.use_binaural() {
+    // Attenuation par la distance (conditionnelle)
+    let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
+        (1.0 - distance / settings.max_distance()).max(0.0)
+    } else {
+        1.0 // Bypass : volume constant quelle que soit la distance
+    };
+
+    // Binaural ITD+ILD (conditionnel) — override du flag settings.use_binaural()
+    if settings.use_binaural() && fx_enabled(fx_mask, AudioEffect::Binaural) {
         let azimuth = diff.x.atan2(-diff.z);
         let elevation = diff.y.atan2((diff.x * diff.x + diff.z * diff.z).sqrt());
 
@@ -37,7 +49,7 @@ pub fn calculate_spatial_params_3d(diff: Vec3, settings: &AudioEngineSettings) -
                 gain_right: att * far_gain,
             }
         }
-    } else {
+    } else if fx_enabled(fx_mask, AudioEffect::Panning) {
         let pan = (diff.x / settings.max_distance()).clamp(-1.0, 1.0);
         let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
         SpatialParams {
@@ -46,14 +58,33 @@ pub fn calculate_spatial_params_3d(diff: Vec3, settings: &AudioEngineSettings) -
             gain_left: angle.cos() * att,
             gain_right: angle.sin() * att,
         }
+    } else {
+        // Flat center panning
+        SpatialParams {
+            itd_left_sec: 0.0,
+            itd_right_sec: 0.0,
+            gain_left: att,
+            gain_right: att,
+        }
     }
 }
 
-pub fn calculate_spatial_params_2d(diff: Vec2, settings: &AudioEngineSettings) -> SpatialParams {
+pub fn calculate_spatial_params_2d(
+    diff: Vec2,
+    settings: &AudioEngineSettings,
+    fx_mask: u32,
+) -> SpatialParams {
     let distance = diff.length().max(1e-6);
-    let att = (1.0 - distance / settings.max_distance()).max(0.0);
 
-    if settings.use_binaural() {
+    // Atténuation par la distance (conditionnelle)
+    let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
+        (1.0 - distance / settings.max_distance()).max(0.0)
+    } else {
+        1.0 // Bypass : volume constant quelle que soit la distance
+    };
+
+    // Binaural ITD+ILD (conditionnel) — override du flag settings.use_binaural()
+    if settings.use_binaural() && fx_enabled(fx_mask, AudioEffect::Binaural) {
         let azimuth = diff.x.atan2(diff.y);
         let theta = azimuth.abs();
         let c = 343.0_f32;
@@ -76,7 +107,7 @@ pub fn calculate_spatial_params_2d(diff: Vec2, settings: &AudioEngineSettings) -
                 gain_right: att * far_gain,
             }
         }
-    } else {
+    } else if fx_enabled(fx_mask, AudioEffect::Panning) {
         let pan = (diff.x / settings.max_distance()).clamp(-1.0, 1.0);
         let angle = (pan + 1.0) * std::f32::consts::FRAC_PI_4;
         SpatialParams {
@@ -84,6 +115,14 @@ pub fn calculate_spatial_params_2d(diff: Vec2, settings: &AudioEngineSettings) -
             itd_right_sec: 0.0,
             gain_left: angle.cos() * att,
             gain_right: angle.sin() * att,
+        }
+    } else {
+        // Flat center panning
+        SpatialParams {
+            itd_left_sec: 0.0,
+            itd_right_sec: 0.0,
+            gain_left: att,
+            gain_right: att,
         }
     }
 }
@@ -105,7 +144,11 @@ pub fn binauralize_mono_fast_into(
     }
 
     let diff = src_pos.into() - listener_pos.into();
-    let params = calculate_spatial_params_3d(diff, settings);
+    let params = calculate_spatial_params_3d(
+        diff,
+        settings,
+        crate::audio_engine::effect_flags::DEFAULT_FLAGS,
+    );
 
     // 2. Travail direct sur la tranche utile du buffer réutilisé
     let stereo_slice = &mut output_stereo[..n];
@@ -210,7 +253,11 @@ pub fn binauralize_mono(
 ) -> Vec<[f32; 2]> {
     let n = mono.len();
     let diff = src_pos.into() - listener_pos.into();
-    let params = calculate_spatial_params_3d(diff, settings);
+    let params = calculate_spatial_params_3d(
+        diff,
+        settings,
+        crate::audio_engine::effect_flags::DEFAULT_FLAGS,
+    );
 
     let itd_left_samples = params.itd_left_sec * sample_rate as f32;
     let itd_right_samples = params.itd_right_sec * sample_rate as f32;

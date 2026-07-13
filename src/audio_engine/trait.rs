@@ -1,3 +1,4 @@
+use crate::audio_engine::effect_flags::AudioEffect;
 use glam::Vec2;
 
 pub trait AudioEngine {
@@ -13,6 +14,20 @@ pub trait AudioEngine {
 
     fn mute(&mut self);
     fn unmute(&mut self) -> f32;
+
+    // --- Contrôle des effets DSP à chaud ---
+
+    /// Active ou désactive un effet DSP. Opération lock-free, safe depuis le main thread.
+    fn set_effect_enabled(&self, effect: AudioEffect, enabled: bool);
+
+    /// Active ou désactive tous les effets DSP en même temps. Opération lock-free.
+    fn set_all_effects_enabled(&self, enabled: bool);
+
+    /// Retourne `true` si l'effet est actuellement activé.
+    fn get_effect_enabled(&self, effect: AudioEffect) -> bool;
+
+    /// Retourne une chaîne listant tous les effets et leur état courant (pour la console).
+    fn get_effects_status(&self) -> String;
 
     fn as_audio_engine(&self) -> &dyn AudioEngine;
 }
