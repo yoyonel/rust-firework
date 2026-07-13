@@ -10,10 +10,13 @@ Access the console by pressing `F1` (or `` ` `` depending on configuration).
 | `clear` | Clears the console output. |
 
 ## Audio
-| Command | Description |
-| :--- | :--- |
-| `audio.mute` | Mute all audio. |
-| `audio.unmute` | Unmute audio. |
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `audio.mute` | | Mute all audio. |
+| `audio.unmute` | | Unmute audio. |
+| `audio.fx` | `<effect> <on\|off>` | Toggle a specific DSP audio effect at runtime (lock-free).<br>Available: `binaural`, `panning`, `distance_atten`, `lowpass`, `doppler`, `fade`, `gain_lerp`, `normalize`. |
+| `audio.fx_all` | `<on\|off>` | Toggle all DSP audio effects at once. |
+| `audio.fx_status` | | Display current status of all DSP audio effects (ON/OFF). |
 
 ## Physics & Simulation
 
