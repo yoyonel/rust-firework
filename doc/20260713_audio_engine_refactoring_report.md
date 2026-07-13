@@ -64,5 +64,21 @@ Lors de la revue de code interactive, les points suivants ont été corrigés po
 
 Les modifications ont été rigoureusement testées et validées :
 1.  **Vérification de Compilation et Lints** : `cargo check` et `cargo clippy --all-targets` se terminent avec succès et ne signalent aucun avertissement.
-2.  **Tests Automatisés** : L'intégralité de la suite de tests (`cargo test`) passe avec succès, soit **154 tests validés** (dont les tests d'intégration du moteur physique et la vérification de continuité de phase DSP).
+2.  **Tests Automatisés** : L'intégralité de la suite de tests (`cargo test`) passe avec succès, soit **160 tests validés** (dont les nouveaux tests unitaires de bypass d'effets DSP et d'intégration console).
 3.  **Performances** : Le respect de l'architecture sans allocation en boucle chaude (Zéro-Heap) a été préservé, conservant les gains de performance acquis (réduction de 67% des cycles CPU du moteur audio).
+
+---
+
+## 5. Rendre Optionnel les Effets Audio (Bitmask & Lock-Free Bypass)
+
+Dans le cadre des spécifications de flexibilité et d'optimisation en temps réel, le pipeline de traitement DSP a été rendu modulaire et configurable à chaud :
+*   **Masque d'effets atomique (`AudioEffectFlags`)** : Représenté par un bitfield lock-free (`AtomicU32`). Le thread CPAL lit le bitfield une seule fois par bloc via `load(Ordering::Relaxed)` pour éliminer tout overhead de re-lecture et garantir la cohérence des effets sur la durée du bloc. Le thread principal écrit via `fetch_or`/`fetch_and`.
+*   **Zero-Cost Bypass** :
+    *   *Atténuation par la distance et passe-bas* : Désactivés à chaud via le bitfield, le coefficient du filtre $a$ est figé à $1.0$ (transparent) et le gain d'atténuation à $1.0$.
+    *   *Spatialisation binaurale et panoramique* : Si la spatialisation binaurale est désactivée, elle retombe sur le panoramique standard. Si les deux sont désactivés, les gains gauche/droite sont identiques (flat mono).
+    *   *Effet Doppler* : Si désactivé, le calcul de vitesse radiale est ignoré et le taux de lecture est réinitialisé à $1.0$ pour les voix actives dynamiques.
+    *   *Normalisation et Gain Stage* : Si désactivé, le gain global n'est pas appliqué et la saturation douce `.tanh()` est bypassée au profit d'un simple clampage linéaire matériel.
+*   **Commandes de Console intégrées** :
+    *   `audio.fx <effect_name> <on|off>` : Active ou désactive individuellement un effet.
+    *   `audio.fx_all <on|off>` : Active ou désactive tous les effets en une seule opération atomique.
+    *   `audio.fx_status` : Affiche l'état courant de tous les effets.
