@@ -1,4 +1,5 @@
 use crossbeam_channel::Sender; // NOUVEAU
+use fireworks_sim::audio_engine::effect_flags::AudioEffect;
 use fireworks_sim::audio_engine::{AudioEngine, DopplerEvent}; // MODIFIÉ : ajout de DopplerEvent
 use fireworks_sim::physic_engine::config::PhysicConfig;
 use fireworks_sim::physic_engine::explosion_shape::ExplosionShape;
@@ -94,9 +95,16 @@ impl AudioEngine for DummyAudio {
     fn unmute(&mut self) -> f32 {
         1.0
     }
-
     fn as_audio_engine(&self) -> &dyn AudioEngine {
         self
+    }
+    fn set_effect_enabled(&self, _: AudioEffect, _: bool) {}
+    fn set_all_effects_enabled(&self, _: bool) {}
+    fn get_effect_enabled(&self, _: AudioEffect) -> bool {
+        true
+    }
+    fn get_effects_status(&self) -> String {
+        "Binaural: ON".to_string()
     }
 }
 
@@ -269,9 +277,31 @@ impl AudioEngine for TestAudio {
         self.log.borrow_mut().push("audio.unmute".into());
         1.0
     }
-
     fn as_audio_engine(&self) -> &dyn AudioEngine {
         self
+    }
+    fn set_effect_enabled(&self, effect: AudioEffect, enabled: bool) {
+        self.log.borrow_mut().push(format!(
+            "set_effect_enabled called: {:?} = {}",
+            effect, enabled
+        ));
+    }
+    fn set_all_effects_enabled(&self, enabled: bool) {
+        self.log
+            .borrow_mut()
+            .push(format!("set_all_effects_enabled called: {}", enabled));
+    }
+    fn get_effect_enabled(&self, _effect: AudioEffect) -> bool {
+        self.log
+            .borrow_mut()
+            .push("get_effect_enabled called".into());
+        true
+    }
+    fn get_effects_status(&self) -> String {
+        self.log
+            .borrow_mut()
+            .push("get_effects_status called".into());
+        "test_all_on".to_string()
     }
 }
 

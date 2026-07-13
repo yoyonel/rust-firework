@@ -1,3 +1,4 @@
+use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
 use crate::audio_engine::types::{FireworksAudioConfig, PlayRequest, Voice};
 use crate::audio_engine::{load_audio, resample_linear, AudioBlock, AudioEngine, SafeWavWriter};
 use crate::profiler::Profiler;
@@ -59,6 +60,10 @@ pub struct FireworksAudio3D {
     garbage_rx: crossbeam_channel::Receiver<Arc<Vec<[f32; 2]>>>,
 
     doppler_receiver: Option<Receiver<crate::audio_engine::DopplerEvent>>,
+
+    /// Masque atomique des effets DSP activés. Partagé avec le `DspProcessor` via `Arc`.
+    /// Lock-free : le thread CPAL lit, le main thread écrit.
+    effect_flags: std::sync::Arc<AudioEffectFlags>,
 }
 
 impl FireworksAudio3D {
@@ -108,7 +113,8 @@ impl FireworksAudio3D {
             global_gain,
             garbage_tx,
             garbage_rx,
-            doppler_receiver: config.doppler_receiver, // MODIFIÉ : Initialisation
+            doppler_receiver: config.doppler_receiver,
+            effect_flags: AudioEffectFlags::new_all_enabled(),
         })
     }
 
@@ -185,6 +191,7 @@ impl FireworksAudio3D {
         let _settings = self.settings.clone();
         let doppler_rx_clone = self.doppler_receiver.clone();
         let listener_pos_clone = self.listener_pos;
+        let effect_flags_clone = self.effect_flags.clone();
 
         let export_writer_arc: Option<Arc<Mutex<SafeWavWriter>>> =
             export_path.map(|path| Arc::new(Mutex::new(SafeWavWriter::new(path, sr))));
@@ -221,6 +228,7 @@ impl FireworksAudio3D {
                     acc: vec![[0.0; 2]; max_supported_frames],
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
+                    effect_flags: effect_flags_clone,
                 };
 
                 // 3. Lancement du Flux Audio
@@ -322,6 +330,22 @@ impl AudioEngine for FireworksAudio3D {
     fn unmute(&mut self) -> f32 {
         self.set_volume(self.settings.global_gain());
         self.settings.global_gain()
+    }
+
+    fn set_effect_enabled(&self, effect: AudioEffect, enabled: bool) {
+        self.effect_flags.set(effect, enabled);
+    }
+
+    fn set_all_effects_enabled(&self, enabled: bool) {
+        self.effect_flags.set_all(enabled);
+    }
+
+    fn get_effect_enabled(&self, effect: AudioEffect) -> bool {
+        self.effect_flags.is_enabled(effect)
+    }
+
+    fn get_effects_status(&self) -> String {
+        self.effect_flags.status_string()
     }
 
     fn as_audio_engine(&self) -> &dyn AudioEngine {
