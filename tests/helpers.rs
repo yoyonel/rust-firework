@@ -165,21 +165,22 @@ impl PhysicEngine for DummyPhysic {
 }
 
 impl PhysicEngineIterator for DummyPhysic {
-    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(self.particles.iter())
+    fn for_each_active_particle(&self, f: &mut dyn FnMut(&Particle)) {
+        for p in &self.particles {
+            f(p);
+        }
     }
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(self.particles.iter())
+    fn for_each_active_head_not_exploded(&self, f: &mut dyn FnMut(&Particle)) {
+        for p in &self.particles {
+            f(p);
+        }
     }
-    fn iter_particles_by_type<'a>(
-        &'a self,
-        particle_type: ParticleType,
-    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(
-            self.particles
-                .iter()
-                .filter(move |p| p.particle_type == particle_type),
-        )
+    fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
+        for p in &self.particles {
+            if p.particle_type == particle_type {
+                f(p);
+            }
+        }
     }
 }
 
@@ -394,17 +395,13 @@ impl PhysicEngine for TestPhysic {
 }
 
 impl PhysicEngineIterator for TestPhysic {
-    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(std::iter::empty())
-    }
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(std::iter::empty())
-    }
-    fn iter_particles_by_type<'a>(
-        &'a self,
+    fn for_each_active_particle(&self, _f: &mut dyn FnMut(&Particle)) {}
+    fn for_each_active_head_not_exploded(&self, _f: &mut dyn FnMut(&Particle)) {}
+    fn for_each_particle_of_type(
+        &self,
         _particle_type: ParticleType,
-    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(std::iter::empty())
+        _f: &mut dyn FnMut(&Particle),
+    ) {
     }
 }
 

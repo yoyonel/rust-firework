@@ -325,12 +325,24 @@ fn test_get_config() {
 // 7. Itérateurs (PhysicEngineIterator)
 // ==================================
 
+fn count_active_particles(engine: &PhysicEngineFireworks) -> usize {
+    let mut count = 0;
+    engine.for_each_active_particle(&mut |_| count += 1);
+    count
+}
+
+fn count_active_heads(engine: &PhysicEngineFireworks) -> usize {
+    let mut count = 0;
+    engine.for_each_active_head_not_exploded(&mut |_| count += 1);
+    count
+}
+
 #[test]
 fn test_iter_active_particles_empty() {
     let config = PhysicConfig::default();
     let engine = PhysicEngineFireworks::new(&config, 1920.0);
 
-    let count = engine.iter_active_particles().count();
+    let count = count_active_particles(&engine);
     assert_eq!(count, 0);
 }
 
@@ -346,7 +358,7 @@ fn test_iter_active_particles_with_rockets() {
     engine.update(0.016);
 
     // Chaque fusée a au moins sa particule head
-    let count = engine.iter_active_particles().count();
+    let count = count_active_particles(&engine);
     assert!(count >= 2, "Devrait avoir au moins 2 particules (heads)");
 }
 
@@ -359,14 +371,14 @@ fn test_iter_active_particles_increases_with_trails() {
     engine.force_next_launch();
     engine.update(0.016);
 
-    let count_initial = engine.iter_active_particles().count();
+    let count_initial = count_active_particles(&engine);
 
     // Simuler pour générer des trails
     for _ in 0..10 {
         engine.update(0.016);
     }
 
-    let count_after = engine.iter_active_particles().count();
+    let count_after = count_active_particles(&engine);
 
     // Le nombre de particules devrait augmenter (trails)
     assert!(
@@ -390,7 +402,7 @@ fn test_iter_active_heads_not_exploded() {
     }
 
     // Toutes devraient être non explosées initialement
-    let count = engine.iter_active_heads_not_exploded().count();
+    let count = count_active_heads(&engine);
     assert_eq!(count, 3, "Les 3 fusées devraient être non explosées");
 
     // Simuler jusqu'à ce que certaines explosent
@@ -400,7 +412,7 @@ fn test_iter_active_heads_not_exploded() {
     }
 
     // Certaines devraient avoir explosé ou être désactivées
-    let count_after = engine.iter_active_heads_not_exploded().count();
+    let count_after = count_active_heads(&engine);
     assert!(
         count_after <= count,
         "Le nombre de fusées non explosées devrait diminuer ou rester égal"
@@ -418,7 +430,7 @@ fn test_iter_active_heads_filters_correctly() {
         engine.update(0.016);
     }
 
-    let heads_count = engine.iter_active_heads_not_exploded().count();
+    let heads_count = count_active_heads(&engine);
     let total_rockets = engine.rockets_count();
 
     // Le nombre de heads non explosées devrait être <= nombre total de fusées

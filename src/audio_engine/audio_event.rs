@@ -26,7 +26,7 @@ impl Default for DopplerEvent {
 /// Thread-safe queue : crossbeam channel (sender côté renderer, receiver côté audio)
 pub mod doppler_queue {
     use super::DopplerEvent;
-    use crossbeam::channel::{unbounded, Receiver, Sender};
+    use crossbeam::channel::{bounded, Receiver, Sender};
 
     #[derive(Clone)]
     pub struct DopplerQueue {
@@ -42,7 +42,7 @@ pub mod doppler_queue {
 
     impl DopplerQueue {
         pub fn new() -> Self {
-            let (s, r) = unbounded();
+            let (s, r) = bounded(8192);
             Self {
                 sender: s,
                 receiver: r,

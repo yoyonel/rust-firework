@@ -24,6 +24,7 @@ pub struct PhysicEngineFireworks {
     active_indices: Vec<Index>, // Itération rapide sur les fusées actives
     free_indices: Vec<Index>,   // Slots disponibles à réutiliser
     triggered_explosions: Vec<Particle>,
+    to_deactivate_scratch: Vec<Index>, // Buffer temporaire réutilisable pour éviter les allocations
 
     time_since_last_rocket: f32,
     next_rocket_interval: f32,
@@ -65,6 +66,7 @@ impl PhysicEngineFireworks {
             active_indices: Vec::with_capacity(config.max_rockets),
             free_indices,
             triggered_explosions,
+            to_deactivate_scratch: Vec::with_capacity(config.max_rockets),
             time_since_last_rocket: 0.0,
             next_rocket_interval: 0.0,
             window_width,
@@ -98,9 +100,10 @@ impl PhysicEngineFireworks {
             );
             self.triggered_explosions = vec![Particle::default(); new_config.max_rockets];
 
-            // Réinitialisation des slots free_indices et active_indices
+            // Réinitialisation des slots free_indices, active_indices et scratch buffer
             self.active_indices.clear();
             self.free_indices.clear();
+            self.to_deactivate_scratch.clear();
 
             for _ in 0..new_config.max_rockets {
                 let idx = self.rockets.insert(Rocket::new(&mut self.rng));
@@ -175,7 +178,10 @@ impl PhysicEngineFireworks {
             }
         }
 
-        let mut to_deactivate = Vec::new();
+        // On extrait temporairement le buffer de travail sans allouer pour contenter le borrow checker.
+        let mut to_deactivate = std::mem::take(&mut self.to_deactivate_scratch);
+        to_deactivate.clear();
+
         // on parcourt la liste des id de rockets actives
         for &idx in &self.active_indices {
             // si la rocket existe
@@ -213,10 +219,14 @@ impl PhysicEngineFireworks {
                 }
             }
         }
+
         // on désactive les rockets
-        for idx in to_deactivate {
+        for &idx in &to_deactivate {
             self.deactivate_rocket(idx);
         }
+
+        // On remet le buffer de travail dans la structure pour le réutiliser au prochain tour
+        self.to_deactivate_scratch = to_deactivate;
 
         UpdateResult {
             new_rocket,
@@ -230,69 +240,35 @@ impl PhysicEngineFireworks {
 // Trait PhysicEngine
 // ==================================
 impl PhysicEngineIterator for PhysicEngineFireworks {
-    /// Itère sur toutes les particules de **toutes** les fusées actives.
-    ///
-    /// ✔ Aucun `Vec` interne
-    /// ✔ Aucun `Box<dyn Iterator>`
-    /// ✔ Zéro allocation
-    /// ✔ Pipeline d’itérateurs entièrement optimisable par le compilateur
-    ///
-    /// Cette approche est idéale pour un rendu GPU basé sur un buffer mappé persistant :
-    /// on produit un flux de particules triées, en lecture séquentielle, permettant
-    /// une écriture contiguë dans le VBO d'instanciation (meilleur throughput).
-    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        Box::new(
-            self.active_indices
-                .iter()
-                // Pour chaque rocket active, on concatène son itérateur de heads
-                // à l’aide d’un `flat_map`. Le résultat final est un seul pipeline
-                // d’itérateurs, entièrement paresseux et zéro-allocation.
-                .flat_map(move |&idx| {
-                    self.rockets[idx].iter_active_particles(&self.particles_pools_for_rockets)
-                }),
-        )
+    /// Applique une fonction sur chaque particule active de toutes les fusées actives.
+    fn for_each_active_particle(&self, f: &mut dyn FnMut(&Particle)) {
+        for &idx in &self.active_indices {
+            for p in self.rockets[idx].iter_active_particles(&self.particles_pools_for_rockets) {
+                f(p);
+            }
+        }
     }
 
-    /// Itère sur les particules-têtes (non explosées) référencées statiquement
-    /// pour chaque fusée active.
-    ///
-    /// ✔ Zero allocation
-    /// ✔ Transmet une Particle (référencée) par rocket active
-    /// ✔ Pas d'accès aux pools
-    /// ✔ Parfaitement optimisable
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        // TODO: peut être mettre en place une liste d'indices de rockets non-explosées
-        Box::new(
-            self.active_indices
-                .iter()
-                // 1) filtrage des fusées non-explosées
-                .filter(move |&&idx| !self.rockets[idx].exploded)
-                .map(move |&idx| self.rockets[idx].head_particle()),
-        )
+    /// Applique une fonction sur chaque tête de fusée active non explosée.
+    fn for_each_active_head_not_exploded(&self, f: &mut dyn FnMut(&Particle)) {
+        for &idx in &self.active_indices {
+            let rocket = &self.rockets[idx];
+            if !rocket.exploded {
+                f(rocket.head_particle());
+            }
+        }
     }
 
-    /// Retourne un itérateur sur les particules actives d'un type spécifique.
-    ///
-    /// ✔ Zero allocation
-    /// ✔ Filtrage paresseux (lazy)
-    /// ✔ Parfaitement optimisable
-    ///
-    /// Note: Pour les particules de type Rocket, cette méthode combine les particules
-    /// de tête (head_particle) avec les particules des pools qui correspondent au type.
-    fn iter_particles_by_type<'a>(
-        &'a self,
-        particle_type: ParticleType,
-    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a> {
-        // Pour les particules de type Rocket, on doit inclure les têtes de fusée
-        // qui ne sont pas dans les pools mais dans la structure Rocket elle-même
+    /// Applique une fonction sur chaque particule active d'un type spécifique.
+    fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
         if particle_type == ParticleType::Rocket {
-            Box::new(self.iter_active_heads_not_exploded())
+            self.for_each_active_head_not_exploded(f);
         } else {
-            // Pour les autres types, on filtre les particules des pools
-            Box::new(
-                self.iter_active_particles()
-                    .filter(move |p| p.particle_type == particle_type),
-            )
+            self.for_each_active_particle(&mut |p| {
+                if p.particle_type == particle_type {
+                    f(p);
+                }
+            });
         }
     }
 }
