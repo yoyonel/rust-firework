@@ -1,8 +1,36 @@
 use fireworks_sim::physic_engine::{
     config::PhysicConfig,
+    particle::Particle,
     physic_engine_generational_arena::{PhysicEngineFireworks, PhysicEngineTestHelpers},
     ParticleType, PhysicEngine, PhysicEngineIterator,
 };
+
+fn count_active_particles(engine: &PhysicEngineFireworks) -> usize {
+    let mut count = 0;
+    engine.for_each_active_particle(&mut |_| count += 1);
+    count
+}
+
+fn count_active_heads(engine: &PhysicEngineFireworks) -> usize {
+    let mut count = 0;
+    engine.for_each_active_head_not_exploded(&mut |_| count += 1);
+    count
+}
+
+fn count_particles_by_type(engine: &PhysicEngineFireworks, particle_type: ParticleType) -> usize {
+    let mut count = 0;
+    engine.for_each_particle_of_type(particle_type, &mut |_| count += 1);
+    count
+}
+
+fn collect_particles_by_type(
+    engine: &PhysicEngineFireworks,
+    particle_type: ParticleType,
+) -> Vec<Particle> {
+    let mut v = Vec::new();
+    engine.for_each_particle_of_type(particle_type, &mut |p| v.push(*p));
+    v
+}
 
 /// Test que iter_particles_by_type retourne les particules de tête pour ParticleType::Rocket
 /// Ce test aurait détecté la régression où les têtes de fusées n'étaient pas visibles
@@ -18,9 +46,7 @@ fn test_iter_particles_by_type_returns_rocket_heads() {
     }
 
     // CRITIQUE: iter_particles_by_type(Rocket) doit retourner les têtes de fusées
-    let rocket_particles: Vec<_> = engine
-        .iter_particles_by_type(ParticleType::Rocket)
-        .collect();
+    let rocket_particles = collect_particles_by_type(&engine, ParticleType::Rocket);
 
     assert_eq!(
         rocket_particles.len(),
@@ -50,8 +76,8 @@ fn test_iter_particles_by_type_rocket_equals_heads() {
         engine.update(0.016);
     }
 
-    let rocket_count = engine.iter_particles_by_type(ParticleType::Rocket).count();
-    let heads_count = engine.iter_active_heads_not_exploded().count();
+    let rocket_count = count_particles_by_type(&engine, ParticleType::Rocket);
+    let heads_count = count_active_heads(&engine);
 
     assert_eq!(
         rocket_count, heads_count,
@@ -74,7 +100,7 @@ fn test_iter_particles_by_type_returns_trails() {
         engine.update(0.016);
     }
 
-    let trail_particles: Vec<_> = engine.iter_particles_by_type(ParticleType::Trail).collect();
+    let trail_particles = collect_particles_by_type(&engine, ParticleType::Trail);
 
     // Devrait avoir des particules de traînée
     assert!(
@@ -107,9 +133,7 @@ fn test_iter_particles_by_type_returns_explosions() {
         engine.update(0.016);
     }
 
-    let explosion_particles: Vec<_> = engine
-        .iter_particles_by_type(ParticleType::Explosion)
-        .collect();
+    let explosion_particles = collect_particles_by_type(&engine, ParticleType::Explosion);
 
     // Devrait avoir des particules d'explosion
     assert!(
@@ -138,7 +162,7 @@ fn test_iter_particles_by_type_empty_for_smoke() {
     engine.update(0.016);
 
     // Smoke n'est pas encore implémenté, devrait retourner 0
-    let smoke_count = engine.iter_particles_by_type(ParticleType::Smoke).count();
+    let smoke_count = count_particles_by_type(&engine, ParticleType::Smoke);
 
     assert_eq!(
         smoke_count, 0,
@@ -163,12 +187,10 @@ fn test_iter_particles_by_type_filters_correctly() {
         engine.update(0.016);
     }
 
-    let rocket_count = engine.iter_particles_by_type(ParticleType::Rocket).count();
-    let trail_count = engine.iter_particles_by_type(ParticleType::Trail).count();
-    let explosion_count = engine
-        .iter_particles_by_type(ParticleType::Explosion)
-        .count();
-    let total_particles = engine.iter_active_particles().count();
+    let rocket_count = count_particles_by_type(&engine, ParticleType::Rocket);
+    let trail_count = count_particles_by_type(&engine, ParticleType::Trail);
+    let explosion_count = count_particles_by_type(&engine, ParticleType::Explosion);
+    let total_particles = count_active_particles(&engine);
 
     // La somme des particules par type devrait être <= au total
     // (peut être < car certaines particules peuvent être inactives)
@@ -192,9 +214,7 @@ fn test_regression_rocket_particles_visible() {
     }
 
     // CRITIQUE: Ce test aurait échoué avec le bug initial
-    let rocket_particles: Vec<_> = engine
-        .iter_particles_by_type(ParticleType::Rocket)
-        .collect();
+    let rocket_particles = collect_particles_by_type(&engine, ParticleType::Rocket);
 
     assert!(
         !rocket_particles.is_empty(),

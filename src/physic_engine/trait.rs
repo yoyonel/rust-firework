@@ -7,19 +7,14 @@ use crate::physic_engine::ParticleType;
 use crossbeam_channel::Sender;
 
 pub trait PhysicEngineIterator {
-    // Les types associés ne sont pas nécessaires ici si 'Particle' est importé.
+    /// Applique une fonction sur chaque particule active.
+    fn for_each_active_particle(&self, f: &mut dyn FnMut(&Particle));
 
-    /// Retourne un itérateur sur les particules actives.
-    fn iter_active_particles<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
+    /// Applique une fonction sur chaque tête de fusée active non explosée.
+    fn for_each_active_head_not_exploded(&self, f: &mut dyn FnMut(&Particle));
 
-    /// Retourne un itérateur sur les têtes de fusées non explosées.
-    fn iter_active_heads_not_exploded<'a>(&'a self) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
-
-    /// Retourne un itérateur sur les particules actives d'un type spécifique.
-    fn iter_particles_by_type<'a>(
-        &'a self,
-        particle_type: ParticleType,
-    ) -> Box<dyn Iterator<Item = &'a Particle> + 'a>;
+    /// Applique une fonction sur chaque particule active d'un type spécifique.
+    fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle));
 }
 
 /// 🔧 Trait `PhysicEngine`
