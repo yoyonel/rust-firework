@@ -143,42 +143,32 @@ impl RendererGraphics {
     /// # Safety
     /// This function is unsafe because it directly manipulates GPU resources.
     /// The caller must ensure that the OpenGL context is valid.
-    pub unsafe fn fill_particle_data_direct<P: PhysicEngineIterator + ?Sized>(
-        &mut self,
-        physic: &P,
-    ) -> usize {
+    pub unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize {
         let mut count = 0;
 
         // Slice Rust mutable mappé directement sur la mémoire GPU.
         // Toute écriture dans ce slice écrit physiquement dans la BAR / VRAM.
         let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
 
-        // Ici, `iter_active_particles()` fournit un flux paresseux, sans allocation CPU
-        // intermédiaire : idéal pour écrire contigu dans le buffer GPU.
-        for (i, p) in physic
-            .iter_active_particles()
-            .take(self.max_particles_on_gpu)
-            .enumerate()
-        {
-            gpu_slice[i] = ParticleGPU {
-                pos_x: p.pos.x,
-                pos_y: p.pos.y,
-                col_r: p.color.x,
-                col_g: p.color.y,
-                col_b: p.color.z,
-                life: p.life,
-                max_life: p.max_life,
-                size: p.size,
-                angle: p.angle,
-                // Brightness based on life ratio with exponential decay (quartic)
-                brightness: (p.life / p.max_life).powi(4),
-            };
-            count += 1;
-        }
-        // Flush explicite de la zone écrite.
-        // (Si MAP_COHERENT_BIT est utilisé : cette étape peut être omise.)
-        // let written_bytes = (count * std::mem::size_of::<ParticleGPU>()) as isize;
-        // gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, 0, written_bytes);
+        // Ici, on remplit sans allocations temporaires en passant par for_each_active_particle
+        physic.for_each_active_particle(&mut |p| {
+            if count < self.max_particles_on_gpu {
+                gpu_slice[count] = ParticleGPU {
+                    pos_x: p.pos.x,
+                    pos_y: p.pos.y,
+                    col_r: p.color.x,
+                    col_g: p.color.y,
+                    col_b: p.color.z,
+                    life: p.life,
+                    max_life: p.max_life,
+                    size: p.size,
+                    angle: p.angle,
+                    // Brightness based on life ratio with exponential decay (quartic)
+                    brightness: (p.life / p.max_life).powi(4),
+                };
+                count += 1;
+            }
+        });
 
         count
     }
