@@ -40,8 +40,8 @@ impl fmt::Display for MetricValue {
 
 /// Données internes du profiler
 pub struct ProfilerInner {
-    pub samples: HashMap<String, Vec<f32>>, // Durées RAII / profile_block
-    pub metrics: HashMap<String, Vec<MetricValue>>, // Valeurs scalaires typées
+    pub samples: HashMap<&'static str, Vec<f32>>, // Durées RAII / profile_block
+    pub metrics: HashMap<&'static str, Vec<MetricValue>>, // Valeurs scalaires typées
     pub max_samples: usize,
     pub total_frame_times: Vec<f32>,
 }
@@ -73,20 +73,19 @@ impl Profiler {
     }
 
     /// Mesure d'un bloc labelisé (RAII)
-    pub fn measure(&'_ self, label: impl Into<String>) -> MeasureGuard<'_> {
+    pub fn measure(&'_ self, label: &'static str) -> MeasureGuard<'_> {
         MeasureGuard {
             profiler: self,
-            label: label.into(),
+            label,
             start: Instant::now(),
         }
     }
 
     /// Enregistre une métrique scalaire typée
-    pub fn record_metric<T: Into<MetricValue>>(&self, label: impl Into<String>, value: T) {
-        let label_str = label.into();
+    pub fn record_metric<T: Into<MetricValue>>(&self, label: &'static str, value: T) {
         let mut inner = self.inner.write().unwrap();
         let max_samples = inner.max_samples;
-        let buffer = inner.metrics.entry(label_str).or_default();
+        let buffer = inner.metrics.entry(label).or_default();
         if buffer.len() >= max_samples {
             buffer.remove(0);
         }
@@ -111,41 +110,45 @@ impl Profiler {
     }
 
     /// Résumé des temps mesurés (moyenne, min, max)
-    pub fn summary(&self) -> HashMap<String, (f32, f32, f32)> {
+    pub fn summary(&self) -> HashMap<&'static str, (f32, f32, f32)> {
         let inner = self.inner.read().unwrap();
         summarize_map(&inner.samples)
     }
 
     /// Résumé des métriques scalaires (moyenne, min, max)
-    pub fn metrics_summary(&self) -> HashMap<String, (MetricValue, MetricValue, MetricValue)> {
+    pub fn metrics_summary(
+        &self,
+    ) -> HashMap<&'static str, (MetricValue, MetricValue, MetricValue)> {
         let inner = self.inner.read().unwrap();
         inner
             .metrics
             .iter()
             .filter(|(_, v)| !v.is_empty())
-            .map(|(k, v)| (k.clone(), summarize_metric(v)))
+            .map(|(k, v)| (*k, summarize_metric(v)))
             .collect()
     }
 
     /// Résumé pour une métrique spécifique
-    pub fn metric_summary(&self, label: &str) -> Option<(MetricValue, MetricValue, MetricValue)> {
+    pub fn metric_summary(
+        &self,
+        label: &'static str,
+    ) -> Option<(MetricValue, MetricValue, MetricValue)> {
         let inner = self.inner.read().unwrap();
         inner.metrics.get(label).map(|v| summarize_metric(v))
     }
 
     /// Profile un bloc de code et retourne sa valeur de retour
-    pub fn profile_block<T, F>(&self, label: impl Into<String>, f: F) -> T
+    pub fn profile_block<T, F>(&self, label: &'static str, f: F) -> T
     where
         F: FnOnce() -> T,
     {
-        let label_str = label.into();
         let start = Instant::now();
         let result = f();
         let dt = start.elapsed().as_secs_f32() * 1000.0;
 
         let mut inner = self.inner.write().unwrap();
         let max_samples = inner.max_samples;
-        let samples = inner.samples.entry(label_str).or_default();
+        let samples = inner.samples.entry(label).or_default();
         if samples.len() >= max_samples {
             samples.remove(0);
         }
@@ -236,10 +239,10 @@ pub fn summarize_metric(series: &[MetricValue]) -> (MetricValue, MetricValue, Me
 }
 
 /// Résumé pour une map f32
-fn summarize_map(map: &HashMap<String, Vec<f32>>) -> HashMap<String, (f32, f32, f32)> {
+fn summarize_map(map: &HashMap<&'static str, Vec<f32>>) -> HashMap<&'static str, (f32, f32, f32)> {
     map.iter()
         .filter(|(_, v)| !v.is_empty())
-        .map(|(k, v)| (k.clone(), summarize_series(v)))
+        .map(|(k, v)| (*k, summarize_series(v)))
         .collect()
 }
 
@@ -263,7 +266,7 @@ impl Drop for FrameGuard {
 /// Mesure d’un bloc labelisé (RAII)
 pub struct MeasureGuard<'a> {
     profiler: &'a Profiler,
-    label: String,
+    label: &'static str,
     start: Instant,
 }
 
@@ -272,7 +275,7 @@ impl<'a> Drop for MeasureGuard<'a> {
         let dt = self.start.elapsed().as_secs_f32() * 1000.0;
         let mut inner = self.profiler.inner.write().unwrap();
         let max_samples = inner.max_samples;
-        let samples = inner.samples.entry(self.label.clone()).or_default();
+        let samples = inner.samples.entry(self.label).or_default();
         if samples.len() >= max_samples {
             samples.remove(0);
         }
