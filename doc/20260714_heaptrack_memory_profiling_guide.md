@@ -148,8 +148,8 @@ Par défaut, le driver graphique force la synchronisation verticale (VSync) qui 
 vblank_mode=0 __GL_SYNC_TO_VBLANK=0 cargo bench --bench simulator_full_bench
 ```
 
-### B. Comparaison de baselines de performance avec mise à l'échelle (1 à 64 fusées)
-Pour évaluer précisément l'évolution des performances sous charge de 1 à 64 fusées entre deux branches Git (ex: `master` et notre branche optimisée) :
+### B. Comparaison de baselines de performance avec mise à l'échelle (10 à 4000 fusées)
+Pour évaluer précisément l'évolution des performances sous charge de 10 à 4000 fusées actives soutenues entre deux branches Git (ex: `master` et notre branche optimisée) :
 
 1. **Sauvegarder la baseline optimisée :**
    Placez-vous sur la branche `perf/zero-allocation-hot-paths` et exécutez :
@@ -164,17 +164,18 @@ Pour évaluer précisément l'évolution des performances sous charge de 1 à 64
 
 ### 📈 Résultats comparatifs réels constatés (Mise à l'échelle) :
 
-| Nombre de fusées actives | Temps de frame - Master | Temps de frame - Optimisé | Régression Master / Gain Optimisé |
+| Nombre de fusées actives soutenues | Temps de frame - Master | Temps de frame - Optimisé | Gain Net (Zéro-alloc) |
 | :---: | :---: | :---: | :---: |
-| **1 fusée** | 820.3 µs | **783.6 µs** | +4.7% (Master plus lent) / **+4.5% gain** |
-| **2 fusées** | 861.9 µs | **819.1 µs** | +7.4% (Master plus lent) / **+5.0% gain** |
-| **4 fusées** | 834.9 µs | **828.5 µs** | +4.0% (Master plus lent) / **+0.8% gain** |
-| **8 fusées** | 838.4 µs | **794.6 µs** | +5.4% (Master plus lent) / **+5.2% gain** |
-| **16 fusées** | 857.4 µs | **812.0 µs** | +2.4% (Master plus lent) / **+5.3% gain** |
-| **32 fusées** | 848.5 µs | **819.5 µs** | +7.4% (Master plus lent) / **+3.4% gain** |
-| **64 fusées** | 831.0 µs | **818.5 µs** | +2.3% (Master plus lent) / **+1.5% gain** |
+| **10 fusées** | 562.2 µs | **544.1 µs** | **+3.3%** |
+| **50 fusées** | 640.7 µs | **610.9 µs** | **+4.9%** |
+| **200 fusées** | 1.30 ms | **1.24 ms** | **+4.3%** |
+| **1000 fusées** | 4.43 ms | **4.34 ms** | **+2.1%** |
+| **4000 fusées** | 5.38 ms | **4.90 ms** | **+9.8%** |
 
-Ce gain, substantiel sur une boucle de rendu en temps réel, s'accompagne d'une réduction drastique du bruit et des micro-bégaiements audio (plus de contention d'allocateur global sur le thread CPAL).
+### 🔍 Analyse de la charge GPU/CPU :
+* **Pourquoi la faible variation auparavant ?** Lors de nos premiers tests, la simulation progressait naturellement dans le temps. En raison du grand nombre d'itérations de Criterion, la simulation atteignait rapidement son état stationnaire par défaut (environ 120 fusées), quel que soit le nombre initial de fusées injectées au démarrage.
+* **Comportement sous haute charge :** En adaptant les intervalles de génération à l'état stationnaire, nous constatons désormais une courbe de mise à l'échelle logique. À 4000 fusées actives, le moteur gère en permanence des dizaines de milliers de particules de traînées et d'explosions. 
+* **Optimisation mémoire sous haute charge :** À 4000 fusées, la version optimisée montre son plus grand avantage (**+9.8% de gain**), car l'absence totale d'allocations dans la boucle chaude évite la fragmentation du tas et les micro-latences induites par le mapping dynamique des buffers GPU et le recyclage des voix audio.
 
 ---
 
