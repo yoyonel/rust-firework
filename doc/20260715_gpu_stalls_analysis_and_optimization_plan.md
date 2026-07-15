@@ -18,7 +18,7 @@ La timeline Tracy affiche des espaces vides importants (de 400 à 600 µs) entre
 
 ### B. Le Bloc rose `simulator::finalize_frame(swap_buffer)` (Driver Throttling)
 Même lorsque la VSync est désactivée (`vblank_mode=0`), le pilote graphique (NVIDIA/AMD) bride artificiellement le CPU dans `glfwSwapBuffers`. 
-* **Pourquoi ?** Si le CPU soumettait ses frames à sa vitesse maximale (sans synchronisation), la file de commandes du pilote grandirait indéfiniment. Cela causerait une explosion de la consommation mémoire et un retard d'affichage (input lag) majeur.
+* **Pourquoi ?** Si le CPU s'exécutait à sa vitesse maximale (sans synchronisation), la file de commandes du pilote grandirait indéfiniment. Cela causerait une explosion de la consommation mémoire et un retard d'affichage (input lag) majeur.
 * **Conséquence :** Le pilote endort le thread CPU dans `swap_buffers` jusqu'à ce que le GPU ait fini de dessiner une frame précédente et libéré un slot de swap.
 
 ### C. Schéma séquentiel CPU-GPU constaté
@@ -91,3 +91,34 @@ Pour fusionner le rendu instancié (fusées) et le rendu des particules en un mi
 ### Phase 4 : Uniform Buffer Objects (UBO)
 * **Action 1 :** Regrouper toutes les variables globales (dimensions de la fenêtre, matrice de projection, temps écoulé, intensité du Bloom) dans un bloc uniforme partagé.
 * **Action 2 :** Créer un UBO sur le GPU et le lier au début de la frame. Toutes les étapes de rendu et de post-process y accèdent sans nécessiter de multiples appels à `glUniform*` individuels.
+
+---
+
+## 📈 Partie 4 : Gains de Performance Attendus (Projections)
+
+L'implémentation complète de ce plan d'optimisation (AZDO) permettra d'obtenir des améliorations ciblées à tous les niveaux du pipeline :
+
+### A. Stabilisation du Framerate et Suppression des Pics (99th Percentile FPS)
+* **Gains :** Élimination complète des micro-bégaiements (stutters) lors des pics d'explosions.
+* **Mécanisme :** Le Triple-Buffering persistant avec fences (`glFenceSync`) résout les conflits d'accès en écriture/lecture (Write-After-Read), évitant au pilote graphique de bloquer le thread principal CPU pour protéger les buffers.
+
+### B. Réduction drastique du Temps de Rendu CPU (Command Submission Cost)
+* **Gains :** **-50% à -70%** de réduction de l'overhead de rendu CPU.
+* **Mécanisme :** Le regroupement en un seul Draw Call instancié avec un Texture Array 2D élimine 90% des appels API lourds (`glUseProgram`, `glBindTexture`, `glBindVertexArray`). La phase de soumission CPU descendra de ~100 µs à environ **30-40 µs** par frame.
+
+### C. Gain de Temps GPU Pur (Pipeline Occupancy)
+* **Gains :** **-15% à -20%** sur le temps d'exécution GPU.
+* **Mécanisme :** Le GPU traite tous les sommets de toutes les particules en une seule vague unifiée, améliorant l'occupation des cœurs de calcul du GPU.
+
+### D. Gain Global sous Haute Charge (4 000+ Fusées)
+* **Gains :** **+10% à +15%** de performance globale sous charge extrême.
+* **Mécanisme :** À 4 000 fusées actives (environ 1 million de particules), le temps de traitement global par frame passera de **4.90 ms** à environ **4.20 ms**, repoussant les limites physiques de la simulation avant d'atteindre le seuil des 60 FPS (16.6 ms).
+
+### Synthèse des indicateurs cibles après implémentation :
+
+| Indicateur | Avant AZDO (Actuel) | Après AZDO (Cible) | Type de gain |
+| :--- | :---: | :---: | :---: |
+| **Micro-bégaiements (Spikes)** | Présents sous haute charge | **Supprimés** | Fluidité visuelle (Frametime 1% Low) |
+| **Overhead CPU Rendu** | ~100 µs | **~30 µs** | Temps CPU libéré pour la physique |
+| **Temps Frame (4000 fusées)** | 4.90 ms | **~4.20 ms** | **+14% de FPS sous charge** |
+| **Draw Calls par Frame** | Multiple (selon types) | **1 unique draw call** | Efficacité driver OpenGL |
