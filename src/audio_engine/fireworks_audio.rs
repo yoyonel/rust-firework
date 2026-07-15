@@ -94,7 +94,7 @@ impl FireworksAudio3D {
 
         let global_gain = config.settings.global_gain();
 
-        let (garbage_tx, garbage_rx) = crossbeam_channel::unbounded();
+        let (garbage_tx, garbage_rx) = crossbeam_channel::bounded(1024);
 
         // --- NOUVEAU : Ring buffer SPSC borné pour les requêtes audio ---
         let (play_tx, play_rx) = crossbeam_channel::bounded(512);
