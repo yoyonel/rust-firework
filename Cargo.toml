@@ -58,6 +58,10 @@ harness = false
 name = "audio_binaural_bench"
 harness = false
 
+[[bench]]
+name = "simulator_full_bench"
+harness = false
+
 [features]
 default = ["simd", "test_helpers"] # SIMD activé par défaut
 fft = []
