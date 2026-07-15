@@ -11,6 +11,7 @@ Ce document explique les concepts de profilage de la mémoire à l'aide de **hea
    * [B. Remplacement de `Box<dyn Iterator>` par des closures](#b-remplacement-de-boxdyn-iterator-par-des-closures)
    * [C. Canal borné pour la file Doppler (`crossbeam-channel`)](#c-canal-borné-pour-la-file-doppler-crossbeam-channel)
    * [D. Pattern "Scratch Buffer" pour `to_deactivate`](#d-pattern-scratch-buffer-pour-to_deactivate)
+   * [E. Canal borné pour le Garbage Collector audio](#e-canal-borné-pour-le-garbage-collector-audio)
 3. [Tutoriel : Analyser son application avec Heaptrack](#3-tutoriel--analyser-son-application-avec-heaptrack)
    * [Lancement du profilage](#lancement-du-profilage)
    * [Analyse textuelle (`heaptrack_print`)](#analyse-textuelle-heaptrack_print)
@@ -33,7 +34,7 @@ Bien que Rust ne possède pas de ramasse-miettes (Garbage Collector) causant des
 
 ## 2. Anatomie des Refactorings de `fireworks_sim`
 
-Grâce au profilage mémoire Heaptrack, nous avons identifié quatre sources majeures d'allocations répétitives sur le tas dans les chemins critiques.
+Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq sources d'allocations dynamiques sur le tas dans les chemins critiques.
 
 ### A. Élimination des allocations de chaînes du Profiler
 * **Problème détecté :** Le profiler de performance interne acceptait des clés génériques via `label: impl Into<String>`. 
@@ -96,14 +97,10 @@ Grâce au profilage mémoire Heaptrack, nous avons identifié quatre sources maj
   self.to_deactivate_scratch = to_deactivate;
   ```
 
-### 📊 Bilan comparatif des allocations temporaires applicatives
-| Fonction concernée | Avant | Après |
-| :--- | :---: | :---: |
-| `write_cpal_buffer` (Audio / Profiler) | ~10 120 allocations | **0** |
-| `iter_active_particles` (Rendu / Iterator) | ~5 100 allocations | **0** |
-| `record_metric` (Profiler Metrics) | ~410 allocations | **0** |
-| `DopplerEvent` sending (`try_send` Channel) | ~12 600 allocations | **0** |
-| `to_deactivate` push (Physics update) | ~1 660 allocations | **0** |
+### E. Canal borné pour le Garbage Collector audio
+* **Problème détecté :** Lorsque le thread audio termine de jouer une voix, il renvoie son tampon audio au thread principal pour déallocation via un canal `garbage_tx` non borné (`unbounded()`). L'appel à `try_send` sur ce canal dans la boucle temps réel CPAL causait une allocation de nœud sur le tas.
+* **Correction dans [fireworks_audio.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs) :**
+  Modification du canal de recyclage pour utiliser une file bornée pré-allouée (`crossbeam::channel::bounded(1024)`), garantissant qu'aucune allocation dynamique ne se produit lorsque les voix terminent leur lecture.
 
 ---
 
@@ -139,12 +136,6 @@ Si vous travaillez dans un terminal ou souhaitez scripter des vérifications, ut
   heaptrack_print -l 1 heaptrack.fireworks_sim.XXXXXX.zst > rapport_fuites.txt
   ```
 
-#### Comment interpréter le rapport texte :
-1. **MOST CALLS TO ALLOCATION FUNCTIONS :** Liste les stack traces qui appellent le plus souvent l'allocateur. Idéal pour repérer les fonctions qui effectuent de petites allocations répétitives.
-2. **PEAK MEMORY CONSUMERS :** Liste les stack traces responsables de la consommation maximale de mémoire (taille brute en octets). Idéal pour trouver des buffers trop grands ou des fuites massives.
-3. **MOST TEMPORARY ALLOCATIONS :** Identifie le "churn" (allocations immédiatement libérées).
-4. **MEMORY LEAKS :** Liste les allocations qui n'ont jamais été libérées avant l'arrêt du programme.
-
 ---
 
 ## 4. Tutoriel Graphique : Naviguer dans Heaptrack-GUI
@@ -154,27 +145,9 @@ Lancez l'interface graphique en ouvrant le fichier `.zst` :
 heaptrack_gui heaptrack.fireworks_sim.XXXXXX.zst
 ```
 
-### L'onglet "Summary" (Résumé)
-C'est votre tableau de bord. Il affiche :
-* Le nombre total d'allocations et le taux d'allocation par seconde.
-* Le pic de mémoire consommée du tas (Peak heap memory consumption).
-* La mémoire totale fuitée à l'extinction.
-
-### L'onglet "Bottom-Up" (Bas-haut)
-Affiche une grille triable de toutes les fonctions ayant alloué de la mémoire.
-* **Tri par "Temporary" :** Permet d'isoler instantanément les fonctions qui allouent et libèrent immédiatement. Si une fonction de votre boucle de rendu apparaît avec un taux élevé d'allocations temporaires, elle doit être optimisée.
-* **Tri par "Peak" :** Utile pour trouver les structures de données (comme les textures, les grands tableaux physiques) les plus lourdes.
-
-### L'onglet "Caller/Callee" (Appelant/Appelé)
-Permet de visualiser le chemin d'appel complet (Call graph) d'une allocation spécifique pour comprendre *pourquoi* une bibliothèque ou une fonction alloue de la mémoire.
-
-### L'onglet "Memory Leaks" (Fuites de mémoire)
-Affiche la liste des allocations non libérées à la fin de l'application.
-
-> [!TIP]
-> **Distinguer les "vraies" fuites des fuites de démarrage (One-time Leaks) :**
-> * Une fuite dans un pilote graphique (comme `libgallium` ou `libX11`) ou dans `libasound` (ALSA) qui n'a lieu qu'une seule fois au démarrage (généralement via `glfwInit` ou `snd_pcm_open`) est **inoffensive** car la mémoire est réclamée par le système d'exploitation à l'extinction.
-> * Une fuite dans la boucle de mise à jour physique ou dans la boucle d'événements qui alloue de la mémoire à chaque frame sans jamais la libérer est une **vraie fuite critique** (la consommation mémoire grandira indéfiniment jusqu'au crash par manque de mémoire).
+* **Summary (Résumé) :** Affiche le volume d'allocations par seconde, le pic de mémoire et les fuites.
+* **Bottom-Up (Bas-haut) :** Permet d'isoler instantanément les fonctions qui allouent et libèrent immédiatement (tri par "Temporary").
+* **Memory Leaks (Fuites de mémoire) :** Affiche la liste des allocations non libérées à la fin de l'application.
 
 ---
 
