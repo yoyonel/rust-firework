@@ -24,6 +24,10 @@ impl WindowEngine for GlfwWindowEngine {
         let mut glfw = glfw::init(glfw::fail_on_errors)
             .map_err(|_| anyhow!("Impossible d'initialiser GLFW"))?;
 
+        if std::env::var("FIREWORKS_HEADLESS").is_ok() || std::env::var("FIREWORKS_BENCH").is_ok() {
+            glfw.window_hint(glfw::WindowHint::Visible(false));
+        }
+
         glfw.window_hint(glfw::WindowHint::ContextVersionMajor(3));
         glfw.window_hint(glfw::WindowHint::ContextVersionMinor(3));
         glfw.window_hint(glfw::WindowHint::OpenGlProfile(
