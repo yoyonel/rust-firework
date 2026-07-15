@@ -2,12 +2,17 @@
 
 Rust application for rendering fireworks (OpenGL + Audio)
 
+[![Rust CI](https://github.com/yoyonel/rust-firework/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/yoyonel/rust-firework/actions/workflows/ci.yml)
+[![Integration Test](https://github.com/yoyonel/rust-firework/actions/workflows/integration.yml/badge.svg?branch=master)](https://github.com/yoyonel/rust-firework/actions/workflows/integration.yml)
+[![Deploy mdBook Docs](https://github.com/yoyonel/rust-firework/actions/workflows/deploy_docs.yml/badge.svg?branch=master)](https://github.com/yoyonel/rust-firework/actions/workflows/deploy_docs.yml)
+[![Docs](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://yoyonel.github.io/rust-firework/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 ## 🚀 Présentation
 
-`rust-firework` est une application écrite en Rust qui génère des feux
-d'artifice visuels via un contexte OpenGL, et joue un fond sonore via
-cpal. L'objectif est de combiner rendu graphique dynamique et audio en
-temps réel pour créer une expérience immersive.
+`rust-firework` est une application écrite en Rust qui génère des feux d'artifice visuels via un contexte OpenGL, et joue un fond sonore via `cpal`. L'objectif est de combiner rendu graphique dynamique et audio en temps réel pour créer une expérience immersive.
+
+La documentation interactive complète (profilage mémoire, analyses de performance, manuel du renderer, spécifications Doppler, etc.) est disponible sur la **[GitHub Page du Projet](https://yoyonel.github.io/rust-firework/)**.
 
 ## 🎥 Démo
 
