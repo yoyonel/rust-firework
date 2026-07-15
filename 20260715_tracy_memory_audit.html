@@ -1,0 +1,302 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Audit Mémoire Temps Réel - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">4.1.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">4.2.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html" class="active"><strong aria-hidden="true">4.3.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">4.4.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">4.5.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.6.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.7.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.8.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="2026-07-15---audit-de-lusage-de-la-mÉmoire-ram"><a class="header" href="#2026-07-15---audit-de-lusage-de-la-mÉmoire-ram">2026-07-15 - AUDIT DE L'USAGE DE LA MÉMOIRE (RAM)</a></h1>
+<p>Cet audit analyse en détail la consommation mémoire de l'application <code>fireworks_sim</code> à partir des relevés Tracy, afin d'expliquer l'origine des variations et des changements de paliers constatés.</p>
+<hr />
+<h2 id="1-leffet-microscope-de-tracy-analyse-de-lÉchelle"><a class="header" href="#1-leffet-microscope-de-tracy-analyse-de-lÉchelle">1. L'Effet "Microscope" de Tracy (Analyse de l'Échelle)</a></h2>
+<blockquote>
+<p>[!IMPORTANT]<br />
+Le point le plus crucial à noter est <strong>l'échelle verticale (axe Y)</strong> de la courbe de mémoire dans Tracy :</p>
+<ul>
+<li><strong>Consommation totale :</strong> ~5,7 Mo (<code>5703 KB</code> à <code>5705 KB</code>).</li>
+<li><strong>Plage de variation (y-range) :</strong> <strong>2 634 octets</strong> (soit seulement <strong>2,57 Ko</strong>).</li>
+</ul>
+<p>Cette fluctuation représente moins de <strong>0,045 %</strong> de la mémoire totale de l'application. La consommation est donc <strong>extrêmement stable</strong>. Tracy met à l'échelle automatiquement l'axe Y pour remplir l'écran, ce qui donne l'illusion visuelle de grandes vagues ou de changements majeurs, alors qu'il s'agit de bruit de fond microscopique.</p>
+</blockquote>
+<hr />
+<h2 id="2-origine-des-variations-micro-variations--spikes"><a class="header" href="#2-origine-des-variations-micro-variations--spikes">2. Origine des Variations (Micro-variations &amp; Spikes)</a></h2>
+<p>Les petites variations de l'ordre de quelques octets à 1-2 Ko observées frame par frame proviennent principalement de trois sources :</p>
+<h3 id="a-le-formatage-des-logs-périodiques"><a class="header" href="#a-le-formatage-des-logs-périodiques">A. Le formatage des Logs périodiques</a></h3>
+<p>Toutes les 4 à 5 secondes, l'application formate des chaînes de caractères pour afficher les statistiques dans la console :</p>
+<ul>
+<li><strong>Audio Thread (<code>dsp_processor.rs</code>) :</strong> Formate et affiche <code>audio_frame: avg = ...</code>, <code>write_cpal_buffer: avg = ...</code>, etc.</li>
+<li><strong>Main Thread (<code>simulator.rs</code>) :</strong> Formate et affiche le graphe ASCII (<code>ascii_sample_timeline</code>), le FPS moyen (EMA, iter), etc.</li>
+<li><strong>Coût mémoire :</strong> La macro <code>format!</code> ou le passage de variables au logger alloue temporairement des chaînes de caractères (<code>String</code>) sur le tas. Ces chaînes sont libérées immédiatement après l'écriture sur la console, créant des pics éphémères. De plus, <code>self.summary()</code> dans <code>src/profiler.rs</code> alloue une nouvelle <code>HashMap</code> à chaque appel pour regrouper les métriques.</li>
+</ul>
+<h3 id="b-dear-imgui-interface-utilisateur"><a class="header" href="#b-dear-imgui-interface-utilisateur">B. Dear ImGui (Interface utilisateur)</a></h3>
+<p>Comme Dear ImGui est un moteur d'UI en mode immédiat (Immediate Mode), l'interface est entièrement reconstruite à chaque frame :</p>
+<ul>
+<li>Lorsque la fenêtre d'options (visible dans la capture) ou la console ImGui est ouverte, ImGui génère des sommets (vertices), des commandes de dessin (draw commands) et gère des structures d'événements.</li>
+<li>Si l'utilisateur déplace la souris sur l'interface, clique sur un menu déroulant, ou si du texte change, ImGui peut réallouer dynamiquement de petits buffers internes pour s'adapter à la géométrie de l'UI.</li>
+</ul>
+<h3 id="c-la-file-dévénements-glfw"><a class="header" href="#c-la-file-dévénements-glfw">C. La file d'événements GLFW</a></h3>
+<p>À chaque frame, l'application appelle :</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let events: Vec&lt;_&gt; = glfw::flush_messages(self.window_engine.get_events()).collect();
+<span class="boring">}</span></code></pre></pre>
+<ul>
+<li>Si des événements système (mouvements de la souris, clics, touches pressées, focus de la fenêtre) se produisent, la méthode <code>collect()</code> alloue dynamiquement un vecteur (<code>Vec</code>) sur le tas pour stocker temporairement ces événements.</li>
+<li>S'il n'y a aucun événement, <code>collect()</code> renvoie un vecteur vide sans allouer de mémoire, mais le moindre mouvement de souris génère de petites allocations/désallocations.</li>
+</ul>
+<hr />
+<h2 id="3-origine-des-paliers-plateaus--step-ups"><a class="header" href="#3-origine-des-paliers-plateaus--step-ups">3. Origine des Paliers (Plateaus / Step-ups)</a></h2>
+<p>Les changements de paliers semi-permanents (les sauts horizontaux où la mémoire monte d'un coup et y reste) proviennent de mécanismes de cache :</p>
+<h3 id="a-initialisation-paresseuse-lazy-caching-des-buffers-système"><a class="header" href="#a-initialisation-paresseuse-lazy-caching-des-buffers-système">A. Initialisation paresseuse (Lazy Caching) des buffers système</a></h3>
+<ul>
+<li><strong>Stdout/Console Buffering :</strong> Lors du premier affichage d'un log ou d'une sortie console, les bibliothèques standards de Rust/C (comme le <code>BufWriter</code> interne de <code>stdout</code> ou les buffers de formatage de <code>env_logger</code>) allouent dynamiquement des buffers d'écriture.</li>
+<li>Une fois ces buffers alloués, ils ne sont <strong>jamais libérés</strong> pendant la durée de vie du thread pour éviter de répéter des allocations coûteuses (comportement standard de la <code>glibc</code> et de <code>std::io</code>). Cela crée un palier persistant dès le premier log.</li>
+</ul>
+<h3 id="b-redimensionnement-des-buffers-imgui"><a class="header" href="#b-redimensionnement-des-buffers-imgui">B. Redimensionnement des buffers ImGui</a></h3>
+<ul>
+<li>Si le nombre d'éléments affichés à l'écran augmente (par exemple, l'ouverture d'un menu déroulant avec plus d'options), ImGui agrandit ses buffers de sommets et de commandes.</li>
+<li>Une fois qu'un buffer de dessin ImGui a grandi, il conserve sa capacité maximale pour éviter des réallocations futures, ce qui stabilise la mémoire sur un palier plus haut.</li>
+</ul>
+<h3 id="c-caches-internes-de-lallocateur-de-mémoire-glibcrust"><a class="header" href="#c-caches-internes-de-lallocateur-de-mémoire-glibcrust">C. Caches internes de l'allocateur de mémoire (Glibc/Rust)</a></h3>
+<ul>
+<li>L'allocateur mémoire (le gestionnaire de tas système de Linux) ne restitue pas immédiatement chaque bloc de mémoire libéré au noyau OS pour des raisons de performance. Il conserve des listes de blocs libres prêts à être réattribués, ce qui peut se traduire par une consommation rapportée légèrement supérieure et stable (en paliers).</li>
+</ul>
+<hr />
+<h2 id="4-bilan-de-laudit"><a class="header" href="#4-bilan-de-laudit">4. Bilan de l'Audit</a></h2>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Métrique</th><th style="text-align: left">Valeur / Comportement</th><th style="text-align: left">Diagnostic</th></tr></thead><tbody>
+<tr><td style="text-align: left"><strong>Mémoire totale</strong></td><td style="text-align: left"><strong>~5,7 Mo</strong></td><td style="text-align: left"><strong>Excellent.</strong> L'usage de la mémoire est extrêmement bas pour une application graphique avec moteur physique et audio 3D.</td></tr>
+<tr><td style="text-align: left"><strong>Fuite mémoire</strong></td><td style="text-align: left"><strong>Aucune</strong></td><td style="text-align: left">La mémoire n'augmente pas de manière linéaire ou infinie au cours du temps. Elle se stabilise rapidement après l'initialisation.</td></tr>
+<tr><td style="text-align: left"><strong>Stabilité</strong></td><td style="text-align: left"><strong>Haute</strong></td><td style="text-align: left">Les variations observées (2,5 Ko) sont négligeables (0,04% de la RAM totale).</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="5-recommandations-optionnelles"><a class="header" href="#5-recommandations-optionnelles">5. Recommandations (Optionnelles)</a></h2>
+<p>Si vous souhaitez obtenir une ligne de mémoire <strong>parfaitement plate</strong> (zéro variation) dans Tracy, vous pouvez appliquer les optimisations suivantes :</p>
+<ol>
+<li><strong>Désactiver les logs console périodiques</strong> en production ou augmenter leur intervalle de déclenchement.</li>
+<li><strong>Éviter de générer des chaînes dynamiques</strong> dans la boucle de rendu principale (par exemple, en pré-allouant les chaînes de caractères pour l'affichage ou en désactivant le tracé du graphe FPS ASCII).</li>
+<li><strong>Fermer l'interface ImGui</strong> (les menus d'options) lors des mesures de performance pures.</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="20260715_gpu_stalls_analysis_and_optimization_plan.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="20260713_profiling_analysis_tutorial.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="20260715_gpu_stalls_analysis_and_optimization_plan.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="20260713_profiling_analysis_tutorial.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
