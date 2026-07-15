@@ -148,8 +148,8 @@ Par défaut, le driver graphique force la synchronisation verticale (VSync) qui 
 vblank_mode=0 __GL_SYNC_TO_VBLANK=0 cargo bench --bench simulator_full_bench
 ```
 
-### B. Comparaison de baselines de performance
-Pour évaluer précisément l'évolution des performances entre deux branches Git (ex: `master` et notre branche optimisée) :
+### B. Comparaison de baselines de performance avec mise à l'échelle (1 à 64 fusées)
+Pour évaluer précisément l'évolution des performances sous charge de 1 à 64 fusées entre deux branches Git (ex: `master` et notre branche optimisée) :
 
 1. **Sauvegarder la baseline optimisée :**
    Placez-vous sur la branche `perf/zero-allocation-hot-paths` et exécutez :
@@ -162,10 +162,17 @@ Pour évaluer précisément l'évolution des performances entre deux branches Gi
    vblank_mode=0 __GL_SYNC_TO_VBLANK=0 cargo bench --bench simulator_full_bench -- --baseline optimized
    ```
 
-### 📈 Résultats comparatifs réels constatés :
-* **Temps de frame sur la branche Master (non-optimisée) :** **~820.3 µs**
-* **Temps de frame sur la branche Optimisée (zéro-allocation) :** **~773.0 µs**
-* **Gain global mesuré par Criterion :** **+6.4% de performance** (temps de frame réduit de ~6%).
+### 📈 Résultats comparatifs réels constatés (Mise à l'échelle) :
+
+| Nombre de fusées actives | Temps de frame - Master | Temps de frame - Optimisé | Régression Master / Gain Optimisé |
+| :---: | :---: | :---: | :---: |
+| **1 fusée** | 820.3 µs | **783.6 µs** | +4.7% (Master plus lent) / **+4.5% gain** |
+| **2 fusées** | 861.9 µs | **819.1 µs** | +7.4% (Master plus lent) / **+5.0% gain** |
+| **4 fusées** | 834.9 µs | **828.5 µs** | +4.0% (Master plus lent) / **+0.8% gain** |
+| **8 fusées** | 838.4 µs | **794.6 µs** | +5.4% (Master plus lent) / **+5.2% gain** |
+| **16 fusées** | 857.4 µs | **812.0 µs** | +2.4% (Master plus lent) / **+5.3% gain** |
+| **32 fusées** | 848.5 µs | **819.5 µs** | +7.4% (Master plus lent) / **+3.4% gain** |
+| **64 fusées** | 831.0 µs | **818.5 µs** | +2.3% (Master plus lent) / **+1.5% gain** |
 
 Ce gain, substantiel sur une boucle de rendu en temps réel, s'accompagne d'une réduction drastique du bruit et des micro-bégaiements audio (plus de contention d'allocateur global sur le thread CPAL).
 
