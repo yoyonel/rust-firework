@@ -1,0 +1,11 @@
+[book]
+title = "Fireworks Simulator Documentation"
+author = "Lionel ATTY"
+description = "Documentation and performance profiling guides for the Rust Fireworks Simulator."
+src = "doc"
+
+[output.html]
+git-repository-url = "https://github.com/yoyonel/rust-firework"
+git-repository-icon = "fa-github"
+default-theme = "navy"
+preferred-dark-theme = "navy"
