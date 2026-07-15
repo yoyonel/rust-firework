@@ -1,4 +1,4 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 use fireworks_sim::audio_engine::audio_event::doppler_queue::DopplerQueue;
 use fireworks_sim::audio_engine::config::AudioConfig;
 use fireworks_sim::audio_engine::FireworksAudio3D;
@@ -10,50 +10,62 @@ use fireworks_sim::renderer_engine::renderer::Renderer;
 use fireworks_sim::window_engine::{GlfwWindowEngine, WindowEngine};
 use fireworks_sim::{PhysicEngine, Simulator};
 
-fn bench_simulator_full(c: &mut Criterion) {
+fn bench_simulator_scaling(c: &mut Criterion) {
     // Activer le mode headless pour éviter d'ouvrir une fenêtre physique
     std::env::set_var("FIREWORKS_BENCH", "1");
 
     let physic_config = PhysicConfig::default();
     let audio_file_config = AudioConfig::default();
 
-    // Initialisation des ressources
-    let doppler_queue = DopplerQueue::new();
-    let mut audio_config = audio_file_config.to_engine_config(physic_config.max_rockets);
-    audio_config.doppler_receiver = Some(doppler_queue.receiver.clone());
-    let mut audio_engine =
-        FireworksAudio3D::new(audio_config).expect("Failed to create audio engine");
+    let mut group = c.benchmark_group("simulator/frame_step_scaling");
 
-    audio_engine.start_audio_thread(None);
+    for n_rockets in [1, 2, 4, 8, 16, 32, 64] {
+        // Initialisation des ressources
+        let doppler_queue = DopplerQueue::new();
+        let mut audio_config = audio_file_config.to_engine_config(physic_config.max_rockets);
+        audio_config.doppler_receiver = Some(doppler_queue.receiver.clone());
+        let mut audio_engine =
+            FireworksAudio3D::new(audio_config).expect("Failed to create audio engine");
 
-    let window_width = 1024;
-    let window_height = 800;
-    let window_engine = GlfwWindowEngine::init(window_width, window_height, "Fireworks Benchmark")
-        .expect("Failed to init window");
-    let renderer_engine = Renderer::new(window_width, window_height, &physic_config)
-        .expect("Failed to init renderer");
-    let mut physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
-    physic_engine.set_doppler_sender(doppler_queue.sender.clone());
+        audio_engine.start_audio_thread(None);
 
-    // Générer une charge de travail initiale (plusieurs fusées actives) pour que le benchmark soit réaliste
-    for _ in 0..10 {
-        physic_engine.force_next_launch();
-        physic_engine.update(0.016);
+        let window_width = 1024;
+        let window_height = 800;
+        let window_engine =
+            GlfwWindowEngine::init(window_width, window_height, "Fireworks Benchmark")
+                .expect("Failed to init window");
+        let renderer_engine = Renderer::new(window_width, window_height, &physic_config)
+            .expect("Failed to init renderer");
+        let mut physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
+        physic_engine.set_doppler_sender(doppler_queue.sender.clone());
+
+        // Générer une charge de travail initiale (n_rockets fusées actives)
+        for _ in 0..n_rockets {
+            physic_engine.force_next_launch();
+            physic_engine.update(0.016);
+        }
+
+        let mut simulator =
+            Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
+        simulator.init_console_commands();
+
+        group.bench_with_input(
+            BenchmarkId::from_parameter(n_rockets),
+            &n_rockets,
+            |b, _| {
+                b.iter(|| {
+                    let res = simulator.step();
+                    black_box(res);
+                });
+            },
+        );
+
+        // Nettoyage après benchmark de cette configuration
+        simulator.close();
     }
 
-    let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
-    simulator.init_console_commands();
-
-    c.bench_function("simulator/full_frame_step", |b| {
-        b.iter(|| {
-            let res = simulator.step();
-            black_box(res);
-        });
-    });
-
-    // Nettoyage après benchmark
-    simulator.close();
+    group.finish();
 }
 
-criterion_group!(benches, bench_simulator_full);
+criterion_group!(benches, bench_simulator_scaling);
 criterion_main!(benches);
