@@ -1,0 +1,353 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Attentes GPU et Optimisations (Tracy) - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">4.1.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html" class="active"><strong aria-hidden="true">4.2.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">4.3.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">4.4.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">4.5.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.6.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.7.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.8.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="-analyse-des-attentes-gpu-stalls-et-plan-doptimisation-du-rendu-option-c"><a class="header" href="#-analyse-des-attentes-gpu-stalls-et-plan-doptimisation-du-rendu-option-c">📊 Analyse des attentes GPU (Stalls) et Plan d'Optimisation du Rendu (Option C)</a></h1>
+<p>Ce document fournit une analyse technique détaillée des trous (gaps) observés dans la timeline "OpenGL Main Context" de Tracy, explique le mécanisme de blocage du pilote (Driver Throttling), et présente un plan d'implémentation complet pour <strong>l'Option C (Approaching Zero Driver Overhead - AZDO)</strong> visant à minimiser le surcoût de soumission CPU.</p>
+<hr />
+<h2 id="-partie-1--diagnostic-des-attentes-gpu-tracy-timeline"><a class="header" href="#-partie-1--diagnostic-des-attentes-gpu-tracy-timeline">🔍 Partie 1 : Diagnostic des Attentes GPU (Tracy Timeline)</a></h2>
+<p>En analysant la capture d'écran Tracy, nous constatons deux comportements asynchrones distincts :</p>
+<h3 id="a-la-timeline-opengl-main-context-inactivité-gpu"><a class="header" href="#a-la-timeline-opengl-main-context-inactivité-gpu">A. La Timeline "OpenGL Main Context" (Inactivité GPU)</a></h3>
+<p>La timeline Tracy affiche des espaces vides importants (de 400 à 600 µs) entre chaque bloc <code>Renderer::render_frame</code>.</p>
+<ul>
+<li><strong>Signification :</strong> Le GPU traite les sommets et dessine la frame en seulement 100 à 200 µs. Une fois fini, il se met en pause (<strong>Idle</strong>) car sa file d'attente de commandes est vide.</li>
+<li><strong>Causalité :</strong> Le thread principal CPU n'a pas encore soumis les commandes suivantes. Il est occupé par :
+<ol>
+<li>Le bloc rose <code>simulator::finalize_frame(swap_buffer)</code>.</li>
+<li>Le calcul de la physique (<code>physics</code>).</li>
+<li>La gestion des événements de fenêtre et la construction de l'UI.</li>
+</ol>
+</li>
+</ul>
+<h3 id="b-le-bloc-rose-simulatorfinalize_frameswap_buffer-driver-throttling"><a class="header" href="#b-le-bloc-rose-simulatorfinalize_frameswap_buffer-driver-throttling">B. Le Bloc rose <code>simulator::finalize_frame(swap_buffer)</code> (Driver Throttling)</a></h3>
+<p>Même lorsque la VSync est désactivée (<code>vblank_mode=0</code>), le pilote graphique (NVIDIA/AMD) bride artificiellement le CPU dans <code>glfwSwapBuffers</code>.</p>
+<ul>
+<li><strong>Pourquoi ?</strong> Si le CPU s'exécutait à sa vitesse maximale (sans synchronisation), la file de commandes du pilote grandirait indéfiniment. Cela causerait une explosion de la consommation mémoire et un retard d'affichage (input lag) majeur.</li>
+<li><strong>Conséquence :</strong> Le pilote endort le thread CPU dans <code>swap_buffers</code> jusqu'à ce que le GPU ait fini de dessiner une frame précédente et libéré un slot de swap.</li>
+</ul>
+<h3 id="c-schéma-séquentiel-cpu-gpu-constaté"><a class="header" href="#c-schéma-séquentiel-cpu-gpu-constaté">C. Schéma séquentiel CPU-GPU constaté</a></h3>
+<pre><code class="language-mermaid">gantt
+    title Cycle Temporel CPU vs GPU (Séquentiel)
+    dateFormat  X
+    axisFormat %s
+
+    section CPU (Main Thread)
+    Physique &amp; Logique (600µs) :active, cpu1, 0, 6
+    Soumission Rendu (100µs)     :crit, cpu2, 6, 7
+    Attente Pilote / swap (400µs) :done, cpu3, 7, 11
+    Frame Suivante...             :active, cpu4, 11, 15
+
+    section GPU (Execution)
+    Inactif (Attente CPU)         :done, gpu1, 0, 7
+    Rendu Réel (150µs)            :crit, gpu2, 7, 8.5
+    Inactif (Attente CPU)         :done, gpu3, 8.5, 12
+</code></pre>
+<hr />
+<h2 id="-partie-2--analyse-technique-de-loption-c-minimisation-des-changements-dÉtat"><a class="header" href="#-partie-2--analyse-technique-de-loption-c-minimisation-des-changements-dÉtat">🛠️ Partie 2 : Analyse Technique de l'Option C (Minimisation des Changements d'État)</a></h2>
+<p>Actuellement, le moteur effectue deux passes de rendu distinctes dans <code>Renderer::render_particles</code> :</p>
+<ol>
+<li>Rendu des particules standards (<code>RendererGraphics</code>) : Bind VAO + Bind VBO + Use Shader A + <code>glDrawArrays</code>.</li>
+<li>Rendu des fusées instanciées (<code>RendererGraphicsInstanced</code>) : Bind VAO + Bind VBO + Bind Texture + Use Shader B + <code>glDrawArraysInstanced</code>.</li>
+</ol>
+<p>Chaque transition entraîne des appels API OpenGL qui forcent le pilote à revalider le pipeline graphique sur le CPU, générant de la latence système.</p>
+<h3 id="-point-critique-détecté--absence-de-synchronisation-du-buffer-persistant"><a class="header" href="#-point-critique-détecté--absence-de-synchronisation-du-buffer-persistant">⚠️ Point Critique Détecté : Absence de Synchronisation du Buffer Persistant</a></h3>
+<p>Dans l'implémentation actuelle, nous écrivons dans les pointeurs persistants (<code>mapped_ptr</code>) directement à chaque frame sans barrière de synchronisation :</p>
+<ul>
+<li>Si le GPU n'a pas fini de lire le buffer de la frame $N-1$ alors que le CPU commence à écrire la frame $N$, il y a un <strong>conflit d'accès (Write-After-Read)</strong>.</li>
+<li>Pour éviter la corruption visuelle, le pilote graphique effectue souvent une synchronisation implicite sous le capot (ce qui force le CPU à stagner) ou génère des micro-bégaiements.</li>
+</ul>
+<hr />
+<h2 id="-partie-3--plan-dimplémentation-pour-loption-c-azdo"><a class="header" href="#-partie-3--plan-dimplémentation-pour-loption-c-azdo">📋 Partie 3 : Plan d'Implémentation pour l'Option C (AZDO)</a></h2>
+<p>L'objectif de ce plan est de réduire au maximum le coût CPU de soumission des commandes de rendu de manière à minimiser la phase <code>cpu2</code> du schéma temporel.</p>
+<h3 id="phase-1--triple-buffering-persistant--fences-barrières-de-synchronisation"><a class="header" href="#phase-1--triple-buffering-persistant--fences-barrières-de-synchronisation">Phase 1 : Triple-Buffering Persistant &amp; Fences (Barrières de Synchronisation)</a></h3>
+<p>Pour éliminer tout blocage CPU implicite du pilote lors de l'écriture des données physiques de particules :</p>
+<ul>
+<li><strong>Action 1 :</strong> Rallouer les buffers persistants (<code>vbo_particles</code>) avec une capacité triple ($3 \times \text{capacité_max}$).</li>
+<li><strong>Action 2 :</strong> Diviser logiquement le buffer en 3 sections (Frame 0, Frame 1, Frame 2).</li>
+<li><strong>Action 3 :</strong> Utiliser des objets de synchronisation OpenGL (<code>GLsync</code>) pour s'assurer que le CPU n'écrit jamais sur une section en cours de lecture par le GPU :
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Avant d'écrire dans la section K :
+if let Some(sync) = self.fences[K] {
+    gl::ClientWaitSync(sync, gl::SYNC_FLUSH_COMMANDS_BIT, TIMEOUT);
+    gl::DeleteSync(sync);
+}
+// Après le draw call de la section K :
+self.fences[K] = gl::FenceSync(gl::SYNC_GPU_COMMANDS_COMPLETE, 0);
+<span class="boring">}</span></code></pre></pre>
+</li>
+</ul>
+<h3 id="phase-2--regroupement-et-tri-dÉtats-state-sorting"><a class="header" href="#phase-2--regroupement-et-tri-dÉtats-state-sorting">Phase 2 : Regroupement et Tri d'États (State Sorting)</a></h3>
+<p>Pour éviter les reliages de shaders et textures inutiles :</p>
+<ul>
+<li><strong>Action 1 :</strong> Centraliser la gestion des shaders et n'appeler <code>glUseProgram</code> qu'une seule fois si deux passes partagent le même programme.</li>
+<li><strong>Action 2 :</strong> Trier les requêtes de rendu par ID de texture et ID de Shader avant de soumettre les commandes OpenGL.</li>
+</ul>
+<h3 id="phase-3--texture-arrays-tableaux-de-textures-2d--batching-unique"><a class="header" href="#phase-3--texture-arrays-tableaux-de-textures-2d--batching-unique">Phase 3 : Texture Arrays (Tableaux de Textures 2D) &amp; Batching Unique</a></h3>
+<p>Pour fusionner le rendu instancié (fusées) et le rendu des particules en un minimum de Draw Calls :</p>
+<ul>
+<li><strong>Action 1 :</strong> Remplacer les textures 2D individuelles par un <strong>Texture Array 2D</strong> (<code>GL_TEXTURE_2D_ARRAY</code>). Toutes les textures (fusées, explosions, étincelles) sont stockées dans le même objet OpenGL, indexées par un entier (0, 1, 2...).</li>
+<li><strong>Action 2 :</strong> Unifier le format de sommet. Les sommets standards et instanciés partagent le même VAO. L'index de la texture à utiliser est passé comme attribut de sommet.</li>
+<li><strong>Action 3 :</strong> Lancer le rendu de tous les types de feux d'artifice à l'aide d'un seul et unique appel à <code>glDrawArraysInstanced</code> (ou <code>glMultiDrawArraysIndirect</code>), éliminant totalement les changements de textures et de buffers durant le rendu.</li>
+</ul>
+<h3 id="phase-4--uniform-buffer-objects-ubo"><a class="header" href="#phase-4--uniform-buffer-objects-ubo">Phase 4 : Uniform Buffer Objects (UBO)</a></h3>
+<ul>
+<li><strong>Action 1 :</strong> Regrouper toutes les variables globales (dimensions de la fenêtre, matrice de projection, temps écoulé, intensité du Bloom) dans un bloc uniforme partagé.</li>
+<li><strong>Action 2 :</strong> Créer un UBO sur le GPU et le lier au début de la frame. Toutes les étapes de rendu et de post-process y accèdent sans nécessiter de multiples appels à <code>glUniform*</code> individuels.</li>
+</ul>
+<hr />
+<h2 id="-partie-4--gains-de-performance-attendus-projections"><a class="header" href="#-partie-4--gains-de-performance-attendus-projections">📈 Partie 4 : Gains de Performance Attendus (Projections)</a></h2>
+<p>L'implémentation complète de ce plan d'optimisation (AZDO) permettra d'obtenir des améliorations ciblées à tous les niveaux du pipeline :</p>
+<h3 id="a-stabilisation-du-framerate-et-suppression-des-pics-99th-percentile-fps"><a class="header" href="#a-stabilisation-du-framerate-et-suppression-des-pics-99th-percentile-fps">A. Stabilisation du Framerate et Suppression des Pics (99th Percentile FPS)</a></h3>
+<ul>
+<li><strong>Gains :</strong> Élimination complète des micro-bégaiements (stutters) lors des pics d'explosions.</li>
+<li><strong>Mécanisme :</strong> Le Triple-Buffering persistant avec fences (<code>glFenceSync</code>) résout les conflits d'accès en écriture/lecture (Write-After-Read), évitant au pilote graphique de bloquer le thread principal CPU pour protéger les buffers.</li>
+</ul>
+<h3 id="b-réduction-drastique-du-temps-de-rendu-cpu-command-submission-cost"><a class="header" href="#b-réduction-drastique-du-temps-de-rendu-cpu-command-submission-cost">B. Réduction drastique du Temps de Rendu CPU (Command Submission Cost)</a></h3>
+<ul>
+<li><strong>Gains :</strong> <strong>-50% à -70%</strong> de réduction de l'overhead de rendu CPU.</li>
+<li><strong>Mécanisme :</strong> Le regroupement en un seul Draw Call instancié avec un Texture Array 2D élimine 90% des appels API lourds (<code>glUseProgram</code>, <code>glBindTexture</code>, <code>glBindVertexArray</code>). La phase de soumission CPU descendra de ~100 µs à environ <strong>30-40 µs</strong> par frame.</li>
+</ul>
+<h3 id="c-gain-de-temps-gpu-pur-pipeline-occupancy"><a class="header" href="#c-gain-de-temps-gpu-pur-pipeline-occupancy">C. Gain de Temps GPU Pur (Pipeline Occupancy)</a></h3>
+<ul>
+<li><strong>Gains :</strong> <strong>-15% à -20%</strong> sur le temps d'exécution GPU.</li>
+<li><strong>Mécanisme :</strong> Le GPU traite tous les sommets de toutes les particules en une seule vague unifiée, améliorant l'occupation des cœurs de calcul du GPU.</li>
+</ul>
+<h3 id="d-gain-global-sous-haute-charge-4-000-fusées"><a class="header" href="#d-gain-global-sous-haute-charge-4-000-fusées">D. Gain Global sous Haute Charge (4 000+ Fusées)</a></h3>
+<ul>
+<li><strong>Gains :</strong> <strong>+10% à +15%</strong> de performance globale sous charge extrême.</li>
+<li><strong>Mécanisme :</strong> À 4 000 fusées actives (environ 1 million de particules), le temps de traitement global par frame passera de <strong>4.90 ms</strong> à environ <strong>4.20 ms</strong>, repoussant les limites physiques de la simulation avant d'atteindre le seuil des 60 FPS (16.6 ms).</li>
+</ul>
+<h3 id="synthèse-des-indicateurs-cibles-après-implémentation-"><a class="header" href="#synthèse-des-indicateurs-cibles-après-implémentation-">Synthèse des indicateurs cibles après implémentation :</a></h3>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Indicateur</th><th style="text-align: center">Avant AZDO (Actuel)</th><th style="text-align: center">Après AZDO (Cible)</th><th style="text-align: center">Type de gain</th></tr></thead><tbody>
+<tr><td style="text-align: left"><strong>Micro-bégaiements (Spikes)</strong></td><td style="text-align: center">Présents sous haute charge</td><td style="text-align: center"><strong>Supprimés</strong></td><td style="text-align: center">Fluidité visuelle (Frametime 1% Low)</td></tr>
+<tr><td style="text-align: left"><strong>Overhead CPU Rendu</strong></td><td style="text-align: center">~100 µs</td><td style="text-align: center"><strong>~30 µs</strong></td><td style="text-align: center">Temps CPU libéré pour la physique</td></tr>
+<tr><td style="text-align: left"><strong>Temps Frame (4000 fusées)</strong></td><td style="text-align: center">4.90 ms</td><td style="text-align: center"><strong>~4.20 ms</strong></td><td style="text-align: center"><strong>+14% de FPS sous charge</strong></td></tr>
+<tr><td style="text-align: left"><strong>Draw Calls par Frame</strong></td><td style="text-align: center">Multiple (selon types)</td><td style="text-align: center"><strong>1 unique draw call</strong></td><td style="text-align: center">Efficacité driver OpenGL</td></tr>
+</tbody></table>
+</div>
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="20260714_heaptrack_memory_profiling_guide.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="20260715_tracy_memory_audit.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="20260714_heaptrack_memory_profiling_guide.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="20260715_tracy_memory_audit.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

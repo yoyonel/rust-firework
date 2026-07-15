@@ -1,0 +1,649 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Benchmarks Audio - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html" class="active"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">4.1.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">4.2.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">4.3.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">4.4.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">4.5.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.6.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.7.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.8.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="benchmarks-audio-engine--guide-complet"><a class="header" href="#benchmarks-audio-engine--guide-complet">Benchmarks Audio Engine — Guide complet</a></h1>
+<h2 id="table-des-matières"><a class="header" href="#table-des-matières">Table des matières</a></h2>
+<ol>
+<li><a href="#1-contexte-et-motivation">Contexte et motivation</a></li>
+<li><a href="#2-outillage--pourquoi-criterionrs">Outillage : pourquoi Criterion.rs</a></li>
+<li><a href="#3-architecture-des-benchmarks">Architecture des benchmarks</a></li>
+<li><a href="#4-ce-que-mesurent-r%C3%A9ellement-les-benchmarks">Ce que mesurent réellement les benchmarks</a></li>
+<li><a href="#5-r%C3%A9sultats-et-enseignements">Résultats et enseignements</a></li>
+<li><a href="#6-workflow-doptimisation-simd">Workflow d'optimisation SIMD</a></li>
+<li><a href="#7-r%C3%A9f%C3%A9rence-des-t%C3%A2ches-task">Référence des tâches Task</a></li>
+</ol>
+<hr />
+<h2 id="1-contexte-et-motivation"><a class="header" href="#1-contexte-et-motivation">1. Contexte et motivation</a></h2>
+<h3 id="pourquoi-benchmarker-laudio-processing-"><a class="header" href="#pourquoi-benchmarker-laudio-processing-">Pourquoi benchmarker l'audio processing ?</a></h3>
+<p>Le moteur audio de fireworks opère sous une contrainte de temps réel stricte : le <strong>Budget Tampon</strong>. À 48 kHz avec un buffer de 256 échantillons, le thread DSP dispose de <strong>5,33 ms</strong> pour calculer et livrer ses échantillons. Tout dépassement provoque un XRUN (décrochage audible).</p>
+<p>Deux fonctions sont au cœur du traitement sur le chemin critique :</p>
+<ul>
+<li><strong><code>resample_linear_mono</code></strong> (<a href="../src/audio_engine/dsp.rs">dsp.rs</a>) — rééchantillonnage par interpolation linéaire, appelé au chargement et potentiellement à la volée.</li>
+<li><strong><code>binauralize_mono</code></strong> (<a href="../src/audio_engine/binaural_processing.rs">binaural_processing.rs</a>) — spatialisation 3D par ITD (Interaural Time Difference) + ILD (Interaural Level Difference), appelée <strong>par voix et par bloc</strong> dans la boucle audio.</li>
+</ul>
+<p>Avec 16 voix simultanées et un bloc de 512 échantillons à 48 kHz (~10,7 ms de signal), <code>binauralize_mono</code> est appelée <strong>16 fois par période audio</strong>. Connaître son coût réel en nanosecondes n'est pas une curiosité : c'est une information de conception.</p>
+<h3 id="problème-avec-cargo-bench-built-in"><a class="header" href="#problème-avec-cargo-bench-built-in">Problème avec <code>cargo bench</code> built-in</a></h3>
+<p>Le benchmark intégré de Rust (<code>#[bench]</code>) nécessite la toolchain <strong>nightly</strong> et <code>#![feature(test)]</code>. Sur la toolchain <strong>stable</strong> utilisée par ce projet, <code>cargo bench</code> compile les tests en mode <code>release</code> et les exécute — mais les <code>#[test]</code> classiques sont tous marqués <code>ignored</code> par le runner de benchmark, produisant <code>0 measured</code>.</p>
+<p>La sortie trompeuse que l'on obtenait :</p>
+<pre><code>running 29 tests
+test audio_engine::... ... ignored
+[...]
+test result: ok. 0 passed; 0 failed; 29 ignored; 0 measured
+</code></pre>
+<p>Ce n'est pas un bug — c'est le comportement attendu sur stable en l'absence de benchmarks Criterion.</p>
+<hr />
+<h2 id="2-outillage--pourquoi-criterionrs"><a class="header" href="#2-outillage--pourquoi-criterionrs">2. Outillage : pourquoi Criterion.rs</a></h2>
+<p><a href="https://bheisler.github.io/criterion.rs/book/">Criterion.rs</a> est le standard de-facto pour les benchmarks Rust stable. Il apporte :</p>
+<div class="table-wrapper"><table><thead><tr><th>Fonctionnalité</th><th>Détail</th></tr></thead><tbody>
+<tr><td><strong>Statistiques robustes</strong></td><td>Moyenne, médiane, écart-type, intervalles de confiance à 95% sur 100 échantillons</td></tr>
+<tr><td><strong>Détection de régressions</strong></td><td>Comparaison automatique "avant/après" avec test de Welch</td></tr>
+<tr><td><strong>Rapports HTML</strong></td><td>Graphiques SVG interactifs dans <code>target/criterion/</code></td></tr>
+<tr><td><strong>Compatible stable</strong></td><td>Pas besoin de nightly, pas de <code>#![feature(test)]</code></td></tr>
+<tr><td><strong><code>black_box</code></strong></td><td>Barrière de compilation qui empêche le compilateur d'éliminer le code mesuré</td></tr>
+</tbody></table>
+</div>
+<h3 id="intégration-dans-le-projet"><a class="header" href="#intégration-dans-le-projet">Intégration dans le projet</a></h3>
+<p><strong><code>Cargo.toml</code></strong> — Criterion est déclaré en <code>dev-dependency</code> avec le feature <code>html_reports</code> :</p>
+<pre><code class="language-toml">[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "audio_dsp_bench"
+harness = false          # ← Criterion gère son propre runner
+
+[[bench]]
+name = "audio_binaural_bench"
+harness = false
+</code></pre>
+<p>Le <code>harness = false</code> est la clé : il désactive le test runner intégré de Cargo, laissant Criterion piloter l'exécution.</p>
+<blockquote>
+<p><strong>Note</strong> : Gnuplot n'est pas requis. Sans lui, Criterion bascule automatiquement sur le backend <code>plotters</code> (SVG pur Rust). Pour des graphiques plus riches (courbes de densité de probabilité), installer <code>gnuplot</code> : <code>sudo apt install gnuplot</code>.</p>
+</blockquote>
+<hr />
+<h2 id="3-architecture-des-benchmarks"><a class="header" href="#3-architecture-des-benchmarks">3. Architecture des benchmarks</a></h2>
+<h3 id="structure-des-fichiers"><a class="header" href="#structure-des-fichiers">Structure des fichiers</a></h3>
+<pre><code>benches/
+├── audio_dsp_bench.rs       # resample_linear_mono
+└── audio_binaural_bench.rs  # binauralize_mono
+</code></pre>
+<h3 id="audio_dsp_benchrs--rééchantillonnage-dsp"><a class="header" href="#audio_dsp_benchrs--rééchantillonnage-dsp"><code>audio_dsp_bench.rs</code> — Rééchantillonnage DSP</a></h3>
+<p><strong>Fichier</strong> : <a href="../benches/audio_dsp_bench.rs">benches/audio_dsp_bench.rs</a><br />
+<strong>Fonction testée</strong> : <a href="../src/audio_engine/dsp.rs"><code>resample_linear_mono</code></a></p>
+<div class="table-wrapper"><table><thead><tr><th>Groupe Criterion</th><th>Paramètres</th><th>Objectif</th></tr></thead><tbody>
+<tr><td><code>resample/upsample_44100_to_48000</code></td><td>6 tailles : 64→44100</td><td>Scalabilité — ratio ×1.09 (le plus courant)</td></tr>
+<tr><td><code>resample/downsample_48000_to_44100</code></td><td>6 tailles : 64→48000</td><td>Asymétrie up/down</td></tr>
+<tr><td><code>resample/identity_48000</code></td><td>3 tailles : 512→48000</td><td>Chemin trivial (<code>src_rate == dst_rate</code>)</td></tr>
+<tr><td><code>resample/extreme_upsample_8000_to_48000</code></td><td>3 tailles : 512→8000</td><td>Ratio ×6 (téléphonie → hi-fi)</td></tr>
+<tr><td><code>resample/one_second_throughput</code></td><td>44100 et 48000 samples</td><td>Throughput sur 1 seconde audio complète</td></tr>
+</tbody></table>
+</div>
+<p><strong>Signal synthétique</strong> : sinus 440 Hz généré en pur Rust. Aucune dépendance fichier WAV, reproductible à l'identique sur toute machine.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn make_sine(n_samples: usize, freq_hz: f32, sample_rate: u32) -&gt; Vec&lt;f32&gt; {
+    (0..n_samples)
+        .map(|i| (2.0 * PI * freq_hz * i as f32 / sample_rate as f32).sin())
+        .collect()
+}
+<span class="boring">}</span></code></pre></pre>
+<p><strong>Pattern Criterion</strong> utilisé — <code>bench_with_input</code> pour le paramétrage par taille :</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>group.bench_with_input(
+    BenchmarkId::from_parameter(n_samples),
+    &amp;input,
+    |b, inp| {
+        b.iter(|| {
+            let out = resample_linear_mono(inp, 44100, 48000);
+            criterion::black_box(out);  // ← empêche l'élision du code par LLVM
+        });
+    },
+);
+<span class="boring">}</span></code></pre></pre>
+<p>Le <code>black_box</code> est crucial : sans lui, LLVM peut détecter que le résultat n'est jamais utilisé et supprimer l'appel entier, mesurant 0 ns.</p>
+<hr />
+<h3 id="audio_binaural_benchrs--spatialisation-3d"><a class="header" href="#audio_binaural_benchrs--spatialisation-3d"><code>audio_binaural_bench.rs</code> — Spatialisation 3D</a></h3>
+<p><strong>Fichier</strong> : <a href="../benches/audio_binaural_bench.rs">benches/audio_binaural_bench.rs</a><br />
+<strong>Fonction testée</strong> : <a href="../src/audio_engine/binaural_processing.rs"><code>binauralize_mono</code></a></p>
+<div class="table-wrapper"><table><thead><tr><th>Groupe Criterion</th><th>Paramètres</th><th>Objectif</th></tr></thead><tbody>
+<tr><td><code>binaural/positions</code></td><td>5 positions spatiales</td><td>Impact de l'azimut sur le chemin de calcul</td></tr>
+<tr><td><code>binaural/distances</code></td><td>6 distances (1→999m)</td><td>Impact de l'atténuation distance</td></tr>
+<tr><td><code>binaural/block_sizes</code></td><td>7 tailles (64→4096)</td><td>Profil latence audio vs throughput</td></tr>
+<tr><td><code>binaural/signal_types</code></td><td>Constant / sinus 440Hz / sinus 4kHz</td><td>Comportement cache selon le signal</td></tr>
+<tr><td><code>binaural/sample_rates</code></td><td>22050, 44100, 48000, 96000 Hz</td><td>Sensibilité au sample rate (ITD en samples)</td></tr>
+<tr><td><code>binaural/multi_voice</code></td><td>7 paliers : 1, 4, 8, 16, <strong>32, 64, 128</strong> voix</td><td>Coût total de mixage — scenarios actuels (32) et futurs (64+, Doppler)</td></tr>
+</tbody></table>
+</div>
+<p><strong>Positions spatiales couvertes</strong> :</p>
+<pre><code>        z- (devant)
+           |
+ x-  ------+------  x+ (droite)
+ (gauche)  |
+           z+ (derrière)
+</code></pre>
+<ul>
+<li><code>center</code> : source à <code>(0, 0, -10)</code> — azimut 0, ITD nul, traitement symétrique</li>
+<li><code>right_90deg</code> : source à <code>(10, 0, 0)</code> — azimut π/2, chemin ITD+ILD droite</li>
+<li><code>left_90deg</code> : source à <code>(-10, 0, 0)</code> — azimut -π/2, chemin ITD+ILD gauche</li>
+<li><code>above_right_45deg</code> : source à <code>(10, 10, 0)</code> — test du calcul d'élévation 3D</li>
+<li><code>behind</code> : source à <code>(0, 0, 10)</code> — azimut 0 mais signal en arrière</li>
+</ul>
+<p><strong>Simulation multi-voix</strong> : le groupe <code>binaural/multi_voice</code> simule le cas réel de mixage audio avec <code>N</code> voix simultanées. Les positions sont générées par une <strong>spirale de Fibonacci</strong> projetée sur un hémisphère supérieur (feux d'artifice au-dessus du spectateur), ce qui garantit une distribution spatiale uniforme et déterministe sur toute la sphère — sans biais de clustering.</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Spirale de Fibonacci : distribution isotrope de N points sur la sphère
+let golden = PI * (3.0 - 5.0_f32.sqrt()); // ≈ 2.399 rad (angle d'or)
+let angle  = i as f32 * golden;
+let y_norm = 0.1 + 0.9 * (i as f32 + 0.5) / N as f32; // hémisphère supérieur
+let radius = (1.0 - y_norm * y_norm).sqrt();
+let scale  = 50.0 + (i as f32 / (N-1) as f32) * 450.0; // 50m – 500m
+<span class="boring">}</span></code></pre></pre>
+<p>Les paliers couverts : <code>1, 4, 8, 16, 32, 64, 128</code> voix — correspondant au défaut actuel (32), aux cibles court terme (64) et aux scénarios futurs avec effets Doppler et autres (128+).</p>
+<hr />
+<h2 id="4-ce-que-mesurent-réellement-les-benchmarks"><a class="header" href="#4-ce-que-mesurent-réellement-les-benchmarks">4. Ce que mesurent réellement les benchmarks</a></h2>
+<h3 id="ce-qui-est-mesuré"><a class="header" href="#ce-qui-est-mesuré">Ce qui est mesuré</a></h3>
+<p>Criterion mesure le <strong>temps CPU wall-clock</strong> de la fonction cible en isolation, en mode <code>release</code> (optimisations LLVM complètes activées), sur le cœur courant. Il collecte 100 échantillons et calcule :</p>
+<ul>
+<li><strong>Médiane</strong> : valeur centrale, robuste aux outliers</li>
+<li><strong>Intervalle de confiance 95%</strong> : <code>[borne_basse  médiane  borne_haute]</code></li>
+<li><strong>Outliers</strong> : échantillons ≥ 1.5×IQR de la médiane (bruit OS, migration de cache)</li>
+</ul>
+<h3 id="ce-qui-nest-pas-mesuré"><a class="header" href="#ce-qui-nest-pas-mesuré">Ce qui n'est pas mesuré</a></h3>
+<ul>
+<li><strong>Contention de threads</strong> : les benchmarks s'exécutent sur le thread principal, sans le thread audio CPAL en parallèle. Le coût réel en production inclut la pression cache des autres threads.</li>
+<li><strong>Effets thermiques</strong> : Criterion ne fait pas de throttling management. Sur un laptop, les résultats peuvent varier entre une exécution froide et une exécution après 10 minutes de charge.</li>
+<li><strong>Allocations</strong> : Criterion ne mesure pas le nombre d'allocations heap (utiliser <code>cargo bench --features dhat-heap</code> ou <code>heaptrack</code> pour ça). Les <code>Vec&lt;[f32; 2]&gt;</code> retournés par <code>binauralize_mono</code> sont alloués à chaque appel — c'est un candidat d'optimisation (pré-allocation de buffer).</li>
+</ul>
+<h3 id="interprétation-de-lintervalle-de-confiance"><a class="header" href="#interprétation-de-lintervalle-de-confiance">Interprétation de l'intervalle de confiance</a></h3>
+<pre><code>resample/upsample_44100_to_48000/512
+                        time:   [8.4526 µs  8.8591 µs  9.2911 µs]
+                                 ↑ borne basse  ↑ médiane  ↑ borne haute
+</code></pre>
+<p>Un intervalle large (ex: <code>[45 µs … 52 µs]</code>) indique une variabilité élevée — souvent du bruit OS (interruptions, migration de cœur). Relancer avec <code>taskset -c 0</code> pour épingler sur un cœur réduit ce bruit.</p>
+<hr />
+<h2 id="5-résultats-et-enseignements"><a class="header" href="#5-résultats-et-enseignements">5. Résultats et enseignements</a></h2>
+<h3 id="resample_linear_mono--résultats-complets"><a class="header" href="#resample_linear_mono--résultats-complets"><code>resample_linear_mono</code> — Résultats complets</a></h3>
+<h4 id="upsample-44100--48000-hz-ratio-109"><a class="header" href="#upsample-44100--48000-hz-ratio-109">Upsample 44100 → 48000 Hz (ratio ×1.09)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Buffer (samples)</th><th>Durée audio @ 48kHz</th><th>Temps mesuré</th><th>Facteur temps réel</th></tr></thead><tbody>
+<tr><td>64</td><td>1.3 ms</td><td><strong>1.04 µs</strong></td><td>×1300</td></tr>
+<tr><td>128</td><td>2.7 ms</td><td><strong>2.37 µs</strong></td><td>×1140</td></tr>
+<tr><td>512</td><td>10.7 ms</td><td><strong>8.86 µs</strong></td><td>×1200</td></tr>
+<tr><td>1024</td><td>21.3 ms</td><td><strong>17.14 µs</strong></td><td>×1245</td></tr>
+<tr><td>4096</td><td>85.3 ms</td><td><strong>64.05 µs</strong></td><td>×1332</td></tr>
+<tr><td>44100</td><td>1000 ms</td><td><strong>684.6 µs</strong></td><td>×1460</td></tr>
+</tbody></table>
+</div>
+<h4 id="downsample-48000--44100-hz-vs-upsample-même-taille-sortie"><a class="header" href="#downsample-48000--44100-hz-vs-upsample-même-taille-sortie">Downsample 48000 → 44100 Hz vs Upsample (même taille sortie)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Buffer</th><th>Upsample</th><th>Downsample</th><th>Ratio</th></tr></thead><tbody>
+<tr><td>64</td><td>1.04 µs</td><td>1.17 µs</td><td>≈ identique</td></tr>
+<tr><td>512</td><td>8.86 µs</td><td>6.16 µs</td><td><strong>down -30%</strong></td></tr>
+<tr><td>4096</td><td>64.05 µs</td><td>60.02 µs</td><td><strong>down -6%</strong></td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Enseignement</strong> : Le downsample est plus rapide aux grandes tailles car il produit <em>moins</em> de samples de sortie (ratio ÷1.09). La boucle d'interpolation itère sur <code>out_len</code> qui est plus petit. Cela confirme que la scalabilité est bien dominée par la taille de sortie, pas la taille d'entrée.</p>
+</blockquote>
+<h4 id="chemin-identity-src_rate--dst_rate"><a class="header" href="#chemin-identity-src_rate--dst_rate">Chemin identity (src_rate == dst_rate)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Buffer</th><th>Temps mesuré</th><th>Ratio vs upsample équivalent</th></tr></thead><tbody>
+<tr><td>512</td><td><strong>137 ns</strong></td><td>×65 plus rapide</td></tr>
+<tr><td>4096</td><td><strong>435 ns</strong></td><td>×147 plus rapide</td></tr>
+<tr><td>48000</td><td><strong>13.77 µs</strong></td><td>×50 plus rapide</td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Enseignement</strong> : Le court-circuit <code>if src_rate == dst_rate { return input.to_vec(); }</code> est massivement efficace. <code>to_vec()</code> utilise <code>memcpy</code> optimisé par LLVM (voire SIMD implicite). C'est le comportement attendu — ne jamais supprimer ce guard.</p>
+</blockquote>
+<h4 id="extreme-upsample-8000--48000-hz-ratio-6"><a class="header" href="#extreme-upsample-8000--48000-hz-ratio-6">Extreme upsample 8000 → 48000 Hz (ratio ×6)</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Buffer</th><th>Temps mesuré</th></tr></thead><tbody>
+<tr><td>512</td><td><strong>48.5 µs</strong></td></tr>
+<tr><td>4096</td><td><strong>309.6 µs</strong></td></tr>
+<tr><td>8000</td><td><strong>605.9 µs</strong></td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Enseignement</strong> : Le ratio ×6 produit ~5.5× plus de samples que le ratio ×1.09 pour la même entrée. Le temps suit fidèlement — la fonction est <code>O(n_output)</code> sans overhead caché, ce qui est une bonne nouvelle pour la prévisibilité.</p>
+</blockquote>
+<h4 id="throughput-1-seconde-daudio"><a class="header" href="#throughput-1-seconde-daudio">Throughput 1 seconde d'audio</a></h4>
+<div class="table-wrapper"><table><thead><tr><th>Conversion</th><th>Temps mesuré</th><th>Facteur temps réel</th></tr></thead><tbody>
+<tr><td>44100 → 48000</td><td><strong>705 µs</strong></td><td><strong>×1418</strong></td></tr>
+<tr><td>48000 → 44100</td><td><strong>820 µs</strong></td><td><strong>×1220</strong></td></tr>
+</tbody></table>
+</div>
+<blockquote>
+<p><strong>Enseignement</strong> : 1 seconde d'audio entier est traitée en moins de 1 ms. La fonction <code>resample_linear_mono</code> n'est <strong>pas</strong> un goulot sur le chemin critique audio — elle est appelée au chargement, pas dans la boucle temps réel. C'est rassurant, mais pas une raison pour ne pas l'optimiser si on voulait du streaming live.</p>
+</blockquote>
+<hr />
+<h3 id="binauralize_mono--attendus-et-points-dattention"><a class="header" href="#binauralize_mono--attendus-et-points-dattention"><code>binauralize_mono</code> — Attendus et points d'attention</a></h3>
+<p>Le groupe <code>binaural/block_sizes</code> est le plus important : il révèle le <strong>coût par voix par période audio</strong>.</p>
+<p>Avec un bloc de 512 samples (taille typique à 48 kHz) et 16 voix simultanées :</p>
+<pre><code>Coût total par période ≈ 16 voix × coût_binauralize(512)
+Budget tampon à 48 kHz / 256 samples ≈ 5,33 ms
+</code></pre>
+<p>Si <code>binauralize_mono(512)</code> coûte ~100 µs (hypothèse avant mesure), 16 voix = 1.6 ms, soit ~30% du budget tampon. C'est acceptable mais surveiller.</p>
+<p>Le groupe <code>binaural/multi_voice</code> simule exactement ce scénario — il fournit le coût agrégé réel incluant la pression cache entre appels successifs.</p>
+<hr />
+<h2 id="6-workflow-doptimisation-simd"><a class="header" href="#6-workflow-doptimisation-simd">6. Workflow d'optimisation SIMD</a></h2>
+<h3 id="contexte--la-feature-simd-du-projet"><a class="header" href="#contexte--la-feature-simd-du-projet">Contexte : la feature <code>simd</code> du projet</a></h3>
+<p>Le projet dispose d'une feature <code>simd</code> déclarée dans <code>Cargo.toml</code> :</p>
+<pre><code class="language-toml">[features]
+default = ["simd", "test_helpers"]
+simd = []    # Active le code SIMD
+no_simd = [] # Force le mode scalaire
+</code></pre>
+<p>À l'heure actuelle, la feature <code>simd</code> est déclarée mais le code audio n'utilise pas encore d'intrinsics SIMD explicites. Le compilateur peut générer de l'auto-vectorisation LLVM, mais sans garantie. L'objectif est d'instrumenter, mesurer, puis optimiser de façon outillée.</p>
+<hr />
+<h3 id="principe-général-du-workflow"><a class="header" href="#principe-général-du-workflow">Principe général du workflow</a></h3>
+<pre><code>Mesurer (baseline) → Modifier → Mesurer (comparaison) → Décider
+</code></pre>
+<p>Criterion supporte nativement cette boucle via les <strong>baselines nommées</strong> : une baseline est un snapshot des résultats sauvegardés sous un nom, contre lequel la prochaine exécution se compare automatiquement.</p>
+<hr />
+<h3 id="Étape-1--Établir-la-baseline-scalaire-sans-simd"><a class="header" href="#Étape-1--Établir-la-baseline-scalaire-sans-simd">Étape 1 — Établir la baseline scalaire (sans SIMD)</a></h3>
+<p>Sauvegarder les performances actuelles <em>sans</em> la feature <code>simd</code> comme référence :</p>
+<pre><code class="language-sh"># Via Task (recommandé)
+task bench-save-baseline -- scalar
+
+# Ou directement via cargo
+cargo bench --no-default-features -- --save-baseline scalar
+</code></pre>
+<p>Les résultats sont persistés dans <code>target/criterion/</code> sous le nom <code>scalar</code>. Ils survivent aux recompilations.</p>
+<blockquote>
+<p><strong>Attention</strong> : effectuer cette mesure dans des conditions stables (machine non chargée, pas de mises à jour en arrière-plan, préférer un cœur dédié avec <code>taskset -c 0 task bench-save-baseline -- scalar</code>).</p>
+</blockquote>
+<hr />
+<h3 id="Étape-2--identifier-les-cibles-simd-dans-le-code-audio"><a class="header" href="#Étape-2--identifier-les-cibles-simd-dans-le-code-audio">Étape 2 — Identifier les cibles SIMD dans le code audio</a></h3>
+<h4 id="candidat-principal--interpolate_sample_fast-dans-binauralize_mono"><a class="header" href="#candidat-principal--interpolate_sample_fast-dans-binauralize_mono">Candidat principal : <code>interpolate_sample_fast</code> dans <code>binauralize_mono</code></a></h4>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// binaural_processing.rs — boucle interne appelée N fois par sample
+let stereo: Vec&lt;[f32; 2]&gt; = (0..n)
+    .map(|i| {
+        let idx_l = (i as f32) - itd_left_samples;
+        let idx_r = (i as f32) - itd_right_samples;
+        let s_left  = interpolate_sample_fast(mono, idx_l) * gain_left;
+        let s_right = interpolate_sample_fast(mono, idx_r) * gain_right;
+        [s_left, s_right]
+    })
+    .collect();
+<span class="boring">}</span></code></pre></pre>
+<p>Cette boucle est <code>O(n_samples)</code> avec des accès mémoire strided et des opérations FP indépendantes — profil idéal pour SIMD. On peut traiter 4 ou 8 samples <code>f32</code> en parallèle avec SSE2/AVX2.</p>
+<h4 id="candidat-secondaire--resample_linear_mono"><a class="header" href="#candidat-secondaire--resample_linear_mono">Candidat secondaire : <code>resample_linear_mono</code></a></h4>
+<p>La boucle principale est une interpolation linéaire scalaire :</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut idx = 0.0_f32;
+for _ in 0..out_len {
+    // ...
+    let s0 = src[i0];
+    let s1 = src[i0 + 1];
+    out.push(s0 + (s1 - s0) * frac);
+    idx += step;
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Vectorisable en AVX2 (8 × f32 en parallèle), mais l'indexing <code>i0 = idx.floor() as usize</code> avec gather est plus complexe. Cible secondaire après <code>binauralize_mono</code>.</p>
+<hr />
+<h3 id="Étape-3--implémenter-le-code-simd-derrière-la-feature-gate"><a class="header" href="#Étape-3--implémenter-le-code-simd-derrière-la-feature-gate">Étape 3 — Implémenter le code SIMD derrière la feature gate</a></h3>
+<p>La feature <code>simd</code> permet de switcher entre l'implémentation scalaire et SIMD sans changer l'API :</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// binaural_processing.rs
+#[cfg(feature = "simd")]
+pub fn binauralize_mono(mono: &amp;[f32], ...) -&gt; Vec&lt;[f32; 2]&gt; {
+    binauralize_mono_simd(mono, ...)
+}
+
+#[cfg(not(feature = "simd"))]
+pub fn binauralize_mono(mono: &amp;[f32], ...) -&gt; Vec&lt;[f32; 2]&gt; {
+    binauralize_mono_scalar(mono, ...)  // implémentation actuelle
+}
+<span class="boring">}</span></code></pre></pre>
+<p>Les intrinsics SIMD en Rust nécessitent <code>unsafe</code> et le feature gate CPU cible :</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>#[cfg(feature = "simd")]
+#[target_feature(enable = "avx2")]
+unsafe fn binauralize_mono_simd(mono: &amp;[f32], ...) -&gt; Vec&lt;[f32; 2]&gt; {
+    use std::arch::x86_64::*;
+    // Traitement de 8 samples f32 en parallèle via _mm256_*
+    // ...
+}
+<span class="boring">}</span></code></pre></pre>
+<blockquote>
+<p>Pour la détection runtime du support AVX2 (portabilité), utiliser <a href="https://doc.rust-lang.org/std/macro.is_x86_feature_detected.html"><code>is_x86_feature_detected!</code></a> ou la crate <a href="https://crates.io/crates/multiversion"><code>multiversion</code></a>.</p>
+</blockquote>
+<hr />
+<h3 id="Étape-4--comparer-simd-vs-scalaire"><a class="header" href="#Étape-4--comparer-simd-vs-scalaire">Étape 4 — Comparer SIMD vs scalaire</a></h3>
+<pre><code class="language-sh"># Via Task (recommandé)
+task bench-compare -- scalar
+
+# Ou directement via cargo
+cargo bench --no-default-features --features simd -- --baseline scalar
+</code></pre>
+<p>Criterion affiche alors une comparaison détaillée pour chaque benchmark :</p>
+<pre><code>binaural/block_sizes/512
+                        time:   [45.234 µs 46.891 µs 48.203 µs]
+                        change: [-42.1% -40.8% -39.2%] (p = 0.00 &lt; 0.05)
+                        Performance has improved.
+</code></pre>
+<p>La ligne <code>change</code> donne :</p>
+<ul>
+<li>Le pourcentage d'amélioration ou de régression</li>
+<li>La valeur <code>p</code> du test statistique de Welch (&lt; 0.05 = résultat significatif)</li>
+<li>Un verdict textuel : <code>Performance has improved</code> / <code>Performance has regressed</code> / <code>No change in performance detected</code></li>
+</ul>
+<hr />
+<h3 id="Étape-5--itérer-et-sauvegarder-les-milestones"><a class="header" href="#Étape-5--itérer-et-sauvegarder-les-milestones">Étape 5 — Itérer et sauvegarder les milestones</a></h3>
+<pre><code class="language-sh"># Sauvegarder l'implémentation SIMD v1 comme nouvelle baseline
+task bench-save-baseline -- simd_v1
+
+# Après optimisation v2, comparer contre v1
+task bench-compare -- simd_v1
+</code></pre>
+<p>Il est recommandé de nommer les baselines de façon sémantique : <code>scalar</code>, <code>avx2_v1</code>, <code>avx2_v2_prefetch</code>, etc.</p>
+<hr />
+<h3 id="Étape-6--vérifier-labsence-de-régression-fonctionnelle"><a class="header" href="#Étape-6--vérifier-labsence-de-régression-fonctionnelle">Étape 6 — Vérifier l'absence de régression fonctionnelle</a></h3>
+<p>Un gain de performance n'a de valeur que si le résultat reste correct. Après chaque modification SIMD :</p>
+<pre><code class="language-sh"># Tests unitaires (vérifie la correction fonctionnelle)
+task test
+
+# Benchmarks (vérifie la performance)
+task bench-compare -- &lt;baseline&gt;
+</code></pre>
+<p>Le groupe <code>binaural/positions</code> vérifie implicitement la correction : si le canal gauche est soudainement plus fort pour une source à droite, les tests de <code>audio_dsp_test.rs</code> le détecteront.</p>
+<hr />
+<h3 id="récapitulatif-du-workflow-complet"><a class="header" href="#récapitulatif-du-workflow-complet">Récapitulatif du workflow complet</a></h3>
+<pre><code>1. task bench-save-baseline -- scalar          ← snapshot de référence
+
+2. Implémenter SIMD derrière #[cfg(feature="simd")]
+
+3. task test                                   ← vérifier la correction
+
+4. task bench-compare -- scalar                ← mesurer le gain
+
+5. Si gain satisfaisant :
+   task bench-save-baseline -- simd_v1         ← nouvelle baseline
+
+6. Itérer sur l'implémentation
+   task bench-compare -- simd_v1              ← comparer v2 vs v1
+
+7. task bench-open-report                      ← rapport HTML complet
+</code></pre>
+<hr />
+<h2 id="7-référence-des-tâches-task"><a class="header" href="#7-référence-des-tâches-task">7. Référence des tâches Task</a></h2>
+<p>Toutes les commandes passent par <a href="../Taskfile.yml">Taskfile.yml</a> — ne pas utiliser <code>cargo bench</code> directement pour garantir la reproductibilité des flags (<code>--no-default-features --features simd</code>).</p>
+<div class="table-wrapper"><table><thead><tr><th>Tâche</th><th>Équivalent cargo</th><th>Description</th></tr></thead><tbody>
+<tr><td><code>task bench</code></td><td><code>cargo bench --no-default-features --features simd</code></td><td>Tous les benchmarks</td></tr>
+<tr><td><code>task bench-dsp</code></td><td><code>... --bench audio_dsp_bench</code></td><td>DSP uniquement</td></tr>
+<tr><td><code>task bench-binaural</code></td><td><code>... --bench audio_binaural_bench</code></td><td>Binaural uniquement</td></tr>
+<tr><td><code>task bench-save-baseline -- &lt;nom&gt;</code></td><td><code>... -- --save-baseline &lt;nom&gt;</code></td><td>Snapshot nommé</td></tr>
+<tr><td><code>task bench-compare -- &lt;nom&gt;</code></td><td><code>... -- --baseline &lt;nom&gt;</code></td><td>Comparaison vs snapshot</td></tr>
+<tr><td><code>task bench-open-report</code></td><td><em>(ouvre le navigateur)</em></td><td>Rapport HTML Criterion</td></tr>
+</tbody></table>
+</div>
+<h3 id="bench-open-report--serveur-http-local"><a class="header" href="#bench-open-report--serveur-http-local"><code>bench-open-report</code> — serveur HTTP local</a></h3>
+<p>Les rapports Criterion utilisent des <strong>liens relatifs</strong> entre pages HTML. Ouvrir le fichier directement via <code>file://</code> échoue avec les navigateurs sandboxés (Flatpak/Snap) car ils copient le fichier dans <code>/run/user/1000/doc/&lt;hash&gt;/</code> — les chemins relatifs ne se résolvent plus.</p>
+<p>La tâche démarre donc un <strong>serveur HTTP Python local</strong> (<code>python3 -m http.server</code>) servant depuis <code>target/criterion/</code>. Le navigateur navigue sur <code>http://localhost:17380/</code> où tous les liens relatifs fonctionnent.</p>
+<pre><code class="language-sh">task bench-open-report
+# 📊 Démarrage du serveur HTTP sur http://localhost:17380/report/index.html
+#    (Ctrl+C pour arrêter)
+</code></pre>
+<blockquote>
+<p>Le port <code>17380</code> est choisi pour éviter les conflits avec les ports courants (3000, 8080, 8000).</p>
+</blockquote>
+<p>Pour ne benchmarker qu'une partie, passer le filtre après <code>--</code> :</p>
+<pre><code class="language-sh"># Via cargo (le filtrage n'est pas encore exposé dans les tâches Task)
+cargo bench --no-default-features --features simd -- "binaural/block_sizes"
+cargo bench --no-default-features --features simd -- "binaural/multi_voice"
+cargo bench --no-default-features --features simd -- "resample/one_second"
+</code></pre>
+<h3 id="rapport-html"><a class="header" href="#rapport-html">Rapport HTML</a></h3>
+<p>Après exécution, les rapports sont disponibles dans :</p>
+<pre><code>target/criterion/
+├── report/index.html                      ← vue d'ensemble globale
+├── resample/
+│   ├── upsample_44100_to_48000/
+│   │   ├── report/index.html              ← courbes par groupe
+│   │   └── 512/report/index.html          ← courbes par paramètre
+│   └── ...
+└── binaural/
+    ├── block_sizes/
+    │   └── 512/report/index.html
+    └── ...
+</code></pre>
+<pre><code class="language-sh">task bench-open-report
+</code></pre>
+<hr />
+<h2 id="voir-aussi"><a class="header" href="#voir-aussi">Voir aussi</a></h2>
+<ul>
+<li><a href="./profiling_guide.html">profiling_guide.md</a> — Flamegraph, Callgrind, Heaptrack pour le profiling CPU/RAM</li>
+<li><a href="./audio.html">audio.md</a> — Architecture du thread audio (CPAL, Condvar, voices pool)</li>
+<li><a href="./2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html">2026-07-08 - SYNTHÈSE OPTIMISATIONS AUDIO</a> — Historique des optimisations lock-free, FTZ/DAZ, buffer ALSA/PipeWire</li>
+<li><a href="../benches/audio_dsp_bench.rs">benches/audio_dsp_bench.rs</a> — Code source des benchmarks DSP</li>
+<li><a href="../benches/audio_binaural_bench.rs">benches/audio_binaural_bench.rs</a> — Code source des benchmarks binaural</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="audio.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="20260713_audio_performance_profile_analysis.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="audio.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="20260713_audio_performance_profile_analysis.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

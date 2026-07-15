@@ -1,0 +1,443 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Profilage Mémoire (Heaptrack) - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html" class="active"><strong aria-hidden="true">4.1.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">4.2.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">4.3.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">4.4.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">4.5.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.6.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.7.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.8.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="-guide-complet--profilage-de-la-mémoire-dynamique-et-traque-des-fuites-avec-heaptrack"><a class="header" href="#-guide-complet--profilage-de-la-mémoire-dynamique-et-traque-des-fuites-avec-heaptrack">🛠️ Guide Complet : Profilage de la Mémoire Dynamique et Traque des Fuites avec Heaptrack</a></h1>
+<p>Ce document explique les concepts de profilage de la mémoire à l'aide de <strong>heaptrack</strong> et <strong>heaptrack-gui</strong>, détaille les refactorings et corrections apportés au simulateur de feux d'artifice (<code>fireworks_sim</code>), et fournit un tutoriel complet pour pister et éliminer les allocations intempestives et les fuites.</p>
+<hr />
+<h2 id="-sommaire"><a class="header" href="#-sommaire">📖 Sommaire</a></h2>
+<ol>
+<li><a href="#1-introduction--pourquoi-profiler-la-m%C3%A9moire-en-temps-r%C3%A9el-">Introduction : Pourquoi profiler la mémoire en temps réel ?</a></li>
+<li><a href="#2-anatomie-des-refactorings-de-fireworks_sim">Anatomie des Refactorings de <code>fireworks_sim</code></a>
+<ul>
+<li><a href="#a-%C3%A9limination-des-allocations-de-cha%C3%AEnes-du-profiler">A. Élimination des allocations de chaînes du Profiler</a></li>
+<li><a href="#b-remplacement-de-boxdyn-iterator-par-des-closures">B. Remplacement de <code>Box&lt;dyn Iterator&gt;</code> par des closures</a></li>
+<li><a href="#c-canal-born%C3%A9-pour-la-file-doppler-crossbeam-channel">C. Canal borné pour la file Doppler (<code>crossbeam-channel</code>)</a></li>
+<li><a href="#d-pattern-scratch-buffer-pour-to_deactivate">D. Pattern "Scratch Buffer" pour <code>to_deactivate</code></a></li>
+<li><a href="#e-canal-born%C3%A9-pour-le-garbage-collector-audio">E. Canal borné pour le Garbage Collector audio</a></li>
+</ul>
+</li>
+<li><a href="#3-tutoriel--analyser-son-application-avec-heaptrack">Tutoriel : Analyser son application avec Heaptrack</a>
+<ul>
+<li><a href="#lancement-du-profilage">Lancement du profilage</a></li>
+<li><a href="#analyse-textuelle-heaptrack_print">Analyse textuelle (<code>heaptrack_print</code>)</a></li>
+</ul>
+</li>
+<li><a href="#4-tutoriel-graphique--naviguer-dans-heaptrack-gui">Tutoriel Graphique : Naviguer dans Heaptrack-GUI</a></li>
+<li><a href="#5-tutoriel--benchmark-global-de-performance-avec-criterion">Tutoriel : Benchmark Global de Performance avec Criterion</a></li>
+<li><a href="#6-anti-patterns-de-m%C3%A9moire-en-rust-temps-r%C3%A9el">Anti-Patterns de mémoire en Rust Temps Réel</a></li>
+</ol>
+<hr />
+<h2 id="1-introduction--pourquoi-profiler-la-mémoire-en-temps-réel-"><a class="header" href="#1-introduction--pourquoi-profiler-la-mémoire-en-temps-réel-">1. Introduction : Pourquoi profiler la mémoire en temps réel ?</a></h2>
+<p>Dans une application interactive en temps réel comportant un moteur physique, un rendu GPU à haut framerate et un moteur audio 3D binaural, la <strong>latence</strong> et la <strong>régularité du framerate</strong> sont cruciales.
+Bien que Rust ne possède pas de ramasse-miettes (Garbage Collector) causant des pauses imprévisibles, les <strong>allocations dynamiques sur le tas</strong> (via <code>malloc</code> ou l'allocateur système) restent coûteuses :</p>
+<ul>
+<li><strong>Latence de verrouillage (Lock Contention) :</strong> L'allocateur système doit souvent acquérir un verrou global. Si le thread audio ou de rendu alloue en même temps que d'autres threads, cela provoque des bégaiements (stutters/underruns).</li>
+<li><strong>Fragmentation de la mémoire :</strong> Des milliers d'allocations de tailles diverses dégradent la localité du cache processeur.</li>
+<li><strong>Coût de recherche :</strong> Trouver un bloc libre dans le tas prend du temps CPU.</li>
+</ul>
+<p><strong>L'objectif en Rust temps réel : Zéro allocation dans la boucle chaude.</strong></p>
+<hr />
+<h2 id="2-anatomie-des-refactorings-de-fireworks_sim"><a class="header" href="#2-anatomie-des-refactorings-de-fireworks_sim">2. Anatomie des Refactorings de <code>fireworks_sim</code></a></h2>
+<p>Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq sources d'allocations dynamiques sur le tas dans les chemins critiques.</p>
+<h3 id="a-Élimination-des-allocations-de-chaînes-du-profiler"><a class="header" href="#a-Élimination-des-allocations-de-chaînes-du-profiler">A. Élimination des allocations de chaînes du Profiler</a></h3>
+<ul>
+<li><strong>Problème détecté :</strong> Le profiler de performance interne acceptait des clés génériques via <code>label: impl Into&lt;String&gt;</code>.
+Dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L56">dsp_processor.rs</a>, chaque appel à <code>profile_block("write_cpal_buffer")</code> ou <code>record_metric("audio latency", ...)</code> convertissait le littéral <code>&amp;str</code> en un <code>String</code> alloué sur le tas, générant plus de <strong>10 000 allocations temporaires</strong> par tranche de 10 secondes dans le thread audio.</li>
+<li><strong>Correction dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/profiler.rs">profiler.rs</a> :</strong>
+Les HashMaps et les signatures de fonctions ont été réécrites pour stocker et consommer des références statiques <code>&amp;'static str</code> :
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// AVANT (allouait une String à chaque appel)
+pub fn record_metric(&amp;self, label: impl Into&lt;String&gt;, value: T)
+// APRÈS (zéro-allocation, simple copie de pointeur)
+pub fn record_metric(&amp;self, label: &amp;'static str, value: T)
+<span class="boring">}</span></code></pre></pre>
+</li>
+</ul>
+<h3 id="b-remplacement-de-boxdyn-iterator-par-des-closures"><a class="header" href="#b-remplacement-de-boxdyn-iterator-par-des-closures">B. Remplacement de <code>Box&lt;dyn Iterator&gt;</code> par des closures</a></h3>
+<ul>
+<li><strong>Problème détecté :</strong> L'interface d'itération physique <code>PhysicEngineIterator</code> renvoyait des itérateurs dynamiques boxés (<code>Box&lt;dyn Iterator&lt;Item = &amp;Particle&gt;&gt;</code>).
+À chaque frame de rendu, la méthode <code>fill_particle_data_direct</code> appelait ces fonctions, allouant un objet <code>Box</code> sur le tas pour encapsuler le pipeline de filtrage, créant des milliers d'allocations temporaires dans la boucle de rendu.</li>
+<li><strong>Correction dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/trait.rs">trait.rs</a> &amp; <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/physic_engine_generational_arena.rs">physic_engine_generational_arena.rs</a> :</strong>
+Nous avons remplacé l'itération externe (renvoi d'itérateurs) par de l'<strong>itération interne</strong> en passant des closures temporaires (<code>&amp;mut dyn FnMut(&amp;Particle)</code>) :
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// AVANT (allocation sur le tas)
+fn iter_active_particles&lt;'a&gt;(&amp;'a self) -&gt; Box&lt;dyn Iterator&lt;Item = &amp;'a Particle&gt; + 'a&gt;;
+
+// APRÈS (zéro allocation sur le tas, inlining possible)
+fn for_each_active_particle(&amp;self, f: &amp;mut dyn FnMut(&amp;Particle));
+<span class="boring">}</span></code></pre></pre>
+Le renderer utilise désormais cette méthode pour copier directement les données physiques dans le buffer mappé du GPU :
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>physic.for_each_active_particle(&amp;mut |p| {
+    if count &lt; self.max_particles_on_gpu {
+        gpu_slice[count] = ParticleGPU { ... };
+        count += 1;
+    }
+});
+<span class="boring">}</span></code></pre></pre>
+</li>
+</ul>
+<h3 id="c-canal-borné-pour-la-file-doppler-crossbeam-channel"><a class="header" href="#c-canal-borné-pour-la-file-doppler-crossbeam-channel">C. Canal borné pour la file Doppler (<code>crossbeam-channel</code>)</a></h3>
+<ul>
+<li><strong>Problème détecté :</strong> Pour transmettre la télémétrie des fusées au moteur audio en temps réel, nous utilisions un canal non borné (<code>crossbeam::channel::unbounded()</code>).
+En arrière-plan, chaque appel à <code>try_send</code> allouait un nœud de liste chaînée sur le tas, générant des milliers d'allocations temporaires à mesure que les feux d'artifice se déplaçaient.</li>
+<li><strong>Correction dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/audio_event.rs">audio_event.rs</a> :</strong>
+Remplacement du canal par un canal borné (<code>crossbeam::channel::bounded(8192)</code>). Le canal pré-alloue sa file d'attente circulaire une fois au démarrage. Les appels <code>try_send</code> écrivent désormais directement dans les slots existants en <strong>zéro allocation</strong>.</li>
+</ul>
+<h3 id="d-pattern-scratch-buffer-pour-to_deactivate"><a class="header" href="#d-pattern-scratch-buffer-pour-to_deactivate">D. Pattern "Scratch Buffer" pour <code>to_deactivate</code></a></h3>
+<ul>
+<li><strong>Problème détecté :</strong> Dans la méthode <code>update</code> de la physique des fusées, un vecteur temporaire <code>let mut to_deactivate = Vec::new()</code> était instancié à chaque frame pour collecter les indices des fusées éteintes, forçant des allocations de réajustement de capacité sur le tas.</li>
+<li><strong>Correction dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/physic_engine_generational_arena.rs">physic_engine_generational_arena.rs</a> :</strong>
+Nous avons déporté ce buffer temporaire en tant que membre de la structure <code>PhysicEngineFireworks</code> sous la forme de <code>to_deactivate_scratch: Vec&lt;Index&gt;</code>, pré-alloué au démarrage.
+Pour satisfaire le Borrow Checker de Rust (qui interdit de modifier la physique tout en empruntant le buffer temporaire), nous utilisons <code>std::mem::take</code> pour extraire temporairement le vecteur de la structure, effectuer les traitements, puis le réinjecter en fin de frame :
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Extrait le buffer (échange avec un Vec vide à coût nul)
+let mut to_deactivate = std::mem::take(&amp;mut self.to_deactivate_scratch);
+to_deactivate.clear();
+
+// ... boucle physique ...
+// to_deactivate.push(idx);
+
+for &amp;idx in &amp;to_deactivate {
+    self.deactivate_rocket(idx);
+}
+
+// Restitue le buffer pour la frame suivante
+self.to_deactivate_scratch = to_deactivate;
+<span class="boring">}</span></code></pre></pre>
+</li>
+</ul>
+<h3 id="e-canal-borné-pour-le-garbage-collector-audio"><a class="header" href="#e-canal-borné-pour-le-garbage-collector-audio">E. Canal borné pour le Garbage Collector audio</a></h3>
+<ul>
+<li><strong>Problème détecté :</strong> Lorsque le thread audio termine de jouer une voix, il renvoie son tampon audio au thread principal pour déallocation via un canal <code>garbage_tx</code> non borné (<code>unbounded()</code>). L'appel à <code>try_send</code> sur ce canal dans la boucle temps réel CPAL causait une allocation de nœud sur le tas.</li>
+<li><strong>Correction dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs">fireworks_audio.rs</a> :</strong>
+Modification du canal de recyclage pour utiliser une file bornée pré-allouée (<code>crossbeam::channel::bounded(1024)</code>), garantissant qu'aucune allocation dynamique ne se produit lorsque les voix terminent leur lecture.</li>
+</ul>
+<hr />
+<h2 id="3-tutoriel--analyser-son-application-avec-heaptrack"><a class="header" href="#3-tutoriel--analyser-son-application-avec-heaptrack">3. Tutoriel : Analyser son application avec Heaptrack</a></h2>
+<h3 id="lancement-du-profilage"><a class="header" href="#lancement-du-profilage">Lancement du profilage</a></h3>
+<p>Pour obtenir des traces mémoire précises, compilez toujours votre application en mode optimisé tout en conservant les symboles de débogage (ce qui correspond au profil <code>profiling</code> dans le <code>Cargo.toml</code> du projet).</p>
+<ol>
+<li><strong>Compilation :</strong>
+<pre><code class="language-bash">cargo build --profile profiling
+</code></pre>
+</li>
+<li><strong>Exécution sous Heaptrack :</strong>
+<pre><code class="language-bash">vblank_mode=0 __GL_SYNC_TO_VBLANK=0 heaptrack ./target/profiling/fireworks_sim
+</code></pre>
+</li>
+<li><strong>Action utilisateur :</strong> Interagissez avec l'application, déclenchez des feux d'artifice pour forcer les allocations dynamiques, puis fermez l'application. Heaptrack génère un fichier compressé, par exemple : <code>heaptrack.fireworks_sim.357134.zst</code>.</li>
+</ol>
+<hr />
+<h2 id="4-tutoriel-graphique--naviguer-dans-heaptrack-gui"><a class="header" href="#4-tutoriel-graphique--naviguer-dans-heaptrack-gui">4. Tutoriel Graphique : Naviguer dans Heaptrack-GUI</a></h2>
+<p>Lancez l'interface graphique en ouvrant le fichier <code>.zst</code> :</p>
+<pre><code class="language-bash">heaptrack_gui heaptrack.fireworks_sim.XXXXXX.zst
+</code></pre>
+<ul>
+<li><strong>Summary (Résumé) :</strong> Affiche le volume d'allocations par seconde, le pic de mémoire et les fuites.</li>
+<li><strong>Bottom-Up (Bas-haut) :</strong> Permet d'isoler instantanément les fonctions qui allouent et libèrent immédiatement (tri par "Temporary").</li>
+<li><strong>Memory Leaks (Fuites de mémoire) :</strong> Affiche la liste des allocations non libérées à la fin de l'application.</li>
+</ul>
+<hr />
+<h2 id="5-tutoriel--benchmark-global-de-performance-avec-criterion"><a class="header" href="#5-tutoriel--benchmark-global-de-performance-avec-criterion">5. Tutoriel : Benchmark Global de Performance avec Criterion</a></h2>
+<p>Nous avons intégré un benchmark de performance global du simulateur : <code>simulator_full_bench</code>. Ce benchmark instancie tous les moteurs (physique, audio et rendu GPU dans un contexte OpenGL invisible) et mesure le temps complet d'une frame/cycle de mise à jour et de rendu (<code>Simulator::step()</code>).</p>
+<h3 id="a-lancement-en-mode-headless-sans-vsync"><a class="header" href="#a-lancement-en-mode-headless-sans-vsync">A. Lancement en mode Headless (sans VSync)</a></h3>
+<p>Par défaut, le driver graphique force la synchronisation verticale (VSync) qui limite artificiellement la boucle de rendu à la fréquence de votre moniteur (ex: 60Hz = 16.6ms). Pour mesurer les performances brutes CPU/GPU, VSync doit être désactivé lors de l'exécution du benchmark :</p>
+<pre><code class="language-bash"># Désactive la VSync sous Linux et exécute le benchmark
+vblank_mode=0 __GL_SYNC_TO_VBLANK=0 cargo bench --bench simulator_full_bench
+</code></pre>
+<h3 id="b-comparaison-de-baselines-de-performance-avec-mise-à-léchelle-10-à-4000-fusées"><a class="header" href="#b-comparaison-de-baselines-de-performance-avec-mise-à-léchelle-10-à-4000-fusées">B. Comparaison de baselines de performance avec mise à l'échelle (10 à 4000 fusées)</a></h3>
+<p>Pour évaluer précisément l'évolution des performances sous charge de 10 à 4000 fusées actives soutenues entre deux branches Git (ex: <code>master</code> et notre branche optimisée) :</p>
+<ol>
+<li><strong>Sauvegarder la baseline optimisée :</strong>
+Placez-vous sur la branche <code>perf/zero-allocation-hot-paths</code> et exécutez :
+<pre><code class="language-bash">vblank_mode=0 __GL_SYNC_TO_VBLANK=0 cargo bench --bench simulator_full_bench -- --save-baseline optimized
+</code></pre>
+</li>
+<li><strong>Comparer avec la version Master :</strong>
+Basculez sur la branche <code>master</code> (en important temporairement le benchmark et sa config) et lancez :
+<pre><code class="language-bash">vblank_mode=0 __GL_SYNC_TO_VBLANK=0 cargo bench --bench simulator_full_bench -- --baseline optimized
+</code></pre>
+</li>
+</ol>
+<h3 id="-résultats-comparatifs-réels-constatés-mise-à-léchelle-"><a class="header" href="#-résultats-comparatifs-réels-constatés-mise-à-léchelle-">📈 Résultats comparatifs réels constatés (Mise à l'échelle) :</a></h3>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: center">Nombre de fusées actives soutenues</th><th style="text-align: center">Temps de frame - Master</th><th style="text-align: center">Temps de frame - Optimisé</th><th style="text-align: center">Gain Net (Zéro-alloc)</th></tr></thead><tbody>
+<tr><td style="text-align: center"><strong>10 fusées</strong></td><td style="text-align: center">562.2 µs</td><td style="text-align: center"><strong>544.1 µs</strong></td><td style="text-align: center"><strong>+3.3%</strong></td></tr>
+<tr><td style="text-align: center"><strong>50 fusées</strong></td><td style="text-align: center">640.7 µs</td><td style="text-align: center"><strong>610.9 µs</strong></td><td style="text-align: center"><strong>+4.9%</strong></td></tr>
+<tr><td style="text-align: center"><strong>200 fusées</strong></td><td style="text-align: center">1.30 ms</td><td style="text-align: center"><strong>1.24 ms</strong></td><td style="text-align: center"><strong>+4.3%</strong></td></tr>
+<tr><td style="text-align: center"><strong>1000 fusées</strong></td><td style="text-align: center">4.43 ms</td><td style="text-align: center"><strong>4.34 ms</strong></td><td style="text-align: center"><strong>+2.1%</strong></td></tr>
+<tr><td style="text-align: center"><strong>4000 fusées</strong></td><td style="text-align: center">5.38 ms</td><td style="text-align: center"><strong>4.90 ms</strong></td><td style="text-align: center"><strong>+9.8%</strong></td></tr>
+</tbody></table>
+</div>
+<h3 id="-analyse-de-la-charge-gpucpu-"><a class="header" href="#-analyse-de-la-charge-gpucpu-">🔍 Analyse de la charge GPU/CPU :</a></h3>
+<ul>
+<li><strong>Pourquoi la faible variation auparavant ?</strong> Lors de nos premiers tests, la simulation progressait naturellement dans le temps. En raison du grand nombre d'itérations de Criterion, la simulation atteignait rapidement son état stationnaire par défaut (environ 120 fusées), quel que soit le nombre initial de fusées injectées au démarrage.</li>
+<li><strong>Comportement sous haute charge :</strong> En adaptant les intervalles de génération à l'état stationnaire, nous constatons désormais une courbe de mise à l'échelle logique. À 4000 fusées actives, le moteur gère en permanence des dizaines de milliers de particules de traînées et d'explosions.</li>
+<li><strong>Optimisation mémoire sous haute charge :</strong> À 4000 fusées, la version optimisée montre son plus grand avantage (<strong>+9.8% de gain</strong>), car l'absence totale d'allocations dans la boucle chaude évite la fragmentation du tas et les micro-latences induites par le mapping dynamique des buffers GPU et le recyclage des voix audio.</li>
+</ul>
+<hr />
+<h2 id="6-anti-patterns-de-mémoire-en-rust-temps-réel"><a class="header" href="#6-anti-patterns-de-mémoire-en-rust-temps-réel">6. Anti-Patterns de mémoire en Rust Temps Réel</a></h2>
+<p>Voici les principaux pièges de gestion de mémoire à éviter dans vos développements futurs en Rust temps réel :</p>
+<ol>
+<li><strong>Passage de <code>impl Into&lt;String&gt;</code> ou <code>&amp;str</code> converti en <code>String</code> :</strong>
+<ul>
+<li><em>Mauvais :</em> <code>metrics.insert("ma_cle".to_string(), valeur);</code></li>
+<li><em>Bon :</em> <code>metrics.insert("ma_cle", valeur);</code> (utiliser <code>&amp;'static str</code> comme clé de dictionnaire).</li>
+</ul>
+</li>
+<li><strong>Encapsulation systématique dans des itérateurs dynamiques (<code>Box&lt;dyn Iterator&gt;</code>) :</strong>
+<ul>
+<li><em>Mauvais :</em> Renvoyer <code>Box&lt;dyn Iterator&gt;</code> pour masquer la complexité des types internes.</li>
+<li><em>Bon :</em> Renvoyer un type générique opaque <code>impl Iterator&lt;Item = T&gt;</code>, ou utiliser l'itération interne via une closure s'il s'agit d'une interface de trait partagée à dispatch dynamique.</li>
+</ul>
+</li>
+<li><strong>Canaux de communication non bornés (Unbounded Channels) :</strong>
+<ul>
+<li><em>Mauvais :</em> Utiliser <code>unbounded()</code> pour s'affranchir de la gestion des débordements (provoque une allocation de nœud sur le tas à chaque envoi de message).</li>
+<li><em>Bon :</em> Utiliser <code>bounded(capacity)</code> pour pré-allouer un buffer circulaire contigu en mémoire.</li>
+</ul>
+</li>
+<li><strong>Formatage de chaînes de caractères à la volée :</strong>
+<ul>
+<li><em>Mauvais :</em> Utiliser <code>format!("particle_{}", id)</code> dans les logs ou les identifiants à chaque frame.</li>
+<li><em>Bon :</em> Prédécouper les buffers, utiliser des identifiants numériques (<code>usize</code>), ou n'allouer qu'en cas de changement d'état.</li>
+</ul>
+</li>
+<li><strong>Vecteurs dynamiques non pré-alloués (Scratch Buffer Pattern) :</strong>
+<ul>
+<li><em>Mauvais :</em> Déclarer <code>let mut temp = Vec::new();</code> et y pousser des éléments dans une boucle à chaque frame (provoque de multiples réallocations).</li>
+<li><em>Bon :</em> Utiliser des variables membres persistantes (<code>self.scratch_buffer</code>) en réinitialisant leur contenu via <code>.clear()</code> et en utilisant <code>std::mem::take</code> si nécessaire pour contourner l'emprunt mutable de <code>self</code>.</li>
+</ul>
+</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="renderer_manual.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="20260715_gpu_stalls_analysis_and_optimization_plan.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="renderer_manual.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="20260715_gpu_stalls_analysis_and_optimization_plan.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
