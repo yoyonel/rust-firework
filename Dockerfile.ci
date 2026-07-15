@@ -30,7 +30,8 @@ RUN sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 RUN mkdir -p src benches && \
     echo "fn main() {}" > src/main.rs && \
     echo "fn main() {}" > benches/audio_dsp_bench.rs && \
-    echo "fn main() {}" > benches/audio_binaural_bench.rs
+    echo "fn main() {}" > benches/audio_binaural_bench.rs && \
+    echo "fn main() {}" > benches/simulator_full_bench.rs
 RUN cargo build --release
 RUN rm -rf src benches
 
