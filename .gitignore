@@ -267,3 +267,7 @@ r*hs/
 
 # Claude
 .codegraph/
+
+# mdBook output and local binary
+/book/
+/mdbook
