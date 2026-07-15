@@ -14,12 +14,24 @@ fn bench_simulator_scaling(c: &mut Criterion) {
     // Activer le mode headless pour éviter d'ouvrir une fenêtre physique
     std::env::set_var("FIREWORKS_BENCH", "1");
 
-    let physic_config = PhysicConfig::default();
     let audio_file_config = AudioConfig::default();
 
     let mut group = c.benchmark_group("simulator/frame_step_scaling");
+    group.sample_size(30); // Réduire à 30 échantillons car les très hauts volumes prennent du temps
 
-    for n_rockets in [1, 2, 4, 8, 16, 32, 64] {
+    // Tester des charges soutenues réalistes allant de faibles à extrêmes (jusqu'à 4000 fusées actives)
+    for n_rockets in [10, 50, 200, 1000, 4000] {
+        let mut physic_config = PhysicConfig::default();
+        // Une fusée vit environ 3.0 secondes. Pour maintenir un état stationnaire de N fusées,
+        // l'intervalle moyen d'apparition doit être d'environ 3.0 / N secondes.
+        let interval = 3.0 / n_rockets as f32;
+        physic_config.rocket_interval_mean = interval;
+        physic_config.rocket_interval_variation = interval * 0.75;
+        physic_config.rocket_max_next_interval = interval;
+
+        // Limiter le nombre max de fusées dans l'arène au besoin
+        physic_config.max_rockets = n_rockets * 2;
+
         // Initialisation des ressources
         let doppler_queue = DopplerQueue::new();
         let mut audio_config = audio_file_config.to_engine_config(physic_config.max_rockets);
@@ -39,7 +51,7 @@ fn bench_simulator_scaling(c: &mut Criterion) {
         let mut physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
         physic_engine.set_doppler_sender(doppler_queue.sender.clone());
 
-        // Générer une charge de travail initiale (n_rockets fusées actives)
+        // Pré-générer une charge de travail initiale stable (n_rockets fusées actives)
         for _ in 0..n_rockets {
             physic_engine.force_next_launch();
             physic_engine.update(0.016);
