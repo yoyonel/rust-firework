@@ -49,3 +49,9 @@ pub use window_engine::WindowEngine;
 // pub mod audio_rodio;
 // pub mod physic_engine;
 // pub mod physic_engine_static;
+// pub mod physic_engine_generational_arena;
+
+#[cfg(feature = "tracy")]
+#[global_allocator]
+static GLOBAL: tracy_client::ProfiledAllocator<std::alloc::System> =
+    tracy_client::ProfiledAllocator::new(std::alloc::System, 0);
