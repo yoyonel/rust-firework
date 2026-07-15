@@ -219,6 +219,30 @@ tasks:
 
 
   # =========================================
+  # 📖 DOCUMENTATION (mdBook)
+  # =========================================
+  doc-build:
+    desc: "Compile le livre de documentation en HTML"
+    cmds:
+      - echo "📖 Compilation de la documentation mdBook..."
+      - mdbook build
+
+  doc-serve:
+    desc: "Lance un serveur web local de documentation avec rechargement automatique (Ctrl+C pour arrêter)"
+    vars:
+      PORT: "3000"
+      URL: "http://localhost:3000"
+    cmds:
+      - echo "📊 Démarrage du serveur mdBook sur {{.URL}}..."
+      - mdbook serve --port {{.PORT}} --open
+
+  doc-clean:
+    desc: "Nettoie les fichiers de documentation compilés"
+    cmds:
+      - echo "🧹 Nettoyage du livre de documentation..."
+      - rm -rf book/
+
+  # =========================================
   # 🧹 MAINTENANCE
   # =========================================
   clean:
