@@ -183,10 +183,11 @@ fn test_reload_shaders_updates_uniform_locations() {
         "reload_shaders must get location for uSize uniform"
     );
 
-    // Vérifier que uTexture est recherché
+    // Vérifier que uTextureArray est recherché
     assert!(
-        source_code.contains("\"uTexture\"") || source_code.contains("cstr!(\"uTexture\")"),
-        "reload_shaders must get location for uTexture uniform"
+        source_code.contains("\"uTextureArray\"")
+            || source_code.contains("cstr!(\"uTextureArray\")"),
+        "reload_shaders must get location for uTextureArray uniform"
     );
 }
 
