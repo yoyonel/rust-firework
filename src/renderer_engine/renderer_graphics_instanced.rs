@@ -54,6 +54,8 @@ impl RendererGraphicsInstanced {
                 gl::UniformBlockBinding(shader_program, block_idx, 0);
             }
 
+            gl::Uniform1i(loc_tex, 0);
+
             label_gl_object!(gl::PROGRAM, shader_program, "Shader_InstancedQuad");
             label_gl_object!(gl::TEXTURE, texture_id, "Tex_Rocket_Sprite");
         }
@@ -214,7 +216,6 @@ impl RendererGraphicsInstanced {
             gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
             *active_texture = self.texture_id;
         }
-        gl::Uniform1i(self.loc_tex, 0);
 
         // Dessiner le quad
         gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
@@ -303,6 +304,8 @@ impl RendererGraphicsInstanced {
                 if block_idx != gl::INVALID_INDEX {
                     gl::UniformBlockBinding(self.shader_program, block_idx, 0);
                 }
+
+                gl::Uniform1i(self.loc_tex, 0);
 
                 label_gl_object!(gl::PROGRAM, self.shader_program, "Shader_InstancedQuad");
 
