@@ -26,6 +26,10 @@ pub struct RendererGraphics {
     pub loc_size: i32,
 
     pub max_particles_on_gpu: usize,
+
+    // Triple buffering
+    pub current_frame: usize,
+    pub fences: [Option<gl::types::GLsync>; 3],
 }
 
 impl RendererGraphics {
@@ -53,6 +57,8 @@ impl RendererGraphics {
                 shader_program,
                 loc_size,
                 max_particles_on_gpu,
+                current_frame: 0,
+                fences: [None, None, None],
             }
         }
     }
@@ -70,7 +76,7 @@ impl RendererGraphics {
         gl::GenBuffers(1, &mut vbo_particles);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
 
-        let buffer_size = (max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
+        let buffer_size = (3 * max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
         info!(
             "🎮 Allocating instanced particle buffer: {} particles → {}",
             max_particles_on_gpu,
@@ -115,6 +121,14 @@ impl RendererGraphics {
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn recreate_buffers(&mut self, new_max: usize) {
+        // Libérer les anciens fences et reset l'index de frame
+        for fence in self.fences.iter_mut() {
+            if let Some(sync) = fence.take() {
+                gl::DeleteSync(sync);
+            }
+        }
+        self.current_frame = 0;
+
         // 1. Libérer les anciens buffers
         gl::DeleteVertexArrays(1, &self.vao);
         gl::DeleteBuffers(1, &self.vbo_particles);
@@ -144,11 +158,20 @@ impl RendererGraphics {
     /// This function is unsafe because it directly manipulates GPU resources.
     /// The caller must ensure that the OpenGL context is valid.
     pub unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize {
+        // Synchroniser : Attendre que le GPU ait fini de lire cette section
+        if let Some(sync) = self.fences[self.current_frame] {
+            gl::ClientWaitSync(sync, gl::SYNC_FLUSH_COMMANDS_BIT, 10_000_000_000); // 10s
+            gl::DeleteSync(sync);
+            self.fences[self.current_frame] = None;
+        }
+
         let mut count = 0;
 
-        // Slice Rust mutable mappé directement sur la mémoire GPU.
+        // Slice Rust mutable mappé sur la section courante de la mémoire GPU.
         // Toute écriture dans ce slice écrit physiquement dans la BAR / VRAM.
-        let gpu_slice = std::slice::from_raw_parts_mut(self.mapped_ptr, self.max_particles_on_gpu);
+        let offset = self.current_frame * self.max_particles_on_gpu;
+        let gpu_slice =
+            std::slice::from_raw_parts_mut(self.mapped_ptr.add(offset), self.max_particles_on_gpu);
 
         // Ici, on remplit sans allocations temporaires en passant par for_each_active_particle
         physic.for_each_active_particle(&mut |p| {
@@ -197,7 +220,7 @@ impl RendererGraphics {
     /// Il est de la responsabilité de l’appelant de garantir que le contexte OpenGL
     /// est valide et que les ressources (`VAO`, `VBO`, shader, etc.) sont correctement initialisées.
     pub unsafe fn render_particles_with_persistent_buffer(
-        &self,
+        &mut self,
         count: usize,
         window_size: (f32, f32),
     ) {
@@ -218,10 +241,21 @@ impl RendererGraphics {
         gl::BindVertexArray(self.vao);
 
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
-        // Dessine les particules sous forme de points
-        gl::DrawArrays(gl::POINTS, 0, count as i32);
+        // Dessine les particules sous forme de points en décalant l'index de départ selon la section courante
+        let first_vertex = (self.current_frame * self.max_particles_on_gpu) as i32;
+        gl::DrawArrays(gl::POINTS, first_vertex, count as i32);
 
         pop_debug_group!();
+
+        // Placer une barrière de synchronisation après le draw call
+        if let Some(old_sync) = self.fences[self.current_frame] {
+            gl::DeleteSync(old_sync);
+        }
+        let sync = gl::FenceSync(gl::SYNC_GPU_COMMANDS_COMPLETE, 0);
+        self.fences[self.current_frame] = Some(sync);
+
+        // Passer à la frame suivante
+        self.current_frame = (self.current_frame + 1) % 3;
     }
 
     /// Libère les ressources GPU associées à ce RendererGraphics.
@@ -230,6 +264,13 @@ impl RendererGraphics {
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn close(&mut self) {
+        // Libérer les fences
+        for fence in self.fences.iter_mut() {
+            if let Some(sync) = fence.take() {
+                gl::DeleteSync(sync);
+            }
+        }
+
         // Unmap the persistent buffer BEFORE deleting it
         if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
@@ -296,7 +337,7 @@ impl ParticleGraphicsRenderer for RendererGraphics {
     }
 
     unsafe fn render_particles_with_persistent_buffer(
-        &self,
+        &mut self,
         count: usize,
         window_size: (f32, f32),
     ) {
