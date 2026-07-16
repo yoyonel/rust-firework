@@ -296,6 +296,44 @@ tasks:
     cmds:
       - "{{.CARGO}} build --features tracy --release"
 
+  profile-tracy-headless:
+    desc: "Exécute le projet sous profilage Tracy en tâche de fond, enregistre une trace headless de 5s, et extrait les statistiques de render_frame en CSV"
+    env:
+      RUSTFLAGS: "-C target-cpu=native"
+    cmds:
+      - echo "🔨 Compilation du binaire de profiling..."
+      - "{{.CARGO}} build --features tracy --profile profiling"
+      - echo "🚀 Lancement du simulateur en tâche de fond..."
+      - |
+        bash -c '
+          vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./target/profiling/fireworks_sim > /tmp/sim.log 2>&1 &
+          SIM_PID=$!
+          sleep 2
+          echo "📊 Lancement de la capture Tracy (5s)..."
+          /home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture -f -o /tmp/fireworks.tracy -s 5
+          echo "🧹 Arrêt du simulateur..."
+          kill $SIM_PID
+          wait $SIM_PID 2>/dev/null || true
+        '
+      - echo "📊 Extraction des statistiques de Renderer::render_frame..."
+      - "/home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport -u -f 'Renderer::render_frame' /tmp/fireworks.tracy > /tmp/durations.csv"
+      - echo "📈 Statistiques de Renderer::render_frame (hors warmup) :"
+      - |
+        python3 -c "
+        import csv
+        durations = []
+        with open('/tmp/durations.csv', 'r') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                durations.append(int(row['exec_time_ns']))
+        warm_durations = durations[5:] if len(durations) > 5 else durations
+        print(f'   - Nombre total de frames analysées : {len(warm_durations)}')
+        print(f'   - Durée moyenne (Mean)             : {sum(warm_durations)/len(warm_durations)/1000:.2f} us')
+        print(f'   - Durée médiane (Median)           : {sorted(warm_durations)[len(warm_durations)//2]/1000:.2f} us')
+        print(f'   - Durée minimale (Min)             : {min(warm_durations)/1000:.2f} us')
+        print(f'   - Durée maximale (Max)             : {max(warm_durations)/1000:.2f} us')
+        "
+
 # =========================================
   # 🎧 PROFILING PERF + HOTSPOT (AUDIO DOPPLER)
   # =========================================
