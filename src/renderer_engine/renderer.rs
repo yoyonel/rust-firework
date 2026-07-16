@@ -202,7 +202,6 @@ impl RendererEngine for Renderer {
                 std::mem::size_of::<GlobalDataUBO>() as isize,
                 &ubo_data as *const _ as *const _,
             );
-            gl::BindBuffer(gl::UNIFORM_BUFFER, 0);
 
             // Bind global UBO to binding point 0 for this frame (prevent override by other context users like ImGui)
             gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global);

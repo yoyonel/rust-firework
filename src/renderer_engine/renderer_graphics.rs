@@ -241,10 +241,9 @@ impl RendererGraphics {
             *active_shader = self.shader_program;
         }
 
-        // Lie le VAO et VBO correspondant aux particules
+        // Lie le VAO correspondant aux particules
         gl::BindVertexArray(self.vao);
 
-        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
         // Dessine les particules sous forme de points en décalant l'index de départ selon la section courante
         let first_vertex = (self.current_frame * self.max_particles_on_gpu) as i32;
         gl::DrawArrays(gl::POINTS, first_vertex, count as i32);
