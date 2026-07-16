@@ -49,7 +49,6 @@ pub struct BloomPass {
     loc_kawase_up_halfpixel: GLint,
     loc_comp_scene: GLint,
     loc_comp_bloom: GLint,
-    loc_comp_intensity: GLint,
     loc_tone_mapping_mode: GLint,
     loc_passthrough_texture: GLint,
 
@@ -327,7 +326,6 @@ impl BloomPass {
                 gl::UniformBlockBinding(comparison_shader, compare_block_idx, 0);
             }
 
-            let loc_comp_intensity = -1; // Plus utilisé (géré par UBO)
             let loc_tone_mapping_mode =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uToneMappingMode"));
 
@@ -398,7 +396,6 @@ impl BloomPass {
                 loc_kawase_up_halfpixel,
                 loc_comp_scene,
                 loc_comp_bloom,
-                loc_comp_intensity,
                 loc_tone_mapping_mode,
                 loc_passthrough_texture,
                 passthrough_shader,
@@ -443,7 +440,6 @@ impl BloomPass {
             loc_kawase_up_halfpixel: 0,
             loc_comp_scene: 0,
             loc_comp_bloom: 0,
-            loc_comp_intensity: 0,
             loc_tone_mapping_mode: 0,
             loc_passthrough_texture: 0,
             intensity: 1.0,
@@ -952,7 +948,6 @@ impl BloomPass {
             gl::UniformBlockBinding(self.composition_shader, comp_block_idx, 0);
         }
 
-        self.loc_comp_intensity = -1; // Plus utilisé (géré par UBO)
         self.loc_tone_mapping_mode =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uToneMappingMode"));
 

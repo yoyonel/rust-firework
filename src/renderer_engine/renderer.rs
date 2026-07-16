@@ -163,7 +163,6 @@ impl Renderer {
                 );
                 renderer.render_particles_with_persistent_buffer(
                     nb,
-                    self.window_size_f32,
                     &mut active_shader,
                     &mut active_texture,
                 );

@@ -11,7 +11,7 @@ const VERTEX_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.vert.gl
 const FRAGMENT_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.frag.glsl";
 
 pub struct RendererGraphicsInstanced {
-    vao: u32,
+    vaos: [u32; 3],
     vbo_particles: u32,
     vbo_quad: u32,
 
@@ -60,11 +60,11 @@ impl RendererGraphicsInstanced {
 
         // VAO/VBO setup
         unsafe {
-            let (vao, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
+            let (vaos, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
                 RendererGraphicsInstanced::setup_gpu_buffers(max_particles_on_gpu);
 
             Self {
-                vao,
+                vaos,
                 vbo_particles,
                 vbo_quad,
                 mapped_ptr,
@@ -96,16 +96,16 @@ impl RendererGraphicsInstanced {
         self.current_frame = 0;
 
         // 1. Libérer les anciens buffers
-        gl::DeleteVertexArrays(1, &self.vao);
+        gl::DeleteVertexArrays(3, self.vaos.as_ptr());
         gl::DeleteBuffers(1, &self.vbo_particles);
         gl::DeleteBuffers(1, &self.vbo_quad);
 
         // 2. Recréer avec la nouvelle taille
-        let (vao, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
+        let (vaos, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
             RendererGraphicsInstanced::setup_gpu_buffers(new_max);
 
         // 3. Mettre à jour les champs
-        self.vao = vao;
+        self.vaos = vaos;
         self.vbo_particles = vbo_particles;
         self.vbo_quad = vbo_quad;
         self.mapped_ptr = mapped_ptr;
@@ -189,7 +189,6 @@ impl RendererGraphicsInstanced {
     pub unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        _window_size: (f32, f32),
         active_shader: &mut u32,
         active_texture: &mut u32,
     ) {
@@ -206,74 +205,18 @@ impl RendererGraphicsInstanced {
             *active_shader = self.shader_program;
         }
 
-        // Lie le VAO et VBO correspondant aux particules
-        gl::BindVertexArray(self.vao);
+        // Lie le VAO correspondant à la frame courante (tous les attributs et offsets y sont pré-configurés !)
+        gl::BindVertexArray(self.vaos[self.current_frame]);
 
-        // Lie la texture (seulement si elle n'est pas déjà active)
+        // Active la texture (seulement si elle n'est pas déjà active)
         if *active_texture != self.texture_id {
             gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-            gl::Uniform1i(self.loc_tex, 0);
             *active_texture = self.texture_id;
         }
-
-        // Décaler les attributs instanciés selon la section courante
-        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
-        let base_offset = (self.current_frame
-            * self.max_particles_on_gpu
-            * std::mem::size_of::<ParticleGPU>()) as isize;
-        let stride = std::mem::size_of::<ParticleGPU>() as i32;
-
-        // layout(location = 1) : position (vec2)
-        gl::VertexAttribPointer(
-            1,
-            2,
-            gl::FLOAT,
-            gl::FALSE,
-            stride,
-            (base_offset + memoffset::offset_of!(ParticleGPU, pos_x) as isize) as *const _,
-        );
-        gl::EnableVertexAttribArray(1);
-        gl::VertexAttribDivisor(1, 1);
-
-        // layout(location = 2) : couleur (vec3)
-        gl::VertexAttribPointer(
-            2,
-            3,
-            gl::FLOAT,
-            gl::FALSE,
-            stride,
-            (base_offset + memoffset::offset_of!(ParticleGPU, col_r) as isize) as *const _,
-        );
-        gl::EnableVertexAttribArray(2);
-        gl::VertexAttribDivisor(2, 1);
-
-        // layout(location = 3) : vie (float), vie max (float), taille (float), angle (float)
-        gl::VertexAttribPointer(
-            3,
-            4,
-            gl::FLOAT,
-            gl::FALSE,
-            stride,
-            (base_offset + memoffset::offset_of!(ParticleGPU, life) as isize) as *const _,
-        );
-        gl::EnableVertexAttribArray(3);
-        gl::VertexAttribDivisor(3, 1);
-
-        // layout(location = 4) : brightness (float)
-        gl::VertexAttribPointer(
-            4,
-            1,
-            gl::FLOAT,
-            gl::FALSE,
-            stride,
-            (base_offset + memoffset::offset_of!(ParticleGPU, brightness) as isize) as *const _,
-        );
-        gl::EnableVertexAttribArray(4);
-        gl::VertexAttribDivisor(4, 1);
+        gl::Uniform1i(self.loc_tex, 0);
 
         // Dessiner le quad
-        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_quad);
         gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
 
         pop_debug_group!();
@@ -317,9 +260,9 @@ impl RendererGraphicsInstanced {
             gl::DeleteBuffers(1, &self.vbo_quad);
             self.vbo_quad = 0;
         }
-        if self.vao != 0 {
-            gl::DeleteVertexArrays(1, &self.vao);
-            self.vao = 0;
+        if self.vaos[0] != 0 {
+            gl::DeleteVertexArrays(3, self.vaos.as_ptr());
+            self.vaos = [0; 3];
         }
         if self.texture_id != 0 {
             gl::DeleteTextures(1, &self.texture_id);
@@ -377,14 +320,11 @@ impl RendererGraphicsInstanced {
     }
     unsafe fn setup_gpu_buffers(
         max_particles_on_gpu: usize,
-    ) -> (u32, u32, u32, *mut ParticleGPU, isize) {
-        let (mut vao, mut vbo_quad, mut vbo_particles) = (0u32, 0u32, 0u32);
+    ) -> ([u32; 3], u32, u32, *mut ParticleGPU, isize) {
+        let mut vaos = [0u32; 3];
+        let (mut vbo_quad, mut vbo_particles) = (0u32, 0u32);
 
-        // === VAO ===
-        gl::GenVertexArrays(1, &mut vao);
-        gl::BindVertexArray(vao);
-
-        // === 1️⃣ QuadVertexAttribPointer unité statique ===
+        // === VBOs ===
         const QUAD_VERTICES: [f32; 8] = [
             -1.0, -1.0, // bottom-left
             1.0, -1.0, // bottom-right
@@ -401,19 +341,6 @@ impl RendererGraphicsInstanced {
             gl::STATIC_DRAW,
         );
 
-        // layout(location = 0): sommets du quad
-        gl::EnableVertexAttribArray(0);
-        gl::VertexAttribPointer(
-            0,
-            2,
-            gl::FLOAT,
-            gl::FALSE,
-            2 * std::mem::size_of::<f32>() as i32,
-            std::ptr::null(),
-        );
-        gl::VertexAttribDivisor(0, 0); // par sommet
-
-        // === 2️⃣ Particules persistantes ===
         gl::GenBuffers(1, &mut vbo_particles);
         gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
 
@@ -443,16 +370,92 @@ impl RendererGraphicsInstanced {
                 | gl::MAP_FLUSH_EXPLICIT_BIT,
         ) as *mut ParticleGPU;
 
-        // === Définition des attributs instanciés ===
-        ParticleGPU::setup_vertex_attribs_for_instanced_quad();
-        // === Nettoyage ===
+        // === VAO Setup for each frame in the triple buffer ===
+        gl::GenVertexArrays(3, vaos.as_mut_ptr());
+        for (frame, &vao) in vaos.iter().enumerate() {
+            gl::BindVertexArray(vao);
+
+            // 1️⃣ QuadVertexAttribPointer unité statique
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(
+                0,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                2 * std::mem::size_of::<f32>() as i32,
+                std::ptr::null(),
+            );
+            gl::VertexAttribDivisor(0, 0); // par sommet
+
+            // 2️⃣ Particules instanciées (avec offset correspondant à la section triple-buffering)
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+            let base_offset =
+                (frame * max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
+            let stride = std::mem::size_of::<ParticleGPU>() as i32;
+
+            // Attrib 1: position (pos_x, pos_y)
+            gl::VertexAttribPointer(
+                1,
+                2,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                (base_offset + memoffset::offset_of!(ParticleGPU, pos_x) as isize) as *const _,
+            );
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribDivisor(1, 1);
+
+            // Attrib 2: color (col_r, col_g, col_b)
+            gl::VertexAttribPointer(
+                2,
+                3,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                (base_offset + memoffset::offset_of!(ParticleGPU, col_r) as isize) as *const _,
+            );
+            gl::EnableVertexAttribArray(2);
+            gl::VertexAttribDivisor(2, 1);
+
+            // Attrib 3: lifeData
+            gl::VertexAttribPointer(
+                3,
+                4,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                (base_offset + memoffset::offset_of!(ParticleGPU, life) as isize) as *const _,
+            );
+            gl::EnableVertexAttribArray(3);
+            gl::VertexAttribDivisor(3, 1);
+
+            // Attrib 4: brightness
+            gl::VertexAttribPointer(
+                4,
+                1,
+                gl::FLOAT,
+                gl::FALSE,
+                stride,
+                (base_offset + memoffset::offset_of!(ParticleGPU, brightness) as isize) as *const _,
+            );
+            gl::EnableVertexAttribArray(4);
+            gl::VertexAttribDivisor(4, 1);
+        }
+
         gl::BindVertexArray(0);
 
-        label_gl_object!(gl::VERTEX_ARRAY, vao, "VAO_Instanced_Quads");
+        for (frame, &vao) in vaos.iter().enumerate() {
+            label_gl_object!(
+                gl::VERTEX_ARRAY,
+                vao,
+                &format!("VAO_Instanced_Quads_Frame_{}", frame)
+            );
+        }
         label_gl_object!(gl::BUFFER, vbo_quad, "VBO_Static_Quad");
         label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Instanced_Data");
 
-        (vao, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
+        (vaos, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
     }
 }
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
@@ -469,16 +472,10 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
     unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        _window_size: (f32, f32),
         active_shader: &mut u32,
         active_texture: &mut u32,
     ) {
-        self.render_particles_with_persistent_buffer(
-            count,
-            _window_size,
-            active_shader,
-            active_texture,
-        );
+        self.render_particles_with_persistent_buffer(count, active_shader, active_texture);
     }
 
     fn get_shader_program(&self) -> u32 {
