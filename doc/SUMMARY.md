@@ -19,6 +19,7 @@
   - [Manuel du Renderer](renderer_manual.md)
 
 - [Profilage et Performance]()
+  - [Profilage Headless (Tracy CLI)](20260716_tracy_headless_profiling_guide.md)
   - [Profilage Mémoire (Heaptrack)](20260714_heaptrack_memory_profiling_guide.md)
   - [Attentes GPU et Optimisations (Tracy)](20260715_gpu_stalls_analysis_and_optimization_plan.md)
   - [Audit Mémoire Temps Réel](20260715_tracy_memory_audit.md)
