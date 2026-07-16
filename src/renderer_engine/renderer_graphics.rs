@@ -225,7 +225,6 @@ impl RendererGraphics {
     pub unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        _window_size: (f32, f32),
         active_shader: &mut u32,
         _active_texture: &mut u32,
     ) {
@@ -347,16 +346,10 @@ impl ParticleGraphicsRenderer for RendererGraphics {
     unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        _window_size: (f32, f32),
         active_shader: &mut u32,
         active_texture: &mut u32,
     ) {
-        self.render_particles_with_persistent_buffer(
-            count,
-            _window_size,
-            active_shader,
-            active_texture,
-        );
+        self.render_particles_with_persistent_buffer(count, active_shader, active_texture);
     }
 
     fn get_shader_program(&self) -> u32 {

@@ -24,7 +24,6 @@ pub trait ParticleGraphicsRenderer {
     unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        window_size: (f32, f32),
         active_shader: &mut u32,
         active_texture: &mut u32,
     );
