@@ -25,7 +25,15 @@ pub trait ParticleGraphicsRenderer {
         &mut self,
         count: usize,
         window_size: (f32, f32),
+        active_shader: &mut u32,
+        active_texture: &mut u32,
     );
+
+    /// Retourne l'ID du programme shader associé à ce renderer.
+    fn get_shader_program(&self) -> u32;
+
+    /// Retourne l'ID de la texture associée à ce renderer (0 si aucune).
+    fn get_texture_id(&self) -> u32;
 
     /// Recharge les shaders depuis les fichiers.
     ///
