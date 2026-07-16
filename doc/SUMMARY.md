@@ -21,6 +21,7 @@
 - [Profilage et Performance]()
   - [Bilan et Rapport Final (AZDO)](20260716_azdo_refactoring_final_report.md)
   - [Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)](20260716_safe_azdo_optimizations_report.md)
+  - [Références Architecturales (Persistent Mapping & WC)](20260716_persistent_mapping_and_write_combining_references.md)
   - [Corrections de Revue de Code](20260716_code_review_fixes_results.md)
   - [Profilage Headless (Tracy CLI)](20260716_tracy_headless_profiling_guide.md)
   - [Profilage Mémoire (Heaptrack)](20260714_heaptrack_memory_profiling_guide.md)
