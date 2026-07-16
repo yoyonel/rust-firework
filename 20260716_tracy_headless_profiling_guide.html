@@ -3,7 +3,7 @@
     <head>
         <!-- Book generated using mdBook -->
         <meta charset="UTF-8">
-        <title>Guide d&#x27;analyse Massif - Fireworks Simulator Documentation</title>
+        <title>Profilage Headless (Tracy CLI) - Fireworks Simulator Documentation</title>
 
 
         <!-- Custom HTML head -->
@@ -88,7 +88,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">4.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">4.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">4.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">4.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">4.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">4.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">4.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">4.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">4.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html" class="active"><strong aria-hidden="true">4.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">4.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">4.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">4.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">4.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html" class="active"><strong aria-hidden="true">4.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">4.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">4.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">4.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">4.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">4.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -176,98 +176,67 @@
 
                 <div id="content" class="content">
                     <main>
-                        <h1 id="guide-danalyse-massif---profiling-mémoire"><a class="header" href="#guide-danalyse-massif---profiling-mémoire">Guide d'Analyse Massif - Profiling Mémoire</a></h1>
-<h2 id="analyse-rapide-avec-ms_print"><a class="header" href="#analyse-rapide-avec-ms_print">Analyse Rapide avec <code>ms_print</code></a></h2>
-<h3 id="commande-de-base"><a class="header" href="#commande-de-base">Commande de base</a></h3>
-<pre><code class="language-bash">ms_print massif.out.12345 | less
+                        <h1 id="-guide-de-profilage-headless-avec-tracy-profiler"><a class="header" href="#-guide-de-profilage-headless-avec-tracy-profiler">📊 Guide de Profilage Headless avec Tracy Profiler</a></h1>
+<p>Ce guide explique comment réaliser des captures de traces de performance de manière 100% programmatique et headless (sans interaction utilisateur, sans GUI) pour le Fireworks Simulator.</p>
+<hr />
+<h2 id="-le-pipeline-headless-de-profilage"><a class="header" href="#-le-pipeline-headless-de-profilage">🛠️ Le Pipeline Headless de Profilage</a></h2>
+<p>Pour mesurer les bénéfices d'optimisations comme le UBO ou AZDO de manière reproductible et automatisée, nous utilisons le pipeline suivant :</p>
+<ol>
+<li><strong>Compilation Instrumentée :</strong> Le simulateur est compilé avec la feature <code>--features tracy</code> sous le profil de compilation <code>profiling</code> (qui active les optimisations <code>--release</code> tout en conservant les symboles de débogage complets et les Frame Pointers).</li>
+<li><strong>Lancement Asynchrone :</strong> Le simulateur est démarré en arrière-plan avec la désactivation de la VSync pour ne pas brider le rendu (<code>vblank_mode=0 __GL_SYNC_TO_VBLANK=0</code>).</li>
+<li><strong>Capture Programmatique :</strong> L'utilitaire CLI officiel <code>tracy-capture</code> se connecte en local sur le port par défaut (8086), enregistre l'ensemble de l'activité CPU/GPU/Mémoire pendant un intervalle fixe (5 secondes) puis sauvegarde la trace dans un fichier <code>.tracy</code>.</li>
+<li><strong>Arrêt Propre :</strong> Le processus du simulateur en arrière-plan est arrêté proprement (<code>kill</code>).</li>
+<li><strong>Extraction CSV &amp; Analyse :</strong> L'utilitaire CLI <code>tracy-csvexport</code> extrait les métriques temporelles de la zone ciblée (<code>Renderer::render_frame</code>) au format CSV, et un script Python calcule et affiche la moyenne, médiane, minimum et maximum (excluant le warmup).</li>
+</ol>
+<hr />
+<h2 id="-tâche-taskfile-dédiée"><a class="header" href="#-tâche-taskfile-dédiée">🚀 Tâche Taskfile Dédiée</a></h2>
+<p>Une tâche <code>profile-tracy-headless</code> a été ajoutée dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml">Taskfile.yml</a>.</p>
+<p>Pour exécuter le cycle complet de capture et d'analyse en une seule commande, lancez :</p>
+<pre><code class="language-bash">task profile-tracy-headless
 </code></pre>
-<h3 id="sortie-typique-et-interprétation"><a class="header" href="#sortie-typique-et-interprétation">Sortie typique et interprétation</a></h3>
-<pre><code>--------------------------------------------------------------------------------
-  n        time(i)         total(B)   useful-heap(B) extra-heap(B)    stacks(B)
---------------------------------------------------------------------------------
-  0              0                0                0             0            0
-  1        234,567        1,048,576          983,040        65,536            0
-  2        456,789        2,097,152        1,966,080       131,072            0
+<h3 id="-exemple-de-sortie-obtenue"><a class="header" href="#-exemple-de-sortie-obtenue">📝 Exemple de Sortie Obtenue</a></h3>
+<pre><code class="language-text">🔨 Compilation du binaire de profiling...
+warning: fireworks_sim@0.1.0: 🟢 Compilation avec SIMD activé (feature = "simd")
+    Finished `profiling` profile [optimized + debuginfo] target(s) in 0.37s
+🚀 Lancement du simulateur en tâche de fond...
+📊 Lancement de la capture Tracy (5s)...
+Connecting to 127.0.0.1:8086...
+Timer resolution: 14 ns
 ...
- 50     10,000,000       10,485,760        9,830,400       655,360            0  &lt;- Peak
+Frames: 2
+Time span: 7.12 s
+Zones: 75,339
+Elapsed time: 5.03 s
+Saving trace... done!
+Trace size 9880.76 KB
+🧹 Arrêt du simulateur...
+📊 Extraction des statistiques de Renderer::render_frame...
+📈 Statistiques de Renderer::render_frame (hors warmup) :
+   - Nombre total de frames analysées : 3851
+   - Durée moyenne (Mean)             : 773.29 us
+   - Durée médiane (Median)           : 590.21 us
+   - Durée minimale (Min)             : 135.66 us
+   - Durée maximale (Max)             : 8726.28 us
 </code></pre>
-<p><strong>Colonnes importantes</strong> :</p>
+<hr />
+<h2 id="-fichiers-et-outils-utilisés"><a class="header" href="#-fichiers-et-outils-utilisés">📂 Fichiers et Outils Utilisés</a></h2>
 <ul>
-<li><code>time(i)</code> : Instructions exécutées (pas du temps réel)</li>
-<li><code>total(B)</code> : Mémoire totale allouée (heap + extra + stacks)</li>
-<li><code>useful-heap(B)</code> : Mémoire réellement utilisée par votre code</li>
-<li><code>extra-heap(B)</code> : Overhead de l'allocateur (fragmentation, metadata)</li>
+<li><strong>Binaire du Simulateur :</strong> <code>target/profiling/fireworks_sim</code></li>
+<li><strong>Utilitaire Capture (Tracy) :</strong> <code>/home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture</code></li>
+<li><strong>Utilitaire Export CSV (Tracy) :</strong> <code>/home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport</code></li>
+<li><strong>Trace Enregistrée :</strong> <code>/tmp/fireworks.tracy</code> (peut être ouverte par la suite dans la GUI standard de Tracy pour une inspection visuelle).</li>
+<li><strong>Données CSV Temporaires :</strong> <code>/tmp/durations.csv</code></li>
 </ul>
-<hr />
-<h2 id="identifier-le-peak-memory"><a class="header" href="#identifier-le-peak-memory">Identifier le Peak Memory</a></h2>
-<pre><code class="language-bash"># Trouver le pic de mémoire
-ms_print massif.out.12345 | grep -A 20 "peak"
-</code></pre>
-<p><strong>Exemple de sortie</strong> :</p>
-<pre><code>99.99% (10,485,760B) (heap allocation functions)
--&gt;50.00% (5,242,880B) 0x4A2B3C: Vec::with_capacity
-| -&gt;50.00% (5,242,880B) 0x4A2C4D: ParticlesPool::new
-|   -&gt;50.00% (5,242,880B) 0x4A3E5F: PhysicEngineFireworks::new
-</code></pre>
-<p><strong>Interprétation</strong> :</p>
-<ul>
-<li><strong>50%</strong> de la mémoire vient de <code>ParticlesPool::new</code> → Normal (pré-allocation)</li>
-<li><strong>25%</strong> de <code>Arena::with_capacity</code> → Normal aussi</li>
-<li><strong>24.99%</strong> de <code>Vec::push</code> dans une boucle → <strong>⚠️ Potentiel problème !</strong></li>
-</ul>
-<hr />
-<h2 id="visualiser-avec-massif-visualizer-gui"><a class="header" href="#visualiser-avec-massif-visualizer-gui">Visualiser avec Massif-Visualizer (GUI)</a></h2>
-<pre><code class="language-bash">sudo apt install massif-visualizer
-massif-visualizer massif.out.12345
-</code></pre>
-<hr />
-<h2 id="script-danalyse-automatique"><a class="header" href="#script-danalyse-automatique">Script d'Analyse Automatique</a></h2>
-<pre><code class="language-bash">#!/bin/bash
-# analyze_massif.sh
-
-MASSIF_FILE=$1
-
-echo "=== Massif Analysis ==="
-echo ""
-
-# Peak memory
-echo "📊 Peak Memory:"
-ms_print "$MASSIF_FILE" | grep -A 1 "peak" | head -2
-echo ""
-
-# Top 5 allocations
-echo "🔝 Top 5 Allocations:"
-ms_print "$MASSIF_FILE" | grep -E "^\-&gt;[0-9]+\.[0-9]+%" | head -5
-echo ""
-
-# Memory trend
-echo "📈 Memory Trend (last 10 snapshots):"
-ms_print "$MASSIF_FILE" | grep -E "^[[:space:]]*[0-9]+" | tail -10
-</code></pre>
-<hr />
-<h2 id="commandes-essentielles"><a class="header" href="#commandes-essentielles">Commandes Essentielles</a></h2>
-<pre><code class="language-bash"># 1. Profiler
-valgrind --tool=massif ./target/release/fireworks_sim
-
-# 2. Analyser
-ms_print massif.out.* | less
-
-# 3. Trouver le pic
-ms_print massif.out.* | grep -A 20 "peak"
-
-# 4. Visualiser
-massif-visualizer massif.out.*
-</code></pre>
 
                     </main>
 
                     <nav class="nav-wrapper" aria-label="Page navigation">
                         <!-- Mobile navigation buttons -->
-                            <a rel="prev" href="20260713_profiling_analysis_tutorial.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                            <a rel="prev" href="20260716_code_review_fixes_results.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                                 <i class="fa fa-angle-left"></i>
                             </a>
 
-                            <a rel="next prefetch" href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="20260714_heaptrack_memory_profiling_guide.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <i class="fa fa-angle-right"></i>
                             </a>
 
@@ -277,11 +246,11 @@ massif-visualizer massif.out.*
             </div>
 
             <nav class="nav-wide-wrapper" aria-label="Page navigation">
-                    <a rel="prev" href="20260713_profiling_analysis_tutorial.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                    <a rel="prev" href="20260716_code_review_fixes_results.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
                         <i class="fa fa-angle-left"></i>
                     </a>
 
-                    <a rel="next prefetch" href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="20260714_heaptrack_memory_profiling_guide.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <i class="fa fa-angle-right"></i>
                     </a>
             </nav>
