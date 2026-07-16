@@ -67,9 +67,6 @@ pub struct ParticleGPU {
     /// Multiplicateur de luminosité pour HDR (1.0 = normal, >1.0 = bloom).
     /// Calculé côté CPU basé sur la vitesse/accélération de la particule.
     pub brightness: f32,
-
-    /// Index de la texture dans le Texture Array (0.0 = fusée, 1.0 = étincelle).
-    pub tex_index: f32,
 }
 
 impl ParticleGPU {
@@ -180,18 +177,6 @@ impl ParticleGPU {
             );
             gl::EnableVertexAttribArray(4);
             gl::VertexAttribDivisor(4, 1);
-
-            // layout(location = 5) : tex_index (index de texture dans le Texture Array)
-            gl::VertexAttribPointer(
-                5,
-                1,
-                gl::FLOAT,
-                gl::FALSE,
-                stride,
-                offset_of!(Self, tex_index) as *const _,
-            );
-            gl::EnableVertexAttribArray(5);
-            gl::VertexAttribDivisor(5, 1);
         }
     }
 }

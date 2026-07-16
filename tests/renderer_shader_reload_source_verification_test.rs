@@ -37,29 +37,11 @@ fn test_reload_shaders_uses_tex_ratio_field() {
         "reload_shaders method must exist"
     );
 
-    // Test 3: Vérifier que reload_shaders utilise self.tex_ratio
+    // Test 3: Vérifier que reload_shaders lie le bloc uniforme "GlobalData"
     assert!(
-        source_code.contains("self.tex_ratio"),
-        "CRITICAL BUG: reload_shaders must use self.tex_ratio to restore uTexRatio uniform!\n\
-         Without this, textured quads will disappear after shader reload."
-    );
-
-    // Test 4: Vérifier que uTexRatio uniform est restauré
-    assert!(
-        source_code.contains("uTexRatio"),
-        "CRITICAL BUG: uTexRatio uniform must be restored in reload_shaders!\n\
-         This uniform is essential for textured quad rendering."
-    );
-
-    // Test 5: Vérifier que gl::Uniform1f est appelé avec tex_ratio
-    // (recherche d'un pattern qui indique la restauration de l'uniform)
-    let has_uniform_restoration =
-        source_code.contains("gl::Uniform1f") && source_code.contains("self.tex_ratio");
-
-    assert!(
-        has_uniform_restoration,
-        "CRITICAL BUG: reload_shaders must call gl::Uniform1f with self.tex_ratio!\n\
-         The uTexRatio uniform must be restored for textured quads to render correctly."
+        source_code.contains("GlobalData") || source_code.contains("UniformBlockBinding"),
+        "CRITICAL BUG: reload_shaders must bind the GlobalData uniform block!\n\
+         Without this, global data like uTexRatio won't be accessible by the shader after reload."
     );
 }
 
@@ -165,29 +147,22 @@ fn test_reload_shaders_updates_uniform_locations() {
     let source_code =
         fs::read_to_string(source_path).expect("Failed to read renderer_graphics_instanced.rs");
 
-    // Vérifier que loc_size est mis à jour
-    assert!(
-        source_code.contains("self.loc_size = gl::GetUniformLocation"),
-        "reload_shaders must update loc_size uniform location"
-    );
-
     // Vérifier que loc_tex est mis à jour
     assert!(
         source_code.contains("self.loc_tex = gl::GetUniformLocation"),
         "reload_shaders must update loc_tex uniform location"
     );
 
-    // Vérifier que uSize est recherché
+    // Vérifier que uTexture est recherché
     assert!(
-        source_code.contains("\"uSize\"") || source_code.contains("cstr!(\"uSize\")"),
-        "reload_shaders must get location for uSize uniform"
+        source_code.contains("\"uTexture\"") || source_code.contains("cstr!(\"uTexture\")"),
+        "reload_shaders must get location for uTexture uniform"
     );
 
-    // Vérifier que uTextureArray est recherché
+    // Vérifier que le bloc uniforme GlobalData est lié
     assert!(
-        source_code.contains("\"uTextureArray\"")
-            || source_code.contains("cstr!(\"uTextureArray\")"),
-        "reload_shaders must get location for uTextureArray uniform"
+        source_code.contains("GlobalData") || source_code.contains("UniformBlockBinding"),
+        "reload_shaders must bind the GlobalData uniform block"
     );
 }
 

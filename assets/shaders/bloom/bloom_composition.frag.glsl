@@ -5,7 +5,11 @@ out vec4 FragColor;
 
 uniform sampler2D uSceneTexture;
 uniform sampler2D uBloomTexture;
-uniform float uBloomIntensity;
+layout (std140) uniform GlobalData {
+    vec2 uSize;
+    float uTexRatio;
+    float uBloomIntensity;
+};
 uniform int uToneMappingMode;
 
 // 0 = Reinhard

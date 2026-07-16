@@ -8,23 +8,23 @@ layout(location = 1) in vec2 aPos;
 layout(location = 2) in vec3 aColor;
 layout(location = 3) in vec4 aLifeMaxLifeSizeAngle;
 layout(location = 4) in float aBrightness;  // HDR multiplier
-layout(location = 5) in float aTexIndex;     // Index de texture dans le Texture Array
 
 out vec3 vColor;
 out float vAlpha;
 out vec2 vUV;
 out float vBrightness;  // Pass brightness to fragment shader
-out float vTexIndex;
 
-uniform vec2 uSize;
-uniform float uTexRatio;
+layout (std140) uniform GlobalData {
+    vec2 uSize;
+    float uTexRatio;
+    float uBloomIntensity;
+};
 
-mat3 build_world_matrix(float size, float angle, float tex_index) {
+mat3 build_world_matrix(float size, float angle) {
+    // Position du sommet quad dans l'espace clip (avec taille)
     float scale = size;
     
-    // Stretch seulement s'il s'agit de la fusée (couche 0.0), pas pour les étincelles (couche 1.0)
-    float ratio = (tex_index < 0.5) ? uTexRatio : 1.0;
-    float sx = scale * ratio;
+    float sx = scale * uTexRatio;
     float sy = scale * 1.0;            
 
     mat3 mat_scale = mat3(
@@ -60,12 +60,11 @@ void main() {
     vAlpha = clamp(life / max(max_life, 0.0001), 0.0, 1.0);
     vColor = aColor;
     vBrightness = aBrightness;  // Pass brightness to fragment shader
-    vTexIndex = aTexIndex;
 
     // On reconstruit les coordonnées UV du quad (-1.0 → -1.0) -> (0.0, 0.0)
     vUV = aQuad * 0.5 + 0.5;            
 
-    mat3 mat_model = build_world_matrix(size * (2.0 + 5.0 * vAlpha), angle, aTexIndex);
+    mat3 mat_model = build_world_matrix(size * (2.0 + 5.0 * vAlpha), angle);
     vec2 world_pos = (mat_model * vec3(aQuad, 1.0)).xy;
 
     // Clip space

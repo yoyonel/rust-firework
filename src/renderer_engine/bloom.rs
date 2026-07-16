@@ -312,8 +312,22 @@ impl BloomPass {
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uSceneTexture"));
             let loc_comp_bloom =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uBloomTexture"));
-            let loc_comp_intensity =
-                gl::GetUniformLocation(composition_shader, crate::cstr!("uBloomIntensity"));
+
+            // Lier le block uniform "GlobalData" au binding point 0 pour composition_shader
+            let comp_block_idx =
+                gl::GetUniformBlockIndex(composition_shader, crate::cstr!("GlobalData"));
+            if comp_block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(composition_shader, comp_block_idx, 0);
+            }
+
+            // Lier le block uniform "GlobalData" au binding point 0 pour comparison_shader
+            let compare_block_idx =
+                gl::GetUniformBlockIndex(comparison_shader, crate::cstr!("GlobalData"));
+            if compare_block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(comparison_shader, compare_block_idx, 0);
+            }
+
+            let loc_comp_intensity = -1; // Plus utilisé (géré par UBO)
             let loc_tone_mapping_mode =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uToneMappingMode"));
 
@@ -492,7 +506,6 @@ impl BloomPass {
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
         gl::Uniform1i(self.loc_comp_bloom, 1);
 
-        gl::Uniform1f(self.loc_comp_intensity, self.intensity);
         gl::Uniform1i(self.loc_tone_mapping_mode, self.tone_mapping_mode as i32);
 
         self.render_fullscreen_quad();
@@ -542,11 +555,6 @@ impl BloomPass {
         gl::Uniform1i(
             gl::GetUniformLocation(self.comparison_shader, crate::cstr!("uBloomTexture")),
             1,
-        );
-
-        gl::Uniform1f(
-            gl::GetUniformLocation(self.comparison_shader, crate::cstr!("uBloomIntensity")),
-            self.intensity,
         );
 
         self.render_fullscreen_quad();
@@ -937,8 +945,14 @@ impl BloomPass {
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uSceneTexture"));
         self.loc_comp_bloom =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBloomTexture"));
-        self.loc_comp_intensity =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBloomIntensity"));
+
+        let comp_block_idx =
+            gl::GetUniformBlockIndex(self.composition_shader, crate::cstr!("GlobalData"));
+        if comp_block_idx != gl::INVALID_INDEX {
+            gl::UniformBlockBinding(self.composition_shader, comp_block_idx, 0);
+        }
+
+        self.loc_comp_intensity = -1; // Plus utilisé (géré par UBO)
         self.loc_tone_mapping_mode =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uToneMappingMode"));
 
