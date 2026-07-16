@@ -138,7 +138,6 @@ impl RendererGraphicsInstanced {
         let mut count = 0;
 
         // Slice Rust mutable mappé sur la section courante de la mémoire GPU.
-        // Toute écriture dans ce slice écrit physiquement dans la BAR / VRAM.
         let offset = self.current_frame * self.max_particles_on_gpu;
         let gpu_slice =
             std::slice::from_raw_parts_mut(self.mapped_ptr.add(offset), self.max_particles_on_gpu);
@@ -146,21 +145,25 @@ impl RendererGraphicsInstanced {
         // Utilise for_each_particle_of_type pour filtrer les particules du bon type
         physic.for_each_particle_of_type(self.particle_type, &mut |p| {
             if count < self.max_particles_on_gpu {
-                gpu_slice[count] = ParticleGPU {
-                    pos_x: p.pos.x,
-                    pos_y: p.pos.y,
-                    col_r: p.color.x,
-                    col_g: p.color.y,
-                    col_b: p.color.z,
-                    life: p.life,
-                    max_life: p.max_life,
-                    size: p.size,
-                    angle: p.angle,
-                    brightness: 0.0, // Bloom disabled for rockets
-                };
+                // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
+                let src_ptr =
+                    p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
+                let mut gpu_p = *src_ptr;
+                gpu_p.brightness = 0.0; // Bloom disabled for rockets
+
+                gpu_slice[count] = gpu_p;
                 count += 1;
             }
         });
+
+        // ⏱️ Piste 1 : Explicit Flush manquant de gl::MAP_COHERENT_BIT
+        if count > 0 {
+            let write_size = (count * std::mem::size_of::<ParticleGPU>()) as isize;
+            let offset_bytes = (offset * std::mem::size_of::<ParticleGPU>()) as isize;
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, offset_bytes, write_size);
+            gl::BindBuffer(gl::ARRAY_BUFFER, 0);
+        }
 
         count
     }
@@ -354,23 +357,20 @@ impl RendererGraphicsInstanced {
             buffer_size.human_bytes()
         );
 
-        // Allocation persistante
+        // Allocation persistante (sans MAP_COHERENT_BIT)
         gl::BufferStorage(
             gl::ARRAY_BUFFER,
             buffer_size,
             std::ptr::null(),
-            gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_COHERENT_BIT,
+            gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT,
         );
 
-        // Mapping CPU → GPU
+        // Mapping CPU → GPU (sans MAP_COHERENT_BIT, avec MAP_FLUSH_EXPLICIT_BIT)
         let mapped_ptr = gl::MapBufferRange(
             gl::ARRAY_BUFFER,
             0,
             buffer_size,
-            gl::MAP_WRITE_BIT
-                | gl::MAP_PERSISTENT_BIT
-                | gl::MAP_COHERENT_BIT
-                | gl::MAP_FLUSH_EXPLICIT_BIT,
+            gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_FLUSH_EXPLICIT_BIT,
         ) as *mut ParticleGPU;
 
         // === VAO Setup for each frame in the triple buffer ===
