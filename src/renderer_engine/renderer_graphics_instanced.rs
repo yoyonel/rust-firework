@@ -191,6 +191,8 @@ impl RendererGraphicsInstanced {
         &mut self,
         count: usize,
         window_size: (f32, f32),
+        active_shader: &mut u32,
+        active_texture: &mut u32,
     ) {
         // Si aucune particule, on ne fait rien
         if count == 0 {
@@ -199,8 +201,11 @@ impl RendererGraphicsInstanced {
 
         push_debug_group!(30, "Draw Instanced Quads");
 
-        // Active le shader de rendu des particules
-        gl::UseProgram(self.shader_program);
+        // Active le shader de rendu des particules (seulement s'il n'est pas déjà actif)
+        if *active_shader != self.shader_program {
+            gl::UseProgram(self.shader_program);
+            *active_shader = self.shader_program;
+        }
 
         // Envoie les dimensions de la fenêtre au shader (uniforms)
         gl::Uniform2f(self.loc_size, window_size.0, window_size.1);
@@ -208,9 +213,13 @@ impl RendererGraphicsInstanced {
         // Lie le VAO et VBO correspondant aux particules
         gl::BindVertexArray(self.vao);
 
-        gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-        gl::Uniform1i(self.loc_tex, 0);
+        // Lie la texture (seulement si elle n'est pas déjà active)
+        if *active_texture != self.texture_id {
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
+            gl::Uniform1i(self.loc_tex, 0);
+            *active_texture = self.texture_id;
+        }
 
         // Décaler les attributs instanciés selon la section courante
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
@@ -466,8 +475,23 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
         &mut self,
         count: usize,
         window_size: (f32, f32),
+        active_shader: &mut u32,
+        active_texture: &mut u32,
     ) {
-        self.render_particles_with_persistent_buffer(count, window_size);
+        self.render_particles_with_persistent_buffer(
+            count,
+            window_size,
+            active_shader,
+            active_texture,
+        );
+    }
+
+    fn get_shader_program(&self) -> u32 {
+        self.shader_program
+    }
+
+    fn get_texture_id(&self) -> u32 {
+        self.texture_id
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {
