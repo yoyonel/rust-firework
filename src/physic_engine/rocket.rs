@@ -13,7 +13,7 @@ use crate::physic_engine::{
     particles_pools::{ParticlesPool, ParticlesPoolsForRockets, PoolKind},
     ParticleType,
 };
-use glam::{Vec2, Vec4 as Color};
+use glam::{Vec2, Vec3 as Color};
 
 /// Compteur global pour générer des ID uniques pour les rockets
 pub static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -436,7 +436,6 @@ impl Rocket {
             self.rng.random_range(0.5..=1.0),
             self.rng.random_range(0.5..=1.0),
             self.rng.random_range(0.5..=1.0),
-            1.0,
         )
     }
 
