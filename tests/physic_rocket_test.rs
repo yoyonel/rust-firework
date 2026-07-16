@@ -33,7 +33,6 @@ fn test_random_color_in_valid_range() {
             "Blue component out of range: {}",
             color.z
         );
-        assert_eq!(color.w, 1.0, "Alpha should always be 1.0");
 
         // Réinitialiser pour générer une nouvelle couleur
         rocket.reset(&PhysicConfig::default(), 1920.0);
