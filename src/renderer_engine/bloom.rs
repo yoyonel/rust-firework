@@ -476,6 +476,9 @@ impl BloomPass {
         // Disable depth test for post-processing
         gl::Disable(gl::DEPTH_TEST);
 
+        // Bind the dummy VAO once for all fullscreen passes (AZDO VAO caching)
+        gl::BindVertexArray(self.dummy_vao);
+
         // 2. Blur passes - method selection
         push_debug_group!(1, "PostFX: Bloom Blur Chain");
         match self.blur_method {
@@ -507,6 +510,9 @@ impl BloomPass {
         self.render_fullscreen_quad();
         pop_debug_group!();
 
+        // Unbind VAO
+        gl::BindVertexArray(0);
+
         // Re-enable depth test
         gl::Enable(gl::DEPTH_TEST);
     }
@@ -522,6 +528,9 @@ impl BloomPass {
 
         // Disable depth test for post-processing
         gl::Disable(gl::DEPTH_TEST);
+
+        // Bind the dummy VAO once for all fullscreen passes (AZDO VAO caching)
+        gl::BindVertexArray(self.dummy_vao);
 
         push_debug_group!(3, "PostFX: Comparison Mode");
         // Apply blur first (same as normal rendering)
@@ -608,6 +617,9 @@ impl BloomPass {
         gl::Viewport(0, 0, self.width, self.height);
 
         pop_debug_group!(); // End Comparison Mode
+
+        // Unbind VAO
+        gl::BindVertexArray(0);
 
         // Re-enable depth test
         gl::Enable(gl::DEPTH_TEST);
@@ -728,13 +740,9 @@ impl BloomPass {
     }
 
     /// Renders a fullscreen quad using the vertex ID trick (no VBO needed)
+    /// Assumes the dummy_vao is already bound (AZDO VAO caching optimization).
     unsafe fn render_fullscreen_quad(&self) {
-        gl::BindVertexArray(self.dummy_vao);
         gl::DrawArrays(gl::TRIANGLES, 0, 3);
-        // ponytail: no unbind to VAO 0 here - core profile treats 0 as "no VAO",
-        // leaving it bound between draws trips GL_INVALID_OPERATION on attrib
-        // queries (e.g. RenderDoc capture). Every caller binds its own VAO
-        // before drawing, so nothing here needs to "clean up" to 0.
     }
 
     /// Recreates framebuffers when window is resized
