@@ -27,9 +27,19 @@ macro_rules! tracy_zone {
     ($name:expr, $color:expr) => {};
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct GlobalDataUBO {
+    pub u_size_x: f32,
+    pub u_size_y: f32,
+    pub u_tex_ratio: f32,
+    pub u_bloom_intensity: f32,
+}
+
 // ---------------------------------------------------------
 pub struct Renderer {
     max_particles_on_gpu: usize,
+    ubo_global: u32,
     // Window management
     window_size_f32: (f32, f32),
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
@@ -93,10 +103,28 @@ impl Renderer {
             crate::renderer_engine::utils::gpu_profiler::GpuProfiler::new()
         }));
 
+        // 🟢 Initialize UBO Global Buffer
+        let mut ubo_global = 0;
+        unsafe {
+            gl::GenBuffers(1, &mut ubo_global);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_global);
+            gl::BufferData(
+                gl::UNIFORM_BUFFER,
+                std::mem::size_of::<GlobalDataUBO>() as isize,
+                std::ptr::null(),
+                gl::DYNAMIC_DRAW,
+            );
+            gl::BindBuffer(gl::UNIFORM_BUFFER, 0);
+
+            // Bind global UBO to binding point 0
+            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, ubo_global);
+        }
+
         Ok(Self {
             window_size_f32: (width as f32, height as f32),
             renderers,
             max_particles_on_gpu,
+            ubo_global,
             bloom_pass,
             gpu_profiler,
             last_gpu_log_time: std::time::Instant::now(),
@@ -156,6 +184,27 @@ impl Renderer {
 // Trait implementation
 impl RendererEngine for Renderer {
     fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
+        // ⏱️ 0. Mettre à jour le UBO global
+        unsafe {
+            let ubo_data = GlobalDataUBO {
+                u_size_x: self.window_size_f32.0,
+                u_size_y: self.window_size_f32.1,
+                u_tex_ratio: self.renderers.first().map_or(1.0, |r| r.get_tex_ratio()),
+                u_bloom_intensity: self.bloom_pass.intensity,
+            };
+            gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global);
+            gl::BufferSubData(
+                gl::UNIFORM_BUFFER,
+                0,
+                std::mem::size_of::<GlobalDataUBO>() as isize,
+                &ubo_data as *const _ as *const _,
+            );
+            gl::BindBuffer(gl::UNIFORM_BUFFER, 0);
+
+            // Bind global UBO to binding point 0 for this frame (prevent override by other context users like ImGui)
+            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global);
+        }
+
         // ⏱️ 1. Récolte asynchrone des chronométrages réels de la frame N-1 et affichage
         if let Ok(mut profiler) = self.gpu_profiler.lock() {
             profiler.begin_frame();
@@ -265,6 +314,11 @@ impl RendererEngine for Renderer {
                 renderer.close();
             }
             self.bloom_pass.close();
+
+            if self.ubo_global != 0 {
+                gl::DeleteBuffers(1, &self.ubo_global);
+                self.ubo_global = 0;
+            }
         }
     }
 
