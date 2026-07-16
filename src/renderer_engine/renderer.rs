@@ -7,6 +7,7 @@ use log::info;
 use crate::gpu_profile_zone;
 use crate::physic_engine::config::PhysicConfig;
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
+use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
 use crate::renderer_engine::BloomPass;
 
@@ -29,7 +30,6 @@ macro_rules! tracy_zone {
 // ---------------------------------------------------------
 pub struct Renderer {
     max_particles_on_gpu: usize,
-    max_rockets: usize, // Stored to compute combined capacity on buffer recreation
     // Window management
     window_size_f32: (f32, f32),
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
@@ -69,16 +69,17 @@ impl Renderer {
         // Note: OpenGL context initialization (show_opengl_context_info, setup_opengl_debug, etc.)
         // is already done by GlfwWindowEngine::init(), so we don't duplicate it here.
 
-        let max_particles_on_gpu =
+        let max_particles_on_gpu: usize =
             physic_config.max_rockets * physic_config.particles_per_explosion;
 
-        let max_total_particles = max_particles_on_gpu + physic_config.max_rockets;
-
-        let mut renderers: Vec<Box<dyn ParticleGraphicsRenderer>> =
-            vec![Box::new(RendererGraphicsInstanced::new(
-                max_total_particles,
+        let mut renderers: Vec<Box<dyn ParticleGraphicsRenderer>> = vec![
+            Box::new(RendererGraphics::new(max_particles_on_gpu)),
+            Box::new(RendererGraphicsInstanced::new(
+                physic_config.max_rockets,
+                crate::physic_engine::ParticleType::Rocket,
                 "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png",
-            ))];
+            )),
+        ];
 
         // 🏷️ Phase 2 : Tri d'états (State Sorting)
         renderers.sort_by_key(|r| (r.get_shader_program(), r.get_texture_id()));
@@ -96,7 +97,6 @@ impl Renderer {
             window_size_f32: (width as f32, height as f32),
             renderers,
             max_particles_on_gpu,
-            max_rockets: physic_config.max_rockets,
             bloom_pass,
             gpu_profiler,
             last_gpu_log_time: std::time::Instant::now(),
@@ -221,11 +221,10 @@ impl RendererEngine for Renderer {
                 "🔁 GPU buffer reallocation required ({} → {})",
                 self.max_particles_on_gpu, max_particles
             );
-            let max_total_particles = max_particles + self.max_rockets;
             self.max_particles_on_gpu = max_particles;
             unsafe {
                 for renderer in &mut self.renderers {
-                    renderer.recreate_buffers(max_total_particles);
+                    renderer.recreate_buffers(max_particles);
                 }
             }
         }

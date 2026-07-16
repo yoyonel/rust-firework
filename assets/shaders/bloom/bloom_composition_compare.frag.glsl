@@ -11,7 +11,11 @@ layout(location = 4) out vec4 FragColor4; // Khronos PBR
 
 uniform sampler2D uSceneTexture;
 uniform sampler2D uBloomTexture;
-uniform float uBloomIntensity;
+layout (std140) uniform GlobalData {
+    vec2 uSize;
+    float uTexRatio;
+    float uBloomIntensity;
+};
 
 // --- Tone Mapping Functions ---
 

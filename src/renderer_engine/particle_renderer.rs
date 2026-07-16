@@ -35,6 +35,9 @@ pub trait ParticleGraphicsRenderer {
     /// Retourne l'ID de la texture associée à ce renderer (0 si aucune).
     fn get_texture_id(&self) -> u32;
 
+    /// Retourne le ratio d'aspect de la texture.
+    fn get_tex_ratio(&self) -> f32;
+
     /// Recharge les shaders depuis les fichiers.
     ///
     /// # Safety

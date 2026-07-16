@@ -8,7 +8,11 @@ out vec3 vertexColor;
 out float alpha;
 out float vBrightness;  // Pass brightness to fragment shader
 
-uniform vec2 uSize;
+layout (std140) uniform GlobalData {
+    vec2 uSize;
+    float uTexRatio;
+    float uBloomIntensity;
+};
 
 void main() {
     float a = clamp(lifeData.x / max(lifeData.y, 0.0001), 0.0, 1.0);
