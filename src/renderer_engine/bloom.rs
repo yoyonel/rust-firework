@@ -41,16 +41,10 @@ pub struct BloomPass {
 
     // Uniform Locations
     // loc_brightness_* removed (MRT)
-    loc_blur_texture: GLint,
     loc_blur_direction: GLint,
-    loc_kawase_down_texture: GLint,
     loc_kawase_down_halfpixel: GLint,
-    loc_kawase_up_texture: GLint,
     loc_kawase_up_halfpixel: GLint,
-    loc_comp_scene: GLint,
-    loc_comp_bloom: GLint,
     loc_tone_mapping_mode: GLint,
-    loc_passthrough_texture: GLint,
 
     // Configuration
     pub intensity: f32,
@@ -332,6 +326,33 @@ impl BloomPass {
             let loc_passthrough_texture =
                 gl::GetUniformLocation(passthrough_shader, crate::cstr!("uTexture"));
 
+            // ⚙️ SETUP STATIC UNIFORM TEXTURE MAPPINGS ONCE (AZDO Optimization)
+            gl::UseProgram(blur_shader);
+            gl::Uniform1i(loc_blur_texture, 0);
+
+            gl::UseProgram(kawase_downsample_shader);
+            gl::Uniform1i(loc_kawase_down_texture, 0);
+
+            gl::UseProgram(kawase_upsample_shader);
+            gl::Uniform1i(loc_kawase_up_texture, 0);
+
+            gl::UseProgram(composition_shader);
+            gl::Uniform1i(loc_comp_scene, 0);
+            gl::Uniform1i(loc_comp_bloom, 1);
+
+            gl::UseProgram(comparison_shader);
+            gl::Uniform1i(
+                gl::GetUniformLocation(comparison_shader, crate::cstr!("uSceneTexture")),
+                0,
+            );
+            gl::Uniform1i(
+                gl::GetUniformLocation(comparison_shader, crate::cstr!("uBloomTexture")),
+                1,
+            );
+
+            gl::UseProgram(passthrough_shader);
+            gl::Uniform1i(loc_passthrough_texture, 0);
+
             // Create dummy VAO for fullscreen quad rendering (Core Profile requirement)
             let mut dummy_vao = 0;
             gl::GenVertexArrays(1, &mut dummy_vao);
@@ -388,16 +409,10 @@ impl BloomPass {
                 kawase_upsample_shader,
                 composition_shader,
                 dummy_vao,
-                loc_blur_texture,
                 loc_blur_direction,
-                loc_kawase_down_texture,
                 loc_kawase_down_halfpixel,
-                loc_kawase_up_texture,
                 loc_kawase_up_halfpixel,
-                loc_comp_scene,
-                loc_comp_bloom,
                 loc_tone_mapping_mode,
-                loc_passthrough_texture,
                 passthrough_shader,
                 intensity: 2.0,
                 blur_iterations: 5,
@@ -432,16 +447,10 @@ impl BloomPass {
             composition_shader: 0,
             passthrough_shader: 0,
             dummy_vao: 0,
-            loc_blur_texture: 0,
             loc_blur_direction: 0,
-            loc_kawase_down_texture: 0,
             loc_kawase_down_halfpixel: 0,
-            loc_kawase_up_texture: 0,
             loc_kawase_up_halfpixel: 0,
-            loc_comp_scene: 0,
-            loc_comp_bloom: 0,
             loc_tone_mapping_mode: 0,
-            loc_passthrough_texture: 0,
             intensity: 1.0,
             blur_iterations: 1,
             enabled: false,
@@ -498,12 +507,10 @@ impl BloomPass {
         // Bind scene texture
         gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture);
-        gl::Uniform1i(self.loc_comp_scene, 0);
 
         // Bind bloom texture (result of blur)
         gl::ActiveTexture(gl::TEXTURE1);
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
-        gl::Uniform1i(self.loc_comp_bloom, 1);
 
         gl::Uniform1i(self.loc_tone_mapping_mode, self.tone_mapping_mode as i32);
 
@@ -549,18 +556,10 @@ impl BloomPass {
         // Bind scene texture
         gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture);
-        gl::Uniform1i(
-            gl::GetUniformLocation(self.comparison_shader, crate::cstr!("uSceneTexture")),
-            0,
-        );
 
         // Bind bloom texture
         gl::ActiveTexture(gl::TEXTURE1);
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
-        gl::Uniform1i(
-            gl::GetUniformLocation(self.comparison_shader, crate::cstr!("uBloomTexture")),
-            1,
-        );
 
         self.render_fullscreen_quad();
 
@@ -607,7 +606,6 @@ impl BloomPass {
             // Bind the comparison texture
             gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, tex_id);
-            gl::Uniform1i(self.loc_passthrough_texture, 0);
 
             // Render fullscreen quad for this viewport
             self.render_fullscreen_quad();
@@ -666,7 +664,6 @@ impl BloomPass {
         gl::Viewport(0, 0, self.blur_width, self.blur_height);
 
         gl::UseProgram(self.blur_shader);
-        gl::Uniform1i(self.loc_blur_texture, 0);
 
         // Première passe : bright_texture -> ping_pong[1]
         gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[1]);
@@ -703,7 +700,6 @@ impl BloomPass {
 
         // Downsample passes (3 iterations)
         gl::UseProgram(self.kawase_downsample_shader);
-        gl::Uniform1i(self.loc_kawase_down_texture, 0);
 
         for i in 0..3 {
             let source_texture = if i == 0 {
@@ -724,7 +720,6 @@ impl BloomPass {
 
         // Upsample passes (3 iterations)
         gl::UseProgram(self.kawase_upsample_shader);
-        gl::Uniform1i(self.loc_kawase_up_texture, 0);
 
         for i in 0..3 {
             let source_idx = (2 - i) % 2;
@@ -941,13 +936,13 @@ impl BloomPass {
         self.composition_shader = new_composition;
 
         // Update uniform locations
-        self.loc_blur_texture = gl::GetUniformLocation(self.blur_shader, crate::cstr!("uTexture"));
+        let loc_blur_texture = gl::GetUniformLocation(self.blur_shader, crate::cstr!("uTexture"));
         self.loc_blur_direction =
             gl::GetUniformLocation(self.blur_shader, crate::cstr!("uDirection"));
 
-        self.loc_comp_scene =
+        let loc_comp_scene =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uSceneTexture"));
-        self.loc_comp_bloom =
+        let loc_comp_bloom =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBloomTexture"));
 
         let comp_block_idx =
@@ -958,6 +953,14 @@ impl BloomPass {
 
         self.loc_tone_mapping_mode =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uToneMappingMode"));
+
+        // Setup reloaded static uniforms
+        gl::UseProgram(self.blur_shader);
+        gl::Uniform1i(loc_blur_texture, 0);
+
+        gl::UseProgram(self.composition_shader);
+        gl::Uniform1i(loc_comp_scene, 0);
+        gl::Uniform1i(loc_comp_bloom, 1);
 
         info!("✅ Bloom shaders reloaded successfully");
         Ok(())
