@@ -5,11 +5,11 @@ mod tests {
     #[test]
     fn test_particle_gpu_structure() {
         // Verify ParticleGPU has the correct size and alignment for OpenGL std140/layout
-        // We added 'brightness' (f32) and 'tex_index' (f32) at the end.
-        // Previous size was 10 floats = 40 bytes.
-        // New size should be 11 floats = 44 bytes.
+        // We added 'brightness' (f32) at the end.
+        // Previous size was 9 floats = 36 bytes.
+        // New size should be 10 floats = 40 bytes.
 
-        assert_eq!(std::mem::size_of::<ParticleGPU>(), 44);
+        assert_eq!(std::mem::size_of::<ParticleGPU>(), 40);
 
         let p = ParticleGPU {
             pos_x: 1.0,
@@ -22,11 +22,9 @@ mod tests {
             size: 5.0,
             angle: 0.0,
             brightness: 1.5,
-            tex_index: 0.0,
         };
 
         assert_eq!(p.brightness, 1.5);
-        assert_eq!(p.tex_index, 0.0);
     }
 
     #[test]

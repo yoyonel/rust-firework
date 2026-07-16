@@ -23,7 +23,6 @@ pub struct RendererGraphics {
 
     // Shader
     pub shader_program: u32,
-    pub loc_size: i32,
 
     pub max_particles_on_gpu: usize,
 
@@ -37,7 +36,13 @@ impl RendererGraphics {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
-        let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
+        // Bind uniform block "GlobalData" to binding point 0
+        unsafe {
+            let block_idx = gl::GetUniformBlockIndex(shader_program, cstr!("GlobalData"));
+            if block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(shader_program, block_idx, 0);
+            }
+        }
 
         // VAO/VBO setup
         unsafe {
@@ -48,14 +53,12 @@ impl RendererGraphics {
             label_gl_object!(gl::PROGRAM, shader_program, "Shader_PointRendering");
             label_gl_object!(gl::VERTEX_ARRAY, vao, "VAO_Particules_Base");
             label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Particules_Data");
-            label_gl_object!(gl::PROGRAM, shader_program, "Shader_PointRendering");
 
             Self {
                 vao,
                 vbo_particles,
                 mapped_ptr,
                 shader_program,
-                loc_size,
                 max_particles_on_gpu,
                 current_frame: 0,
                 fences: [None, None, None],
@@ -222,7 +225,7 @@ impl RendererGraphics {
     pub unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        window_size: (f32, f32),
+        _window_size: (f32, f32),
         active_shader: &mut u32,
         _active_texture: &mut u32,
     ) {
@@ -238,9 +241,6 @@ impl RendererGraphics {
             gl::UseProgram(self.shader_program);
             *active_shader = self.shader_program;
         }
-
-        // Envoie les dimensions de la fenêtre au shader (uniforms)
-        gl::Uniform2f(self.loc_size, window_size.0, window_size.1);
 
         // Lie le VAO et VBO correspondant aux particules
         gl::BindVertexArray(self.vao);
@@ -317,10 +317,13 @@ impl RendererGraphics {
                 // Utiliser le nouveau programme
                 self.shader_program = new_program;
 
-                // Mettre à jour les uniform locations
-                self.loc_size = gl::GetUniformLocation(self.shader_program, cstr!("uSize"));
+                // Lier le block uniform "GlobalData" au binding point 0
+                let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
+                if block_idx != gl::INVALID_INDEX {
+                    gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                }
 
-                info!("✅ Point rendering shaders reloaded successfully");
+                info!("Point rendering shaders reloaded successfully");
                 Ok(())
             }
             Err(e) => {
@@ -344,13 +347,13 @@ impl ParticleGraphicsRenderer for RendererGraphics {
     unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        window_size: (f32, f32),
+        _window_size: (f32, f32),
         active_shader: &mut u32,
         active_texture: &mut u32,
     ) {
         self.render_particles_with_persistent_buffer(
             count,
-            window_size,
+            _window_size,
             active_shader,
             active_texture,
         );
@@ -362,6 +365,10 @@ impl ParticleGraphicsRenderer for RendererGraphics {
 
     fn get_texture_id(&self) -> u32 {
         0 // Pas de texture pour le rendu par points
+    }
+
+    fn get_tex_ratio(&self) -> f32 {
+        1.0
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {

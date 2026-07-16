@@ -3,7 +3,7 @@ use log::{debug, info};
 use crate::cstr;
 use crate::physic_engine::{ParticleType, PhysicEngineIterator};
 use crate::renderer_engine::shader::compile_shader_program_from_files;
-use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture_array};
+use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture};
 use crate::utils::human_bytes::HumanBytes;
 use crate::{label_gl_object, pop_debug_group, push_debug_group};
 
@@ -19,12 +19,14 @@ pub struct RendererGraphicsInstanced {
 
     shader_program: u32,
     // Shader
-    loc_size: i32,
     loc_tex: i32,
     texture_id: u32,
     tex_ratio: f32, // Stocke le ratio de texture pour le reload
 
     max_particles_on_gpu: usize,
+
+    // Configuration du type de particule
+    particle_type: ParticleType,
 
     // Triple buffering
     current_frame: usize,
@@ -32,24 +34,28 @@ pub struct RendererGraphicsInstanced {
 }
 
 impl RendererGraphicsInstanced {
-    pub fn new(max_particles_on_gpu: usize, texture_path: &str) -> Self {
+    pub fn new(
+        max_particles_on_gpu: usize,
+        particle_type: ParticleType,
+        texture_path: &str,
+    ) -> Self {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
-        let loc_size = unsafe { gl::GetUniformLocation(shader_program, cstr!("uSize")) };
-        let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTextureArray")) };
+        let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
 
-        // Charge le Texture Array contenant la fusée (couche 0) et l'étincelle générée (couche 1)
-        let (texture_id, tex_width, tex_height) = load_texture_array(texture_path);
+        let (texture_id, tex_width, tex_height) = load_texture(texture_path);
         unsafe {
             gl::UseProgram(shader_program);
-            gl::Uniform1f(
-                gl::GetUniformLocation(shader_program, cstr!("uTexRatio")),
-                tex_width as f32 / tex_height as f32,
-            );
+
+            // Lier le block uniform "GlobalData" au binding point 0
+            let block_idx = gl::GetUniformBlockIndex(shader_program, cstr!("GlobalData"));
+            if block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(shader_program, block_idx, 0);
+            }
 
             label_gl_object!(gl::PROGRAM, shader_program, "Shader_InstancedQuad");
-            label_gl_object!(gl::TEXTURE, texture_id, "Tex_Particle_Array");
+            label_gl_object!(gl::TEXTURE, texture_id, "Tex_Rocket_Sprite");
         }
 
         // VAO/VBO setup
@@ -63,11 +69,11 @@ impl RendererGraphicsInstanced {
                 vbo_quad,
                 mapped_ptr,
                 shader_program,
-                loc_size,
                 loc_tex,
                 texture_id,
                 tex_ratio: tex_width as f32 / tex_height as f32,
                 max_particles_on_gpu,
+                particle_type,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -135,8 +141,8 @@ impl RendererGraphicsInstanced {
         let gpu_slice =
             std::slice::from_raw_parts_mut(self.mapped_ptr.add(offset), self.max_particles_on_gpu);
 
-        // 1. Ajouter les fusées (Rockets, texture Layer 0.0)
-        physic.for_each_particle_of_type(ParticleType::Rocket, &mut |p| {
+        // Utilise for_each_particle_of_type pour filtrer les particules du bon type
+        physic.for_each_particle_of_type(self.particle_type, &mut |p| {
             if count < self.max_particles_on_gpu {
                 gpu_slice[count] = ParticleGPU {
                     pos_x: p.pos.x,
@@ -148,28 +154,7 @@ impl RendererGraphicsInstanced {
                     max_life: p.max_life,
                     size: p.size,
                     angle: p.angle,
-                    brightness: 0.0, // Bloom désactivé pour les fusées
-                    tex_index: 0.0,  // Couche 0
-                };
-                count += 1;
-            }
-        });
-
-        // 2. Ajouter toutes les autres particules actives (étincelles, etc., texture Layer 1.0)
-        physic.for_each_active_particle(&mut |p| {
-            if count < self.max_particles_on_gpu {
-                gpu_slice[count] = ParticleGPU {
-                    pos_x: p.pos.x,
-                    pos_y: p.pos.y,
-                    col_r: p.color.x,
-                    col_g: p.color.y,
-                    col_b: p.color.z,
-                    life: p.life,
-                    max_life: p.max_life,
-                    size: p.size,
-                    angle: p.angle,
-                    brightness: (p.life / p.max_life).powi(4), // Bloom basé sur la vie restante
-                    tex_index: 1.0,                            // Couche 1
+                    brightness: 0.0, // Bloom disabled for rockets
                 };
                 count += 1;
             }
@@ -204,7 +189,7 @@ impl RendererGraphicsInstanced {
     pub unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        window_size: (f32, f32),
+        _window_size: (f32, f32),
         active_shader: &mut u32,
         active_texture: &mut u32,
     ) {
@@ -221,16 +206,13 @@ impl RendererGraphicsInstanced {
             *active_shader = self.shader_program;
         }
 
-        // Envoie les dimensions de la fenêtre au shader (uniforms)
-        gl::Uniform2f(self.loc_size, window_size.0, window_size.1);
-
         // Lie le VAO et VBO correspondant aux particules
         gl::BindVertexArray(self.vao);
 
         // Lie la texture (seulement si elle n'est pas déjà active)
         if *active_texture != self.texture_id {
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D_ARRAY, self.texture_id);
+            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
             gl::Uniform1i(self.loc_tex, 0);
             *active_texture = self.texture_id;
         }
@@ -289,18 +271,6 @@ impl RendererGraphicsInstanced {
         );
         gl::EnableVertexAttribArray(4);
         gl::VertexAttribDivisor(4, 1);
-
-        // layout(location = 5) : tex_index (float)
-        gl::VertexAttribPointer(
-            5,
-            1,
-            gl::FLOAT,
-            gl::FALSE,
-            stride,
-            (base_offset + memoffset::offset_of!(ParticleGPU, tex_index) as isize) as *const _,
-        );
-        gl::EnableVertexAttribArray(5);
-        gl::VertexAttribDivisor(5, 1);
 
         // Dessiner le quad
         gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_quad);
@@ -382,15 +352,14 @@ impl RendererGraphicsInstanced {
                 self.shader_program = new_program;
 
                 // Mettre à jour les uniform locations
-                self.loc_size = gl::GetUniformLocation(self.shader_program, cstr!("uSize"));
-                self.loc_tex = gl::GetUniformLocation(self.shader_program, cstr!("uTextureArray"));
+                self.loc_tex = gl::GetUniformLocation(self.shader_program, cstr!("uTexture"));
 
-                // Remettre à jour le ratio de texture
                 gl::UseProgram(self.shader_program);
-                gl::Uniform1f(
-                    gl::GetUniformLocation(self.shader_program, cstr!("uTexRatio")),
-                    self.tex_ratio,
-                );
+                // Lier le block uniform "GlobalData" au binding point 0
+                let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
+                if block_idx != gl::INVALID_INDEX {
+                    gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                }
 
                 label_gl_object!(gl::PROGRAM, self.shader_program, "Shader_InstancedQuad");
 
@@ -500,13 +469,13 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
     unsafe fn render_particles_with_persistent_buffer(
         &mut self,
         count: usize,
-        window_size: (f32, f32),
+        _window_size: (f32, f32),
         active_shader: &mut u32,
         active_texture: &mut u32,
     ) {
         self.render_particles_with_persistent_buffer(
             count,
-            window_size,
+            _window_size,
             active_shader,
             active_texture,
         );
@@ -518,6 +487,10 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
 
     fn get_texture_id(&self) -> u32 {
         self.texture_id
+    }
+
+    fn get_tex_ratio(&self) -> f32 {
+        self.tex_ratio
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {
