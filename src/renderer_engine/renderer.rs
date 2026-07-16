@@ -72,7 +72,7 @@ impl Renderer {
         let max_particles_on_gpu: usize =
             physic_config.max_rockets * physic_config.particles_per_explosion;
 
-        let renderers: Vec<Box<dyn ParticleGraphicsRenderer>> = vec![
+        let mut renderers: Vec<Box<dyn ParticleGraphicsRenderer>> = vec![
             Box::new(RendererGraphics::new(max_particles_on_gpu)),
             Box::new(RendererGraphicsInstanced::new(
                 physic_config.max_rockets,
@@ -80,6 +80,9 @@ impl Renderer {
                 "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png",
             )),
         ];
+
+        // 🏷️ Phase 2 : Tri d'états (State Sorting)
+        renderers.sort_by_key(|r| (r.get_shader_program(), r.get_texture_id()));
 
         // Initialize bloom pass
         let bloom_pass = BloomPass::new(width, height)
@@ -111,6 +114,8 @@ impl Renderer {
         // 🟢 RAII unifié (GPU + CPU + RenderDoc). Englobe toute la fonction.
         gpu_profile_zone!(10, "Draw All Particles", palette::NBODY, profiler);
 
+        let mut active_shader = 0u32;
+        let mut active_texture = 0u32;
         let mut total_particles = 0;
         for renderer in &mut self.renderers {
             let nb;
@@ -128,7 +133,12 @@ impl Renderer {
                     palette::SHOCKWAVE,
                     profiler
                 );
-                renderer.render_particles_with_persistent_buffer(nb, self.window_size_f32);
+                renderer.render_particles_with_persistent_buffer(
+                    nb,
+                    self.window_size_f32,
+                    &mut active_shader,
+                    &mut active_texture,
+                );
             }
 
             total_particles += nb;
