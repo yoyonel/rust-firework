@@ -189,7 +189,11 @@ impl RendererEngine for Renderer {
             let ubo_data = GlobalDataUBO {
                 u_size_x: self.window_size_f32.0,
                 u_size_y: self.window_size_f32.1,
-                u_tex_ratio: self.renderers.first().map_or(1.0, |r| r.get_tex_ratio()),
+                u_tex_ratio: self
+                    .renderers
+                    .iter()
+                    .find(|r| r.get_texture_id() != 0)
+                    .map_or(1.0, |r| r.get_tex_ratio()),
                 u_bloom_intensity: self.bloom_pass.intensity,
             };
             gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global);
