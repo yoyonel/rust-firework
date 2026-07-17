@@ -210,8 +210,11 @@ impl PhysicEngineFireworks {
                 }
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
-                // on incrémente le compteur d'explosion
-                triggered_count += (!exploded_before && rocket.exploded) as usize;
+                // on copie la particule de tête et on incrémente le compteur d'explosion
+                if !exploded_before && rocket.exploded {
+                    self.triggered_explosions[triggered_count] = *rocket.head_particle();
+                    triggered_count += 1;
+                }
                 // si la rocket n'est plus active, on place son ix dans la liste des rockets à déactiver.
                 // on le fait en déférer car on itère (actuellement) sur la liste (des id) des rockets actives.
                 if !rocket.active {

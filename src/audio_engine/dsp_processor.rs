@@ -15,7 +15,7 @@ pub struct DspProcessor {
     pub doppler_rx: Option<Receiver<DopplerEvent>>,
     pub garbage_tx: Sender<Arc<Vec<[f32; 2]>>>,
     pub settings: AudioEngineSettings,
-    pub listener_pos: glam::Vec2,
+    pub listener_pos: Arc<crate::audio_engine::types::AtomicVec2>,
     pub sample_rate: u32,
     pub export_writer: Option<Arc<Mutex<SafeWavWriter>>>,
     pub block_index: u64,
@@ -24,6 +24,8 @@ pub struct DspProcessor {
     pub log_interval: Duration,
     /// Masque atomique des effets DSP. Lu une seule fois par `process_block`.
     pub effect_flags: Arc<AudioEffectFlags>,
+    /// Canal de debug pour notifier le thread principal des événements audio
+    pub debug_tx: Option<Sender<crate::audio_engine::types::AudioDebugEvent>>,
 }
 
 impl DspProcessor {
@@ -63,11 +65,79 @@ impl DspProcessor {
         crate::tracy_zone!("audio::consume_requests", 0x00FF00);
 
         while let Ok(req) = self.play_rx.try_recv() {
-            if let Some(v) = self.voices.iter_mut().find(|v| !v.active) {
+            if let Some(debug_tx) = &self.debug_tx {
+                let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Received {
+                    request_id: req.request_id,
+                    received_at: Instant::now(),
+                });
+            }
+
+            let mut selected_voice_idx = None;
+            let mut steal_reason = None;
+
+            // 1. Chercher une voix inactive
+            if let Some((idx, _)) = self.voices.iter().enumerate().find(|(_, v)| !v.active) {
+                selected_voice_idx = Some(idx);
+            } else {
+                // 2. Stratégie de Voice Stealing (vol de voix)
+                // Trouver la voix active la plus silencieuse (gain canal maximum)
+                let mut min_volume = f32::MAX;
+                let mut quietest_idx = None;
+
+                for (idx, v) in self.voices.iter().enumerate() {
+                    let volume = v.target_gains[0].abs().max(v.target_gains[1].abs());
+                    if volume < min_volume {
+                        min_volume = volume;
+                        quietest_idx = Some(idx);
+                    }
+                }
+
+                if let Some(idx) = quietest_idx {
+                    // On ne vole la voix que si le nouveau son demandé est plus fort que le son actif le plus silencieux
+                    if req.gain > min_volume {
+                        let stolen_req_id = self.voices[idx].request_id;
+                        selected_voice_idx = Some(idx);
+                        steal_reason = Some(stolen_req_id);
+                    }
+                }
+            }
+
+            if let Some(voice_idx) = selected_voice_idx {
+                // Si on a volé une voix active, on notifie son drop avec le motif approprié
+                if let Some(stolen_id) = steal_reason {
+                    if let Some(debug_tx) = &self.debug_tx {
+                        let _ =
+                            debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                                request_id: stolen_id,
+                                dropped_at: std::time::Instant::now(),
+                                reason: "Voice stolen (quieter)",
+                            });
+                    }
+                }
+
+                let v = &mut self.voices[voice_idx];
                 v.reset_from_request(&req);
-                let latency = Instant::now().duration_since(req.sent_at);
+                let now = Instant::now();
+                let latency = now.duration_since(req.sent_at);
                 profiler.record_metric("audio latency", latency);
                 crate::tracy_plot!("Audio: Latency (ms)", latency.as_secs_f64() * 1000.0);
+
+                if let Some(debug_tx) = &self.debug_tx {
+                    let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Started {
+                        request_id: req.request_id,
+                        started_at: now,
+                        voice_index: voice_idx,
+                    });
+                }
+            } else {
+                // Pas de voix libre et aucune voix active plus silencieuse que le nouveau son
+                if let Some(debug_tx) = &self.debug_tx {
+                    let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                        request_id: req.request_id,
+                        dropped_at: Instant::now(),
+                        reason: "No inactive voice available",
+                    });
+                }
             }
         }
 
@@ -102,7 +172,7 @@ impl DspProcessor {
                     v.world_pos = event.pos;
                     v.velocity = event.vel;
 
-                    let d = v.world_pos - self.listener_pos;
+                    let d = v.world_pos - self.listener_pos.load();
                     let dist = d.length().max(0.001);
 
                     let dir = -d / dist;
@@ -140,7 +210,7 @@ impl DspProcessor {
             }
 
             // 1. Paramètres physiques 3D de base
-            let d = v.world_pos - self.listener_pos;
+            let d = v.world_pos - self.listener_pos.load();
             let distance = d.length().max(1e-6);
 
             // Filtre passe-bas dynamique (conditionnel via fx_mask)
@@ -291,6 +361,12 @@ impl DspProcessor {
                 if let Some(dead_arc) = v.data.take() {
                     let _ = self.garbage_tx.try_send(dead_arc);
                 }
+                if let Some(debug_tx) = &self.debug_tx {
+                    let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Completed {
+                        request_id: v.request_id,
+                        completed_at: Instant::now(),
+                    });
+                }
             }
         }
     }
@@ -411,16 +487,20 @@ mod tests {
                 filter_state: [0.0, 0.0],
                 filter_a: 0.0,
                 user_gain: 1.0,
-                current_gains: [0.99, 0.99],
-                target_gains: [0.99, 0.99],
+                current_gains: [1.0, 1.0],
+                target_gains: [1.0, 1.0],
                 current_itd: [0.0, 0.0],
                 target_itd: [0.0, 0.0],
+                request_id: 1,
+                sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
             }],
             play_rx: play_rx.clone(),
             doppler_rx: None,
             garbage_tx: garbage_tx.clone(),
             settings: settings.clone(),
-            listener_pos: glam::Vec2::ZERO,
+            listener_pos: std::sync::Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                glam::Vec2::ZERO,
+            )),
             sample_rate,
             export_writer: None,
             block_index: 0,
@@ -428,6 +508,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            debug_tx: None,
         };
 
         let profiler = Profiler::new(1000);
@@ -451,16 +532,20 @@ mod tests {
                 filter_state: [0.0, 0.0],
                 filter_a: 0.0,
                 user_gain: 1.0,
-                current_gains: [0.99, 0.99],
-                target_gains: [0.99, 0.99],
+                current_gains: [1.0, 1.0],
+                target_gains: [1.0, 1.0],
                 current_itd: [0.0, 0.0],
                 target_itd: [0.0, 0.0],
+                request_id: 1,
+                sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
             }],
             play_rx,
             doppler_rx: None,
             garbage_tx,
             settings,
-            listener_pos: glam::Vec2::ZERO,
+            listener_pos: std::sync::Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                glam::Vec2::ZERO,
+            )),
             sample_rate,
             export_writer: None,
             block_index: 0,
@@ -468,6 +553,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            debug_tx: None,
         };
 
         let mut chunked_output = Vec::with_capacity(total_samples);
@@ -594,12 +680,16 @@ mod tests {
                 target_gains: [1.0, 1.0],
                 current_itd: [0.0, 0.0],
                 target_itd: [0.0, 0.0],
+                request_id: 1,
+                sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
             }],
             play_rx,
             doppler_rx: None,
             garbage_tx,
             settings: AudioEngineSettings::default(),
-            listener_pos: glam::Vec2::ZERO,
+            listener_pos: std::sync::Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                glam::Vec2::ZERO,
+            )),
             sample_rate,
             export_writer: None,
             block_index: 0,
@@ -607,6 +697,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            debug_tx: None,
         };
 
         // Disable Doppler
@@ -637,7 +728,9 @@ mod tests {
             doppler_rx: None,
             garbage_tx,
             settings: crate::AudioEngineSettings::default(),
-            listener_pos: glam::Vec2::ZERO,
+            listener_pos: std::sync::Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                glam::Vec2::ZERO,
+            )),
             sample_rate,
             export_writer: None,
             block_index: 0,
@@ -645,6 +738,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            debug_tx: None,
         };
 
         let mut output_data = vec![0.0; block_size * 2];
@@ -686,5 +780,126 @@ mod tests {
         flags.set_all(true);
         assert!(flags.is_enabled(AudioEffect::Binaural));
         assert!(flags.is_enabled(AudioEffect::Panning));
+    }
+
+    #[test]
+    fn test_strict_event_tracking_and_latency() {
+        use crate::audio_engine::effect_flags::AudioEffectFlags;
+        use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType, Voice};
+        use crate::profiler::Profiler;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+
+        let sample_rate = 48_000;
+        let block_size = 256;
+        let source_audio = generate_sine_wave(440.0, sample_rate, block_size);
+        let source_arc = Arc::new(source_audio);
+
+        let (play_tx, play_rx) = crossbeam_channel::unbounded();
+        let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+        let (debug_tx, debug_rx) = crossbeam_channel::unbounded();
+
+        let mut dsp = super::DspProcessor {
+            voices: vec![Voice::new()], // Only 1 voice slot!
+            play_rx,
+            doppler_rx: None,
+            garbage_tx,
+            settings: crate::AudioEngineSettings::default(),
+            listener_pos: std::sync::Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                glam::Vec2::ZERO,
+            )),
+            sample_rate,
+            export_writer: None,
+            block_index: 0,
+            acc: vec![[0.0; 2]; block_size],
+            last_log: Instant::now(),
+            log_interval: Duration::from_secs(1),
+            effect_flags: AudioEffectFlags::new_all_enabled(),
+            debug_tx: Some(debug_tx.clone()),
+        };
+
+        // 1. Send first play request
+        let req1 = crate::audio_engine::types::PlayRequest {
+            data: source_arc.clone(),
+            fade_in: 0,
+            fade_out: 0,
+            gain: 1.0,
+            filter_a: 0.05,
+            sent_at: Instant::now(),
+            request_id: 101,
+            id: 10,
+            pos: glam::Vec2::ZERO,
+            is_dynamic: false,
+            sound_type: AudioSoundType::Rocket,
+        };
+        play_tx.send(req1).unwrap();
+
+        // 2. Consume request
+        let profiler = Profiler::new(100);
+        dsp.consume_requests(&profiler);
+
+        // Check events popped from debug_rx
+        let mut events = Vec::new();
+        while let Ok(evt) = debug_rx.try_recv() {
+            events.push(evt);
+        }
+
+        assert_eq!(events.len(), 2);
+        match &events[0] {
+            AudioDebugEvent::Received { request_id, .. } => assert_eq!(*request_id, 101),
+            _ => panic!("Expected Received event"),
+        }
+        match &events[1] {
+            AudioDebugEvent::Started {
+                request_id,
+                voice_index,
+                ..
+            } => {
+                assert_eq!(*request_id, 101);
+                assert_eq!(*voice_index, 0);
+            }
+            _ => panic!("Expected Started event"),
+        }
+
+        // The voice is now active.
+        assert!(dsp.voices[0].active);
+
+        // 3. Send second play request (which should be dropped because voice 0 is active and max_voices = 1)
+        let req2 = crate::audio_engine::types::PlayRequest {
+            data: source_arc,
+            fade_in: 0,
+            fade_out: 0,
+            gain: 1.0,
+            filter_a: 0.05,
+            sent_at: Instant::now(),
+            request_id: 102,
+            id: 20,
+            pos: glam::Vec2::ZERO,
+            is_dynamic: false,
+            sound_type: AudioSoundType::Explosion,
+        };
+        play_tx.send(req2).unwrap();
+
+        dsp.consume_requests(&profiler);
+
+        events.clear();
+        while let Ok(evt) = debug_rx.try_recv() {
+            events.push(evt);
+        }
+
+        assert_eq!(events.len(), 2);
+        match &events[0] {
+            AudioDebugEvent::Received { request_id, .. } => assert_eq!(*request_id, 102),
+            _ => panic!("Expected Received event"),
+        }
+        match &events[1] {
+            AudioDebugEvent::Dropped {
+                request_id, reason, ..
+            } => {
+                assert_eq!(*request_id, 102);
+                assert_eq!(*reason, "No inactive voice available");
+            }
+            _ => panic!("Expected Dropped event"),
+        }
     }
 }

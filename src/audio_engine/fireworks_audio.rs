@@ -44,7 +44,7 @@ pub struct FireworksAudio3D {
     rocket_data: Arc<Vec<[f32; 2]>>,
     explosion_data: Arc<Vec<[f32; 2]>>,
 
-    listener_pos: Vec2,
+    listener_pos: Arc<crate::audio_engine::types::AtomicVec2>,
     sample_rate: u32,
     block_size: usize,
     voices: Vec<Voice>,
@@ -64,6 +64,11 @@ pub struct FireworksAudio3D {
     /// Masque atomique des effets DSP activés. Partagé avec le `DspProcessor` via `Arc`.
     /// Lock-free : le thread CPAL lit, le main thread écrit.
     effect_flags: std::sync::Arc<AudioEffectFlags>,
+
+    // NOUVEAU : Tracking et debug des événements audio
+    debug_rx: crossbeam_channel::Receiver<crate::audio_engine::types::AudioDebugEvent>,
+    debug_tx: crossbeam_channel::Sender<crate::audio_engine::types::AudioDebugEvent>,
+    next_request_id: std::sync::atomic::AtomicU64,
 }
 
 impl FireworksAudio3D {
@@ -99,10 +104,15 @@ impl FireworksAudio3D {
         // --- NOUVEAU : Ring buffer SPSC borné pour les requêtes audio ---
         let (play_tx, play_rx) = crossbeam_channel::bounded(512);
 
+        // NOUVEAU : Canaux de debug
+        let (debug_tx, debug_rx) = crossbeam_channel::unbounded();
+
         Ok(Self {
             rocket_data: Arc::new(rocket_data),
             explosion_data: Arc::new(explosion_data),
-            listener_pos: config.listener_pos,
+            listener_pos: Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                config.listener_pos,
+            )),
             sample_rate: config.sample_rate,
             block_size: config.block_size,
             voices,
@@ -115,6 +125,9 @@ impl FireworksAudio3D {
             garbage_rx,
             doppler_receiver: config.doppler_receiver,
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            debug_tx,
+            debug_rx,
+            next_request_id: std::sync::atomic::AtomicU64::new(1),
         })
     }
 
@@ -126,6 +139,7 @@ impl FireworksAudio3D {
         pos: Vec2,
         gain: f32,
         is_dynamic: bool,
+        sound_type: crate::audio_engine::types::AudioSoundType,
     ) {
         if self.global_gain == 0.0 {
             return;
@@ -136,6 +150,21 @@ impl FireworksAudio3D {
             #[cfg(feature = "tracy")]
             tracy_zone!("audio::free_garbage_buffer", 0xFF00AA);
         }
+
+        let request_id = self
+            .next_request_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let sent_at = Instant::now();
+
+        // Envoyer l'event "Sent"
+        let _ = self
+            .debug_tx
+            .send(crate::audio_engine::types::AudioDebugEvent::Sent {
+                request_id,
+                sound_type,
+                entity_id: id,
+                sent_at,
+            });
 
         let global_gain = self.global_gain * gain;
 
@@ -153,28 +182,58 @@ impl FireworksAudio3D {
             fade_out: fade_out_samples,
             gain: global_gain,
             filter_a: 0.05, // Valeur initiale, recalculée au 1er bloc par DspProcessor
-            sent_at: Instant::now(),
+            sent_at,
+            request_id,
             id,
             pos,
             is_dynamic,
+            sound_type,
         };
 
         if let Err(e) = self.play_tx.try_send(req) {
             log::warn!("⚠️ Audio play_queue full! Dropping sound event: {:?}", e);
+            let _ = self
+                .debug_tx
+                .send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                    request_id,
+                    dropped_at: Instant::now(),
+                    reason: "Play queue full",
+                });
         }
     }
 
     pub fn play_rocket(&self, pos: Vec2, gain: f32) {
         // En passant &self.rocket_data, on transmet proprement la référence vers l'Arc !
-        self.enqueue_sound(0, &self.rocket_data, pos, gain, false);
+        self.enqueue_sound(
+            0,
+            &self.rocket_data,
+            pos,
+            gain,
+            false,
+            crate::audio_engine::types::AudioSoundType::Rocket,
+        );
     }
 
     pub fn play_rocket_with_id(&self, id: u64, pos: Vec2, gain: f32) {
-        self.enqueue_sound(id, &self.rocket_data, pos, gain, true);
+        self.enqueue_sound(
+            id,
+            &self.rocket_data,
+            pos,
+            gain,
+            true,
+            crate::audio_engine::types::AudioSoundType::Rocket,
+        );
     }
 
     pub fn play_explosion(&self, pos: Vec2, gain: f32) {
-        self.enqueue_sound(0, &self.explosion_data, pos, gain, false);
+        self.enqueue_sound(
+            0,
+            &self.explosion_data,
+            pos,
+            gain,
+            false,
+            crate::audio_engine::types::AudioSoundType::Explosion,
+        );
     }
 
     pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
@@ -190,13 +249,14 @@ impl FireworksAudio3D {
         let profiler = Profiler::new(200);
         let _settings = self.settings.clone();
         let doppler_rx_clone = self.doppler_receiver.clone();
-        let listener_pos_clone = self.listener_pos;
+        let listener_pos_clone = self.listener_pos.clone();
         let effect_flags_clone = self.effect_flags.clone();
 
         let export_writer_arc: Option<Arc<Mutex<SafeWavWriter>>> =
             export_path.map(|path| Arc::new(Mutex::new(SafeWavWriter::new(path, sr))));
 
         let garbage_tx = self.garbage_tx.clone();
+        let debug_tx_clone = self.debug_tx.clone();
 
         thread::spawn(move || {
             let audio_result: Result<(), AudioThreadError> = (|| {
@@ -229,6 +289,7 @@ impl FireworksAudio3D {
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
                     effect_flags: effect_flags_clone,
+                    debug_tx: Some(debug_tx_clone),
                 };
 
                 // 3. Lancement du Flux Audio
@@ -315,12 +376,12 @@ impl AudioEngine for FireworksAudio3D {
     }
 
     fn set_listener_position(&mut self, pos: Vec2) {
-        self.listener_pos = pos;
-        info!("🎧️ Listener position set to: {:?}", self.listener_pos);
+        self.listener_pos.store(pos);
+        info!("🎧️ Listener position set to: {:?}", pos);
     }
 
     fn get_listener_position(&self) -> Vec2 {
-        self.listener_pos
+        self.listener_pos.load()
     }
 
     fn mute(&mut self) {
@@ -346,6 +407,18 @@ impl AudioEngine for FireworksAudio3D {
 
     fn get_effects_status(&self) -> String {
         self.effect_flags.status_string()
+    }
+
+    fn pop_debug_events(&self) -> Vec<crate::audio_engine::types::AudioDebugEvent> {
+        let mut events = Vec::new();
+        while let Ok(evt) = self.debug_rx.try_recv() {
+            events.push(evt);
+        }
+        events
+    }
+
+    fn get_max_distance(&self) -> f32 {
+        self.settings.max_distance()
     }
 
     fn as_audio_engine(&self) -> &dyn AudioEngine {

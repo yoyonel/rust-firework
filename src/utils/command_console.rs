@@ -339,7 +339,11 @@ impl Console {
             .movable(false)
             .resizable(true)
             .collapsible(false)
-            .flags(imgui::WindowFlags::NO_TITLE_BAR | imgui::WindowFlags::NO_SCROLLBAR)
+            .flags(
+                imgui::WindowFlags::NO_TITLE_BAR
+                    | imgui::WindowFlags::NO_SCROLLBAR
+                    | imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS,
+            )
             .build(|| {
                 let pos = ui.window_pos();
                 let size = ui.window_size();

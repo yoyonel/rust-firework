@@ -87,6 +87,25 @@ where
 
     // Tone mapping comparison
     pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
+
+    // NOUVEAU: Statistiques et tracking des requêtes audio
+    pub audio_debug_records:
+        std::collections::HashMap<u64, crate::audio_engine::types::AudioDebugRecord>,
+    pub audio_sent_rocket: u64,
+    pub audio_received_rocket: u64,
+    pub audio_played_rocket: u64,
+    pub audio_dropped_rocket: u64,
+    pub audio_completed_rocket: u64,
+    pub audio_sent_explosion: u64,
+    pub audio_received_explosion: u64,
+    pub audio_played_explosion: u64,
+    pub audio_dropped_explosion: u64,
+    pub audio_completed_explosion: u64,
+
+    pub latency_dispatch_sum: std::time::Duration,
+    pub latency_dispatch_count: u64,
+    pub latency_play_sum: std::time::Duration,
+    pub latency_play_count: u64,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -130,6 +149,21 @@ where
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
+            audio_debug_records: std::collections::HashMap::new(),
+            audio_sent_rocket: 0,
+            audio_received_rocket: 0,
+            audio_played_rocket: 0,
+            audio_dropped_rocket: 0,
+            audio_completed_rocket: 0,
+            audio_sent_explosion: 0,
+            audio_received_explosion: 0,
+            audio_played_explosion: 0,
+            audio_dropped_explosion: 0,
+            audio_completed_explosion: 0,
+            latency_dispatch_sum: std::time::Duration::ZERO,
+            latency_dispatch_count: 0,
+            latency_play_sum: std::time::Duration::ZERO,
+            latency_play_count: 0,
         }
     }
 
@@ -167,7 +201,10 @@ where
         tracy_zone!(
             "simulator::physics",
             0xFF5500, // Orange
-            self.update_simulation(delta)
+            {
+                self.update_simulation(delta);
+                self.process_audio_debug_events();
+            }
         );
 
         // 6. Rendu
@@ -198,6 +235,130 @@ where
     }
 
     // --- Helper Methods ---
+
+    fn process_audio_debug_events(&mut self) {
+        let events = self.audio_engine.pop_debug_events();
+        for evt in events {
+            match evt {
+                crate::audio_engine::types::AudioDebugEvent::Sent {
+                    request_id,
+                    sound_type,
+                    entity_id,
+                    sent_at,
+                } => {
+                    self.audio_debug_records.insert(
+                        request_id,
+                        crate::audio_engine::types::AudioDebugRecord {
+                            request_id,
+                            sound_type,
+                            entity_id,
+                            sent_at,
+                            received_at: None,
+                            started_at: None,
+                            dropped_at: None,
+                            completed_at: None,
+                            status: crate::audio_engine::types::AudioPlayStatus::Sent,
+                            voice_index: None,
+                            drop_reason: None,
+                        },
+                    );
+                    match sound_type {
+                        crate::audio_engine::types::AudioSoundType::Rocket => {
+                            self.audio_sent_rocket += 1;
+                        }
+                        crate::audio_engine::types::AudioSoundType::Explosion => {
+                            self.audio_sent_explosion += 1;
+                        }
+                    }
+                }
+                crate::audio_engine::types::AudioDebugEvent::Received {
+                    request_id,
+                    received_at,
+                } => {
+                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                        rec.received_at = Some(received_at);
+                        rec.status = crate::audio_engine::types::AudioPlayStatus::Received;
+                        let latency = received_at.duration_since(rec.sent_at);
+                        self.latency_dispatch_sum += latency;
+                        self.latency_dispatch_count += 1;
+                        match rec.sound_type {
+                            crate::audio_engine::types::AudioSoundType::Rocket => {
+                                self.audio_received_rocket += 1;
+                            }
+                            crate::audio_engine::types::AudioSoundType::Explosion => {
+                                self.audio_received_explosion += 1;
+                            }
+                        }
+                    }
+                }
+                crate::audio_engine::types::AudioDebugEvent::Started {
+                    request_id,
+                    started_at,
+                    voice_index,
+                } => {
+                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                        rec.started_at = Some(started_at);
+                        rec.voice_index = Some(voice_index);
+                        rec.status = crate::audio_engine::types::AudioPlayStatus::Playing;
+                        let latency = started_at.duration_since(rec.sent_at);
+                        self.latency_play_sum += latency;
+                        self.latency_play_count += 1;
+                        match rec.sound_type {
+                            crate::audio_engine::types::AudioSoundType::Rocket => {
+                                self.audio_played_rocket += 1;
+                            }
+                            crate::audio_engine::types::AudioSoundType::Explosion => {
+                                self.audio_played_explosion += 1;
+                            }
+                        }
+                    }
+                }
+                crate::audio_engine::types::AudioDebugEvent::Dropped {
+                    request_id,
+                    dropped_at,
+                    reason,
+                } => {
+                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                        rec.dropped_at = Some(dropped_at);
+                        rec.drop_reason = Some(reason);
+                        rec.status = crate::audio_engine::types::AudioPlayStatus::Dropped;
+                        match rec.sound_type {
+                            crate::audio_engine::types::AudioSoundType::Rocket => {
+                                self.audio_dropped_rocket += 1;
+                            }
+                            crate::audio_engine::types::AudioSoundType::Explosion => {
+                                self.audio_dropped_explosion += 1;
+                            }
+                        }
+                        log::warn!(
+                            "⚠️ AUDIO DROPPED: request #{} ({:?}) for entity {} was dropped: {}",
+                            request_id,
+                            rec.sound_type,
+                            rec.entity_id,
+                            reason
+                        );
+                    }
+                }
+                crate::audio_engine::types::AudioDebugEvent::Completed {
+                    request_id,
+                    completed_at,
+                } => {
+                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                        rec.completed_at = Some(completed_at);
+                        rec.status = crate::audio_engine::types::AudioPlayStatus::Completed;
+                        match rec.sound_type {
+                            crate::audio_engine::types::AudioSoundType::Rocket => {
+                                self.audio_completed_rocket += 1;
+                            }
+                            crate::audio_engine::types::AudioSoundType::Explosion => {
+                                self.audio_completed_explosion += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     fn handle_window_events(&mut self) -> (bool, bool) {
         let mut reload_config = false;
@@ -482,12 +643,173 @@ where
 
         // Draw console (foreground)
         if self.console.open {
+            {
+                // NOUVEAU : Dessiner l'indicateur graphique de l'auditeur (Listener) en arrière-plan
+                let draw_list = ui.get_background_draw_list();
+                let window_width = ui.io().display_size[0];
+                let window_height = ui.io().display_size[1];
+
+                let listener_x = window_width * 0.5;
+                let listener_y = window_height;
+
+                // Icône de casque (dessin vectoriel)
+                draw_list
+                    .add_circle([listener_x, listener_y - 20.0], 12.0, [0.0, 1.0, 0.0, 0.8])
+                    .thickness(2.0)
+                    .build();
+                draw_list
+                    .add_circle([listener_x, listener_y - 20.0], 4.0, [0.0, 1.0, 0.0, 1.0])
+                    .filled(true)
+                    .build();
+
+                let label = "🎧 Listener (Sol / Centre)";
+                let text_size = ui.calc_text_size(label);
+                draw_list.add_text(
+                    [listener_x - text_size[0] * 0.5, listener_y - 45.0],
+                    [0.0, 1.0, 0.0, 1.0],
+                    label,
+                );
+
+                // Cercle indicatif de la zone de volume max (ref_distance = 50px)
+                draw_list
+                    .add_circle([listener_x, listener_y], 50.0, [0.0, 0.8, 1.0, 0.35])
+                    .thickness(1.5)
+                    .build();
+                draw_list.add_text(
+                    [listener_x + 55.0, listener_y - 20.0],
+                    [0.0, 0.8, 1.0, 0.7],
+                    "Volume Max (50px)",
+                );
+
+                // Cercle de la zone d'atténuation (max_distance réelle récupérée dynamiquement)
+                let max_dist = self.audio_engine.get_max_distance();
+                draw_list
+                    .add_circle([listener_x, listener_y], max_dist, [1.0, 0.5, 0.0, 0.15])
+                    .thickness(1.5)
+                    .build();
+
+                let label_text = format!("Zone d'attenuation (max {}px)", max_dist as u32);
+                let text_y = (listener_y - max_dist).max(10.0);
+                draw_list.add_text(
+                    [listener_x + 10.0, text_y],
+                    [1.0, 0.5, 0.0, 0.5],
+                    label_text,
+                );
+            }
+
             self.console.draw(
                 ui,
                 &mut self.audio_engine,
                 &mut self.physic_engine,
                 &self.commands_registry,
             );
+
+            // NOUVEAU: Fenêtre ImGui de diagnostic Audio
+            let window_width = ui.io().display_size[0];
+            let window_height = ui.io().display_size[1];
+            ui.window("Audio Diagnostic Monitor")
+                .size([window_width * 0.45, window_height * 0.45], imgui::Condition::FirstUseEver)
+                .position([window_width * 0.53, window_height * 0.52], imgui::Condition::FirstUseEver)
+                .build(|| {
+                    ui.text("=== AUDIO ENGINE REAL-TIME DIAGNOSTIC ===");
+                    ui.separator();
+
+                    // Statistiques globales
+                    ui.text(format!(
+                        "Rockets: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
+                        self.audio_sent_rocket,
+                        self.audio_received_rocket,
+                        self.audio_played_rocket,
+                        self.audio_dropped_rocket,
+                        self.audio_completed_rocket
+                    ));
+
+                    ui.text(format!(
+                        "Explosions: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
+                        self.audio_sent_explosion,
+                        self.audio_received_explosion,
+                        self.audio_played_explosion,
+                        self.audio_dropped_explosion,
+                        self.audio_completed_explosion
+                    ));
+
+                    ui.separator();
+                    ui.text("=== LATENCY QUANTIFICATION ===");
+
+                    let avg_dispatch = if self.latency_dispatch_count > 0 {
+                        self.latency_dispatch_sum.as_secs_f64() * 1000.0 / self.latency_dispatch_count as f64
+                    } else {
+                        0.0
+                    };
+
+                    let avg_play = if self.latency_play_count > 0 {
+                        self.latency_play_sum.as_secs_f64() * 1000.0 / self.latency_play_count as f64
+                    } else {
+                        0.0
+                    };
+
+                    ui.text(format!("Avg thread transit latency: {:.3} ms", avg_dispatch));
+                    ui.text(format!("Avg render-to-audio-start latency: {:.3} ms", avg_play));
+
+                    // Warning indicator if anything dropped
+                    let total_dropped = self.audio_dropped_rocket + self.audio_dropped_explosion;
+                    if total_dropped > 0 {
+                        ui.text_colored([1.0, 0.0, 0.0, 1.0], format!("⚠️ CRITICAL: {} SOUNDS DROPPED!", total_dropped));
+                    } else {
+                        ui.text_colored([0.0, 1.0, 0.0, 1.0], "   All sounds successfully dispatched and mixed");
+                    }
+
+                    ui.separator();
+                    ui.text("=== RECENT AUDIO EVENT LOG ===");
+
+                    // Get recent records, sorted by request_id descending
+                    let mut records: Vec<&crate::audio_engine::types::AudioDebugRecord> = self.audio_debug_records.values().collect();
+                    records.sort_by_key(|r| std::cmp::Reverse(r.request_id));
+
+                    ui.child_window("RecentLogChild")
+                        .size([0.0, 0.0])
+                        .build(|| {
+                            for r in records.iter().take(15) {
+                                let type_str = match r.sound_type {
+                                    crate::audio_engine::types::AudioSoundType::Rocket => "ROCKET",
+                                    crate::audio_engine::types::AudioSoundType::Explosion => "EXPLOSION",
+                                };
+                                let status_color = match r.status {
+                                    crate::audio_engine::types::AudioPlayStatus::Sent => [0.7, 0.7, 0.7, 1.0],
+                                    crate::audio_engine::types::AudioPlayStatus::Received => [0.2, 0.6, 1.0, 1.0],
+                                    crate::audio_engine::types::AudioPlayStatus::Playing => [0.0, 1.0, 0.0, 1.0],
+                                    crate::audio_engine::types::AudioPlayStatus::Dropped => [1.0, 0.0, 0.0, 1.0],
+                                    crate::audio_engine::types::AudioPlayStatus::Completed => [0.5, 0.5, 0.5, 1.0],
+                                };
+
+                                let transit_ms = r.received_at.map(|t| t.duration_since(r.sent_at).as_secs_f64() * 1000.0);
+                                let start_ms = r.started_at.map(|t| t.duration_since(r.sent_at).as_secs_f64() * 1000.0);
+
+                                ui.text(format!(
+                                    "#{:<3} {:<9} (id:{:<2}) - ",
+                                    r.request_id, type_str, r.entity_id
+                                ));
+                                ui.same_line();
+                                ui.text_colored(status_color, format!("{:?}", r.status));
+
+                                if r.status == crate::audio_engine::types::AudioPlayStatus::Dropped {
+                                    if let Some(reason) = r.drop_reason {
+                                        ui.same_line();
+                                        ui.text(format!("({})", reason));
+                                    }
+                                } else {
+                                    if let Some(t_ms) = transit_ms {
+                                        ui.same_line();
+                                        ui.text(format!(" | Transit: {:.2}ms", t_ms));
+                                    }
+                                    if let Some(s_ms) = start_ms {
+                                        ui.same_line();
+                                        ui.text(format!(" | Render-to-start: {:.2}ms", s_ms));
+                                    }
+                                }
+                            }
+                        });
+                });
         }
 
         // Finalize ImGui Draw
