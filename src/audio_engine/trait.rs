@@ -30,9 +30,7 @@ pub trait AudioEngine {
     fn get_effects_status(&self) -> String;
 
     /// Récupère les événements de diagnostic de debug accumulés par le moteur audio.
-    fn pop_debug_events(&self) -> Vec<crate::audio_engine::types::AudioDebugEvent> {
-        Vec::new()
-    }
+    fn pop_debug_events(&self, _buf: &mut Vec<crate::audio_engine::types::AudioDebugEvent>) {}
 
     /// Récupère la distance d'atténuation maximale configurée.
     fn get_max_distance(&self) -> f32 {

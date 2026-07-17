@@ -105,7 +105,7 @@ impl FireworksAudio3D {
         let (play_tx, play_rx) = crossbeam_channel::bounded(512);
 
         // NOUVEAU : Canaux de debug
-        let (debug_tx, debug_rx) = crossbeam_channel::unbounded();
+        let (debug_tx, debug_rx) = crossbeam_channel::bounded(2048);
 
         Ok(Self {
             rocket_data: Arc::new(rocket_data),
@@ -271,7 +271,7 @@ impl FireworksAudio3D {
                     .ok_or(AudioThreadError::NoDevice)?;
 
                 // 1. Configuration Matérielle (déléguée !)
-                let config = get_cpal_config(&device, sr);
+                let config = get_cpal_config(&device, sr, block_size);
 
                 // 2. Instanciation du processeur DSP
                 let max_supported_frames = block_size.max(16384);
@@ -409,12 +409,10 @@ impl AudioEngine for FireworksAudio3D {
         self.effect_flags.status_string()
     }
 
-    fn pop_debug_events(&self) -> Vec<crate::audio_engine::types::AudioDebugEvent> {
-        let mut events = Vec::new();
+    fn pop_debug_events(&self, buf: &mut Vec<crate::audio_engine::types::AudioDebugEvent>) {
         while let Ok(evt) = self.debug_rx.try_recv() {
-            events.push(evt);
+            buf.push(evt);
         }
-        events
     }
 
     fn get_max_distance(&self) -> f32 {
@@ -427,7 +425,7 @@ impl AudioEngine for FireworksAudio3D {
 }
 
 /// Négocie la meilleure taille de buffer (low-latency) avec le matériel
-fn get_cpal_config(device: &cpal::Device, sr: u32) -> cpal::StreamConfig {
+fn get_cpal_config(device: &cpal::Device, sr: u32, block_size: usize) -> cpal::StreamConfig {
     let buffer_size = match device.supported_output_configs() {
         Ok(mut configs) => {
             let target_sr = cpal::SampleRate(sr);
@@ -436,12 +434,14 @@ fn get_cpal_config(device: &cpal::Device, sr: u32) -> cpal::StreamConfig {
                     && c.min_sample_rate() <= target_sr
                     && c.max_sample_rate() >= target_sr
                     && match c.buffer_size() {
-                        cpal::SupportedBufferSize::Range { min, max } => *min <= 256 && *max >= 256,
+                        cpal::SupportedBufferSize::Range { min, max } => {
+                            *min <= block_size as u32 && *max >= block_size as u32
+                        }
                         cpal::SupportedBufferSize::Unknown => true,
                     }
             });
             if supports_low_latency {
-                cpal::BufferSize::Fixed(256)
+                cpal::BufferSize::Fixed(block_size as u32)
             } else {
                 cpal::BufferSize::Default
             }

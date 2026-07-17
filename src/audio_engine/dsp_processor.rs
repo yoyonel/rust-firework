@@ -64,9 +64,12 @@ impl DspProcessor {
     fn consume_requests(&mut self, profiler: &Profiler) {
         crate::tracy_zone!("audio::consume_requests", 0x00FF00);
 
+        let fx_mask = self.effect_flags.load();
+        let listener_pos = self.listener_pos.load();
+
         while let Ok(req) = self.play_rx.try_recv() {
             if let Some(debug_tx) = &self.debug_tx {
-                let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Received {
+                let _ = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Received {
                     request_id: req.request_id,
                     received_at: Instant::now(),
                 });
@@ -80,12 +83,41 @@ impl DspProcessor {
                 selected_voice_idx = Some(idx);
             } else {
                 // 2. Stratégie de Voice Stealing (vol de voix)
-                // Trouver la voix active la plus silencieuse (gain canal maximum)
+                // Calculer l'atténuation spatiale pour la nouvelle requête (pre-attenuation fix)
+                let d = req.pos - listener_pos;
+                let distance = d.length().max(1e-6);
+                let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
+                    let ref_distance = 50.0_f32;
+                    let max_distance = self.settings.max_distance().max(ref_distance + 1.0);
+                    if distance <= ref_distance {
+                        1.0
+                    } else if distance >= max_distance {
+                        0.0
+                    } else {
+                        let raw_att = ref_distance / distance;
+                        let fade = (max_distance - distance) / (max_distance - ref_distance);
+                        raw_att * fade
+                    }
+                } else {
+                    1.0
+                };
+
+                let req_priority = match req.sound_type {
+                    crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
+                    crate::audio_engine::types::AudioSoundType::Rocket => 1.0,
+                };
+                let req_volume = req.gain * att * req_priority;
+
+                // Trouver la voix active la plus silencieuse (gain canal maximum pondéré par type)
                 let mut min_volume = f32::MAX;
                 let mut quietest_idx = None;
 
                 for (idx, v) in self.voices.iter().enumerate() {
-                    let volume = v.target_gains[0].abs().max(v.target_gains[1].abs());
+                    let v_priority = match v.sound_type {
+                        crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
+                        crate::audio_engine::types::AudioSoundType::Rocket => 1.0,
+                    };
+                    let volume = v.target_gains[0].abs().max(v.target_gains[1].abs()) * v_priority;
                     if volume < min_volume {
                         min_volume = volume;
                         quietest_idx = Some(idx);
@@ -94,7 +126,7 @@ impl DspProcessor {
 
                 if let Some(idx) = quietest_idx {
                     // On ne vole la voix que si le nouveau son demandé est plus fort que le son actif le plus silencieux
-                    if req.gain > min_volume {
+                    if req_volume > min_volume {
                         let stolen_req_id = self.voices[idx].request_id;
                         selected_voice_idx = Some(idx);
                         steal_reason = Some(stolen_req_id);
@@ -106,12 +138,13 @@ impl DspProcessor {
                 // Si on a volé une voix active, on notifie son drop avec le motif approprié
                 if let Some(stolen_id) = steal_reason {
                     if let Some(debug_tx) = &self.debug_tx {
-                        let _ =
-                            debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                        let _ = debug_tx.try_send(
+                            crate::audio_engine::types::AudioDebugEvent::Dropped {
                                 request_id: stolen_id,
                                 dropped_at: std::time::Instant::now(),
                                 reason: "Voice stolen (quieter)",
-                            });
+                            },
+                        );
                     }
                 }
 
@@ -123,20 +156,22 @@ impl DspProcessor {
                 crate::tracy_plot!("Audio: Latency (ms)", latency.as_secs_f64() * 1000.0);
 
                 if let Some(debug_tx) = &self.debug_tx {
-                    let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Started {
-                        request_id: req.request_id,
-                        started_at: now,
-                        voice_index: voice_idx,
-                    });
+                    let _ =
+                        debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Started {
+                            request_id: req.request_id,
+                            started_at: now,
+                            voice_index: voice_idx,
+                        });
                 }
             } else {
                 // Pas de voix libre et aucune voix active plus silencieuse que le nouveau son
                 if let Some(debug_tx) = &self.debug_tx {
-                    let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Dropped {
-                        request_id: req.request_id,
-                        dropped_at: Instant::now(),
-                        reason: "No inactive voice available",
-                    });
+                    let _ =
+                        debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                            request_id: req.request_id,
+                            dropped_at: Instant::now(),
+                            reason: "No inactive voice available",
+                        });
                 }
             }
         }
@@ -362,10 +397,11 @@ impl DspProcessor {
                     let _ = self.garbage_tx.try_send(dead_arc);
                 }
                 if let Some(debug_tx) = &self.debug_tx {
-                    let _ = debug_tx.send(crate::audio_engine::types::AudioDebugEvent::Completed {
-                        request_id: v.request_id,
-                        completed_at: Instant::now(),
-                    });
+                    let _ =
+                        debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Completed {
+                            request_id: v.request_id,
+                            completed_at: Instant::now(),
+                        });
                 }
             }
         }
@@ -864,19 +900,19 @@ mod tests {
         // The voice is now active.
         assert!(dsp.voices[0].active);
 
-        // 3. Send second play request (which should be dropped because voice 0 is active and max_voices = 1)
+        // 3. Send second play request (which should be dropped because voice 0 is active and has higher priority)
         let req2 = crate::audio_engine::types::PlayRequest {
             data: source_arc,
             fade_in: 0,
             fade_out: 0,
-            gain: 1.0,
+            gain: 0.5,
             filter_a: 0.05,
             sent_at: Instant::now(),
             request_id: 102,
             id: 20,
             pos: glam::Vec2::ZERO,
             is_dynamic: false,
-            sound_type: AudioSoundType::Explosion,
+            sound_type: AudioSoundType::Rocket,
         };
         play_tx.send(req2).unwrap();
 

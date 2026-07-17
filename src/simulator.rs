@@ -45,6 +45,32 @@ macro_rules! tracy_zone_with_value {
     ($name:expr, $color:expr, $value:expr) => {};
 }
 
+macro_rules! ui_text {
+    ($ui:expr, $($arg:tt)*) => {
+        let mut buf = [0u8; 256];
+        let mut cursor = std::io::Cursor::new(&mut buf[..]);
+        if std::io::Write::write_fmt(&mut cursor, format_args!($($arg)*)).is_ok() {
+            let pos = cursor.position() as usize;
+            if let Ok(s) = std::str::from_utf8(&buf[..pos]) {
+                $ui.text(s);
+            }
+        }
+    };
+}
+
+macro_rules! ui_text_colored {
+    ($ui:expr, $color:expr, $($arg:tt)*) => {
+        let mut buf = [0u8; 256];
+        let mut cursor = std::io::Cursor::new(&mut buf[..]);
+        if std::io::Write::write_fmt(&mut cursor, format_args!($($arg)*)).is_ok() {
+            let pos = cursor.position() as usize;
+            if let Ok(s) = std::str::from_utf8(&buf[..pos]) {
+                $ui.text_colored($color, s);
+            }
+        }
+    };
+}
+
 pub struct Simulator<R, P, A, W>
 where
     R: RendererEngine,
@@ -90,7 +116,8 @@ where
 
     // NOUVEAU: Statistiques et tracking des requêtes audio
     pub audio_debug_records:
-        std::collections::HashMap<u64, crate::audio_engine::types::AudioDebugRecord>,
+        std::collections::VecDeque<crate::audio_engine::types::AudioDebugRecord>,
+    pub audio_events_buf: Vec<crate::audio_engine::types::AudioDebugEvent>,
     pub audio_sent_rocket: u64,
     pub audio_received_rocket: u64,
     pub audio_played_rocket: u64,
@@ -149,7 +176,8 @@ where
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
-            audio_debug_records: std::collections::HashMap::new(),
+            audio_debug_records: std::collections::VecDeque::with_capacity(128),
+            audio_events_buf: Vec::with_capacity(2048),
             audio_sent_rocket: 0,
             audio_received_rocket: 0,
             audio_played_rocket: 0,
@@ -237,8 +265,10 @@ where
     // --- Helper Methods ---
 
     fn process_audio_debug_events(&mut self) {
-        let events = self.audio_engine.pop_debug_events();
-        for evt in events {
+        self.audio_events_buf.clear();
+        self.audio_engine
+            .pop_debug_events(&mut self.audio_events_buf);
+        for evt in self.audio_events_buf.drain(..) {
             match evt {
                 crate::audio_engine::types::AudioDebugEvent::Sent {
                     request_id,
@@ -246,8 +276,7 @@ where
                     entity_id,
                     sent_at,
                 } => {
-                    self.audio_debug_records.insert(
-                        request_id,
+                    self.audio_debug_records.push_back(
                         crate::audio_engine::types::AudioDebugRecord {
                             request_id,
                             sound_type,
@@ -262,6 +291,9 @@ where
                             drop_reason: None,
                         },
                     );
+                    if self.audio_debug_records.len() > 100 {
+                        self.audio_debug_records.pop_front();
+                    }
                     match sound_type {
                         crate::audio_engine::types::AudioSoundType::Rocket => {
                             self.audio_sent_rocket += 1;
@@ -275,7 +307,11 @@ where
                     request_id,
                     received_at,
                 } => {
-                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                    if let Some(rec) = self
+                        .audio_debug_records
+                        .iter_mut()
+                        .find(|r| r.request_id == request_id)
+                    {
                         rec.received_at = Some(received_at);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Received;
                         let latency = received_at.duration_since(rec.sent_at);
@@ -296,7 +332,11 @@ where
                     started_at,
                     voice_index,
                 } => {
-                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                    if let Some(rec) = self
+                        .audio_debug_records
+                        .iter_mut()
+                        .find(|r| r.request_id == request_id)
+                    {
                         rec.started_at = Some(started_at);
                         rec.voice_index = Some(voice_index);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Playing;
@@ -318,7 +358,11 @@ where
                     dropped_at,
                     reason,
                 } => {
-                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                    if let Some(rec) = self
+                        .audio_debug_records
+                        .iter_mut()
+                        .find(|r| r.request_id == request_id)
+                    {
                         rec.dropped_at = Some(dropped_at);
                         rec.drop_reason = Some(reason);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Dropped;
@@ -343,7 +387,11 @@ where
                     request_id,
                     completed_at,
                 } => {
-                    if let Some(rec) = self.audio_debug_records.get_mut(&request_id) {
+                    if let Some(rec) = self
+                        .audio_debug_records
+                        .iter_mut()
+                        .find(|r| r.request_id == request_id)
+                    {
                         rec.completed_at = Some(completed_at);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Completed;
                         match rec.sound_type {
@@ -688,13 +736,19 @@ where
                     .thickness(1.5)
                     .build();
 
-                let label_text = format!("Zone d'attenuation (max {}px)", max_dist as u32);
                 let text_y = (listener_y - max_dist).max(10.0);
-                draw_list.add_text(
-                    [listener_x + 10.0, text_y],
-                    [1.0, 0.5, 0.0, 0.5],
-                    label_text,
-                );
+                let mut buf = [0u8; 64];
+                let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                use std::io::Write;
+                let _ = write!(cursor, "Zone d'attenuation (max {}px)", max_dist as u32);
+                let pos = cursor.position() as usize;
+                if let Ok(label_text) = std::str::from_utf8(&buf[..pos]) {
+                    draw_list.add_text(
+                        [listener_x + 10.0, text_y],
+                        [1.0, 0.5, 0.0, 0.5],
+                        label_text,
+                    );
+                }
             }
 
             self.console.draw(
@@ -715,23 +769,25 @@ where
                     ui.separator();
 
                     // Statistiques globales
-                    ui.text(format!(
+                    ui_text!(
+                        ui,
                         "Rockets: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
                         self.audio_sent_rocket,
                         self.audio_received_rocket,
                         self.audio_played_rocket,
                         self.audio_dropped_rocket,
                         self.audio_completed_rocket
-                    ));
+                    );
 
-                    ui.text(format!(
+                    ui_text!(
+                        ui,
                         "Explosions: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
                         self.audio_sent_explosion,
                         self.audio_received_explosion,
                         self.audio_played_explosion,
                         self.audio_dropped_explosion,
                         self.audio_completed_explosion
-                    ));
+                    );
 
                     ui.separator();
                     ui.text("=== LATENCY QUANTIFICATION ===");
@@ -748,13 +804,13 @@ where
                         0.0
                     };
 
-                    ui.text(format!("Avg thread transit latency: {:.3} ms", avg_dispatch));
-                    ui.text(format!("Avg render-to-audio-start latency: {:.3} ms", avg_play));
+                    ui_text!(ui, "Avg thread transit latency: {:.3} ms", avg_dispatch);
+                    ui_text!(ui, "Avg render-to-audio-start latency: {:.3} ms", avg_play);
 
                     // Warning indicator if anything dropped
                     let total_dropped = self.audio_dropped_rocket + self.audio_dropped_explosion;
                     if total_dropped > 0 {
-                        ui.text_colored([1.0, 0.0, 0.0, 1.0], format!("⚠️ CRITICAL: {} SOUNDS DROPPED!", total_dropped));
+                        ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], "⚠️ CRITICAL: {} SOUNDS DROPPED!", total_dropped);
                     } else {
                         ui.text_colored([0.0, 1.0, 0.0, 1.0], "   All sounds successfully dispatched and mixed");
                     }
@@ -762,14 +818,10 @@ where
                     ui.separator();
                     ui.text("=== RECENT AUDIO EVENT LOG ===");
 
-                    // Get recent records, sorted by request_id descending
-                    let mut records: Vec<&crate::audio_engine::types::AudioDebugRecord> = self.audio_debug_records.values().collect();
-                    records.sort_by_key(|r| std::cmp::Reverse(r.request_id));
-
                     ui.child_window("RecentLogChild")
                         .size([0.0, 0.0])
                         .build(|| {
-                            for r in records.iter().take(15) {
+                            for r in self.audio_debug_records.iter().rev().take(15) {
                                 let type_str = match r.sound_type {
                                     crate::audio_engine::types::AudioSoundType::Rocket => "ROCKET",
                                     crate::audio_engine::types::AudioSoundType::Explosion => "EXPLOSION",
@@ -785,26 +837,27 @@ where
                                 let transit_ms = r.received_at.map(|t| t.duration_since(r.sent_at).as_secs_f64() * 1000.0);
                                 let start_ms = r.started_at.map(|t| t.duration_since(r.sent_at).as_secs_f64() * 1000.0);
 
-                                ui.text(format!(
+                                ui_text!(
+                                    ui,
                                     "#{:<3} {:<9} (id:{:<2}) - ",
                                     r.request_id, type_str, r.entity_id
-                                ));
+                                );
                                 ui.same_line();
-                                ui.text_colored(status_color, format!("{:?}", r.status));
+                                ui_text_colored!(ui, status_color, "{:?}", r.status);
 
                                 if r.status == crate::audio_engine::types::AudioPlayStatus::Dropped {
                                     if let Some(reason) = r.drop_reason {
                                         ui.same_line();
-                                        ui.text(format!("({})", reason));
+                                        ui_text!(ui, "({})", reason);
                                     }
                                 } else {
                                     if let Some(t_ms) = transit_ms {
                                         ui.same_line();
-                                        ui.text(format!(" | Transit: {:.2}ms", t_ms));
+                                        ui_text!(ui, " | Transit: {:.2}ms", t_ms);
                                     }
                                     if let Some(s_ms) = start_ms {
                                         ui.same_line();
-                                        ui.text(format!(" | Render-to-start: {:.2}ms", s_ms));
+                                        ui_text!(ui, " | Render-to-start: {:.2}ms", s_ms);
                                     }
                                 }
                             }
