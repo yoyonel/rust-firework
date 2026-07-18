@@ -7,6 +7,8 @@ vars:
   CARGO: cargo
   COVERAGE_DIR: target/llvm-cov
   XVFB: xvfb-run -a
+  SKILLS_OUTPUT_DIR: '{{.HOME}}/.agents/skills'
+  DOC_TEMPLATES_DIR: 'doc/ai_skills'
 
 tasks:
   default:
@@ -334,7 +336,7 @@ tasks:
         print(f'   - Durée maximale (Max)             : {max(warm_durations)/1000:.2f} us')
         "
 
-# =========================================
+  # =========================================
   # 🎧 PROFILING PERF + HOTSPOT (AUDIO DOPPLER)
   # =========================================
   build-perf:
@@ -371,3 +373,49 @@ tasks:
         # Lancement au PREMIER PLAN sans masquer les erreurs.
         # Si l'AppImage échoue à cause de FUSE, tu verras immédiatement l'erreur dans le terminal !
         - hotspot {{.PERF_DATA}}
+
+  # =========================================
+  # 🧠 IA + Skills
+  # =========================================
+  update-ai-skills:
+      desc: 'Régénère et configure toutes les compétences IA locales pour Antigravity / agy'
+      summary: |
+        Analyse la codebase avec Repomix par sous-système (Audio, Renderer, Physic, ImGui),
+        génère le contexte d'indexation dans ~/.agents/skills/, puis applique automatiquement
+        les overlays personnalisés (SKILL.md) depuis le dossier doc/ai_skills/.
+      cmds:
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-audio'
+            INCLUDE: 'src/audio_engine/**,doc/*audio*,doc/*doppler*'
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-renderer'
+            INCLUDE: 'src/renderer_engine/**,assets/shaders/**,doc/*azdo*,doc/*opengl*,doc/*tracy*,doc/*gpu*'
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-physic'
+            INCLUDE: 'src/physic_engine/**,src/simulator.rs,doc/*physic*,doc/*memory*'
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-imgui'
+            INCLUDE: 'src/window_engine/**,src/utils/command_console.rs,src/utils/glfw_window.rs,src/profiler.rs,src/renderer_engine/tools.rs,doc/console_commands.md,doc/*profiling*'
+        - echo "✨ Tout est prêt ! Les compétences IA sont à jour et patchées dans {{.SKILLS_OUTPUT_DIR}}."
+      silent: false
+
+  # Tâche interne (masquée du CLI 'task --list') qui sert de template réutilisable (DRY)
+  _generate-overlay-skill:
+    internal: true
+    desc: 'Tâche template : Génère un skill spécifique via Repomix et écrase son SKILL.md'
+    cmds:
+      - echo "🤖 [{{.NAME}}] Génération du contexte Repomix..."
+      - npx -y repomix@latest --include "{{.INCLUDE}}" --skill-generate {{.NAME}} --skill-output {{.SKILLS_OUTPUT_DIR}}/{{.NAME}} --force
+      - |
+        if [ -f "{{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md" ]; then
+          cp -f "{{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md" "{{.SKILLS_OUTPUT_DIR}}/{{.NAME}}/SKILL.md"
+          echo "  ✔ Overlay appliqué avec succès : {{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md -> SKILL.md"
+        else
+          echo "  ⚠️ Attention : Aucun fichier template trouvé dans {{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md (SKILL.md par défaut conservé)"
+        fi
+      - echo ""
+    silent: true
