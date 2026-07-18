@@ -673,7 +673,7 @@ where
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
 
-        if !self.console.open && !comparison_active {
+        if !self.console.open && !comparison_active && !self.show_audio_diagnostic {
             return;
         }
 
