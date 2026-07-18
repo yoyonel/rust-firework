@@ -110,6 +110,7 @@ where
     fps_avg_iter: f32,
     last_log: Instant,
     first_frame: bool,
+    pub last_audio_debug_update: Instant,
 
     // Tone mapping comparison
     pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -173,6 +174,7 @@ where
             fps_avg_iter: 0.0,
             last_log: Instant::now(),
             first_frame: true,
+            last_audio_debug_update: Instant::now(),
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
@@ -231,7 +233,13 @@ where
             0xFF5500, // Orange
             {
                 self.update_simulation(delta);
-                self.process_audio_debug_events();
+                if self.console.open
+                    && self.last_audio_debug_update.elapsed()
+                        >= std::time::Duration::from_millis(16)
+                {
+                    self.process_audio_debug_events();
+                    self.last_audio_debug_update = std::time::Instant::now();
+                }
             }
         );
 

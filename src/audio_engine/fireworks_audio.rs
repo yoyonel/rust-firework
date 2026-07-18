@@ -159,7 +159,7 @@ impl FireworksAudio3D {
         // Envoyer l'event "Sent"
         let _ = self
             .debug_tx
-            .send(crate::audio_engine::types::AudioDebugEvent::Sent {
+            .try_send(crate::audio_engine::types::AudioDebugEvent::Sent {
                 request_id,
                 sound_type,
                 entity_id: id,
@@ -194,7 +194,7 @@ impl FireworksAudio3D {
             log::warn!("⚠️ Audio play_queue full! Dropping sound event: {:?}", e);
             let _ = self
                 .debug_tx
-                .send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                .try_send(crate::audio_engine::types::AudioDebugEvent::Dropped {
                     request_id,
                     dropped_at: Instant::now(),
                     reason: "Play queue full",
@@ -300,6 +300,20 @@ impl FireworksAudio3D {
                             INIT_CPAL_THREAD.call_once(|| {
                                 #[cfg(feature = "tracy")]
                                 tracy_client::set_thread_name!("CPAL Audio Callback");
+
+                                #[cfg(target_os = "linux")]
+                                unsafe {
+                                    let mut param: libc::sched_param = std::mem::zeroed();
+                                    param.sched_priority = 20;
+                                    let res = libc::pthread_setschedparam(
+                                        libc::pthread_self(),
+                                        libc::SCHED_FIFO,
+                                        &param,
+                                    );
+                                    if res != 0 {
+                                        libc::setpriority(libc::PRIO_PROCESS, 0, -20);
+                                    }
+                                }
                             });
                             dsp_processor.process_block(data, global_gain, &profiler);
                         },
