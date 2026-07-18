@@ -111,6 +111,7 @@ where
     last_log: Instant,
     first_frame: bool,
     pub last_audio_debug_update: Instant,
+    pub show_audio_diagnostic: bool,
 
     // Tone mapping comparison
     pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -175,6 +176,7 @@ where
             last_log: Instant::now(),
             first_frame: true,
             last_audio_debug_update: Instant::now(),
+            show_audio_diagnostic: false,
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
@@ -233,7 +235,7 @@ where
             0xFF5500, // Orange
             {
                 self.update_simulation(delta);
-                if self.console.open
+                if (self.console.open || self.show_audio_diagnostic)
                     && self.last_audio_debug_update.elapsed()
                         >= std::time::Duration::from_millis(16)
                 {
@@ -438,20 +440,24 @@ where
                 glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
                     self.toggle_fullscreen();
                 }
-                glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, _) => {
-                    self.toggle_console();
+                glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, mods) => {
+                    if mods.contains(glfw::Modifiers::Shift) {
+                        self.show_audio_diagnostic = !self.show_audio_diagnostic;
+                        self.update_cursor_mode();
+                    } else {
+                        self.toggle_console();
+                    }
                 }
                 _ => {}
             }
 
-            // ImGui Input Handling
             // ImGui Input Handling
             let is_key_event = matches!(
                 event,
                 glfw::WindowEvent::Key(_, _, _, _) | glfw::WindowEvent::Char(_)
             );
 
-            if self.console.open || !is_key_event {
+            if self.console.open || self.show_audio_diagnostic || !is_key_event {
                 let imgui_system = self.window_engine.get_imgui_system_mut();
                 imgui_system
                     .glfw
@@ -516,12 +522,19 @@ where
 
     fn toggle_console(&mut self) {
         self.console.open = !self.console.open;
-        self.window_engine.set_cursor_mode(if self.console.open {
+        if self.console.open {
             self.console.focus_previous_widget = true;
+        }
+        self.update_cursor_mode();
+    }
+
+    fn update_cursor_mode(&mut self) {
+        let cursor_mode = if self.console.open || self.show_audio_diagnostic {
             glfw::CursorMode::Normal
         } else {
             glfw::CursorMode::Disabled
-        });
+        };
+        self.window_engine.set_cursor_mode(cursor_mode);
     }
 
     fn apply_reload_requests(&mut self, reload_config: bool, reload_shaders: bool) {
@@ -765,13 +778,17 @@ where
                 &mut self.physic_engine,
                 &self.commands_registry,
             );
+        }
 
-            // NOUVEAU: Fenêtre ImGui de diagnostic Audio
+        // NOUVEAU: Fenêtre ImGui de diagnostic Audio (indépendante de la console, toggle via SHIFT+²)
+        if self.show_audio_diagnostic {
             let window_width = ui.io().display_size[0];
             let window_height = ui.io().display_size[1];
             ui.window("Audio Diagnostic Monitor")
                 .size([window_width * 0.45, window_height * 0.45], imgui::Condition::FirstUseEver)
                 .position([window_width * 0.53, window_height * 0.52], imgui::Condition::FirstUseEver)
+                .resizable(true)
+                .collapsible(true)
                 .build(|| {
                     ui.text("=== AUDIO ENGINE REAL-TIME DIAGNOSTIC ===");
                     ui.separator();
@@ -827,7 +844,7 @@ where
                     ui.text("=== RECENT AUDIO EVENT LOG ===");
 
                     ui.child_window("RecentLogChild")
-                        .size([0.0, 0.0])
+                        .size([0.0, 180.0])
                         .build(|| {
                             for r in self.audio_debug_records.iter().rev().take(15) {
                                 let type_str = match r.sound_type {
