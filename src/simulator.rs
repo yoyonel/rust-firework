@@ -440,13 +440,12 @@ where
                 glfw::WindowEvent::Key(Key::F11, _, Action::Press, _) => {
                     self.toggle_fullscreen();
                 }
-                glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, mods) => {
-                    if mods.contains(glfw::Modifiers::Shift) {
-                        self.show_audio_diagnostic = !self.show_audio_diagnostic;
-                        self.update_cursor_mode();
-                    } else {
-                        self.toggle_console();
-                    }
+                glfw::WindowEvent::Key(Key::F3, _, Action::Press, _) => {
+                    self.show_audio_diagnostic = !self.show_audio_diagnostic;
+                    self.update_cursor_mode();
+                }
+                glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, _) => {
+                    self.toggle_console();
                 }
                 _ => {}
             }
@@ -712,6 +711,16 @@ where
 
         // Draw console (foreground)
         if self.console.open {
+            self.console.draw(
+                ui,
+                &mut self.audio_engine,
+                &mut self.physic_engine,
+                &self.commands_registry,
+            );
+        }
+
+        // NOUVEAU: Fenêtre ImGui de diagnostic Audio (indépendante de la console, toggle via F3)
+        if self.show_audio_diagnostic {
             {
                 // NOUVEAU : Dessiner l'indicateur graphique de l'auditeur (Listener) en arrière-plan
                 let draw_list = ui.get_background_draw_list();
@@ -772,16 +781,6 @@ where
                 }
             }
 
-            self.console.draw(
-                ui,
-                &mut self.audio_engine,
-                &mut self.physic_engine,
-                &self.commands_registry,
-            );
-        }
-
-        // NOUVEAU: Fenêtre ImGui de diagnostic Audio (indépendante de la console, toggle via SHIFT+²)
-        if self.show_audio_diagnostic {
             let window_width = ui.io().display_size[0];
             let window_height = ui.io().display_size[1];
             ui.window("Audio Diagnostic Monitor")
