@@ -79,8 +79,8 @@ impl Renderer {
         // Note: OpenGL context initialization (show_opengl_context_info, setup_opengl_debug, etc.)
         // is already done by GlfwWindowEngine::init(), so we don't duplicate it here.
 
-        let max_particles_on_gpu: usize =
-            physic_config.max_rockets * physic_config.particles_per_explosion;
+        let max_particles_on_gpu: usize = physic_config.max_rockets
+            * (physic_config.particles_per_explosion + physic_config.particles_per_trail);
 
         let mut renderers: Vec<Box<dyn ParticleGraphicsRenderer>> = vec![
             Box::new(RendererGraphics::new(max_particles_on_gpu)),
