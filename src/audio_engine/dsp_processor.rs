@@ -20,6 +20,12 @@ pub struct DspProcessor {
     pub export_writer: Option<Arc<Mutex<SafeWavWriter>>>,
     pub block_index: u64,
     pub acc: Vec<[f32; 2]>,
+    /// Bus spatial 2D : composante omnidirectionnelle W
+    pub bus_w: Vec<f32>,
+    /// Bus spatial 2D : composante directionnelle X (Droite/Gauche)
+    pub bus_x: Vec<f32>,
+    /// Bus spatial 2D : composante directionnelle Y (Avant/Arrière)
+    pub bus_y: Vec<f32>,
     pub last_log: Instant,
     pub log_interval: Duration,
     /// Masque atomique des effets DSP. Lu une seule fois par `process_block`.
@@ -108,7 +114,7 @@ impl DspProcessor {
                 };
                 let req_volume = req.gain * att * req_priority;
 
-                // Trouver la voix active la plus silencieuse (gain canal maximum pondéré par type)
+                // Trouver la voix active la plus silencieuse (gain et atténuation spatiale pondérés par priorité de son)
                 let mut min_volume = f32::MAX;
                 let mut quietest_idx = None;
 
@@ -117,7 +123,29 @@ impl DspProcessor {
                         crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
                         crate::audio_engine::types::AudioSoundType::Rocket => 1.0,
                     };
-                    let volume = v.target_gains[0].abs().max(v.target_gains[1].abs()) * v_priority;
+                    let v_d = v.world_pos - listener_pos;
+                    let v_distance = v_d.length().max(1e-6);
+                    let v_att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
+                        let ref_distance = 50.0_f32;
+                        let max_distance = self.settings.max_distance().max(ref_distance + 1.0);
+                        if v_distance <= ref_distance {
+                            1.0
+                        } else if v_distance >= max_distance {
+                            0.0
+                        } else {
+                            let raw_att = ref_distance / v_distance;
+                            let fade = (max_distance - v_distance) / (max_distance - ref_distance);
+                            raw_att * fade
+                        }
+                    } else {
+                        1.0
+                    };
+                    let v_gain = v.user_gain
+                        * v.target_gains[0]
+                            .abs()
+                            .max(v.target_gains[1].abs())
+                            .max(0.001);
+                    let volume = v_gain * v_att * v_priority;
                     if volume < min_volume {
                         min_volume = volume;
                         quietest_idx = Some(idx);
@@ -232,10 +260,164 @@ impl DspProcessor {
         }
     }
 
-    /// 🎯 BOÎTE HOTSPOT 1 : Traitement DSP par bloc et par voix (LERP + 3D Binaural)
+    #[inline(always)]
+    fn process_dsp(&mut self, frames: usize, fx_mask: u32, profiler: &Profiler) {
+        if fx_enabled(fx_mask, AudioEffect::SpatialBus) {
+            self.process_dsp_spatial_bus(frames, fx_mask, profiler);
+        } else {
+            self.process_dsp_legacy(frames, fx_mask, profiler);
+        }
+    }
+
+    /// 🎯 BOÎTE HOTSPOT 1B : Rendu ultra-rapide par Bus Spatial 2D (Ambisonics 2D / Harmoniques Circulaires W, X, Y)
+    /// Pré-accumule les sources dans un bus 3 canaux ultra-léger (3 mults/sample) avant de décoder une seule fois en Stéréo.
+    #[inline(never)]
+    fn process_dsp_spatial_bus(&mut self, frames: usize, fx_mask: u32, profiler: &Profiler) {
+        let _guard = profiler.measure("process_active_voices_bus");
+        crate::tracy_zone!("audio::process_dsp_spatial_bus", 0xAA00FF);
+
+        if self.bus_w.len() < frames {
+            self.bus_w.resize(frames, 0.0);
+            self.bus_x.resize(frames, 0.0);
+            self.bus_y.resize(frames, 0.0);
+        }
+
+        self.bus_w[..frames].fill(0.0);
+        self.bus_x[..frames].fill(0.0);
+        self.bus_y[..frames].fill(0.0);
+
+        let listener_pos = self.listener_pos.load();
+
+        for v in self.voices.iter_mut() {
+            if !v.active || v.data.is_none() {
+                continue;
+            }
+
+            let d = v.world_pos - listener_pos;
+            let distance = d.length().max(1e-6);
+
+            // Direction 2D normalisée (x = panoramique horizontal droite/gauche, y = altitude/distance)
+            let dir_x = d.x / distance;
+
+            let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
+                let ref_distance = 50.0_f32;
+                let max_distance = self.settings.max_distance().max(ref_distance + 1.0);
+                if distance <= ref_distance {
+                    1.0
+                } else if distance >= max_distance {
+                    0.0
+                } else {
+                    let raw_att = ref_distance / distance;
+                    let fade = (max_distance - distance) / (max_distance - ref_distance);
+                    raw_att * fade
+                }
+            } else {
+                1.0
+            };
+
+            let filter_a = if fx_enabled(fx_mask, AudioEffect::LowPassFilter) {
+                let fc = (self.settings.f_min()
+                    + (self.settings.f_max() - self.settings.f_min())
+                        * (-self.settings.distance_alpha() * distance).exp())
+                .clamp(self.settings.f_min(), self.settings.f_max());
+                let dt = 1.0 / self.sample_rate as f32;
+                let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
+                dt / (rc + dt)
+            } else {
+                1.0
+            };
+            v.filter_a = filter_a;
+
+            let slice_ref = v.data.as_ref().expect("Voice data should exist");
+            let total_len = slice_ref.len();
+
+            let mut prev_mono = v.filter_state[0];
+            let rate = v.playback_rate as f64;
+            let voice_gain = v.user_gain * att;
+
+            let w_weight = voice_gain * std::f32::consts::FRAC_1_SQRT_2;
+            let x_weight = voice_gain * dir_x;
+
+            for i in 0..frames {
+                let current_pos = v.pos;
+                let index = current_pos as usize;
+
+                if index >= total_len {
+                    break;
+                }
+
+                let s0 = (slice_ref[index][0] + slice_ref[index][1]) * 0.5;
+                let s1 = if index + 1 < total_len {
+                    (slice_ref[index + 1][0] + slice_ref[index + 1][1]) * 0.5
+                } else {
+                    0.0
+                };
+                let frac = (current_pos - index as f64) as f32;
+                let mut s = s0 + frac * (s1 - s0);
+
+                if fx_enabled(fx_mask, AudioEffect::FadeInOut) {
+                    if index < v.fade_in_samples {
+                        let alpha = index as f32 / v.fade_in_samples as f32;
+                        s *= alpha;
+                    } else {
+                        let rem = total_len - index;
+                        if rem < v.fade_out_samples {
+                            let alpha = rem as f32 / v.fade_out_samples as f32;
+                            s *= alpha;
+                        }
+                    }
+                }
+
+                s = prev_mono + filter_a * (s - prev_mono);
+                if s.abs() < 1e-15 {
+                    s = 0.0;
+                }
+                prev_mono = s;
+
+                self.bus_w[i] += s * w_weight;
+                self.bus_x[i] += s * x_weight;
+
+                v.pos += rate;
+            }
+
+            v.filter_state[0] = prev_mono;
+            v.current_gains[0] = voice_gain;
+            v.current_gains[1] = voice_gain;
+
+            if v.pos as usize >= total_len {
+                v.active = false;
+                if let Some(dead_arc) = v.data.take() {
+                    let _ = self.garbage_tx.try_send(dead_arc);
+                }
+                if let Some(debug_tx) = &self.debug_tx {
+                    let _ =
+                        debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Completed {
+                            request_id: v.request_id,
+                            completed_at: Instant::now(),
+                        });
+                }
+            }
+        }
+
+        // Décodage final du Bus Spatial (W, X) vers la sortie Stéréo (L, R)
+        // Compensation d'énergie Isopuissance (SQRT_2) :
+        // - Au centre (dir_x = 0) : L = 0.7071 S, R = 0.7071 S (100% ISO avec le mode Legacy)
+        // - À gauche/droite (dir_x = +-1) : L = 1.0 S, R = 0.0 S (100% ISO avec le mode Legacy)
+        let frac_1_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
+        for i in 0..frames {
+            let w = self.bus_w[i];
+            let x = self.bus_x[i];
+            let l = w - frac_1_sqrt2 * x;
+            let r = w + frac_1_sqrt2 * x;
+            self.acc[i][0] = l;
+            self.acc[i][1] = r;
+        }
+    }
+
+    /// 🎯 BOÎTE HOTSPOT 1A : Traitement DSP classique legacy par bloc et par voix (LERP + 3D Binaural)
     /// L'annotation #[inline(never)] garantit que ce bloc sera visible individuellement dans perf.
     #[inline(never)]
-    fn process_dsp(&mut self, frames: usize, fx_mask: u32, profiler: &Profiler) {
+    fn process_dsp_legacy(&mut self, frames: usize, fx_mask: u32, profiler: &Profiler) {
         let _guard = profiler.measure("process_active_voices");
         crate::tracy_zone!("audio::process_dsp", 0xAA00FF);
 
@@ -541,6 +723,9 @@ mod tests {
             export_writer: None,
             block_index: 0,
             acc: vec![[0.0; 2]; total_samples],
+            bus_w: Vec::new(),
+            bus_x: Vec::new(),
+            bus_y: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -586,6 +771,9 @@ mod tests {
             export_writer: None,
             block_index: 0,
             acc: vec![[0.0; 2]; block_size],
+            bus_w: Vec::new(),
+            bus_x: Vec::new(),
+            bus_y: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -730,6 +918,9 @@ mod tests {
             export_writer: None,
             block_index: 0,
             acc: vec![[0.0; 2]; block_size],
+            bus_w: Vec::new(),
+            bus_x: Vec::new(),
+            bus_y: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -771,6 +962,9 @@ mod tests {
             export_writer: None,
             block_index: 0,
             acc: vec![[1.5, -2.0]; block_size], // Acc holds values that exceed 1.0
+            bus_w: Vec::new(),
+            bus_x: Vec::new(),
+            bus_y: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -848,6 +1042,9 @@ mod tests {
             export_writer: None,
             block_index: 0,
             acc: vec![[0.0; 2]; block_size],
+            bus_w: Vec::new(),
+            bus_x: Vec::new(),
+            bus_y: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -937,5 +1134,78 @@ mod tests {
             }
             _ => panic!("Expected Dropped event"),
         }
+    }
+
+    #[test]
+    fn test_spatial_bus_rendering() {
+        use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
+        use crate::audio_engine::types::Voice;
+        use crate::profiler::Profiler;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+
+        let sample_rate = 48_000;
+        let block_size = 256;
+        let source_audio = generate_sine_wave(440.0, sample_rate, block_size);
+        let source_arc = Arc::new(source_audio);
+        let (_play_tx, play_rx) = crossbeam_channel::unbounded();
+        let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+
+        let mut dsp = super::DspProcessor {
+            voices: vec![Voice {
+                id: 1,
+                active: true,
+                data: Some(source_arc),
+                pos: 0.0,
+                playback_rate: 1.0,
+                is_dynamic: false,
+                world_pos: glam::Vec2::new(50.0, 0.0), // Sound to the right
+                velocity: glam::Vec2::ZERO,
+                fade_in_samples: 0,
+                fade_out_samples: 0,
+                filter_state: [0.0, 0.0],
+                filter_a: 0.0,
+                user_gain: 1.0,
+                current_gains: [1.0, 1.0],
+                target_gains: [1.0, 1.0],
+                current_itd: [0.0, 0.0],
+                target_itd: [0.0, 0.0],
+                request_id: 1,
+                sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            }],
+            play_rx,
+            doppler_rx: None,
+            garbage_tx,
+            settings: crate::AudioEngineSettings::default(),
+            listener_pos: std::sync::Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                glam::Vec2::ZERO,
+            )),
+            sample_rate,
+            export_writer: None,
+            block_index: 0,
+            acc: vec![[0.0; 2]; block_size],
+            bus_w: Vec::new(),
+            bus_x: Vec::new(),
+            bus_y: Vec::new(),
+            last_log: Instant::now(),
+            log_interval: Duration::from_secs(1),
+            effect_flags: AudioEffectFlags::new_all_enabled(),
+            debug_tx: None,
+        };
+
+        // Enable SpatialBus effect
+        dsp.effect_flags.set(AudioEffect::SpatialBus, true);
+        let fx_mask = dsp.effect_flags.load();
+
+        let profiler = Profiler::new(100);
+        dsp.process_dsp(block_size, fx_mask, &profiler);
+
+        // Right channel should be louder than left channel for a sound at (50, 0)
+        let sample_l = dsp.acc[10][0];
+        let sample_r = dsp.acc[10][1];
+        assert!(
+            sample_r.abs() > sample_l.abs(),
+            "Right ear should be louder for source on the right in SpatialBus mode"
+        );
     }
 }

@@ -30,6 +30,8 @@ pub enum AudioEffect {
     GainLerp = 1 << 6,
     /// Normalisation douce et contrôle du gain appliqués en sortie globale (limiteur doux).
     Normalization = 1 << 7,
+    /// Bus spatial 2D (Harmoniques Circulaires / Ambisonics 2D W, X, Y pré-accumulés).
+    SpatialBus = 1 << 8,
 }
 
 impl AudioEffect {
@@ -45,6 +47,7 @@ impl AudioEffect {
             ("fade", AudioEffect::FadeInOut),
             ("gain_lerp", AudioEffect::GainLerp),
             ("normalize", AudioEffect::Normalization),
+            ("spatial_bus", AudioEffect::SpatialBus),
         ]
     }
 
