@@ -17,6 +17,7 @@
 - [Rendu Graphique]()
   - [Persistent Mapped Buffers (AZDO)](opengl_azdo_persistent_mapped_buffers.md)
   - [Manuel du Renderer](renderer_manual.md)
+  - [Validation OpenGL avec Mesa Debug Layer](opengl_debug_validation_guide.md)
 
 - [Profilage et Performance]()
   - [Bilan et Rapport Final (AZDO)](20260716_azdo_refactoring_final_report.md)
@@ -35,3 +36,6 @@
 
 - [Console Interactive]()
   - [Manuel des Commandes Console](console_commands.md)
+
+- [Tests & Qualité]()
+  - [Validation OpenGL headless (Mesa Debug)](opengl_debug_validation_guide.md)
