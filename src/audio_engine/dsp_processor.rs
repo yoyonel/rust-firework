@@ -32,9 +32,6 @@ pub struct DspProcessor {
     pub effect_flags: Arc<AudioEffectFlags>,
     /// Réverbération spatiale globale FDN / Schroeder sur le bus accumulé O(1)
     pub spatial_reverb: crate::audio_engine::SpatialReverb,
-    /// Banques d'échantillons pré-filtrés en distance (Distance Audio Atlas)
-    pub rocket_atlas: Option<Arc<crate::audio_engine::SoundAtlas>>,
-    pub explosion_atlas: Option<Arc<crate::audio_engine::SoundAtlas>>,
     /// Canal de debug pour notifier le thread principal des événements audio
     pub debug_tx: Option<Sender<crate::audio_engine::types::AudioDebugEvent>>,
 }
@@ -189,19 +186,6 @@ impl DspProcessor {
 
                 let v = &mut self.voices[voice_idx];
                 v.reset_from_request(&req);
-                if fx_enabled(fx_mask, AudioEffect::DistanceAtlas) {
-                    let atlas_opt = match req.sound_type {
-                        crate::audio_engine::types::AudioSoundType::Rocket => &self.rocket_atlas,
-                        crate::audio_engine::types::AudioSoundType::Explosion => {
-                            &self.explosion_atlas
-                        }
-                    };
-                    if let Some(atlas) = atlas_opt {
-                        let d = req.pos - listener_pos;
-                        let distance = d.length();
-                        v.data = Some(Arc::clone(atlas.select(distance)));
-                    }
-                }
                 let now = Instant::now();
                 let latency = now.duration_since(req.sent_at);
                 profiler.record_metric("audio latency", latency);
@@ -339,9 +323,7 @@ impl DspProcessor {
                 1.0
             };
 
-            let filter_a = if fx_enabled(fx_mask, AudioEffect::LowPassFilter)
-                && !fx_enabled(fx_mask, AudioEffect::DistanceAtlas)
-            {
+            let filter_a = if fx_enabled(fx_mask, AudioEffect::LowPassFilter) {
                 let fc = (self.settings.f_min()
                     + (self.settings.f_max() - self.settings.f_min())
                         * (-self.settings.distance_alpha() * distance).exp())
@@ -456,10 +438,8 @@ impl DspProcessor {
             let d = v.world_pos - self.listener_pos.load();
             let distance = d.length().max(1e-6);
 
-            // Filtre passe-bas dynamique (conditionnel via fx_mask et contourné si DistanceAtlas est actif)
-            let filter_a = if fx_enabled(fx_mask, AudioEffect::LowPassFilter)
-                && !fx_enabled(fx_mask, AudioEffect::DistanceAtlas)
-            {
+            // Filtre passe-bas dynamique (conditionnel via fx_mask)
+            let filter_a = if fx_enabled(fx_mask, AudioEffect::LowPassFilter) {
                 let fc = (self.settings.f_min()
                     + (self.settings.f_max() - self.settings.f_min())
                         * (-self.settings.distance_alpha() * distance).exp())
@@ -759,8 +739,6 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            rocket_atlas: None,
-            explosion_atlas: None,
             debug_tx: None,
         };
 
@@ -810,8 +788,6 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            rocket_atlas: None,
-            explosion_atlas: None,
             debug_tx: None,
         };
 
@@ -960,8 +936,6 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            rocket_atlas: None,
-            explosion_atlas: None,
             debug_tx: None,
         };
 
@@ -1007,8 +981,6 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            rocket_atlas: None,
-            explosion_atlas: None,
             debug_tx: None,
         };
 
@@ -1090,8 +1062,6 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            rocket_atlas: None,
-            explosion_atlas: None,
             debug_tx: Some(debug_tx.clone()),
         };
 
@@ -1108,7 +1078,6 @@ mod tests {
             pos: glam::Vec2::ZERO,
             is_dynamic: false,
             sound_type: AudioSoundType::Rocket,
-            atlas: None,
         };
         play_tx.send(req1).unwrap();
 
@@ -1155,7 +1124,6 @@ mod tests {
             pos: glam::Vec2::ZERO,
             is_dynamic: false,
             sound_type: AudioSoundType::Rocket,
-            atlas: None,
         };
         play_tx.send(req2).unwrap();
 
@@ -1237,8 +1205,6 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            rocket_atlas: None,
-            explosion_atlas: None,
             debug_tx: None,
         };
 

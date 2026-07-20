@@ -35,8 +35,5 @@ pub use safewavwriter::{AudioBlock, SafeWavWriter};
 pub mod spatial_reverb;
 pub use spatial_reverb::SpatialReverb;
 
-pub mod distance_atlas;
-pub use distance_atlas::SoundAtlas;
-
 pub mod config;
 pub use config::AudioConfig;
