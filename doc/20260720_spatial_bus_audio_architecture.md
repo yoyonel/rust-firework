@@ -138,21 +138,41 @@ Lorsqu'une nouvelle explosion se produit, le processeur compare le volume perçu
 
 ---
 
-## 4. Perspectives & Extensions Futures du Moteur Audio
+## 4. Perspectives & Extensions Futures (Évaluation Valeur vs Effort)
 
-Grâce à cette architecture basée sur un bus spatial intermédiaire, plusieurs évolutions à fort impact sont désormais envisageables :
+Grâce à cette architecture basée sur un bus spatial intermédiaire, plusieurs évolutions à fort impact sont désormais envisageables. Elles sont évaluées ci-dessous selon la matrice **Valeur / Immersion perçue** vs **Effort / Complexité technique** et le score **RICE** (détaillés dans le guide des [Méthodologies d'Évaluation d'Architecture](20260720_feature_evaluation_frameworks.md)).
 
-### 4.1 Ambisonics 2D d'Ordre Supérieur (HOA 2D - Ordre 2)
-Ajout des composantes dipolaires et quadrupolaires d'ordre 2 (*U* = cos 2&theta;, *V* = sin 2&theta;) sur 5 canaux (*W, X, Y, U, V*) pour affiner la sélectivité spatiale et la directivité des feux d'artifice.
+### 4.1 Matrice d'Évaluation Synthetique (Valeur vs Effort & RICE)
 
-### 4.2 Reverb Spatiale sur Bus Unique (*Spatial Reverb Bus*)
-Au lieu d'appliquer un effet de réverbération par fusée (incalculable en temps réel), le signal du bus spatial (*W, X, Y*) peut être envoyé à une **unique instance de réverbération algorithmique (FDN - Feedback Delay Network)** ou de **convolution RIR**, créant un écho d'environnement réaliste pour l'ensemble du spectacle à coût constant.
+| Extension | Effort (1-5) | Valeur (1-5) | Score RICE | Qualification & Cadrage | Priorité MoSCoW |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **4.2 Reverb Spatiale sur Bus Unique** | **2** (Faible) | **5** (Maximale) | **150** | **🌟 Quick Win Majeur / "Golden Ticket"** | 🟢 **Must Have (Prochain Jalon)** |
+| **4.4 Distance Audio Atlas** | **1** (Très Faible) | **3.5** (Élevée) | **175** | **⚡ Quick Win Technique** | 🟢 **Must Have (Rentrée Facile)** |
+| **4.3 Décodeur HRTF Binaural Bus** | **4** (Élevé) | **4.5** (Très Élevée) | **56** | **🎯 Pari Stratégique (Casque)** | 🟡 **Should Have (Jalon Ultérieur)** |
+| **4.1 Ambisonics 2D Ordre 2 (HOA)** | **2** (Faible) | **2** (Faible en Stéréo) | **25** | **💤 Fausse Bonne Idée (pour Stéréo)** | 🔴 **Won't Have (Déprioritisé)** |
 
-### 4.3 Décodeur HRTF Binaural sur Bus (*Bus-Level Binaural Convolver*)
-Application d'un filtrage HRTF (Head-Related Transfer Function) par paires de filtres FIR **une seule fois sur la sortie décodée du bus**, réinjectant les indices de phase binauraux (ITD/pinna filtering) sans recalculer par voix.
+---
 
-### 4.4 Banque d'Échantillons Pré-Spatialisés & Stratification de Distance (*Distance Audio Atlas*)
-Pré-calcul et stockage en mémoire de variantes d'échantillons pré-filtrés en distance (`explosion_near.wav`, `explosion_mid.wav`, `explosion_far.wav`) pour supprimer également le filtre IIR passe-bas en temps réel.
+### 4.2 Analyse Détaillée des Perspectives
+
+#### 🟢 4.2 Reverb Spatiale sur Bus Unique (*Spatial Reverb Bus*)
+- **Concept** : Au lieu d'appliquer un effet de réverbération par fusée (incalculable en temps réel), le signal du bus spatial (*W, X, Y*) est envoyé à une **unique instance de réverbération algorithmique (FDN - Feedback Delay Network)** ou de convolution RIR (Room Impulse Response).
+- **Gain & Immersion** : En acoustique extérieure (vallée, stade, ville), l'écho et la réverbération apportent une dimension **colossale et majestueuse** aux grosses explosions.
+- **Complexité** : Coût constant <b><i>O</i>(1)</b> indépendant du nombre de voix.
+
+#### 🟢 4.4 Banque d'Échantillons Pré-Spatialisés (*Distance Audio Atlas*)
+- **Concept** : Pré-calcul et stockage en mémoire de variantes d'échantillons pré-filtrés en distance (`explosion_near.wav`, `explosion_mid.wav`, `explosion_far.wav`).
+- **Gain & Immersion** : Suppression totale des filtres IIR passe-bas dans la boucle audio temps réel *hot-path*.
+- **Complexité** : Chargement initial légèrement plus long mais trivial en code (`std::cmp::min`).
+
+#### 🟡 4.3 Décodeur HRTF Binaural sur Bus (*Bus-Level Binaural Convolver*)
+- **Concept** : Application d'un filtrage HRTF (Head-Related Transfer Function via jeux de filtres FIR SOFA/KEMAR) **une seule fois sur la sortie décodée du bus** via convolution FFT overlap-save.
+- **Gain & Immersion** : Spatialisation 3D réaliste avec indices de phase (ITD) et d'élévation pour l'écoute au casque.
+- **Complexité** : Nécessite l'intégration d'un convoluteur FFT audio par blocs.
+
+#### 🔴 4.1 Ambisonics 2D d'Ordre Supérieur (*HOA 2D - Ordre 2*)
+- **Concept** : Ajout des composantes dipolaires et quadrupolaires d'ordre 2 (*U* = cos 2&theta;, *V* = sin 2&theta;) sur 5 canaux (*W, X, Y, U, V*).
+- **Justification du rejet** : L'ordre 2 n'apporte de réelle précision angulaire que pour des systèmes multi-enceintes physiques (5.1, 7.1, Atmos). En rendu 2 canaux stéréo (casque/enceintes PC), le gain acoustique par rapport à l'ordre 1 est négligeable.
 
 ---
 
