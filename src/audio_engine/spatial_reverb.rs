@@ -76,15 +76,15 @@ impl SpatialReverb {
     pub fn new(sample_rate: u32) -> Self {
         let scale = sample_rate as f32 / 44100.0;
 
-        // Longueurs de délai premières pour éviter les résonances métalliques
-        let comb_delays_l = [1116, 1188, 1277, 1356];
-        let comb_delays_r = [1116 + 23, 1188 + 23, 1277 + 23, 1356 + 23];
+        // Longueurs de délai pour écho d'espace extérieur (Outdoor Open-Air Echo)
+        let comb_delays_l = [1553, 2129, 2801, 3547];
+        let comb_delays_r = [1553 + 47, 2129 + 47, 2801 + 47, 3547 + 47];
 
-        let allpass_delays_l = [556, 441];
-        let allpass_delays_r = [556 + 23, 441 + 23];
+        let allpass_delays_l = [641, 317];
+        let allpass_delays_r = [641 + 47, 317 + 47];
 
-        let feedback = 0.78;
-        let damp = 0.25;
+        let feedback = 0.68;
+        let damp = 0.50; // Amortissement HF fort (absorption de l'air en extérieur)
 
         let combs_l = comb_delays_l
             .iter()
@@ -98,12 +98,12 @@ impl SpatialReverb {
 
         let allpasses_l = allpass_delays_l
             .iter()
-            .map(|&d| AllPassFilter::new((d as f32 * scale) as usize, 0.5))
+            .map(|&d| AllPassFilter::new((d as f32 * scale) as usize, 0.35))
             .collect();
 
         let allpasses_r = allpass_delays_r
             .iter()
-            .map(|&d| AllPassFilter::new((d as f32 * scale) as usize, 0.5))
+            .map(|&d| AllPassFilter::new((d as f32 * scale) as usize, 0.35))
             .collect();
 
         Self {
@@ -111,7 +111,7 @@ impl SpatialReverb {
             combs_r,
             allpasses_l,
             allpasses_r,
-            wet_gain: 0.18, // 18% de signal réverbéré
+            wet_gain: 0.08, // 8% de signal réverbéré subtil et majestueux
         }
     }
 
@@ -120,19 +120,21 @@ impl SpatialReverb {
     #[inline(always)]
     pub fn process_block(&mut self, acc: &mut [[f32; 2]], frames: usize) {
         let wet = self.wet_gain;
+        let comb_scale = 0.25; // Normalisation des 4 peignes en parallèle (évite la saturation)
+
         for frame in acc[..frames].iter_mut() {
             let in_l = frame[0];
             let in_r = frame[1];
 
-            // 1. Filtrage en parallèle par les filtres de peigne
+            // 1. Filtrage en parallèle par les filtres de peigne avec normalisation
             let mut out_l = 0.0;
             for comb in self.combs_l.iter_mut() {
-                out_l += comb.process(in_l);
+                out_l += comb.process(in_l) * comb_scale;
             }
 
             let mut out_r = 0.0;
             for comb in self.combs_r.iter_mut() {
-                out_r += comb.process(in_r);
+                out_r += comb.process(in_r) * comb_scale;
             }
 
             // 2. Diffusion à travers les filtres tout-passe en série

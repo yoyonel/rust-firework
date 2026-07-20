@@ -47,12 +47,15 @@ impl SoundAtlas {
 
 /// Applique un filtre passe-bas du 1er ordre offline sur l'échantillon brut.
 fn prefilter_lowpass(input: &[[f32; 2]], sample_rate: u32, fc: f32) -> Vec<[f32; 2]> {
+    if input.is_empty() {
+        return Vec::new();
+    }
     let dt = 1.0 / sample_rate as f32;
     let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
     let a = dt / (rc + dt);
 
     let mut output = Vec::with_capacity(input.len());
-    let mut state = [0.0f32; 2];
+    let mut state = input[0]; // Initialisation propre sans saut de tension (pas de clic)
 
     for &[l, r] in input {
         state[0] += a * (l - state[0]);

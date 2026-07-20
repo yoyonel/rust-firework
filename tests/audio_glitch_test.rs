@@ -69,6 +69,8 @@ fn test_dsp_no_glitches_under_normal_play() {
         log_interval: Duration::from_secs(1),
         effect_flags: AudioEffectFlags::new_all_enabled(),
         spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
+        rocket_atlas: None,
+        explosion_atlas: None,
         debug_tx: None,
     };
 
@@ -145,6 +147,8 @@ fn test_dsp_voice_stealing_glitch_limit() {
         log_interval: Duration::from_secs(1),
         effect_flags: AudioEffectFlags::new_all_enabled(),
         spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
+        rocket_atlas: None,
+        explosion_atlas: None,
         debug_tx: None,
     };
 
@@ -254,6 +258,8 @@ fn test_block_processing_budget() {
         log_interval: Duration::from_secs(1),
         effect_flags: AudioEffectFlags::new_all_enabled(),
         spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
+        rocket_atlas: None,
+        explosion_atlas: None,
         debug_tx: None,
     };
 
@@ -286,5 +292,83 @@ fn test_block_processing_budget() {
         "Le temps de calcul du DSP ({:?}) dépasse le budget autorisé ({:?}) !",
         duration,
         max_allowed
+    );
+}
+
+#[test]
+fn test_distance_atlas_no_glitches() {
+    use fireworks_sim::audio_engine::effect_flags::AudioEffect;
+    use fireworks_sim::audio_engine::SoundAtlas;
+
+    let sample_rate = 48_000;
+    let block_size = 64;
+    let sound_len = 1024;
+    let source_audio = generate_sine_wave(440.0, sample_rate, sound_len);
+    let source_arc = Arc::new(source_audio);
+    let atlas = Arc::new(SoundAtlas::from_raw_data(source_arc.clone(), sample_rate));
+
+    let (play_tx, play_rx) = crossbeam_channel::unbounded();
+    let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+
+    let mut dsp = fireworks_sim::audio_engine::dsp_processor::DspProcessor {
+        voices: vec![Voice::new(), Voice::new(), Voice::new(), Voice::new()],
+        play_rx,
+        doppler_rx: None,
+        garbage_tx,
+        settings: fireworks_sim::AudioEngineSettings::default(),
+        listener_pos: std::sync::Arc::new(fireworks_sim::audio_engine::types::AtomicVec2::new(
+            glam::Vec2::ZERO,
+        )),
+        sample_rate,
+        export_writer: None,
+        block_index: 0,
+        acc: vec![[0.0; 2]; block_size],
+        bus_w: Vec::new(),
+        bus_x: Vec::new(),
+        bus_y: Vec::new(),
+        last_log: Instant::now(),
+        log_interval: Duration::from_secs(1),
+        effect_flags: AudioEffectFlags::new_all_enabled(),
+        spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
+        rocket_atlas: Some(atlas.clone()),
+        explosion_atlas: Some(atlas),
+        debug_tx: None,
+    };
+
+    dsp.effect_flags.set(AudioEffect::DistanceAtlas, true);
+
+    let req = fireworks_sim::audio_engine::types::PlayRequest {
+        data: source_arc,
+        fade_in: 32,
+        fade_out: 64,
+        gain: 0.8,
+        filter_a: 0.05,
+        sent_at: Instant::now(),
+        request_id: 1,
+        id: 10,
+        pos: glam::Vec2::new(500.0, 0.0), // Distance intermédiare (Mid atlas)
+        is_dynamic: false,
+        sound_type: AudioSoundType::Explosion,
+        atlas: None,
+    };
+    play_tx.send(req).unwrap();
+
+    let profiler = Profiler::new(10);
+    let mut recorded_output = Vec::new();
+
+    for _ in 0..15 {
+        let mut buffer = vec![0.0f32; block_size * 2];
+        dsp.process_block(&mut buffer, 1.0, &profiler);
+        for frame in buffer.chunks_exact(2) {
+            recorded_output.push([frame[0], frame[1]]);
+        }
+    }
+
+    let glitches = detect_glitches(&recorded_output, 0.2);
+    assert_eq!(
+        glitches.len(),
+        0,
+        "DistanceAtlas a provoqué des craquements : {:?}",
+        glitches
     );
 }

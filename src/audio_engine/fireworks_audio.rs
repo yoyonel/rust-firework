@@ -43,8 +43,8 @@ impl std::fmt::Display for AudioThreadError {
 pub struct FireworksAudio3D {
     rocket_data: Arc<Vec<[f32; 2]>>,
     explosion_data: Arc<Vec<[f32; 2]>>,
-    rocket_atlas: crate::audio_engine::SoundAtlas,
-    explosion_atlas: crate::audio_engine::SoundAtlas,
+    rocket_atlas: Arc<crate::audio_engine::SoundAtlas>,
+    explosion_atlas: Arc<crate::audio_engine::SoundAtlas>,
 
     listener_pos: Arc<crate::audio_engine::types::AtomicVec2>,
     sample_rate: u32,
@@ -99,12 +99,14 @@ impl FireworksAudio3D {
         let rocket_arc = Arc::new(rocket_data);
         let explosion_arc = Arc::new(explosion_data);
 
-        let rocket_atlas =
-            crate::audio_engine::SoundAtlas::from_raw_data(rocket_arc.clone(), config.sample_rate);
-        let explosion_atlas = crate::audio_engine::SoundAtlas::from_raw_data(
+        let rocket_atlas = Arc::new(crate::audio_engine::SoundAtlas::from_raw_data(
+            rocket_arc.clone(),
+            config.sample_rate,
+        ));
+        let explosion_atlas = Arc::new(crate::audio_engine::SoundAtlas::from_raw_data(
             explosion_arc.clone(),
             config.sample_rate,
-        );
+        ));
 
         let mut voices = Vec::with_capacity(config.max_voices);
         voices.resize_with(config.max_voices, Voice::new);
@@ -151,7 +153,6 @@ impl FireworksAudio3D {
         &self,
         id: u64,
         data: &Arc<Vec<[f32; 2]>>, // 🎯 MODIFICATION : On reçoit la référence vers l'Arc d'origine !
-        atlas: Option<crate::audio_engine::SoundAtlas>,
         pos: Vec2,
         gain: f32,
         is_dynamic: bool,
@@ -202,7 +203,14 @@ impl FireworksAudio3D {
             pos,
             is_dynamic,
             sound_type,
-            atlas,
+            atlas: match sound_type {
+                crate::audio_engine::types::AudioSoundType::Rocket => {
+                    Some((*self.rocket_atlas).clone())
+                }
+                crate::audio_engine::types::AudioSoundType::Explosion => {
+                    Some((*self.explosion_atlas).clone())
+                }
+            },
         };
 
         if let Err(e) = self.play_tx.try_send(req) {
@@ -221,7 +229,6 @@ impl FireworksAudio3D {
         self.enqueue_sound(
             0,
             &self.rocket_data,
-            Some(self.rocket_atlas.clone()),
             pos,
             gain,
             false,
@@ -233,7 +240,6 @@ impl FireworksAudio3D {
         self.enqueue_sound(
             id,
             &self.rocket_data,
-            Some(self.rocket_atlas.clone()),
             pos,
             gain,
             true,
@@ -245,7 +251,6 @@ impl FireworksAudio3D {
         self.enqueue_sound(
             0,
             &self.explosion_data,
-            Some(self.explosion_atlas.clone()),
             pos,
             gain,
             false,
@@ -274,6 +279,8 @@ impl FireworksAudio3D {
 
         let garbage_tx = self.garbage_tx.clone();
         let debug_tx_clone = self.debug_tx.clone();
+        let rocket_atlas_clone = self.rocket_atlas.clone();
+        let explosion_atlas_clone = self.explosion_atlas.clone();
 
         thread::spawn(move || {
             let audio_result: Result<(), AudioThreadError> = (|| {
@@ -310,6 +317,8 @@ impl FireworksAudio3D {
                     log_interval: Duration::from_secs(4),
                     effect_flags: effect_flags_clone,
                     spatial_reverb: crate::audio_engine::SpatialReverb::new(sr),
+                    rocket_atlas: Some(rocket_atlas_clone),
+                    explosion_atlas: Some(explosion_atlas_clone),
                     debug_tx: Some(debug_tx_clone),
                 };
 
