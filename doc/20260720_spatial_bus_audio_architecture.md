@@ -176,6 +176,24 @@ Grâce à cette architecture basée sur un bus spatial intermédiaire, plusieurs
 
 ---
 
+### 4.3 Implémentation Effective des Fonctionnalités P1 (Livraison 2026-07)
+
+Les deux fonctionnalités prioritaires du quadrant **P1** ont été intégrées avec succès au moteur audio :
+
+1. **Réverbération Spatiale sur Bus Unique (`SpatialReverb`)** :
+   - Module dédié : [`src/audio_engine/spatial_reverb.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/spatial_reverb.rs)
+   - Combinaison de **4 filtres de peigne en parallèle** avec atténuation passe-bas HF (absorption de l'air) et **2 filtres tout-passe en série** (densification de l'écho).
+   - Traitement exécuté **une seule fois par bloc d'audio stéréo** après accumulation du bus spatial, garantissant un coût CPU strictement constant <b><i>O</i>(1)</b>.
+   - Activé/Désactivé à la volée via le bitmask atomique `AudioEffect::SpatialReverb`.
+
+2. **Banque d'Échantillons Pré-Spatialisés (`DistanceAudioAtlas`)** :
+   - Module dédié : [`src/audio_engine/distance_atlas.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/distance_atlas.rs)
+   - Génération au chargement d'un `SoundAtlas` contenant 3 estratifications spectraux : `near` (plein spectre), `mid` (filtré $f_c = 4000$ Hz) et `far` (filtré $f_c = 1200$ Hz).
+   - En runtime, la voix bascule dynamiquement sur l'échantillon pré-filtré sans ré-exécuter la boucle de filtrage IIR passe-bas par échantillon.
+   - Activé/Désactivé à la volée via le bitmask atomique `AudioEffect::DistanceAtlas`.
+
+---
+
 ## 5. Références Techniques & Académiques
 
 - **Ambisonics & B-Format** (Wikipedia) : [https://en.wikipedia.org/wiki/Ambisonics](https://en.wikipedia.org/wiki/Ambisonics)
