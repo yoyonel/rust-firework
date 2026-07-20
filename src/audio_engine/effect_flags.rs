@@ -86,7 +86,8 @@ pub const DEFAULT_FLAGS: u32 = AudioEffect::Binaural as u32
     | AudioEffect::Doppler as u32
     | AudioEffect::FadeInOut as u32
     | AudioEffect::GainLerp as u32
-    | AudioEffect::Normalization as u32;
+    | AudioEffect::Normalization as u32
+    | AudioEffect::SpatialReverb as u32;
 
 /// Bitmask partagé entre le main thread et le thread CPAL.
 ///

@@ -37,5 +37,13 @@ pub trait AudioEngine {
         1000.0
     }
 
+    /// Définir le gain wet de la réverbération spatiale (0.00 à 1.00).
+    fn set_reverb_wet(&self, _wet: f32) {}
+
+    /// Obtenir le gain wet de la réverbération spatiale.
+    fn get_reverb_wet(&self) -> f32 {
+        0.08
+    }
+
     fn as_audio_engine(&self) -> &dyn AudioEngine;
 }

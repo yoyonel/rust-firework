@@ -65,6 +65,9 @@ pub struct FireworksAudio3D {
     /// Lock-free : le thread CPAL lit, le main thread écrit.
     effect_flags: std::sync::Arc<AudioEffectFlags>,
 
+    /// Gain du signal réverbéré (Wet gain de 0.00 à 1.00) partagé de manière lock-free.
+    reverb_wet: Arc<std::sync::atomic::AtomicU32>,
+
     // NOUVEAU : Tracking et debug des événements audio
     debug_rx: crossbeam_channel::Receiver<crate::audio_engine::types::AudioDebugEvent>,
     debug_tx: crossbeam_channel::Sender<crate::audio_engine::types::AudioDebugEvent>,
@@ -128,6 +131,7 @@ impl FireworksAudio3D {
             garbage_rx,
             doppler_receiver: config.doppler_receiver,
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            reverb_wet: Arc::new(std::sync::atomic::AtomicU32::new(0.08f32.to_bits())),
             debug_tx,
             debug_rx,
             next_request_id: std::sync::atomic::AtomicU64::new(1),
@@ -252,6 +256,7 @@ impl FireworksAudio3D {
         let doppler_rx_clone = self.doppler_receiver.clone();
         let listener_pos_clone = self.listener_pos.clone();
         let effect_flags_clone = self.effect_flags.clone();
+        let reverb_wet_clone = self.reverb_wet.clone();
 
         let export_writer_arc: Option<Arc<Mutex<SafeWavWriter>>> =
             export_path.map(|path| Arc::new(Mutex::new(SafeWavWriter::new(path, sr))));
@@ -293,7 +298,10 @@ impl FireworksAudio3D {
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
                     effect_flags: effect_flags_clone,
-                    spatial_reverb: crate::audio_engine::SpatialReverb::new(sr),
+                    spatial_reverb: crate::audio_engine::SpatialReverb::new_with_wet(
+                        sr,
+                        reverb_wet_clone,
+                    ),
                     debug_tx: Some(debug_tx_clone),
                 };
 
@@ -436,6 +444,17 @@ impl AudioEngine for FireworksAudio3D {
 
     fn get_max_distance(&self) -> f32 {
         self.settings.max_distance()
+    }
+
+    fn set_reverb_wet(&self, wet: f32) {
+        self.reverb_wet.store(
+            wet.clamp(0.0, 1.0).to_bits(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    fn get_reverb_wet(&self) -> f32 {
+        f32::from_bits(self.reverb_wet.load(std::sync::atomic::Ordering::Relaxed))
     }
 
     fn as_audio_engine(&self) -> &dyn AudioEngine {

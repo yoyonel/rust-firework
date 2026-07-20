@@ -63,17 +63,20 @@ impl AllPassFilter {
     }
 }
 
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::Arc;
+
 pub struct SpatialReverb {
     combs_l: Vec<CombFilter>,
     combs_r: Vec<CombFilter>,
     allpasses_l: Vec<AllPassFilter>,
     allpasses_r: Vec<AllPassFilter>,
-    pub wet_gain: f32,
+    pub wet_gain: Arc<AtomicU32>,
 }
 
 impl SpatialReverb {
-    /// Crée une nouvelle instance de réverbération spatiale pré-allouée.
-    pub fn new(sample_rate: u32) -> Self {
+    /// Crée une nouvelle instance de réverbération spatiale pré-allouée avec un wet_gain partagé.
+    pub fn new_with_wet(sample_rate: u32, wet_gain: Arc<AtomicU32>) -> Self {
         let scale = sample_rate as f32 / 44100.0;
 
         // Longueurs de délai pour écho d'espace extérieur (Outdoor Open-Air Echo)
@@ -111,15 +114,29 @@ impl SpatialReverb {
             combs_r,
             allpasses_l,
             allpasses_r,
-            wet_gain: 0.08, // 8% de signal réverbéré subtil et majestueux
+            wet_gain,
         }
+    }
+
+    /// Crée une nouvelle instance avec la valeur par défaut (8% wet).
+    pub fn new(sample_rate: u32) -> Self {
+        Self::new_with_wet(sample_rate, Arc::new(AtomicU32::new(0.08f32.to_bits())))
+    }
+
+    pub fn set_wet_gain(&self, wet: f32) {
+        self.wet_gain
+            .store(wet.clamp(0.0, 1.0).to_bits(), Ordering::Relaxed);
+    }
+
+    pub fn get_wet_gain(&self) -> f32 {
+        f32::from_bits(self.wet_gain.load(Ordering::Relaxed))
     }
 
     /// Applique la réverbération spatiale en place sur le buffer d'accumulation stéréo.
     /// Exécutée UNE SEULE FOIS par bloc d'audio (coût O(1)).
     #[inline(always)]
     pub fn process_block(&mut self, acc: &mut [[f32; 2]], frames: usize) {
-        let wet = self.wet_gain;
+        let wet = self.get_wet_gain();
         let comb_scale = 0.25; // Normalisation des 4 peignes en parallèle (évite la saturation)
 
         for frame in acc[..frames].iter_mut() {

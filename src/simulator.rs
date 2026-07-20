@@ -1071,6 +1071,49 @@ where
             "audio.fx_status",
             "List all DSP effects and their current state",
         );
+
+        // audio.reverb_wet <gain 0.0..1.0> — Ajuste ou affiche le gain wet de la réverbération
+        self.commands_registry
+            .register_for_audio("audio.reverb_wet", |engine, input| {
+                let parts: Vec<&str> = input.split_whitespace().collect();
+                match parts.as_slice() {
+                    [_, value_str] => {
+                        if let Ok(val) = value_str.parse::<f32>() {
+                            let clamped = val.clamp(0.0, 1.0);
+                            engine.set_reverb_wet(clamped);
+                            format!(
+                                "Spatial Reverb Wet Gain -> {:.2} ({:.0}%)",
+                                clamped,
+                                clamped * 100.0
+                            )
+                        } else {
+                            "Valeur invalide. Attendu : nombre flottant entre 0.0 et 1.0 (ex: 0.08)".to_string()
+                        }
+                    }
+                    _ => {
+                        let current = engine.get_reverb_wet();
+                        format!(
+                            "Spatial Reverb Wet Gain = {:.2} ({:.0}%)\n\
+                            • 0.00 (0%)   : Signal pur sec (Dry). Aucune réverbération.\n\
+                            • 0.08 (8%)   : [Par défaut] Écho d'espace extérieur subtil & naturel.\n\
+                            • 0.20 (20%)  : Réverbération moyenne (espace semi-fermé / vallonné).\n\
+                            • 0.50 (50%)  : Écho très fort (salle de concert / cathédrale).\n\
+                            • 1.00 (100%) : 100% signal réverbéré (écho noyé).\n\
+                            Usage: audio.reverb_wet <0.0..1.0>",
+                            current,
+                            current * 100.0
+                        )
+                    }
+                }
+            });
+        self.commands_registry.register_hint(
+            "audio.reverb_wet",
+            "<0.0..1.0> — Set or view Spatial Reverb wet mix gain (Default: 0.08)",
+        );
+        self.commands_registry
+            .register_current_value("audio.reverb_wet", |audio, _| {
+                format!("{:.2}", audio.get_reverb_wet())
+            });
     }
 
     fn register_physic_commands(&mut self) {
