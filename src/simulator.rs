@@ -89,6 +89,7 @@ where
 
     // Flags for console commands
     reload_shaders_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    physic_reinit_requested: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
     // Renderer configuration
     renderer_config: std::sync::Arc<std::sync::RwLock<crate::renderer_engine::RendererConfig>>,
@@ -158,6 +159,7 @@ where
             reload_shaders_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
+            physic_reinit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             renderer_config: std::sync::Arc::new(std::sync::RwLock::new(
                 crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
                     .unwrap_or_default(),
@@ -551,6 +553,18 @@ where
                     .store(false, std::sync::atomic::Ordering::Relaxed);
             }
             self.reload_shaders();
+        }
+
+        if self
+            .physic_reinit_requested
+            .swap(false, std::sync::atomic::Ordering::Relaxed)
+        {
+            let config = self.physic_engine.get_config().clone();
+            let new_max =
+                config.max_rockets * (config.particles_per_explosion + config.particles_per_trail);
+            self.renderer_engine.recreate_buffers(new_max);
+            self.console
+                .log("-> Engines (physic + renderer) re-synchronized");
         }
     }
 
@@ -1062,8 +1076,233 @@ where
     fn register_physic_commands(&mut self) {
         self.commands_registry
             .register_for_physic("physic.config", |engine, _| {
-                format!("{:#?}", engine.get_config())
+                let current = engine.get_config().clone();
+                let pending = engine.get_config_mut().clone();
+                if current == pending {
+                    format!("Applied Configuration:\n{:#?}", current)
+                } else {
+                    format!(
+                        "Applied Configuration:\n{:#?}\n\n[PENDING CHANGES] (run 'physic.apply' to apply):\n{:#?}",
+                        current, pending
+                    )
+                }
             });
+        self.commands_registry.register_hint(
+            "physic.config",
+            "Display current applied and pending physics configurations",
+        );
+
+        macro_rules! reg_usize_param {
+            ($registry:expr, $name:expr, $field:ident, $hint:expr) => {
+                $registry.register_for_physic($name, |engine, args| {
+                    let val_str = args.split_whitespace().nth(1).unwrap_or("");
+                    if val_str.is_empty() {
+                        let applied = engine.get_config().$field;
+                        let pending = engine.get_config_mut().$field;
+                        return format!(
+                            "Usage: {} <value> (applied: {}, pending: {})",
+                            $name, applied, pending
+                        );
+                    }
+                    match val_str.parse::<usize>() {
+                        Ok(val) => {
+                            engine.get_config_mut().$field = val;
+                            format!(
+                                "-> Set {} = {} (pending, run 'physic.apply' to apply)",
+                                $name, val
+                            )
+                        }
+                        Err(_) => "x Invalid unsigned integer value".to_string(),
+                    }
+                });
+                $registry.register_hint($name, $hint);
+                $registry.register_current_value($name, |_, physic| {
+                    physic.get_config().$field.to_string()
+                });
+            };
+        }
+
+        macro_rules! reg_f32_param {
+            ($registry:expr, $name:expr, $field:ident, $hint:expr) => {
+                $registry.register_for_physic($name, |engine, args| {
+                    let val_str = args.split_whitespace().nth(1).unwrap_or("");
+                    if val_str.is_empty() {
+                        let applied = engine.get_config().$field;
+                        let pending = engine.get_config_mut().$field;
+                        return format!(
+                            "Usage: {} <value> (applied: {}, pending: {})",
+                            $name, applied, pending
+                        );
+                    }
+                    match val_str.parse::<f32>() {
+                        Ok(val) => {
+                            engine.get_config_mut().$field = val;
+                            format!(
+                                "-> Set {} = {} (pending, run 'physic.apply' to apply)",
+                                $name, val
+                            )
+                        }
+                        Err(_) => "x Invalid float value".to_string(),
+                    }
+                });
+                $registry.register_hint($name, $hint);
+                $registry.register_current_value($name, |_, physic| {
+                    physic.get_config().$field.to_string()
+                });
+            };
+        }
+
+        reg_usize_param!(
+            self.commands_registry,
+            "physic.max_rockets",
+            max_rockets,
+            "Set maximum concurrent rockets"
+        );
+        reg_usize_param!(
+            self.commands_registry,
+            "physic.particles_per_explosion",
+            particles_per_explosion,
+            "Set particles per explosion"
+        );
+        reg_usize_param!(
+            self.commands_registry,
+            "physic.particles_per_trail",
+            particles_per_trail,
+            "Set particles per trail"
+        );
+
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.rocket_interval_mean",
+            rocket_interval_mean,
+            "Set mean time interval between rocket spawns (seconds)"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.rocket_interval_variation",
+            rocket_interval_variation,
+            "Set variation of interval between rocket spawns"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.rocket_max_next_interval",
+            rocket_max_next_interval,
+            "Set maximum interval constraint between rocket spawns"
+        );
+
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.spawn_rocket_margin",
+            spawn_rocket_margin,
+            "Set screen margin for rocket spawns"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.spawn_rocket_vertical_angle",
+            spawn_rocket_vertical_angle,
+            "Set vertical spawn angle of rockets (radians)"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.spawn_rocket_angle_variation",
+            spawn_rocket_angle_variation,
+            "Set random angle variation of spawned rockets"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.spawn_rocket_min_speed",
+            spawn_rocket_min_speed,
+            "Set minimum initial speed of spawned rockets"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.spawn_rocket_max_speed",
+            spawn_rocket_max_speed,
+            "Set maximum initial speed of spawned rockets"
+        );
+
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.explosion_threshold",
+            explosion_threshold,
+            "Set speed threshold under which rockets explode"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.gravity",
+            gravity,
+            "Set gravity value affecting rockets and particles"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.initial_rocket_speed",
+            initial_rocket_speed,
+            "Set target initial speed (metadata)"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.explosion_min_vel",
+            explosion_min_vel,
+            "Set minimum velocity of explosion particles"
+        );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.explosion_max_vel",
+            explosion_max_vel,
+            "Set maximum velocity of explosion particles"
+        );
+
+        // Apply config changes / reinit engines
+        let physic_reinit_flag = self.physic_reinit_requested.clone();
+        self.commands_registry
+            .register_for_physic("physic.apply", move |engine, _| {
+                let pending = engine.get_config_mut().clone();
+                let _updated = engine.reload_config(&pending);
+                physic_reinit_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+                "-> Physics configuration applied and engines re-synchronized.".to_string()
+            });
+        self.commands_registry.register_hint(
+            "physic.apply",
+            "Apply all pending configuration changes and re-synchronize engines (physics & renderer)",
+        );
+
+        // Save current configuration to disk
+        self.commands_registry
+            .register_for_physic("physic.config.save", |engine, _| {
+                let current = engine.get_config();
+                match current.save_to_file("assets/config/physic.toml") {
+                    Ok(_) => {
+                        "-> Physics configuration saved to assets/config/physic.toml".to_string()
+                    }
+                    Err(e) => format!("x Failed to save physics configuration: {}", e),
+                }
+            });
+        self.commands_registry.register_hint(
+            "physic.config.save",
+            "Save current applied physics configuration to assets/config/physic.toml",
+        );
+
+        // Reload configuration from disk
+        let reinit_flag_reload = self.physic_reinit_requested.clone();
+        self.commands_registry
+            .register_for_physic("physic.config.reload", move |engine, _| {
+                match crate::physic_engine::config::PhysicConfig::from_file(
+                    "assets/config/physic.toml",
+                ) {
+                    Ok(new_cfg) => {
+                        *engine.get_config_mut() = new_cfg.clone();
+                        let _updated = engine.reload_config(&new_cfg);
+                        reinit_flag_reload.store(true, std::sync::atomic::Ordering::Relaxed);
+                        "-> Physics configuration reloaded from disk and engines re-synchronized"
+                            .to_string()
+                    }
+                    Err(e) => format!("x Failed to load physics configuration: {}", e),
+                }
+            });
+        self.commands_registry.register_hint(
+            "physic.config.reload",
+            "Reload physics configuration from assets/config/physic.toml and re-synchronize engines",
+        );
 
         // --- Explosion Shape Commands ---
 

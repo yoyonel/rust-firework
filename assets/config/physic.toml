@@ -29,5 +29,5 @@ spawn_rocket_max_speed = 500.0
 
 gravity = -200.0
 initial_rocket_speed = 100.0
-explosion_min_vel = 400.0
-explosion_max_vel = 500.0
+explosion_min_vel = 60.0
+explosion_max_vel = 200.0

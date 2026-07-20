@@ -57,6 +57,8 @@ pub trait PhysicEngine {
 
     fn get_config(&self) -> &PhysicConfig;
 
+    fn get_config_mut(&mut self) -> &mut PhysicConfig;
+
     /// Définit la forme des explosions (sphérique par défaut, ou basée sur image).
     fn set_explosion_shape(&mut self, shape: ExplosionShape);
 

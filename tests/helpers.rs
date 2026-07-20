@@ -132,6 +132,9 @@ impl PhysicEngine for DummyPhysic {
     fn get_config(&self) -> &PhysicConfig {
         &self.config
     }
+    fn get_config_mut(&mut self) -> &mut PhysicConfig {
+        &mut self.config
+    }
     fn set_explosion_shape(&mut self, shape: ExplosionShape) {
         self.explosion_shape = shape;
     }
@@ -310,6 +313,7 @@ impl AudioEngine for TestAudio {
 pub struct TestPhysic {
     pub log: SharedLog,
     pub config: PhysicConfig,
+    pub pending_config: PhysicConfig,
     pub fail_on_update: bool,
     pub explosion_shape: ExplosionShape,
 }
@@ -320,6 +324,7 @@ impl TestPhysic {
         Self {
             log,
             config: PhysicConfig::default(),
+            pending_config: PhysicConfig::default(),
             fail_on_update: false,
             explosion_shape: ExplosionShape::default(),
         }
@@ -348,11 +353,16 @@ impl PhysicEngine for TestPhysic {
     fn close(&mut self) {
         self.log.borrow_mut().push("physic.close".into());
     }
-    fn reload_config(&mut self, _config: &PhysicConfig) -> bool {
+    fn reload_config(&mut self, config: &PhysicConfig) -> bool {
+        self.config = config.clone();
+        self.pending_config = config.clone();
         false
     }
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+    fn get_config_mut(&mut self) -> &mut PhysicConfig {
+        &mut self.pending_config
     }
     fn set_explosion_shape(&mut self, shape: ExplosionShape) {
         self.explosion_shape = shape;

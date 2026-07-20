@@ -32,6 +32,7 @@ pub struct PhysicEngineFireworks {
     rng: rand::rngs::ThreadRng,
 
     config: PhysicConfig,
+    pending_config: PhysicConfig,
     rocket_margin_min_x: f32,
     rocket_margin_max_x: f32,
 
@@ -72,6 +73,7 @@ impl PhysicEngineFireworks {
             window_width,
             rng,
             config: config.clone(),
+            pending_config: config.clone(),
             rocket_margin_min_x: 0.0,
             rocket_margin_max_x: 0.0,
             particles_pools_for_rockets: ParticlesPoolsForRockets::new(
@@ -90,13 +92,22 @@ impl PhysicEngineFireworks {
 
     fn reload_config(&mut self, new_config: &PhysicConfig) -> bool {
         let old_max_rockets = self.config.max_rockets;
+        let old_per_explosion = self.config.particles_per_explosion;
+        let old_per_trail = self.config.particles_per_trail;
+
         self.config = new_config.clone();
+        self.pending_config = new_config.clone();
 
         let max_rockets_updated = new_config.max_rockets != old_max_rockets;
-        if max_rockets_updated {
+        let pool_params_updated = new_config.particles_per_explosion != old_per_explosion
+            || new_config.particles_per_trail != old_per_trail;
+
+        if max_rockets_updated || pool_params_updated {
             info!(
-                "Reinitializing physics buffers due to max_rockets change: {} -> {}",
-                old_max_rockets, new_config.max_rockets
+                "Reinitializing physics buffers due to config change: max_rockets ({} -> {}), per_explosion ({} -> {}), per_trail ({} -> {})",
+                old_max_rockets, new_config.max_rockets,
+                old_per_explosion, new_config.particles_per_explosion,
+                old_per_trail, new_config.particles_per_trail
             );
             self.triggered_explosions = vec![Particle::default(); new_config.max_rockets];
 
@@ -105,15 +116,22 @@ impl PhysicEngineFireworks {
             self.free_indices.clear();
             self.to_deactivate_scratch.clear();
 
+            self.rockets.clear();
             for _ in 0..new_config.max_rockets {
                 let idx = self.rockets.insert(Rocket::new(&mut self.rng));
                 self.free_indices.push(idx);
             }
+
+            self.particles_pools_for_rockets = ParticlesPoolsForRockets::new(
+                new_config.max_rockets,
+                new_config.particles_per_explosion,
+                new_config.particles_per_trail,
+            );
         }
 
         self.next_rocket_interval = self.compute_next_interval();
         self.update_spawn_rocket_margin();
-        max_rockets_updated
+        max_rockets_updated || pool_params_updated
     }
 
     fn update_spawn_rocket_margin(&mut self) {
@@ -299,6 +317,10 @@ impl PhysicEngine for PhysicEngineFireworks {
 
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+
+    fn get_config_mut(&mut self) -> &mut PhysicConfig {
+        &mut self.pending_config
     }
 
     fn set_explosion_shape(&mut self, shape: ExplosionShape) {
