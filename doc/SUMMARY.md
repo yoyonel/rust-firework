@@ -9,6 +9,7 @@
 
 - [Moteur Audio]()
   - [Architecture & Spécification Bus Spatial 2D](20260720_spatial_bus_audio_architecture.md)
+  - [Spécification & Guide Réverbération Spatiale](20260720_spatial_reverb_technical_spec.md)
   - [Méthodologies d'Évaluation de Fonctionnalités](20260720_feature_evaluation_frameworks.md)
   - [Refactoring et Architecture](20260713_audio_engine_refactoring_report.md)
   - [Spécification Effet Doppler](20260711_doppler_audio_technical_spec.md)

@@ -14,9 +14,10 @@ Access the console by pressing `F1` (or `` ` `` depending on configuration).
 | :--- | :--- | :--- |
 | `audio.mute` | | Mute all audio. |
 | `audio.unmute` | | Unmute audio. |
-| `audio.fx` | `<effect> <on\|off>` | Toggle a specific DSP audio effect at runtime (lock-free).<br>Available: `binaural`, `panning`, `distance_atten`, `lowpass`, `doppler`, `fade`, `gain_lerp`, `normalize`. |
+| `audio.fx` | `<effect> <on\|off>` | Toggle a specific DSP audio effect at runtime (lock-free).<br>Available: `binaural`, `panning`, `distance_atten`, `lowpass`, `doppler`, `fade`, `gain_lerp`, `normalize`, `spatial_bus`, `spatial_reverb`. |
 | `audio.fx_all` | `<on\|off>` | Toggle all DSP audio effects at once. |
 | `audio.fx_status` | | Display current status of all DSP audio effects (ON/OFF). |
+| `audio.reverb_wet` | `<0.0..1.0>` | View or set Spatial Reverb wet mix gain (Default: 0.08 / 8%). |
 
 ## Physics & Simulation
 
