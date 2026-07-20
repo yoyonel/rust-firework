@@ -37,6 +37,7 @@ fn enqueue_sound_test(engine: &FireworksAudio3D, pos: glam::Vec2, gain: f32) -> 
         pos,
         is_dynamic: false,
         sound_type: AudioSoundType::Rocket,
+        atlas: None,
     }
 }
 

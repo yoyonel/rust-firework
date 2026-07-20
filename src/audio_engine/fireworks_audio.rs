@@ -43,6 +43,8 @@ impl std::fmt::Display for AudioThreadError {
 pub struct FireworksAudio3D {
     rocket_data: Arc<Vec<[f32; 2]>>,
     explosion_data: Arc<Vec<[f32; 2]>>,
+    rocket_atlas: crate::audio_engine::SoundAtlas,
+    explosion_atlas: crate::audio_engine::SoundAtlas,
 
     listener_pos: Arc<crate::audio_engine::types::AtomicVec2>,
     sample_rate: u32,
@@ -94,6 +96,16 @@ impl FireworksAudio3D {
         rocket_data = resample_linear(&rocket_data, rocket_sr, config.sample_rate);
         explosion_data = resample_linear(&explosion_data, explosion_sr, config.sample_rate);
 
+        let rocket_arc = Arc::new(rocket_data);
+        let explosion_arc = Arc::new(explosion_data);
+
+        let rocket_atlas =
+            crate::audio_engine::SoundAtlas::from_raw_data(rocket_arc.clone(), config.sample_rate);
+        let explosion_atlas = crate::audio_engine::SoundAtlas::from_raw_data(
+            explosion_arc.clone(),
+            config.sample_rate,
+        );
+
         let mut voices = Vec::with_capacity(config.max_voices);
         voices.resize_with(config.max_voices, Voice::new);
 
@@ -108,8 +120,10 @@ impl FireworksAudio3D {
         let (debug_tx, debug_rx) = crossbeam_channel::bounded(2048);
 
         Ok(Self {
-            rocket_data: Arc::new(rocket_data),
-            explosion_data: Arc::new(explosion_data),
+            rocket_data: rocket_arc,
+            explosion_data: explosion_arc,
+            rocket_atlas,
+            explosion_atlas,
             listener_pos: Arc::new(crate::audio_engine::types::AtomicVec2::new(
                 config.listener_pos,
             )),
@@ -132,10 +146,12 @@ impl FireworksAudio3D {
     }
 
     /// Queue a sound for playback — 100% Zero-Heap Allocation !
+    #[allow(clippy::too_many_arguments)]
     fn enqueue_sound(
         &self,
         id: u64,
         data: &Arc<Vec<[f32; 2]>>, // 🎯 MODIFICATION : On reçoit la référence vers l'Arc d'origine !
+        atlas: Option<crate::audio_engine::SoundAtlas>,
         pos: Vec2,
         gain: f32,
         is_dynamic: bool,
@@ -174,8 +190,6 @@ impl FireworksAudio3D {
         let fade_out_samples =
             (self.sample_rate as f32 * (self.settings.fade_out_ms() / 1000.0)) as usize;
 
-        // 🎯 MAGIE ZERO-HEAP : Arc::clone ne fait qu'incrémenter un compteur atomique O(1) !
-        // Plus de data.to_owned(), plus de prepare_voice(), plus de malloc !
         let req = PlayRequest {
             data: Arc::clone(data), // ZÉRO ALLOCATION MÉMOIRE : Pointeur partagé !
             fade_in: fade_in_samples,
@@ -188,6 +202,7 @@ impl FireworksAudio3D {
             pos,
             is_dynamic,
             sound_type,
+            atlas,
         };
 
         if let Err(e) = self.play_tx.try_send(req) {
@@ -203,10 +218,10 @@ impl FireworksAudio3D {
     }
 
     pub fn play_rocket(&self, pos: Vec2, gain: f32) {
-        // En passant &self.rocket_data, on transmet proprement la référence vers l'Arc !
         self.enqueue_sound(
             0,
             &self.rocket_data,
+            Some(self.rocket_atlas.clone()),
             pos,
             gain,
             false,
@@ -218,6 +233,7 @@ impl FireworksAudio3D {
         self.enqueue_sound(
             id,
             &self.rocket_data,
+            Some(self.rocket_atlas.clone()),
             pos,
             gain,
             true,
@@ -229,6 +245,7 @@ impl FireworksAudio3D {
         self.enqueue_sound(
             0,
             &self.explosion_data,
+            Some(self.explosion_atlas.clone()),
             pos,
             gain,
             false,
@@ -292,6 +309,7 @@ impl FireworksAudio3D {
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
                     effect_flags: effect_flags_clone,
+                    spatial_reverb: crate::audio_engine::SpatialReverb::new(sr),
                     debug_tx: Some(debug_tx_clone),
                 };
 

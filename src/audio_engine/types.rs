@@ -159,6 +159,7 @@ pub struct PlayRequest {
     pub pos: Vec2,                  // Position initiale
     pub is_dynamic: bool,           // true si sujet au Doppler
     pub sound_type: AudioSoundType, // NOUVEAU : Type de son
+    pub atlas: Option<crate::audio_engine::SoundAtlas>, // Banque pré-filtrée par distance (Distance Audio Atlas)
 }
 
 // =========================

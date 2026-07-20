@@ -30,6 +30,8 @@ pub struct DspProcessor {
     pub log_interval: Duration,
     /// Masque atomique des effets DSP. Lu une seule fois par `process_block`.
     pub effect_flags: Arc<AudioEffectFlags>,
+    /// Réverbération spatiale globale FDN / Schroeder sur le bus accumulé O(1)
+    pub spatial_reverb: crate::audio_engine::SpatialReverb,
     /// Canal de debug pour notifier le thread principal des événements audio
     pub debug_tx: Option<Sender<crate::audio_engine::types::AudioDebugEvent>>,
 }
@@ -59,6 +61,12 @@ impl DspProcessor {
 
         // 3. Rendu DSP (Isolé dans Hotspot via #[inline(never)])
         self.process_dsp(frames, fx_mask, profiler);
+
+        // 3.5. Réverbération spatiale globale O(1) sur le bus accumulé
+        if fx_enabled(fx_mask, AudioEffect::SpatialReverb) {
+            let _reverb_guard = profiler.measure("spatial_reverb");
+            self.spatial_reverb.process_block(&mut self.acc, frames);
+        }
 
         // 4. Finalisation et monitoring (Soft clipping isolé dans Hotspot)
         self.write_cpal_buffer(data, frames, global_gain, fx_mask, profiler);
@@ -178,6 +186,13 @@ impl DspProcessor {
 
                 let v = &mut self.voices[voice_idx];
                 v.reset_from_request(&req);
+                if fx_enabled(fx_mask, AudioEffect::DistanceAtlas) {
+                    if let Some(atlas) = &req.atlas {
+                        let d = req.pos - listener_pos;
+                        let distance = d.length();
+                        v.data = Some(Arc::clone(atlas.select(distance)));
+                    }
+                }
                 let now = Instant::now();
                 let latency = now.duration_since(req.sent_at);
                 profiler.record_metric("audio latency", latency);
@@ -650,6 +665,7 @@ impl DspProcessor {
 
 #[cfg(test)]
 mod tests {
+    use crate::audio_engine::SpatialReverb;
     use std::f32::consts::PI;
 
     /// Génère un buffer stéréo contenant une onde sinusoïdale pure de fréquence donnée.
@@ -729,6 +745,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            spatial_reverb: SpatialReverb::new(sample_rate),
             debug_tx: None,
         };
 
@@ -777,6 +794,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            spatial_reverb: SpatialReverb::new(sample_rate),
             debug_tx: None,
         };
 
@@ -924,6 +942,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            spatial_reverb: SpatialReverb::new(sample_rate),
             debug_tx: None,
         };
 
@@ -968,6 +987,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            spatial_reverb: SpatialReverb::new(sample_rate),
             debug_tx: None,
         };
 
@@ -1048,6 +1068,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            spatial_reverb: SpatialReverb::new(sample_rate),
             debug_tx: Some(debug_tx.clone()),
         };
 
@@ -1064,6 +1085,7 @@ mod tests {
             pos: glam::Vec2::ZERO,
             is_dynamic: false,
             sound_type: AudioSoundType::Rocket,
+            atlas: None,
         };
         play_tx.send(req1).unwrap();
 
@@ -1110,6 +1132,7 @@ mod tests {
             pos: glam::Vec2::ZERO,
             is_dynamic: false,
             sound_type: AudioSoundType::Rocket,
+            atlas: None,
         };
         play_tx.send(req2).unwrap();
 
@@ -1190,6 +1213,7 @@ mod tests {
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            spatial_reverb: SpatialReverb::new(sample_rate),
             debug_tx: None,
         };
 

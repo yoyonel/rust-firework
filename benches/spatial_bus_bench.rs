@@ -84,6 +84,7 @@ fn create_bench_dsp(n_voices: usize, block_size: usize, enable_spatial_bus: bool
         last_log: Instant::now(),
         log_interval: Duration::from_secs(1),
         effect_flags,
+        spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
         debug_tx: None,
     }
 }

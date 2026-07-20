@@ -32,6 +32,10 @@ pub enum AudioEffect {
     Normalization = 1 << 7,
     /// Bus spatial 2D (Harmoniques Circulaires / Ambisonics 2D W, X, Y pré-accumulés).
     SpatialBus = 1 << 8,
+    /// Banque d'échantillons pré-filtrés en distance (Distance Audio Atlas: Near, Mid, Far).
+    DistanceAtlas = 1 << 9,
+    /// Réverbération spatiale globale sur bus unique (Feedback Delay Network / Schroeder Reverb).
+    SpatialReverb = 1 << 10,
 }
 
 impl AudioEffect {
@@ -48,6 +52,8 @@ impl AudioEffect {
             ("gain_lerp", AudioEffect::GainLerp),
             ("normalize", AudioEffect::Normalization),
             ("spatial_bus", AudioEffect::SpatialBus),
+            ("distance_atlas", AudioEffect::DistanceAtlas),
+            ("spatial_reverb", AudioEffect::SpatialReverb),
         ]
     }
 
