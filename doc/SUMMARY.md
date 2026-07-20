@@ -8,6 +8,7 @@
   - [Formes d'explosions](physic_explosion_shapes.md)
 
 - [Moteur Audio]()
+  - [Architecture & Spécification Bus Spatial 2D](20260720_spatial_bus_audio_architecture.md)
   - [Refactoring et Architecture](20260713_audio_engine_refactoring_report.md)
   - [Spécification Effet Doppler](20260711_doppler_audio_technical_spec.md)
   - [Pipeline Binaural](audio.md)
@@ -36,6 +37,3 @@
 
 - [Console Interactive]()
   - [Manuel des Commandes Console](console_commands.md)
-
-- [Tests & Qualité]()
-  - [Validation OpenGL headless (Mesa Debug)](opengl_debug_validation_guide.md)

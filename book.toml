@@ -9,3 +9,4 @@ git-repository-url = "https://github.com/yoyonel/rust-firework"
 git-repository-icon = "fa-github"
 default-theme = "navy"
 preferred-dark-theme = "navy"
+mathjax-support = true
