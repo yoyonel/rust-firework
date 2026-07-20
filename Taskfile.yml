@@ -216,6 +216,12 @@ tasks:
       - echo "⏱️  Benchmarks binaural 3D..."
       - "{{.CARGO}} bench --no-default-features --features simd --bench audio_binaural_bench"
 
+  bench-spatial-bus:
+    desc: "Benchmarks comparatifs du Bus Spatial 2D (Ambisonics 2D) vs rendu Legacy direct (1 à 512 voix)"
+    cmds:
+      - echo "⏱️  Benchmarks comparatifs Bus Spatial 2D vs Legacy..."
+      - "{{.CARGO}} bench --no-default-features --features simd --bench spatial_bus_bench"
+
   bench-save-baseline:
     desc: "Sauvegarde une baseline de performance (usage: task bench-save-baseline -- my_baseline)"
     cmds:
