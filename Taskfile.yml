@@ -150,6 +150,35 @@ tasks:
     cmds:
       - '{{.XVFB}} {{.CARGO}} llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
 
+  test-opengl-mesa:
+    desc: "Tests OpenGL headless avec Mesa llvmpipe + debug validation (détecte les violations de spec OpenGL)"
+    summary: |
+      Exécute les tests interactive_tests avec le renderer logiciel Mesa (llvmpipe, OpenGL 4.5)
+      et le mode debug OpenGL activé (MESA_GL_DEBUG=1).
+
+      Les violations de spec OpenGL (ex: DeleteBuffers sur buffer mappé, états invalides)
+      sont émises sur stderr via le mécanisme GL_DEBUG_OUTPUT et capturées dans un log.
+      La cible échoue si des messages GL_INVALID_* ou API_ID_* sont détectés.
+
+      Prérequis : libgl1-mesa-dri (apt install libgl1-mesa-dri)
+      Voir : doc/opengl_debug_validation_guide.md
+    cmds:
+      - echo "🔍 Tests OpenGL headless avec Mesa llvmpipe + debug validation..."
+      - |
+        set -o pipefail
+        env \
+          LIBGL_ALWAYS_SOFTWARE=1 \
+          MESA_GL_DEBUG=1 \
+          GALLIUM_SOFTPIPE=1 \
+        {{.XVFB}} {{.CARGO}} test --features interactive_tests -- --test-threads=1 2>&1 | \
+        tee /tmp/mesa_gl_debug.log
+      - |
+        if grep -qE "GL_INVALID|error generated|API_ID_" /tmp/mesa_gl_debug.log; then
+          echo "❌ Violations OpenGL détectées (voir /tmp/mesa_gl_debug.log)"
+          exit 1
+        fi
+        echo "✅ Aucune violation OpenGL détectée"
+
   fmt:
     desc: "Vérification du formatage"
     cmds:

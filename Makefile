@@ -68,6 +68,28 @@ coverage-without-tests:
 	@$(XVFB) $(CARGO) llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1
 
 # -----------------------------------------
+# 🔍 Tests OpenGL headless avec validation Mesa
+# -----------------------------------------
+# Exécute les tests interactive_tests avec le renderer logiciel Mesa (llvmpipe)
+# et le mode debug OpenGL activé. Les violations de la spec OpenGL (ex: DeleteBuffers
+# sur un buffer mappé, états invalides, etc.) sont reportées sur stderr et peuvent
+# faire échouer le test si la sortie est inspectée.
+#
+# Prérequis : libgl1-mesa-dri installé (apt install libgl1-mesa-dri)
+# Voir doc/opengl_debug_validation_guide.md pour les détails.
+test-opengl-mesa:
+	@echo "🔍 Tests OpenGL headless avec Mesa llvmpipe + debug validation..."
+	@env \
+		LIBGL_ALWAYS_SOFTWARE=1 \
+		MESA_GL_DEBUG=1 \
+		GALLIUM_SOFTPIPE=1 \
+	$(XVFB) $(CARGO) test --features interactive_tests -- --test-threads=1 2>&1 | \
+	tee /tmp/mesa_gl_debug.log && \
+	! grep -qE "GL_INVALID|error generated|API_ID_" /tmp/mesa_gl_debug.log && \
+	echo "✅ Aucune violation OpenGL détectée" || \
+	(echo "❌ Violations OpenGL détectées (voir /tmp/mesa_gl_debug.log)" && exit 1)
+
+# -----------------------------------------
 # 📦 Build optimisé
 # -----------------------------------------
 release:
