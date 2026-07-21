@@ -89,6 +89,7 @@ impl AudioEngine for DummyAudio {
     fn play_rocket(&self, _pos: Vec2, _gain: f32) {}
     fn play_rocket_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {}
     fn play_explosion(&self, _pos: Vec2, _gain: f32) {}
+    fn play_explosion_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {}
     fn start_audio_thread(&mut self, _export_path: Option<&str>) {}
     fn stop_audio_thread(&mut self) {}
     fn mute(&mut self) {}
@@ -273,6 +274,11 @@ impl AudioEngine for TestAudio {
     }
     fn play_explosion(&self, _pos: Vec2, _gain: f32) {
         self.log.borrow_mut().push("play_explosion called".into());
+    }
+    fn play_explosion_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {
+        self.log
+            .borrow_mut()
+            .push("play_explosion_with_id called".into());
     }
     fn mute(&mut self) {
         self.log.borrow_mut().push("mute called".into());
