@@ -5,6 +5,7 @@ description = "Documentation and performance profiling guides for the Rust Firew
 src = "doc"
 
 [output.html]
+theme = "doc/theme"
 git-repository-url = "https://github.com/yoyonel/rust-firework"
 git-repository-icon = "fa-github"
 default-theme = "navy"

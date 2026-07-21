@@ -1,0 +1,33 @@
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: false, theme: 'dark' });
+
+  async function renderMermaid() {
+    const elements = document.querySelectorAll("pre code.language-mermaid");
+    if (elements.length === 0) return;
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+      const pre = el.parentElement;
+      const div = document.createElement("div");
+      div.className = "mermaid";
+      // Decode HTML entities mdBook generated (&gt; -> >, &lt; -> <, &amp; -> &)
+      div.textContent = el.innerHTML
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&amp;/g, '&');
+      pre.replaceWith(div);
+    }
+    try {
+      await mermaid.run();
+    } catch (e) {
+      console.error("Mermaid rendering error:", e);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderMermaid);
+  } else {
+    renderMermaid();
+  }
+</script>
