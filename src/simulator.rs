@@ -908,15 +908,29 @@ where
                     thickness: 0.0,
                 });
 
-                // 4. Source orbits and source representations
+                // 4. Reference orbits if many sources, otherwise individual orbits
+                if self.audio_stress_num_sources > 48 {
+                    for r_factor in [0.25, 0.5, 0.75, 1.0] {
+                        circles.push(crate::renderer_engine::CircleGPUData {
+                            center: [center.x, center.y],
+                            radius: max_dist * r_factor,
+                            color: [1.0, 1.0, 1.0, 0.04],
+                            thickness: 1.0,
+                        });
+                    }
+                }
+
+                // 5. Source representations and individual orbits
                 for source in &self.audio_stress_sources {
-                    // Orbit ring
-                    circles.push(crate::renderer_engine::CircleGPUData {
-                        center: [center.x, center.y],
-                        radius: source.radius,
-                        color: [1.0, 1.0, 1.0, 0.04],
-                        thickness: 1.0,
-                    });
+                    if self.audio_stress_num_sources <= 48 {
+                        // Orbit ring
+                        circles.push(crate::renderer_engine::CircleGPUData {
+                            center: [center.x, center.y],
+                            radius: source.radius,
+                            color: [1.0, 1.0, 1.0, 0.03],
+                            thickness: 1.0,
+                        });
+                    }
 
                     // Source dots/rings
                     match source.sound_type {
