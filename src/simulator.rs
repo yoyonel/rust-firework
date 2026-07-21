@@ -881,61 +881,47 @@ where
                 let window_h = self.window_size_f32.1;
                 let center = glam::Vec2::new(window_w * 0.5, window_h * 0.5);
 
-                let mut circles = Vec::with_capacity(3 + self.audio_stress_sources.len() * 3);
+                let mut orbits = Vec::with_capacity(self.audio_stress_sources.len() + 3);
+                let mut discs = Vec::with_capacity(3 + self.audio_stress_sources.len() * 2);
 
-                // 1. Virtual sound sphere
+                // 1. Virtual sound sphere (drawn as outline)
                 let max_dist = self.audio_engine.get_max_distance();
-                circles.push(crate::renderer_engine::CircleGPUData {
+                orbits.push(crate::renderer_engine::CircleGPUData {
                     center: [center.x, center.y],
                     radius: max_dist,
                     color: [0.0, 0.8, 1.0, 0.15],
-                    thickness: 1.5,
+                    thickness: 0.0,
                 });
 
-                // 2. Listener outer ring
-                circles.push(crate::renderer_engine::CircleGPUData {
+                // 2. Listener outer ring (outline)
+                orbits.push(crate::renderer_engine::CircleGPUData {
                     center: [center.x, center.y],
                     radius: 12.0,
                     color: [0.0, 1.0, 0.0, 0.8],
-                    thickness: 2.0,
+                    thickness: 0.0,
                 });
 
                 // 3. Listener center dot (filled)
-                circles.push(crate::renderer_engine::CircleGPUData {
+                discs.push(crate::renderer_engine::CircleGPUData {
                     center: [center.x, center.y],
                     radius: 4.0,
                     color: [0.0, 1.0, 0.0, 1.0],
                     thickness: 0.0,
                 });
 
-                // 4. Reference orbits if many sources, otherwise individual orbits
-                if self.audio_stress_num_sources > 48 {
-                    for r_factor in [0.25, 0.5, 0.75, 1.0] {
-                        circles.push(crate::renderer_engine::CircleGPUData {
-                            center: [center.x, center.y],
-                            radius: max_dist * r_factor,
-                            color: [1.0, 1.0, 1.0, 0.04],
-                            thickness: 1.0,
-                        });
-                    }
-                }
-
-                // 5. Source representations and individual orbits
+                // 4. Source orbits (drawn as extremely cheap LINE_LOOP outlines)
                 for source in &self.audio_stress_sources {
-                    if self.audio_stress_num_sources <= 48 {
-                        // Orbit ring
-                        circles.push(crate::renderer_engine::CircleGPUData {
-                            center: [center.x, center.y],
-                            radius: source.radius,
-                            color: [1.0, 1.0, 1.0, 0.03],
-                            thickness: 1.0,
-                        });
-                    }
+                    orbits.push(crate::renderer_engine::CircleGPUData {
+                        center: [center.x, center.y],
+                        radius: source.radius,
+                        color: [1.0, 1.0, 1.0, 0.04],
+                        thickness: 0.0,
+                    });
 
-                    // Source dots/rings
+                    // 5. Source representations (discs / rings)
                     match source.sound_type {
                         crate::audio_engine::types::AudioSoundType::Rocket => {
-                            circles.push(crate::renderer_engine::CircleGPUData {
+                            discs.push(crate::renderer_engine::CircleGPUData {
                                 center: [source.pos.x, source.pos.y],
                                 radius: 5.0,
                                 color: [1.0, 0.9, 0.0, 0.8],
@@ -944,25 +930,25 @@ where
                         }
                         crate::audio_engine::types::AudioSoundType::Explosion => {
                             // Filled red inner dot
-                            circles.push(crate::renderer_engine::CircleGPUData {
+                            discs.push(crate::renderer_engine::CircleGPUData {
                                 center: [source.pos.x, source.pos.y],
                                 radius: 8.0,
                                 color: [1.0, 0.2, 0.0, 0.9],
                                 thickness: 0.0,
                             });
-                            // Wireframe orange outer ring
-                            circles.push(crate::renderer_engine::CircleGPUData {
+                            // Wireframe orange outer ring (drawn as outline)
+                            orbits.push(crate::renderer_engine::CircleGPUData {
                                 center: [source.pos.x, source.pos.y],
                                 radius: 20.0,
                                 color: [1.0, 0.4, 0.0, 0.3],
-                                thickness: 1.5,
+                                thickness: 0.0,
                             });
                         }
                     }
                 }
 
                 unsafe {
-                    renderer.draw(&circles);
+                    renderer.draw(&orbits, &discs);
                 }
             }
         }
