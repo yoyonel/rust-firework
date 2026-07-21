@@ -99,6 +99,17 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    let mut audio_stress_sources = None;
+    if let Some(pos) = args.iter().position(|a| a == "--audio-stress-scene") {
+        let num_sources: usize = args.get(pos + 1).and_then(|s| s.parse().ok()).unwrap_or(32);
+        audio_stress_sources = Some(num_sources);
+        info!(
+            "🎧 [STRESS TEST SCENE] Starting interactive audio stress-test with {} virtual sources...",
+            num_sources
+        );
+    }
+
+
     let window_width = 1024;
     let window_height = 800;
 
@@ -120,6 +131,11 @@ fn main() -> Result<()> {
     // 3. Init Simulator
     info!("🚀 Starting Fireworks Simulator...");
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
+
+    if let Some(n) = audio_stress_sources {
+        simulator.set_doppler_sender(doppler_queue.sender.clone());
+        simulator.enable_audio_stress_scene(n);
+    }
 
     simulator.init_console_commands();
     let _ = simulator.run(
