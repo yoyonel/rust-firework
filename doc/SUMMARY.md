@@ -9,6 +9,7 @@
   - [Formes d'explosions](physic_explosion_shapes.md)
 
 - [Moteur Audio]()
+  - [Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU](20260721_audio_diagnostics_underrun_imgui_fixes.md)
   - [Architecture & Spécification Bus Spatial 2D](20260720_spatial_bus_audio_architecture.md)
   - [Spécification & Guide Réverbération Spatiale](20260720_spatial_reverb_technical_spec.md)
   - [Méthodologies d'Évaluation de Fonctionnalités](20260720_feature_evaluation_frameworks.md)
