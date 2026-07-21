@@ -80,7 +80,7 @@ fn create_bench_dsp(n_voices: usize, block_size: usize, enable_spatial_bus: bool
         acc: vec![[0.0; 2]; block_size],
         bus_w: vec![0.0; block_size],
         bus_x: vec![0.0; block_size],
-        bus_y: vec![0.0; block_size],
+        export_buffer: vec![[0.0; 2]; block_size],
         last_log: Instant::now(),
         log_interval: Duration::from_secs(1),
         effect_flags,

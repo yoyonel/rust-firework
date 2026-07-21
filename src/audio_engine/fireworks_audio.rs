@@ -105,7 +105,7 @@ impl FireworksAudio3D {
 
         let global_gain = config.settings.global_gain();
 
-        let (garbage_tx, garbage_rx) = crossbeam_channel::bounded(1024);
+        let (garbage_tx, garbage_rx) = crossbeam_channel::unbounded();
 
         // --- NOUVEAU : Ring buffer SPSC borné pour les requêtes audio ---
         let (play_tx, play_rx) = crossbeam_channel::bounded(512);
@@ -294,7 +294,7 @@ impl FireworksAudio3D {
                     acc: vec![[0.0; 2]; max_supported_frames],
                     bus_w: vec![0.0; max_supported_frames],
                     bus_x: vec![0.0; max_supported_frames],
-                    bus_y: vec![0.0; max_supported_frames],
+                    export_buffer: vec![[0.0; 2]; max_supported_frames],
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
                     effect_flags: effect_flags_clone,

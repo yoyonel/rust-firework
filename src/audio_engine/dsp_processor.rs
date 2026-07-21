@@ -24,8 +24,8 @@ pub struct DspProcessor {
     pub bus_w: Vec<f32>,
     /// Bus spatial 2D : composante directionnelle X (Droite/Gauche)
     pub bus_x: Vec<f32>,
-    /// Bus spatial 2D : composante directionnelle Y (Avant/Arrière)
-    pub bus_y: Vec<f32>,
+    /// Buffer de travail pré-alloué pour l'exportation WAV (évite tout Vec::new dans le thread CPAL)
+    pub export_buffer: Vec<[f32; 2]>,
     pub last_log: Instant,
     pub log_interval: Duration,
     /// Masque atomique des effets DSP. Lu une seule fois par `process_block`.
@@ -34,6 +34,49 @@ pub struct DspProcessor {
     pub spatial_reverb: crate::audio_engine::SpatialReverb,
     /// Canal de debug pour notifier le thread principal des événements audio
     pub debug_tx: Option<Sender<crate::audio_engine::types::AudioDebugEvent>>,
+}
+
+#[inline(always)]
+fn compute_distance_attenuation(
+    settings: &AudioEngineSettings,
+    distance: f32,
+    fx_mask: u32,
+) -> f32 {
+    if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
+        let ref_distance = 50.0_f32;
+        let max_distance = settings.max_distance().max(ref_distance + 1.0);
+        if distance <= ref_distance {
+            1.0
+        } else if distance >= max_distance {
+            0.0
+        } else {
+            let raw_att = ref_distance / distance;
+            let fade = (max_distance - distance) / (max_distance - ref_distance);
+            raw_att * fade
+        }
+    } else {
+        1.0
+    }
+}
+
+#[inline(always)]
+fn compute_lowpass_alpha(
+    settings: &AudioEngineSettings,
+    sample_rate: u32,
+    distance: f32,
+    fx_mask: u32,
+) -> f32 {
+    if fx_enabled(fx_mask, AudioEffect::LowPassFilter) {
+        let fc = (settings.f_min()
+            + (settings.f_max() - settings.f_min())
+                * (-settings.distance_alpha() * distance).exp())
+        .clamp(settings.f_min(), settings.f_max());
+        let dt = 1.0 / sample_rate as f32;
+        let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
+        dt / (rc + dt)
+    } else {
+        1.0
+    }
 }
 
 impl DspProcessor {
@@ -100,21 +143,7 @@ impl DspProcessor {
                 // Calculer l'atténuation spatiale pour la nouvelle requête (pre-attenuation fix)
                 let d = req.pos - listener_pos;
                 let distance = d.length().max(1e-6);
-                let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-                    let ref_distance = 50.0_f32;
-                    let max_distance = self.settings.max_distance().max(ref_distance + 1.0);
-                    if distance <= ref_distance {
-                        1.0
-                    } else if distance >= max_distance {
-                        0.0
-                    } else {
-                        let raw_att = ref_distance / distance;
-                        let fade = (max_distance - distance) / (max_distance - ref_distance);
-                        raw_att * fade
-                    }
-                } else {
-                    1.0
-                };
+                let att = compute_distance_attenuation(&self.settings, distance, fx_mask);
 
                 let req_priority = match req.sound_type {
                     crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
@@ -133,21 +162,7 @@ impl DspProcessor {
                     };
                     let v_d = v.world_pos - listener_pos;
                     let v_distance = v_d.length().max(1e-6);
-                    let v_att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-                        let ref_distance = 50.0_f32;
-                        let max_distance = self.settings.max_distance().max(ref_distance + 1.0);
-                        if v_distance <= ref_distance {
-                            1.0
-                        } else if v_distance >= max_distance {
-                            0.0
-                        } else {
-                            let raw_att = ref_distance / v_distance;
-                            let fade = (max_distance - v_distance) / (max_distance - ref_distance);
-                            raw_att * fade
-                        }
-                    } else {
-                        1.0
-                    };
+                    let v_att = compute_distance_attenuation(&self.settings, v_distance, fx_mask);
                     let v_gain = v.user_gain
                         * v.target_gains[0]
                             .abs()
@@ -185,6 +200,10 @@ impl DspProcessor {
                 }
 
                 let v = &mut self.voices[voice_idx];
+                // Éviter tout drop d'Arc dans le thread CPAL lors du vol d'une voix active
+                if let Some(dead_arc) = v.data.take() {
+                    let _ = self.garbage_tx.try_send(dead_arc);
+                }
                 v.reset_from_request(&req);
                 let now = Instant::now();
                 let latency = now.duration_since(req.sent_at);
@@ -287,12 +306,10 @@ impl DspProcessor {
         if self.bus_w.len() < frames {
             self.bus_w.resize(frames, 0.0);
             self.bus_x.resize(frames, 0.0);
-            self.bus_y.resize(frames, 0.0);
         }
 
         self.bus_w[..frames].fill(0.0);
         self.bus_x[..frames].fill(0.0);
-        self.bus_y[..frames].fill(0.0);
 
         let listener_pos = self.listener_pos.load();
 
@@ -304,36 +321,12 @@ impl DspProcessor {
             let d = v.world_pos - listener_pos;
             let distance = d.length().max(1e-6);
 
-            // Direction 2D normalisée (x = panoramique horizontal droite/gauche, y = altitude/distance)
+            // Direction 2D normalisée (x = panoramique horizontal droite/gauche)
             let dir_x = d.x / distance;
 
-            let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-                let ref_distance = 50.0_f32;
-                let max_distance = self.settings.max_distance().max(ref_distance + 1.0);
-                if distance <= ref_distance {
-                    1.0
-                } else if distance >= max_distance {
-                    0.0
-                } else {
-                    let raw_att = ref_distance / distance;
-                    let fade = (max_distance - distance) / (max_distance - ref_distance);
-                    raw_att * fade
-                }
-            } else {
-                1.0
-            };
-
-            let filter_a = if fx_enabled(fx_mask, AudioEffect::LowPassFilter) {
-                let fc = (self.settings.f_min()
-                    + (self.settings.f_max() - self.settings.f_min())
-                        * (-self.settings.distance_alpha() * distance).exp())
-                .clamp(self.settings.f_min(), self.settings.f_max());
-                let dt = 1.0 / self.sample_rate as f32;
-                let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
-                dt / (rc + dt)
-            } else {
-                1.0
-            };
+            let att = compute_distance_attenuation(&self.settings, distance, fx_mask);
+            let filter_a =
+                compute_lowpass_alpha(&self.settings, self.sample_rate, distance, fx_mask);
             v.filter_a = filter_a;
 
             let slice_ref = v.data.as_ref().expect("Voice data should exist");
@@ -438,19 +431,8 @@ impl DspProcessor {
             let d = v.world_pos - self.listener_pos.load();
             let distance = d.length().max(1e-6);
 
-            // Filtre passe-bas dynamique (conditionnel via fx_mask)
-            let filter_a = if fx_enabled(fx_mask, AudioEffect::LowPassFilter) {
-                let fc = (self.settings.f_min()
-                    + (self.settings.f_max() - self.settings.f_min())
-                        * (-self.settings.distance_alpha() * distance).exp())
-                .clamp(self.settings.f_min(), self.settings.f_max());
-                let dt = 1.0 / self.sample_rate as f32;
-                let rc = 1.0 / (2.0 * std::f32::consts::PI * fc);
-                dt / (rc + dt)
-            } else {
-                // Bypass : a=1 → y[n] = y[n-1] + 1*(x - y[n-1]) = x (pass-through)
-                1.0
-            };
+            let filter_a =
+                compute_lowpass_alpha(&self.settings, self.sample_rate, distance, fx_mask);
             v.filter_a = filter_a;
 
             let slice_ref = v.data.as_ref().expect("Voice data should exist");
@@ -629,21 +611,20 @@ impl DspProcessor {
     #[inline(always)]
     fn export_wav(&mut self, data: &[f32], frames: usize) {
         if let Some(writer_arc) = &self.export_writer {
-            let mut frames_vec = Vec::with_capacity(frames);
+            self.export_buffer.clear();
             for i in 0..frames {
-                frames_vec.push([data[2 * i], data[2 * i + 1]]);
+                self.export_buffer.push([data[2 * i], data[2 * i + 1]]);
             }
 
             let block = AudioBlock {
                 index: self.block_index,
-                frames: frames_vec,
+                frames: self.export_buffer.clone(),
             };
             self.block_index += 1;
 
-            writer_arc
-                .lock()
-                .expect("Failed to lock writer")
-                .push_block(block);
+            if let Ok(writer) = writer_arc.try_lock() {
+                writer.push_block(block);
+            }
         }
     }
 
@@ -734,7 +715,7 @@ mod tests {
             acc: vec![[0.0; 2]; total_samples],
             bus_w: Vec::new(),
             bus_x: Vec::new(),
-            bus_y: Vec::new(),
+            export_buffer: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -783,7 +764,7 @@ mod tests {
             acc: vec![[0.0; 2]; block_size],
             bus_w: Vec::new(),
             bus_x: Vec::new(),
-            bus_y: Vec::new(),
+            export_buffer: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -931,7 +912,7 @@ mod tests {
             acc: vec![[0.0; 2]; block_size],
             bus_w: Vec::new(),
             bus_x: Vec::new(),
-            bus_y: Vec::new(),
+            export_buffer: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -976,7 +957,7 @@ mod tests {
             acc: vec![[1.5, -2.0]; block_size], // Acc holds values that exceed 1.0
             bus_w: Vec::new(),
             bus_x: Vec::new(),
-            bus_y: Vec::new(),
+            export_buffer: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -1057,7 +1038,7 @@ mod tests {
             acc: vec![[0.0; 2]; block_size],
             bus_w: Vec::new(),
             bus_x: Vec::new(),
-            bus_y: Vec::new(),
+            export_buffer: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
@@ -1200,7 +1181,7 @@ mod tests {
             acc: vec![[0.0; 2]; block_size],
             bus_w: Vec::new(),
             bus_x: Vec::new(),
-            bus_y: Vec::new(),
+            export_buffer: Vec::new(),
             last_log: Instant::now(),
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),

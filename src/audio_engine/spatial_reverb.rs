@@ -66,6 +66,13 @@ impl AllPassFilter {
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
+/// Longueurs de délai de base (en échantillons @ 44.1 kHz) pour l'écho d'espace extérieur (Outdoor Open-Air Echo)
+const COMB_DELAYS_BASE_SAMPLES: [usize; 4] = [1553, 2129, 2801, 3547];
+/// Décalage stéréo inter-aural pour éviter la corrélation mono phase
+const STEREO_UNCORRELATION_OFFSET_SAMPLES: usize = 47;
+/// Longueurs de délai tout-passe pour la diffusion sans coloration fréquentielle
+const ALLPASS_DELAYS_BASE_SAMPLES: [usize; 2] = [641, 317];
+
 pub struct SpatialReverb {
     combs_l: Vec<CombFilter>,
     combs_r: Vec<CombFilter>,
@@ -79,34 +86,38 @@ impl SpatialReverb {
     pub fn new_with_wet(sample_rate: u32, wet_gain: Arc<AtomicU32>) -> Self {
         let scale = sample_rate as f32 / 44100.0;
 
-        // Longueurs de délai pour écho d'espace extérieur (Outdoor Open-Air Echo)
-        let comb_delays_l = [1553, 2129, 2801, 3547];
-        let comb_delays_r = [1553 + 47, 2129 + 47, 2801 + 47, 3547 + 47];
-
-        let allpass_delays_l = [641, 317];
-        let allpass_delays_r = [641 + 47, 317 + 47];
-
         let feedback = 0.68;
         let damp = 0.50; // Amortissement HF fort (absorption de l'air en extérieur)
 
-        let combs_l = comb_delays_l
+        let combs_l = COMB_DELAYS_BASE_SAMPLES
             .iter()
             .map(|&d| CombFilter::new((d as f32 * scale) as usize, feedback, damp))
             .collect();
 
-        let combs_r = comb_delays_r
+        let combs_r = COMB_DELAYS_BASE_SAMPLES
             .iter()
-            .map(|&d| CombFilter::new((d as f32 * scale) as usize, feedback, damp))
+            .map(|&d| {
+                CombFilter::new(
+                    ((d + STEREO_UNCORRELATION_OFFSET_SAMPLES) as f32 * scale) as usize,
+                    feedback,
+                    damp,
+                )
+            })
             .collect();
 
-        let allpasses_l = allpass_delays_l
+        let allpasses_l = ALLPASS_DELAYS_BASE_SAMPLES
             .iter()
             .map(|&d| AllPassFilter::new((d as f32 * scale) as usize, 0.35))
             .collect();
 
-        let allpasses_r = allpass_delays_r
+        let allpasses_r = ALLPASS_DELAYS_BASE_SAMPLES
             .iter()
-            .map(|&d| AllPassFilter::new((d as f32 * scale) as usize, 0.35))
+            .map(|&d| {
+                AllPassFilter::new(
+                    ((d + STEREO_UNCORRELATION_OFFSET_SAMPLES) as f32 * scale) as usize,
+                    0.35,
+                )
+            })
             .collect();
 
         Self {
