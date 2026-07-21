@@ -223,6 +223,15 @@ pub enum AudioDebugEvent {
         request_id: u64,
         completed_at: Instant,
     },
+    Underrun {
+        elapsed_us: u64,
+        budget_us: u64,
+    },
+    BlockProcessed {
+        elapsed_us: u64,
+        budget_us: u64,
+        active_voices: usize,
+    },
 }
 
 #[derive(Debug, Clone)]

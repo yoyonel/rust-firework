@@ -32,6 +32,8 @@ pub struct DspProcessor {
     pub effect_flags: Arc<AudioEffectFlags>,
     /// Réverbération spatiale globale FDN / Schroeder sur le bus accumulé O(1)
     pub spatial_reverb: crate::audio_engine::SpatialReverb,
+    /// Décodeur HRTF binaural par convolution FFT Overlap-Save sur le bus spatial
+    pub hrtf_convolver: crate::audio_engine::HrtfConvolver,
     /// Canal de debug pour notifier le thread principal des événements audio
     pub debug_tx: Option<Sender<crate::audio_engine::types::AudioDebugEvent>>,
 }
@@ -83,6 +85,7 @@ impl DspProcessor {
     /// Point d'entrée principal du callback CPAL
     #[inline(always)]
     pub fn process_block(&mut self, data: &mut [f32], global_gain: f32, profiler: &Profiler) {
+        let start_time = Instant::now();
         let _audio_frame_guard = profiler.measure("audio_frame");
         let frames = data.len() / 2;
 
@@ -115,6 +118,28 @@ impl DspProcessor {
         self.write_cpal_buffer(data, frames, global_gain, fx_mask, profiler);
         self.export_wav(data, frames);
         self.log_metrics(profiler);
+
+        let elapsed_us = start_time.elapsed().as_micros() as u64;
+        let budget_us = ((frames as f64 / self.sample_rate as f64) * 1_000_000.0) as u64;
+
+        if let Some(debug_tx) = &self.debug_tx {
+            let active_voices = self.voices.iter().filter(|v| v.active).count();
+            let _ = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::BlockProcessed {
+                elapsed_us,
+                budget_us,
+                active_voices,
+            });
+
+            if elapsed_us > budget_us {
+                log::warn!("⚠️ CPU Audio Underrun detected: block took {} us (budget: {} us)", elapsed_us, budget_us);
+                if let Err(e) = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Underrun {
+                    elapsed_us,
+                    budget_us,
+                }) {
+                    log::error!("Failed to send Underrun event: {:?}", e);
+                }
+            }
+        }
     }
 
     #[inline(always)]
@@ -163,11 +188,10 @@ impl DspProcessor {
                     let v_d = v.world_pos - listener_pos;
                     let v_distance = v_d.length().max(1e-6);
                     let v_att = compute_distance_attenuation(&self.settings, v_distance, fx_mask);
-                    let v_gain = v.user_gain
-                        * v.target_gains[0]
-                            .abs()
-                            .max(v.target_gains[1].abs())
-                            .max(0.001);
+                    let v_gain = v.current_gains[0]
+                        .abs()
+                        .max(v.current_gains[1].abs())
+                        .max(0.001);
                     let volume = v_gain * v_att * v_priority;
                     if volume < min_volume {
                         min_volume = volume;
@@ -401,17 +425,23 @@ impl DspProcessor {
         }
 
         // Décodage final du Bus Spatial (W, X) vers la sortie Stéréo (L, R)
-        // Compensation d'énergie Isopuissance (SQRT_2) :
-        // - Au centre (dir_x = 0) : L = 0.7071 S, R = 0.7071 S (100% ISO avec le mode Legacy)
-        // - À gauche/droite (dir_x = +-1) : L = 1.0 S, R = 0.0 S (100% ISO avec le mode Legacy)
-        let frac_1_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
-        for i in 0..frames {
-            let w = self.bus_w[i];
-            let x = self.bus_x[i];
-            let l = w - frac_1_sqrt2 * x;
-            let r = w + frac_1_sqrt2 * x;
-            self.acc[i][0] = l;
-            self.acc[i][1] = r;
+        if fx_enabled(fx_mask, AudioEffect::HrtfBus) {
+            let _hrtf_guard = profiler.measure("hrtf_bus_convolver");
+            self.hrtf_convolver
+                .process_bus(&self.bus_w, &self.bus_x, &mut self.acc, frames);
+        } else {
+            // Compensation d'énergie Isopuissance (SQRT_2) :
+            // - Au centre (dir_x = 0) : L = 0.7071 S, R = 0.7071 S (100% ISO avec le mode Legacy)
+            // - À gauche/droite (dir_x = +-1) : L = 1.0 S, R = 0.0 S (100% ISO avec le mode Legacy)
+            let frac_1_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
+            for i in 0..frames {
+                let w = self.bus_w[i];
+                let x = self.bus_x[i];
+                let l = w - frac_1_sqrt2 * x;
+                let r = w + frac_1_sqrt2 * x;
+                self.acc[i][0] = l;
+                self.acc[i][1] = r;
+            }
         }
     }
 
@@ -720,6 +750,7 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, total_samples),
             debug_tx: None,
         };
 
@@ -769,6 +800,7 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
             debug_tx: None,
         };
 
@@ -917,6 +949,7 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
             debug_tx: None,
         };
 
@@ -962,6 +995,7 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
             debug_tx: None,
         };
 
@@ -1043,6 +1077,7 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
             debug_tx: Some(debug_tx.clone()),
         };
 
@@ -1186,6 +1221,7 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
             debug_tx: None,
         };
 
@@ -1202,6 +1238,85 @@ mod tests {
         assert!(
             sample_r.abs() > sample_l.abs(),
             "Right ear should be louder for source on the right in SpatialBus mode"
+        );
+    }
+
+    #[test]
+    fn test_spatial_bus_hrtf_rendering_left_right() {
+        use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
+        use crate::audio_engine::types::Voice;
+        use crate::profiler::Profiler;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+
+        let sample_rate = 48_000;
+        let block_size = 256;
+        let source_audio = generate_sine_wave(440.0, sample_rate, block_size);
+        let source_arc = Arc::new(source_audio);
+        let (_play_tx, play_rx) = crossbeam_channel::unbounded();
+        let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+
+        let mut dsp = super::DspProcessor {
+            voices: vec![Voice {
+                id: 1,
+                active: true,
+                data: Some(source_arc),
+                pos: 0.0,
+                playback_rate: 1.0,
+                is_dynamic: false,
+                world_pos: glam::Vec2::new(-50.0, 0.0), // Sound to the LEFT
+                velocity: glam::Vec2::ZERO,
+                fade_in_samples: 0,
+                fade_out_samples: 0,
+                filter_state: [0.0, 0.0],
+                filter_a: 0.0,
+                user_gain: 1.0,
+                current_gains: [1.0, 1.0],
+                target_gains: [1.0, 1.0],
+                current_itd: [0.0, 0.0],
+                target_itd: [0.0, 0.0],
+                request_id: 1,
+                sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            }],
+            play_rx,
+            doppler_rx: None,
+            garbage_tx,
+            settings: crate::AudioEngineSettings::default(),
+            listener_pos: std::sync::Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                glam::Vec2::ZERO,
+            )),
+            sample_rate,
+            export_writer: None,
+            block_index: 0,
+            acc: vec![[0.0; 2]; block_size],
+            bus_w: Vec::new(),
+            bus_x: Vec::new(),
+            export_buffer: Vec::new(),
+            last_log: Instant::now(),
+            log_interval: Duration::from_secs(1),
+            effect_flags: AudioEffectFlags::new_all_enabled(),
+            spatial_reverb: SpatialReverb::new(sample_rate),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+            debug_tx: None,
+        };
+
+        // Enable SpatialBus AND HrtfBus
+        dsp.effect_flags.set(AudioEffect::SpatialBus, true);
+        dsp.effect_flags.set(AudioEffect::HrtfBus, true);
+        let fx_mask = dsp.effect_flags.load();
+
+        let profiler = Profiler::new(100);
+        dsp.process_dsp(block_size, fx_mask, &profiler);
+
+        // Left ear should receive higher amplitude than right ear for sound at (-50, 0)
+        let total_energy_l: f32 = dsp.acc.iter().map(|s| s[0].powi(2)).sum();
+        let total_energy_r: f32 = dsp.acc.iter().map(|s| s[1].powi(2)).sum();
+
+        assert!(
+            total_energy_l > total_energy_r,
+            "Left ear energy ({}) should exceed right ear energy ({}) for left source in HRTF bus mode",
+            total_energy_l,
+            total_energy_r
         );
     }
 }

@@ -34,6 +34,8 @@ pub enum AudioEffect {
     SpatialBus = 1 << 8,
     /// Réverbération spatiale globale sur bus unique (Feedback Delay Network / Schroeder Reverb).
     SpatialReverb = 1 << 9,
+    /// Décodeur HRTF binaural sur Bus Spatial 2D (Overlap-Save FFT sur enceintes virtuelles).
+    HrtfBus = 1 << 10,
 }
 
 impl AudioEffect {
@@ -51,6 +53,7 @@ impl AudioEffect {
             ("normalize", AudioEffect::Normalization),
             ("spatial_bus", AudioEffect::SpatialBus),
             ("spatial_reverb", AudioEffect::SpatialReverb),
+            ("hrtf_bus", AudioEffect::HrtfBus),
         ]
     }
 
@@ -87,7 +90,9 @@ pub const DEFAULT_FLAGS: u32 = AudioEffect::Binaural as u32
     | AudioEffect::FadeInOut as u32
     | AudioEffect::GainLerp as u32
     | AudioEffect::Normalization as u32
-    | AudioEffect::SpatialReverb as u32;
+    | AudioEffect::SpatialReverb as u32
+    | AudioEffect::SpatialBus as u32
+    | AudioEffect::HrtfBus as u32;
 
 /// Bitmask partagé entre le main thread et le thread CPAL.
 ///

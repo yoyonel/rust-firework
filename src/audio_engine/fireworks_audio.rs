@@ -241,6 +241,17 @@ impl FireworksAudio3D {
         );
     }
 
+    pub fn play_explosion_with_id(&self, id: u64, pos: Vec2, gain: f32) {
+        self.enqueue_sound(
+            id,
+            &self.explosion_data,
+            pos,
+            gain,
+            true,
+            crate::audio_engine::types::AudioSoundType::Explosion,
+        );
+    }
+
     pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
         info!("🚀 Starting Audio Engine ...");
 
@@ -302,6 +313,10 @@ impl FireworksAudio3D {
                         sr,
                         reverb_wet_clone,
                     ),
+                    hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                        sr,
+                        block_size,
+                    ),
                     debug_tx: Some(debug_tx_clone),
                 };
 
@@ -313,6 +328,16 @@ impl FireworksAudio3D {
                             INIT_CPAL_THREAD.call_once(|| {
                                 #[cfg(feature = "tracy")]
                                 tracy_client::set_thread_name!("CPAL Audio Callback");
+
+                                #[allow(deprecated)]
+                                #[cfg(target_arch = "x86_64")]
+                                unsafe {
+                                    use std::arch::x86_64::{_mm_getcsr, _mm_setcsr};
+                                    let mut csr = _mm_getcsr();
+                                    csr |= 0x8000; // FTZ (Bit 15)
+                                    csr |= 0x0040; // DAZ (Bit 6)
+                                    _mm_setcsr(csr);
+                                }
 
                                 #[cfg(target_os = "linux")]
                                 unsafe {
@@ -394,6 +419,10 @@ impl AudioEngine for FireworksAudio3D {
         self.play_explosion(pos, gain)
     }
 
+    fn play_explosion_with_id(&self, id: u64, pos: Vec2, gain: f32) {
+        self.play_explosion_with_id(id, pos, gain)
+    }
+
     fn start_audio_thread(&mut self, _export_path: Option<&str>) {
         self.start_audio_thread(_export_path)
     }
@@ -462,41 +491,13 @@ impl AudioEngine for FireworksAudio3D {
     }
 }
 
-/// Négocie la meilleure taille de buffer (low-latency) avec le matériel
-fn get_cpal_config(device: &cpal::Device, sr: u32, block_size: usize) -> cpal::StreamConfig {
-    let buffer_size = match device.supported_output_configs() {
-        Ok(mut configs) => {
-            let target_sr = cpal::SampleRate(sr);
-            let supports_low_latency = configs.any(|c| {
-                c.channels() == 2
-                    && c.min_sample_rate() <= target_sr
-                    && c.max_sample_rate() >= target_sr
-                    && match c.buffer_size() {
-                        cpal::SupportedBufferSize::Range { min, max } => {
-                            *min <= block_size as u32 && *max >= block_size as u32
-                        }
-                        cpal::SupportedBufferSize::Unknown => true,
-                    }
-            });
-            if supports_low_latency {
-                cpal::BufferSize::Fixed(block_size as u32)
-            } else {
-                cpal::BufferSize::Default
-            }
-        }
-        Err(e) => {
-            log::warn!(
-                "Impossible d'inspecter les configs audio ({}), fallback sur Fixed(256)",
-                e
-            );
-            cpal::BufferSize::Fixed(256)
-        }
-    };
-
+/// Configure la configuration CPAL avec un buffer par défaut pour autoriser
+/// une gestion de buffer multi-période stable par le système (PipeWire/PulseAudio/ALSA).
+fn get_cpal_config(_device: &cpal::Device, sr: u32, _block_size: usize) -> cpal::StreamConfig {
     cpal::StreamConfig {
         channels: 2,
         sample_rate: cpal::SampleRate(sr),
-        buffer_size,
+        buffer_size: cpal::BufferSize::Default,
     }
 }
 

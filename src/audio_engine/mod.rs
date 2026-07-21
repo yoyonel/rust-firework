@@ -35,5 +35,8 @@ pub use safewavwriter::{AudioBlock, SafeWavWriter};
 pub mod spatial_reverb;
 pub use spatial_reverb::SpatialReverb;
 
+pub mod hrtf_convolver;
+pub use hrtf_convolver::HrtfConvolver;
+
 pub mod config;
 pub use config::AudioConfig;

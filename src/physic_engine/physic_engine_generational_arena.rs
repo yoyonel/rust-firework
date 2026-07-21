@@ -42,6 +42,7 @@ pub struct PhysicEngineFireworks {
     explosion_shape: ExplosionShape,
 
     doppler_sender: Option<Sender<DopplerEvent>>,
+    last_doppler_time: Instant,
 }
 
 impl PhysicEngineFireworks {
@@ -83,6 +84,7 @@ impl PhysicEngineFireworks {
             ),
             explosion_shape: ExplosionShape::default(),
             doppler_sender: None,
+            last_doppler_time: Instant::now(),
         };
 
         engine.next_rocket_interval = engine.compute_next_interval();
@@ -200,6 +202,9 @@ impl PhysicEngineFireworks {
         let mut to_deactivate = std::mem::take(&mut self.to_deactivate_scratch);
         to_deactivate.clear();
 
+        // Limiteur de fréquence pour les événements Doppler (max 144 Hz)
+        let send_doppler = self.last_doppler_time.elapsed() >= std::time::Duration::from_secs_f64(1.0 / 144.0);
+
         // on parcourt la liste des id de rockets actives
         for &idx in &self.active_indices {
             // si la rocket existe
@@ -215,7 +220,7 @@ impl PhysicEngineFireworks {
                 );
 
                 // On n'envoie le Doppler que si la fusée est active ET n'a pas encore explosé !
-                if rocket.active && !rocket.exploded {
+                if send_doppler && rocket.active && !rocket.exploded {
                     if let Some(tx) = &self.doppler_sender {
                         let _ = tx.try_send(DopplerEvent {
                             id: rocket.id,
@@ -248,6 +253,10 @@ impl PhysicEngineFireworks {
 
         // On remet le buffer de travail dans la structure pour le réutiliser au prochain tour
         self.to_deactivate_scratch = to_deactivate;
+
+        if send_doppler {
+            self.last_doppler_time = Instant::now();
+        }
 
         UpdateResult {
             new_rocket,
