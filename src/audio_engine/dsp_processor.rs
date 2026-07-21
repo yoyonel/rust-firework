@@ -188,10 +188,14 @@ impl DspProcessor {
                     let v_d = v.world_pos - listener_pos;
                     let v_distance = v_d.length().max(1e-6);
                     let v_att = compute_distance_attenuation(&self.settings, v_distance, fx_mask);
-                    let v_gain = v.current_gains[0]
-                        .abs()
-                        .max(v.current_gains[1].abs())
-                        .max(0.001);
+                    let v_gain = if v.current_gains == [0.0, 0.0] {
+                        v.user_gain
+                    } else {
+                        v.current_gains[0]
+                            .abs()
+                            .max(v.current_gains[1].abs())
+                    }
+                    .max(0.001);
                     let volume = v_gain * v_att * v_priority;
                     if volume < min_volume {
                         min_volume = volume;
