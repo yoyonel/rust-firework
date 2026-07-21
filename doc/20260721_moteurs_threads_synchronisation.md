@@ -10,7 +10,8 @@
 
 1. [Vue d'Ensemble & Stratégie d'Architecture](#1-vue-densemble--stratégie-darchitecture)
 2. [Diagrammes de Synthèse (Mermaid)](#2-diagrammes-de-synthèse-mermaid)
-   - [Diagramme 1 : Vue d'Architecture des Threads (Swimlanes)](#diagramme-1--vue-darchitecture-des-threads-swimlanes)
+   - [Diagramme 0 : Vue Macro Épurée (Moteurs, Threads & Orchestrateur)](#diagramme-0--vue-macro-épurée-moteurs-threads--orchestrateur)
+   - [Diagramme 1 : Vue d'Architecture Détaillée des Threads (Swimlanes)](#diagramme-1--vue-darchitecture-détaillée-des-threads-swimlanes)
    - [Diagramme 2 : Canaux de Communication & Primitives Lock-Free](#diagramme-2--canaux-de-communication--primitives-lock-free)
    - [Diagramme 3 : Séquence Temporelle & Découplage des Boucles](#diagramme-3--séquence-temporelle--découplage-des-boucles)
 3. [Détail des Moteurs et de leur Thread d'Appartenance](#3-détail-des-moteurs-et-de-leur-thread-dappartenance)
@@ -25,9 +26,9 @@
 ## 1. Vue d'Ensemble & Stratégie d'Architecture
 
 L'application **Fireworks Simulator** repose sur une architecture multi-threadée asynchrone hautement optimisée, découpée en trois moteurs principaux :
-- **Physic Engine** : Simulation des particules, fusées, traînées et fumée.
-- **Renderer Engine** : Rendu graphique haute performance via OpenGL 4.5 AZDO (*Approaching Zero Driver Overhead*), Persistent Mapped Buffers et Triple Buffering.
-- **Audio Engine** : Synthèse 3D binaurale temps réel, traitement Doppler, réverbération spatiale et bus DSP fonctionnant sur un thread temps-réel dédié.
+- **PE (Physic Engine)** : Simulation des particules, fusées, traînées et fumée (exécuté sur le CPU).
+- **RE (Renderer Engine)** : Rendu graphique haute performance via OpenGL 4.5 AZDO (*Approaching Zero Driver Overhead*), Persistent Mapped Buffers et Triple Buffering (pilote le GPU).
+- **AE (Audio Engine)** : Synthèse 3D binaurale temps réel, traitement Doppler, réverbération spatiale et bus DSP (exécuté sur un thread auxiliaire dédié temps réel).
 
 Le défi majeur de cette architecture est le **découplage temporel** entre la boucle de rendu/physique (cadencée par l'affichage, typiquement 60 Hz à 144 Hz) et le traitement audio (cadencé par la carte son, typiquement 44.1 kHz / 48 kHz avec des blocs de 256 à 512 échantillons, soit ~172 Hz ou 5.8 ms par bloc).
 
@@ -35,9 +36,51 @@ Le défi majeur de cette architecture est le **découplage temporel** entre la b
 
 ## 2. Diagrammes de Synthèse (Mermaid)
 
-### Diagramme 1 : Vue d'Architecture des Threads (Swimlanes)
+### Diagramme 0 : Vue Macro Épurée (Moteurs, Threads & Orchestrateur)
 
-Ce diagramme illustre l'isolation des trois moteurs dans leurs threads respectifs, ainsi que les points de contact inter-threads.
+Ce diagramme synthétique haut niveau valide et affine l'organisation fondamentale de l'application : l'orchestrateur (`Simulator`) englobe la physique (`PE`), le rendu (`RE`) et l'audio (`AE`), répartis entre le **Thread Principal** (boucle de simulation CPU et contextes GPU) et le **Thread Auxiliaire** (audio temps réel CPAL).
+
+```mermaid
+flowchart LR
+    subgraph ORCHESTRATOR ["🕹️ SIMULATOR (Orchestrator Principal)"]
+        direction LR
+
+        subgraph MAIN_THREAD ["🧵 Thread Principal (Main Loop ~60 FPS)"]
+            direction TB
+            PE["<b>PE : Physic Engine</b><br/><i>Generational Arena & Particle Pools (CPU)</i>"]
+            RE["<b>RE : Renderer Engine</b><br/><i>OpenGL 4.5 AZDO & Persistent Buffers (GPU)</i>"]
+        end
+
+        subgraph AUX_THREAD ["🎧 Thread Auxiliaire (Audio CPAL)"]
+            AE["<b>AE : Audio Engine</b><br/><i>DSP Temps Réel, HRTF & Spatial Reverb (CPU)</i>"]
+        end
+
+        %% Communications validées par l'architecture
+        PE -- "<b>Persistent Mapped VBOs</b><br/><i>(Données Particules & Uniforms)</i>" --> RE
+        PE -- "<b>Canaux Lock-Free</b><br/><i>(PlayRequest & DopplerEvent)</i>" --> AE
+        AE -. "<b>Recyclage Arc</b><br/><i>(Garbage Queue)</i>" .-> PE
+    end
+
+    classDef peNode fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef reNode fill:#1e293b,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+    classDef aeNode fill:#1e293b,stroke:#fbbf24,stroke-width:2px,color:#f8fafc;
+    classDef mainBox fill:#0f172a,stroke:#475569,stroke-width:2px,stroke-dasharray: 4 4,color:#cbd5e1;
+    classDef auxBox fill:#0f172a,stroke:#d97706,stroke-width:2px,stroke-dasharray: 4 4,color:#cbd5e1;
+    classDef orchBox fill:#020617,stroke:#64748b,stroke-width:2px,color:#cbd5e1;
+
+    class PE peNode;
+    class RE reNode;
+    class AE aeNode;
+    class MAIN_THREAD mainBox;
+    class AUX_THREAD auxBox;
+    class ORCHESTRATOR orchBox;
+```
+
+---
+
+### Diagramme 1 : Vue d'Architecture Détaillée des Threads (Swimlanes)
+
+Ce diagramme illustre l'isolation fine des trois moteurs dans leurs threads respectifs, ainsi que les points de contact inter-threads.
 
 ```mermaid
 graph TB
