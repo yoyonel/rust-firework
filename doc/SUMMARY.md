@@ -2,6 +2,7 @@
 
 [Introduction](introduction.md)
 [Langage Métier (Glossaire)](ubiquitous_language.md)
+[Guide des Tâches (Taskfile)](taskfile_guide.md)
 - [Architecture Globale, Threads & Synchronisation](20260721_moteurs_threads_synchronisation.md)
 
 - [Moteur Physique]()

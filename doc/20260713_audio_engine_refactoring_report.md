@@ -36,8 +36,8 @@ Auparavant, le panoramique stéréo et les gains binauraux appliqués aux voix �
     Puis, chaque échantillon du bloc est multiplié par un gain interpolé linéairement (`start_gain + gain_step * i`), éliminant tout artéfact acoustique transitoire.
 
 ### D. Correction de l'Effet Doppler Supersonique
-L'implémentation de la vitesse radiale calculait le pitch-shifting via l'équation classique $\alpha = c / (c - v_{radial})$.
-*   **Bug Supersonique** : Si la source s'approchait à une vitesse supérieure ou égale à la vitesse du son ($v_{radial} \geq c = 343\text{ m/s}$), le dénominateur devenait nul ou négatif, provoquant des divisions par zéro ou des inversions de phase temporelle aberrantes.
+L'implémentation de la vitesse radiale calculait le pitch-shifting via l'équation classique α = c / (c - v_radial).
+*   **Bug Supersonique** : Si la source s'approchait à une vitesse supérieure ou égale à la vitesse du son (v_radial >= c = 343 m/s), le dénominateur devenait nul ou négatif, provoquant des divisions par zéro ou des inversions de phase temporelle aberrantes.
 *   **Correction** : L'algorithme dans [process_doppler](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L92-L108) intercepte désormais les dénominateurs négatifs ou nuls et applique un plafonnement physique robuste de la vitesse de lecture à un facteur maximal de `4.0`.
 
 ### E. Suppression Complète des Buffers Scratch Résiduels

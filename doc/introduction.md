@@ -18,6 +18,7 @@ Le simulateur est conçu avec une architecture modulaire et performante :
 
 La documentation est organisée en plusieurs catégories clés :
 
+* [Guide des Tâches (Taskfile)](taskfile_guide.md) : Commandes d'automatisation pour le développement, la compilation, les tests et le profilage.
 * **Moteur Physique :**
   * [Gestion de la mémoire physique](physic_memory_management.md) : Modèle de données et structures pré-allouées.
   * [Formes d'explosions](physic_explosion_shapes.md) : Paramétrage géométrique et par image des explosions.

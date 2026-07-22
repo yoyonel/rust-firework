@@ -18,3 +18,17 @@
    - NO blocking `Mutex::lock()`, `RwLock::write()`, or system blocking calls inside the CPAL callback thread. Use `try_lock()` or lock-free atomics (`AtomicU32`, `AtomicVec2`).
 6. **Zero Code Duplication across Hot Paths (DRY)**:
    - Extract reusable DSP calculations (distance attenuation, lowpass alpha constants) into inline helper functions on `DspProcessor` instead of duplicating math blocks across legacy and spatial bus rendering paths.
+
+## 📝 Documentation & Formatting Rules
+
+7. **Zero MathJax/KaTeX (LaTeX) Formulas in Markdown Documentation**:
+   - The local documentation server (mdBook) does not support LaTeX/MathJax formulas natively (e.g., using `$formula$` or `$$formula$$`).
+   - NEVER use single (`$`) or double (`$$`) dollar signs to enclose formulas in documentation files (`.md`).
+   - Use clean, plain text and standard Unicode characters/symbols instead.
+     - E.g., write `48 kHz` instead of `$48\text{ kHz}$`.
+     - E.g., write `Δt = N / fs = 64 / 48000 ≈ 1.33 ms` instead of `$$\Delta t_{\text{bloc}} = \frac{N}{f_s} = \frac{64}{48000} \approx 1.33\text{ ms}$$`.
+     - E.g., write `α` instead of `$\alpha$`.
+     - E.g., write `16.67 ms` instead of `$16.67\text{ ms}$`.
+   - This ensures the documentation is clean, readable, and functional from the first iteration.
+8. **Taskfile Documentation Sync**:
+   - Every time a task is added, modified, or removed in [**`Taskfile.yml`**](file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml), the corresponding documentation in [**`doc/taskfile_guide.md`**](file:///home/latty/Prog/__PERSO__/rust-firework/doc/taskfile_guide.md) MUST be updated immediately to maintain accurate sync.
