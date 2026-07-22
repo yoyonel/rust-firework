@@ -21,6 +21,17 @@ fn main() -> Result<()> {
 
     show_rust_core_dependencies();
 
+    // Auto-détection du dossier de travail : si "assets" n'existe pas en local mais existe chez le parent, on s'y déplace.
+    if !std::path::Path::new("assets").exists() {
+        if let Ok(current) = std::env::current_dir() {
+            if let Some(parent) = current.parent() {
+                if parent.join("assets").exists() {
+                    let _ = std::env::set_current_dir(parent);
+                }
+            }
+        }
+    }
+
     // TODO: mettre en place un vrai gestionnaire de configurations (avec traits) !
     let physic_config = PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
     info!("Physic config loaded:\n{:#?}", physic_config);
@@ -33,6 +44,7 @@ fn main() -> Result<()> {
     // --------------------------
     let export_path = std::env::args()
         .nth(1) // priorité à l'argument CLI
+        .filter(|arg| !arg.starts_with('-')) // ne pas confondre les flags avec un chemin de fichier
         .map(PathBuf::from)
         .or_else(|| env::var("FIREWORKS_AUDIO_EXPORT").ok().map(PathBuf::from));
 
