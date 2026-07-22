@@ -11,7 +11,7 @@ Ce rapport documente les corrections apportées aux 12 findings soulevés lors d
 - **Résolution :** La fonction `load_texture_array` (qui était du code inutilisé introduit temporairement dans la Phase 3 puis abandonné) a été **intégralement supprimée**. Cela a résolu à la fois la violation linguistique et nettoyé le code mort (Scope Creep).
 
 ### B. Suppression de la Généralité Spéculative (Dead Parameters & Fields)
-- **Problème :** Le paramètre `window_size` était propagé dans `ParticleGraphicsRenderer::render_particles_with_persistent_buffer` mais n'était plus utilisé depuis le passage globale au UBO. De plus, `loc_comp_intensity` dans [bloom.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/bloom.rs) était conservé inutilement.
+- **Problème :** Le paramètre `window_size` était propagé dans `ParticleGraphicsRenderer::render_particles_with_persistent_buffer` mais n'était plus utilisé depuis le passage globale au UBO. De plus, `loc_comp_intensity` dans [bloom/](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/bloom/) était conservé inutilement.
 - **Résolution :** 
   - Nettoyage du paramètre `window_size` de la signature du trait `ParticleGraphicsRenderer` et de toutes ses implémentations (`RendererGraphics` et `RendererGraphicsInstanced`).
   - Suppression complète de `loc_comp_intensity` dans `BloomPass` (champs, initialisation, reloads).

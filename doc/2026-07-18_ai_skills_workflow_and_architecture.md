@@ -59,7 +59,7 @@ L'arborescence est divisée en quatre compétences ultra-spécialisées, stocké
 | **`firework-audio`** | `src/audio_engine/**`<br>`doc/*audio*`, `doc/*doppler*` | Zéro allocation sur le tas dans le callback, structures lock-free (ring buffers), autovectorisation LLVM / SIMD. |
 | **`firework-renderer`** | `src/renderer_engine/**`<br>`assets/shaders/**`<br>`doc/*azdo*`, `doc/*opengl*` | Buffers mappés persistants (Write-Combining), zéro appel GL synchronisant, alignement mémoire strict `#[repr(C)]` / `std140`. |
 | **`firework-physic`** | `src/physic_engine/**`<br>`src/simulator.rs`<br>`doc/*physic*` | *Data-Oriented Design* (Static AoS/SoA), zéro fragmentation par pools pré-alloués et *Generational Arena*, isolation du step physique. |
-| **`firework-imgui`** | `src/window_engine/**`<br>`src/utils/command_console.rs`<br>`src/profiler.rs`<br>`doc/*profiling*` | Mode immédiat pur (pas de duplication d'état), isolation des handles GL bruts, réutilisation des buffers de texte pour le profilage. |
+| **`firework-imgui`** | `src/window_engine/**`<br>`src/utils/command_console/`<br>`src/profiler.rs`<br>`doc/*profiling*` | Mode immédiat pur (pas de duplication d'état), isolation des handles GL bruts, réutilisation des buffers de texte pour le profilage. |
 
 ---
 
@@ -92,7 +92,7 @@ L'agent analyse le langage naturel du prompt et le fait correspondre au champ de
 agy run "Ajoute un filtre passe-bande dans la chaîne DSP de CPal sans allouer de mémoire dans le callback."
 
 # Déclenche automatiquement [firework-imgui]
-agy run "Ajoute un widget ImGui dans command_console.rs pour afficher la consommation mémoire du GPU."
+agy run "Ajoute un widget ImGui dans command_console/ pour afficher la consommation mémoire du GPU."
 ```
 
 ### Routage Explicite (Forçage de contexte pour l'architecture)

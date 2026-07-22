@@ -126,7 +126,7 @@ Dans les coordonnées de l'écran, le point `(0, 0)` est en haut à gauche et `y
 
 Dans ImGui, la console de commande occupe une large bande en haut de l'écran. Lors de l'ouverture simultanée de la console et du *Audio Diagnostic Monitor*, cliquer sur le fond de la console ramenait celle-ci au premier plan, masquant la fenêtre de diagnostic (qui passait en arrière-plan mais restait visible en transparence, interceptant ainsi tous les clics utilisateur).
 
-* **Correction** : Nous avons ajouté le flag `imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS` lors de la création de la fenêtre `"Console"` dans `src/utils/command_console.rs`. 
+* **Correction** : Nous avons ajouté le flag `imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS` lors de la création de la fenêtre `"Console"` dans [src/utils/command_console/mod.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/utils/command_console/mod.rs). 
   Ce flag force la console à **rester systématiquement en arrière-plan** des autres fenêtres d'outils flottantes. Ainsi, même si l'utilisateur interagit avec le terminal de commande, la fenêtre de diagnostic audio reste au premier plan, conserve le focus d'entrée de souris, et demeure entièrement manipulable et repositionnable.
 
 ---

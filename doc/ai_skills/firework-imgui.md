@@ -3,7 +3,7 @@ name: firework-imgui
 description: Compétence spécialisée dans la création d'interfaces GUI en mode immédiat via ImGui, la console de commande interactive (command_console), la gestion des fenêtres (GLFW) et les widgets de diagnostic/profiling pour le projet Rust Firework. À déclencher pour ajouter un panneau d'interface, modifier un widget de debug, étendre la console ou relier l'UI aux données de simulation.
 ---
 
-# Rust Firework - Interface ImGui & Diagnostics (`src/window_engine/`, `src/utils/command_console.rs`)
+# Rust Firework - Interface ImGui & Diagnostics (`src/window_engine/`, `src/utils/command_console/`)
 
 Référence technique sur l'architecture d'interface en mode immédiat (ImGui) et l'outillage de diagnostic visuel.
 
@@ -14,4 +14,4 @@ Référence technique sur l'architecture d'interface en mode immédiat (ImGui) e
 
 ## Comment naviguer dans ce skill
 - **Console et Profiler :** Consulter la documentation `doc/console_commands.md` et `doc/*profiling*` pour voir comment intégrer un nouvel outil de monitoring.
-- **Code de l'interface :** Les implémentations se trouvent dans `references/files.md` sous `## File: src/utils/command_console.rs`, `src/window_engine/...` et `src/profiler.rs`.
+- **Code de l'interface :** Les implémentations se trouvent dans `references/files.md` sous `## File: src/utils/command_console/`, `src/window_engine/...` et `src/profiler.rs`.
