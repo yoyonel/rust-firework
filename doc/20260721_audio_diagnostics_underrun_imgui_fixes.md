@@ -39,3 +39,22 @@ Ce document récapitule les dysfonctionnements identifiés lors des phases d'év
 * **Résolution** :
   1. Rendue la méthode `destroy()` du `CircleGPURenderer` idempotente (vérifie si les IDs sont non nuls et les remet à zéro).
   2. Intégré un nettoyage explicite dans la méthode [`close()` du `Simulator`](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs#L1377) en utilisant `self.circle_renderer.take()`. Les ressources GPU sont ainsi proprement libérées **pendant** que le contexte OpenGL de GLFW est encore valide et actif.
+
+---
+
+## ⏱️ 5. Contrôle du Frame-Rate (VSync) & Déterminisme des Trajectoires en Mode Stress-Test (22 Juillet 2026)
+
+* **Problèmes identifiés** :
+  1. **Frame-Rate plafonné ou instable** : Le framerate restait bloqué à la fréquence de rafraîchissement de l'écran (VSync active par défaut), faussant les mesures de performance pure du moteur de rendu.
+  2. **Trajectoires aléatoires sur recyclage** : Les sources virtuelles du stress-test audio changeaient d'orbite aléatoirement à chaque fois que leur cycle sonore (lancement -> explosion) se terminait, empêchant de visualiser et d'étudier de manière stable des trajectoires de référence prédéterminées.
+  3. **Dérive de trajectoire continue** : Même au cours de leur mouvement, les sources virtuelles modifiaient continuellement leur rayon cible de manière aléatoire dès qu'elles s'approchaient de leur destination temporaire, empêchant toute stabilité géométrique.
+
+* **Résolutions implémentées** :
+  * **Désactivation matérielle de la VSync** : Ajout de la configuration explicite `glfw.set_swap_interval(glfw::SwapInterval::None);` dans [`glfw_window_engine.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/window_engine/glfw_window_engine.rs) pour forcer le driver et le compositeur graphique à ignorer le rafraîchissement vertical, ce qui a débloqué le framerate au-delà de 400 Hz.
+  * **Mise en cache de l'état initial des sources** : Extension de la structure `VirtualSource` avec des champs `initial_*` mémorisant les angles, rayons et vitesses de spawn à l'initialisation.
+  * **Oscillation et Relance Déterministes par Défaut** :
+    * Lors du cycle de vie sonore `Explosion -> Rocket`, si l'option de randomisation n'est pas demandée, la fusée ne subit aucun repositionnement ou saut spatial, ce qui maintient sa trajectoire d'origine de façon fluide.
+    * Au cours de la mise à jour de la physique dans `update_audio_stress_simulation`, si la source s'approche de son rayon cible, elle n'effectue plus de tirage aléatoire mais oscille de manière strictement déterministe entre ses rayons initial et cible d'origine.
+  * **Option de Randomisation CLI** : Ajout du drapeau `--randomize-stress-positions` sur la ligne de commande pour réactiver explicitement le comportement historique de randomisation continue.
+  * **Tests Unitaires Dédiés** : Intégration de tests unitaires (`test_virtual_source_determinism`) à la fin de `simulator.rs` pour valider mathématiquement et hors-contexte graphique (headless) le déterminisme de l'oscillation et de la randomisation.
+
