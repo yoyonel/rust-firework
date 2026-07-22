@@ -222,9 +222,10 @@ sequenceDiagram
 
 ### A. Thread Principal (Main / Simulation / Render Loop)
 * **Localisation du code** : [src/main.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/main.rs), [src/simulator.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs), et ses sous-modules dans [src/simulator/](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/)
-* **Architecture de l'Orchestrateur** : Afin d'éviter le couplage fort et la surcharge de `src/simulator.rs` (allégé à ~1000 lignes), l'orchestrateur délègue désormais ses composants à des sous-modules autonomes dans le dossier `src/simulator/` (SoC) :
+* **Architecture de l'Orchestrateur** : Afin d'éviter le couplage fort et la surcharge de `src/simulator.rs` (allégé à ~800 lignes), l'orchestrateur délègue désormais ses composants à des sous-modules autonomes dans le dossier `src/simulator/` (SoC) :
   - [src/simulator/audio_stress_scene.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/audio_stress_scene.rs) : Gère toute la logique interactive, la cinématique, les statistiques et le dessin GPU de la scène de stress.
   - [src/simulator/console_commands.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/console_commands.rs) : Enregistre à l'initialisation l'intégralité des commandes de la console interactive (Audio, Physique, Renderer, Bloom, Tonemapping).
+  - [src/simulator/ui.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/ui.rs) : Contient le rendu de l'interface utilisateur ImGui (dashboard de diagnostics, logs d'événements et console).
 * **Rôle** :
   - **Gestion de la Fenêtre & Entrées** : Traitement des événements GLFW (clavier, souris) et rendu de l'interface utilisateur ImGui.
   - **Exécution du Moteur Physique** ([src/physic_engine/physic_engine_generational_arena.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/physic_engine_generational_arena.rs)) : Mise à jour de la `GenerationalArena<Rocket>`, des pools de particules (`ParticlesPoolsForRockets`) et du système de fumée (`SmokeSystem`).
