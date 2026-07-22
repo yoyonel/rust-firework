@@ -102,6 +102,17 @@ tasks:
     cmds:
       - "{{.CARGO}} run --release 2>&1"
 
+  run-audio-stress:
+    desc: "Lancement du stress test audio interactif avec Gallium HUD (VSync désactivée)"
+    env:
+      vblank_mode: "0"
+      __GL_SYNC_TO_VBLANK: "0"
+      RUST_LOG: "fireworks_sim=INFO"
+      GALLIUM_HUD_PERIOD: "0.15"
+      GALLIUM_HUD: "cpu;fps;N vertices submitted"
+    cmds:
+      - "{{.CARGO}} run --release -- --audio-stress-scene {{.CLI_ARGS | default \"128\"}}"
+
   run-prime-with-hud:
     desc: "MangoHub (Compatible NVidia) Raccourci: RIGHT-SHIFT+F10"
     env:
