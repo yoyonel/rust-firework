@@ -313,10 +313,7 @@ impl FireworksAudio3D {
                         sr,
                         reverb_wet_clone,
                     ),
-                    hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
-                        sr,
-                        block_size,
-                    ),
+                    hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sr, block_size),
                     debug_tx: Some(debug_tx_clone),
                 };
 

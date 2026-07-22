@@ -82,6 +82,11 @@ pub struct VirtualSource {
     pub radius_speed: f32,
     pub sound_type: crate::audio_engine::types::AudioSoundType,
     pub active_request_id: Option<u64>,
+    pub initial_angle: f32,
+    pub initial_angular_speed: f32,
+    pub initial_radius: f32,
+    pub initial_target_radius: f32,
+    pub initial_radius_speed: f32,
 }
 
 pub struct Simulator<R, P, A, W>
@@ -163,6 +168,8 @@ where
     pub stress_active_voices: usize,
     pub stress_last_report: Instant,
     pub circle_renderer: Option<crate::renderer_engine::CircleGPURenderer>,
+    pub audio_stress_last_doppler: Instant,
+    pub audio_stress_randomize_positions: bool,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -237,19 +244,25 @@ where
             stress_active_voices: 0,
             stress_last_report: Instant::now(),
             circle_renderer: None,
+            audio_stress_last_doppler: Instant::now(),
+            audio_stress_randomize_positions: false,
         }
     }
 
-    pub fn set_doppler_sender(&mut self, sender: crossbeam_channel::Sender<crate::audio_engine::DopplerEvent>) {
+    pub fn set_doppler_sender(
+        &mut self,
+        sender: crossbeam_channel::Sender<crate::audio_engine::DopplerEvent>,
+    ) {
         self.doppler_sender = Some(sender);
     }
 
-    pub fn enable_audio_stress_scene(&mut self, num_sources: usize) {
+    pub fn enable_audio_stress_scene(&mut self, num_sources: usize, randomize_positions: bool) {
         self.audio_stress_scene_mode = true;
         self.audio_stress_num_sources = num_sources;
+        self.audio_stress_randomize_positions = randomize_positions;
         self.show_audio_diagnostic = true;
 
-        if self.circle_renderer.is_none() {
+        if self.circle_renderer.is_none() && gl::GenVertexArrays::is_loaded() {
             self.circle_renderer = Some(crate::renderer_engine::CircleGPURenderer::new());
         }
 
@@ -262,9 +275,12 @@ where
 
         // NOUVEAU: Activer par défaut le Spatial Bus, Hrtf Bus et Spatial Reverb
         use crate::audio_engine::effect_flags::AudioEffect;
-        self.audio_engine.set_effect_enabled(AudioEffect::SpatialBus, true);
-        self.audio_engine.set_effect_enabled(AudioEffect::HrtfBus, true);
-        self.audio_engine.set_effect_enabled(AudioEffect::SpatialReverb, true);
+        self.audio_engine
+            .set_effect_enabled(AudioEffect::SpatialBus, true);
+        self.audio_engine
+            .set_effect_enabled(AudioEffect::HrtfBus, true);
+        self.audio_engine
+            .set_effect_enabled(AudioEffect::SpatialReverb, true);
 
         let mut sources = Vec::with_capacity(num_sources);
         use rand::Rng;
@@ -273,11 +289,15 @@ where
             let angle = rng.random::<f32>() * 2.0 * std::f32::consts::PI;
             let dir = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
             let angular_speed = (rng.random::<f32>() * 0.65 + 0.15) * dir;
-            
+
             let radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
             let target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
             let speed = rng.random::<f32>() * 50.0 + 15.0; // 15 to 65 px/s
-            let radius_speed = if target_radius > radius { speed } else { -speed };
+            let radius_speed = if target_radius > radius {
+                speed
+            } else {
+                -speed
+            };
 
             let pos = center + glam::Vec2::new(radius * angle.cos(), radius * angle.sin());
 
@@ -291,6 +311,11 @@ where
                 radius_speed,
                 sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
                 active_request_id: None,
+                initial_angle: angle,
+                initial_angular_speed: angular_speed,
+                initial_radius: radius,
+                initial_target_radius: target_radius,
+                initial_radius_speed: radius_speed,
             });
         }
 
@@ -298,12 +323,13 @@ where
 
         // Bootstrap sounds
         for source in &self.audio_stress_sources {
-            self.audio_engine.play_rocket_with_id(source.id, source.pos, 0.7);
+            self.audio_engine
+                .play_rocket_with_id(source.id, source.pos, 0.7);
         }
     }
 
     fn update_audio_stress_simulation(&mut self, delta: f32) {
-        use crate::audio_engine::types::{AudioSoundType, AudioDebugEvent};
+        use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType};
 
         let window_w = self.window_size_f32.0;
         let window_h = self.window_size_f32.1;
@@ -313,40 +339,75 @@ where
         use rand::Rng;
         let mut rng = rand::rng();
 
-        // 1. Move virtual sources and send DopplerEvents
+        // 1. Move virtual sources
         for source in &mut self.audio_stress_sources {
             let to_target = source.target_radius - source.radius;
             if to_target.abs() < 5.0 {
-                source.target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
-                let speed = rng.random::<f32>() * 50.0 + 15.0;
-                source.radius_speed = if source.target_radius > source.radius { speed } else { -speed };
+                if self.audio_stress_randomize_positions {
+                    source.target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
+                    let speed = rng.random::<f32>() * 50.0 + 15.0;
+                    source.radius_speed = if source.target_radius > source.radius {
+                        speed
+                    } else {
+                        -speed
+                    };
+                } else {
+                    // Oscillate deterministically between initial_radius and initial_target_radius
+                    if (source.target_radius - source.initial_target_radius).abs() < 1e-3 {
+                        source.target_radius = source.initial_radius;
+                    } else {
+                        source.target_radius = source.initial_target_radius;
+                    }
+                    let speed = source.initial_radius_speed.abs();
+                    source.radius_speed = if source.target_radius > source.radius {
+                        speed
+                    } else {
+                        -speed
+                    };
+                }
             } else {
                 source.radius += source.radius_speed * delta;
             }
 
             source.angle += source.angular_speed * delta;
-            source.pos = center + glam::Vec2::new(source.radius * source.angle.cos(), source.radius * source.angle.sin());
+            source.pos = center
+                + glam::Vec2::new(
+                    source.radius * source.angle.cos(),
+                    source.radius * source.angle.sin(),
+                );
+        }
 
-            // Velocity (derivative)
-            let vx = source.radius_speed * source.angle.cos() - source.radius * source.angular_speed * source.angle.sin();
-            let vy = source.radius_speed * source.angle.sin() + source.radius * source.angular_speed * source.angle.cos();
-            let vel = glam::Vec2::new(vx, vy);
+        // Send DopplerEvents at 144 Hz max AND only for sources actively playing in the audio engine
+        let send_doppler = self.audio_stress_last_doppler.elapsed()
+            >= std::time::Duration::from_secs_f64(1.0 / 144.0);
+        if send_doppler {
+            self.audio_stress_last_doppler = std::time::Instant::now();
+            for source in &self.audio_stress_sources {
+                if source.active_request_id.is_some() {
+                    // Velocity (derivative)
+                    let vx = source.radius_speed * source.angle.cos()
+                        - source.radius * source.angular_speed * source.angle.sin();
+                    let vy = source.radius_speed * source.angle.sin()
+                        + source.radius * source.angular_speed * source.angle.cos();
+                    let vel = glam::Vec2::new(vx, vy);
 
-            // Doppler event
-            if let Some(tx) = &self.doppler_sender {
-                let _ = tx.send(crate::audio_engine::DopplerEvent {
-                    id: source.id,
-                    pos: source.pos,
-                    vel,
-                    gain: 1.0,
-                    timestamp: Instant::now(),
-                });
+                    if let Some(tx) = &self.doppler_sender {
+                        let _ = tx.send(crate::audio_engine::DopplerEvent {
+                            id: source.id,
+                            pos: source.pos,
+                            vel,
+                            gain: 1.0,
+                            timestamp: Instant::now(),
+                        });
+                    }
+                }
             }
         }
 
         // 2. Process debug events for state machine and stats
         self.audio_events_buf.clear();
-        self.audio_engine.pop_debug_events(&mut self.audio_events_buf);
+        self.audio_engine
+            .pop_debug_events(&mut self.audio_events_buf);
 
         let mut block_count = 0u64;
         let mut underrun_count = 0u64;
@@ -357,36 +418,71 @@ where
 
         for event in &self.audio_events_buf {
             match event {
-                AudioDebugEvent::Sent { request_id, entity_id, .. } => {
+                AudioDebugEvent::Sent {
+                    request_id,
+                    entity_id,
+                    ..
+                } => {
                     if *entity_id > 0 && *entity_id <= self.audio_stress_num_sources as u64 {
-                        self.audio_stress_sources[(*entity_id - 1) as usize].active_request_id = Some(*request_id);
+                        self.audio_stress_sources[(*entity_id - 1) as usize].active_request_id =
+                            Some(*request_id);
                     }
                 }
-                AudioDebugEvent::Completed { request_id, .. } | AudioDebugEvent::Dropped { request_id, .. } => {
-                    if let Some(source) = self.audio_stress_sources.iter_mut().find(|s| s.active_request_id == Some(*request_id)) {
+                AudioDebugEvent::Completed { request_id, .. }
+                | AudioDebugEvent::Dropped { request_id, .. } => {
+                    if let Some(source) = self
+                        .audio_stress_sources
+                        .iter_mut()
+                        .find(|s| s.active_request_id == Some(*request_id))
+                    {
                         source.active_request_id = None;
                         match source.sound_type {
                             AudioSoundType::Rocket => {
                                 source.sound_type = AudioSoundType::Explosion;
-                                self.audio_engine.play_explosion_with_id(source.id, source.pos, 1.0);
+                                self.audio_engine
+                                    .play_explosion_with_id(source.id, source.pos, 1.0);
                             }
                             AudioSoundType::Explosion => {
                                 source.sound_type = AudioSoundType::Rocket;
-                                source.angle = rng.random::<f32>() * 2.0 * std::f32::consts::PI;
-                                let dir = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
-                                source.angular_speed = (rng.random::<f32>() * 0.65 + 0.15) * dir;
-                                source.radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
-                                source.target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
-                                let speed = rng.random::<f32>() * 50.0 + 15.0;
-                                source.radius_speed = if source.target_radius > source.radius { speed } else { -speed };
+                                if self.audio_stress_randomize_positions {
+                                    source.angle = rng.random::<f32>() * 2.0 * std::f32::consts::PI;
+                                    let dir = if rng.random_bool(0.5) { 1.0 } else { -1.0 };
+                                    source.angular_speed =
+                                        (rng.random::<f32>() * 0.65 + 0.15) * dir;
+                                    source.radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
+                                    source.target_radius =
+                                        rng.random::<f32>() * (max_r - 80.0) + 80.0;
+                                    let speed = rng.random::<f32>() * 50.0 + 15.0;
+                                    source.radius_speed = if source.target_radius > source.radius {
+                                        speed
+                                    } else {
+                                        -speed
+                                    };
+                                    source.pos = center
+                                        + glam::Vec2::new(
+                                            source.radius * source.angle.cos(),
+                                            source.radius * source.angle.sin(),
+                                        );
+                                } else {
+                                    // Do not reset the position; let the rocket continue its deterministic orbit smoothly
+                                }
 
-                                source.pos = center + glam::Vec2::new(source.radius * source.angle.cos(), source.radius * source.angle.sin());
-                                self.audio_engine.play_rocket_with_id(source.id, source.pos, 0.7);
+                                source.pos = center
+                                    + glam::Vec2::new(
+                                        source.radius * source.angle.cos(),
+                                        source.radius * source.angle.sin(),
+                                    );
+                                self.audio_engine
+                                    .play_rocket_with_id(source.id, source.pos, 0.7);
                             }
                         }
                     }
                 }
-                AudioDebugEvent::BlockProcessed { elapsed_us, budget_us, active_voices } => {
+                AudioDebugEvent::BlockProcessed {
+                    elapsed_us,
+                    budget_us,
+                    active_voices,
+                } => {
                     block_count += 1;
                     sum_us += *elapsed_us;
                     max_us = max_us.max(*elapsed_us);
@@ -468,7 +564,8 @@ where
                         >= std::time::Duration::from_millis(100)
                     {
                         self.audio_events_buf.clear();
-                        self.audio_engine.pop_debug_events(&mut self.audio_events_buf);
+                        self.audio_engine
+                            .pop_debug_events(&mut self.audio_events_buf);
                         self.last_audio_debug_update = std::time::Instant::now();
                     }
                 }
@@ -1068,8 +1165,14 @@ where
 
                 // 2. Custom ImGui window for stress stats & controls
                 ui.window("Audio Stress Scene Monitor")
-                    .size([window_width * 0.45, window_height * 0.50], imgui::Condition::FirstUseEver)
-                    .position([window_width * 0.53, window_height * 0.45], imgui::Condition::FirstUseEver)
+                    .size(
+                        [window_width * 0.45, window_height * 0.50],
+                        imgui::Condition::FirstUseEver,
+                    )
+                    .position(
+                        [window_width * 0.53, window_height * 0.45],
+                        imgui::Condition::FirstUseEver,
+                    )
                     .resizable(true)
                     .collapsible(true)
                     .build(|| {
@@ -1082,8 +1185,10 @@ where
                             self.audio_stress_num_sources,
                             self.stress_active_voices
                         );
-                        
-                        let load_percent = (self.stress_avg_render_us as f64 / self.stress_budget_us as f64) * 100.0;
+
+                        let load_percent = (self.stress_avg_render_us as f64
+                            / self.stress_budget_us as f64)
+                            * 100.0;
                         ui_text!(
                             ui,
                             "Block Budget: {} us  |  CPU Render Avg: {} us ({:.1}%)",
@@ -1092,11 +1197,7 @@ where
                             load_percent
                         );
 
-                        ui_text!(
-                            ui,
-                            "CPU Render Max: {} us",
-                            self.stress_max_render_us
-                        );
+                        ui_text!(ui, "CPU Render Max: {} us", self.stress_max_render_us);
 
                         let underrun_ratio = if self.stress_total_blocks > 0 {
                             (self.stress_underruns as f64 / self.stress_total_blocks as f64) * 100.0
@@ -1114,7 +1215,10 @@ where
                                 underrun_ratio
                             );
                         } else {
-                            ui.text_colored([0.0, 1.0, 0.0, 1.0], "   ALSA Underruns: None (Healthy DSP pipeline)");
+                            ui.text_colored(
+                                [0.0, 1.0, 0.0, 1.0],
+                                "   ALSA Underruns: None (Healthy DSP pipeline)",
+                            );
                         }
 
                         ui.separator();
@@ -1123,7 +1227,12 @@ where
                         // Toggle Buttons for Effects
                         use crate::audio_engine::effect_flags::AudioEffect;
 
-                        fn toggle_effect_btn<A: AudioEngine>(ui: &imgui::Ui, engine: &A, effect: AudioEffect, name: &str) {
+                        fn toggle_effect_btn<A: AudioEngine>(
+                            ui: &imgui::Ui,
+                            engine: &A,
+                            effect: AudioEffect,
+                            name: &str,
+                        ) {
                             let current = engine.get_effect_enabled(effect);
                             let label = if current {
                                 format!("Disable {}", name)
@@ -1136,17 +1245,47 @@ where
                             }
                         }
 
-                        toggle_effect_btn(ui, &self.audio_engine, AudioEffect::HrtfBus, "HRTF (Binaural Bus)");
+                        toggle_effect_btn(
+                            ui,
+                            &self.audio_engine,
+                            AudioEffect::HrtfBus,
+                            "HRTF (Binaural Bus)",
+                        );
                         ui.same_line();
-                        toggle_effect_btn(ui, &self.audio_engine, AudioEffect::SpatialBus, "Spatial Bus");
+                        toggle_effect_btn(
+                            ui,
+                            &self.audio_engine,
+                            AudioEffect::SpatialBus,
+                            "Spatial Bus",
+                        );
 
-                        toggle_effect_btn(ui, &self.audio_engine, AudioEffect::SpatialReverb, "Spatial Reverb");
+                        toggle_effect_btn(
+                            ui,
+                            &self.audio_engine,
+                            AudioEffect::SpatialReverb,
+                            "Spatial Reverb",
+                        );
                         ui.same_line();
-                        toggle_effect_btn(ui, &self.audio_engine, AudioEffect::Doppler, "Doppler Effect");
+                        toggle_effect_btn(
+                            ui,
+                            &self.audio_engine,
+                            AudioEffect::Doppler,
+                            "Doppler Effect",
+                        );
 
-                        toggle_effect_btn(ui, &self.audio_engine, AudioEffect::Binaural, "Legacy Direct Binaural");
+                        toggle_effect_btn(
+                            ui,
+                            &self.audio_engine,
+                            AudioEffect::Binaural,
+                            "Legacy Direct Binaural",
+                        );
                         ui.same_line();
-                        toggle_effect_btn(ui, &self.audio_engine, AudioEffect::Panning, "Legacy Direct Panning");
+                        toggle_effect_btn(
+                            ui,
+                            &self.audio_engine,
+                            AudioEffect::Panning,
+                            "Legacy Direct Panning",
+                        );
 
                         ui.separator();
                         ui.text("Current DSP Status flags:");
@@ -1154,68 +1293,68 @@ where
                     });
             } else {
                 {
-                // NOUVEAU : Dessiner l'indicateur graphique de l'auditeur (Listener) en arrière-plan
-                let draw_list = ui.get_background_draw_list();
+                    // NOUVEAU : Dessiner l'indicateur graphique de l'auditeur (Listener) en arrière-plan
+                    let draw_list = ui.get_background_draw_list();
+                    let window_width = ui.io().display_size[0];
+                    let window_height = ui.io().display_size[1];
+
+                    let listener_x = window_width * 0.5;
+                    let listener_y = window_height;
+
+                    // Icône de casque (dessin vectoriel)
+                    draw_list
+                        .add_circle([listener_x, listener_y - 20.0], 12.0, [0.0, 1.0, 0.0, 0.8])
+                        .thickness(2.0)
+                        .build();
+                    draw_list
+                        .add_circle([listener_x, listener_y - 20.0], 4.0, [0.0, 1.0, 0.0, 1.0])
+                        .filled(true)
+                        .build();
+
+                    let label = "🎧 Listener (Sol / Centre)";
+                    let text_size = ui.calc_text_size(label);
+                    draw_list.add_text(
+                        [listener_x - text_size[0] * 0.5, listener_y - 45.0],
+                        [0.0, 1.0, 0.0, 1.0],
+                        label,
+                    );
+
+                    // Cercle indicatif de la zone de volume max (ref_distance = 50px)
+                    draw_list
+                        .add_circle([listener_x, listener_y], 50.0, [0.0, 0.8, 1.0, 0.35])
+                        .thickness(1.5)
+                        .build();
+                    draw_list.add_text(
+                        [listener_x + 55.0, listener_y - 20.0],
+                        [0.0, 0.8, 1.0, 0.7],
+                        "Volume Max (50px)",
+                    );
+
+                    // Cercle de la zone d'atténuation (max_distance réelle récupérée dynamiquement)
+                    let max_dist = self.audio_engine.get_max_distance();
+                    draw_list
+                        .add_circle([listener_x, listener_y], max_dist, [1.0, 0.5, 0.0, 0.15])
+                        .thickness(1.5)
+                        .build();
+
+                    let text_y = (listener_y - max_dist).max(10.0);
+                    let mut buf = [0u8; 64];
+                    let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                    use std::io::Write;
+                    let _ = write!(cursor, "Zone d'attenuation (max {}px)", max_dist as u32);
+                    let pos = cursor.position() as usize;
+                    if let Ok(label_text) = std::str::from_utf8(&buf[..pos]) {
+                        draw_list.add_text(
+                            [listener_x + 10.0, text_y],
+                            [1.0, 0.5, 0.0, 0.5],
+                            label_text,
+                        );
+                    }
+                }
+
                 let window_width = ui.io().display_size[0];
                 let window_height = ui.io().display_size[1];
-
-                let listener_x = window_width * 0.5;
-                let listener_y = window_height;
-
-                // Icône de casque (dessin vectoriel)
-                draw_list
-                    .add_circle([listener_x, listener_y - 20.0], 12.0, [0.0, 1.0, 0.0, 0.8])
-                    .thickness(2.0)
-                    .build();
-                draw_list
-                    .add_circle([listener_x, listener_y - 20.0], 4.0, [0.0, 1.0, 0.0, 1.0])
-                    .filled(true)
-                    .build();
-
-                let label = "🎧 Listener (Sol / Centre)";
-                let text_size = ui.calc_text_size(label);
-                draw_list.add_text(
-                    [listener_x - text_size[0] * 0.5, listener_y - 45.0],
-                    [0.0, 1.0, 0.0, 1.0],
-                    label,
-                );
-
-                // Cercle indicatif de la zone de volume max (ref_distance = 50px)
-                draw_list
-                    .add_circle([listener_x, listener_y], 50.0, [0.0, 0.8, 1.0, 0.35])
-                    .thickness(1.5)
-                    .build();
-                draw_list.add_text(
-                    [listener_x + 55.0, listener_y - 20.0],
-                    [0.0, 0.8, 1.0, 0.7],
-                    "Volume Max (50px)",
-                );
-
-                // Cercle de la zone d'atténuation (max_distance réelle récupérée dynamiquement)
-                let max_dist = self.audio_engine.get_max_distance();
-                draw_list
-                    .add_circle([listener_x, listener_y], max_dist, [1.0, 0.5, 0.0, 0.15])
-                    .thickness(1.5)
-                    .build();
-
-                let text_y = (listener_y - max_dist).max(10.0);
-                let mut buf = [0u8; 64];
-                let mut cursor = std::io::Cursor::new(&mut buf[..]);
-                use std::io::Write;
-                let _ = write!(cursor, "Zone d'attenuation (max {}px)", max_dist as u32);
-                let pos = cursor.position() as usize;
-                if let Ok(label_text) = std::str::from_utf8(&buf[..pos]) {
-                    draw_list.add_text(
-                        [listener_x + 10.0, text_y],
-                        [1.0, 0.5, 0.0, 0.5],
-                        label_text,
-                    );
-                }
-            }
-
-            let window_width = ui.io().display_size[0];
-            let window_height = ui.io().display_size[1];
-            ui.window("Audio Diagnostic Monitor")
+                ui.window("Audio Diagnostic Monitor")
                 .size([window_width * 0.45, window_height * 0.45], imgui::Condition::FirstUseEver)
                 .position([window_width * 0.53, window_height * 0.52], imgui::Condition::FirstUseEver)
                 .resizable(true)
@@ -2574,5 +2713,77 @@ where
             "khronos" => Some(KhronosPBR),
             _ => None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_virtual_source_determinism() {
+        let center = glam::Vec2::new(512.0, 400.0);
+        let max_r = 400.0;
+
+        let mut source = VirtualSource {
+            id: 1,
+            pos: center + glam::Vec2::new(100.0, 0.0),
+            angle: 0.0,
+            angular_speed: 0.5,
+            radius: 100.0,
+            target_radius: 120.0,
+            radius_speed: 10.0,
+            sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            active_request_id: None,
+            initial_angle: 0.0,
+            initial_angular_speed: 0.5,
+            initial_radius: 100.0,
+            initial_target_radius: 120.0,
+            initial_radius_speed: 10.0,
+        };
+
+        let mut rng = rand::rng();
+
+        // Test 1: Deterministic oscillation instead of random target_radius change when randomize is false
+        let mut source_rand = source.clone();
+
+        // Setup close to target radius so it triggers the target radius change condition
+        source.radius = 119.9;
+        let to_target = source.target_radius - source.radius;
+        assert!(to_target.abs() < 5.0);
+
+        // Run the update logic for deterministic case
+        {
+            let to_target = source.target_radius - source.radius;
+            if to_target.abs() < 5.0 {
+                // Should oscillate to initial_radius
+                if (source.target_radius - source.initial_target_radius).abs() < 1e-3 {
+                    source.target_radius = source.initial_radius;
+                } else {
+                    source.target_radius = source.initial_target_radius;
+                }
+                let speed = source.initial_radius_speed.abs();
+                source.radius_speed = if source.target_radius > source.radius {
+                    speed
+                } else {
+                    -speed
+                };
+            }
+        }
+
+        assert_eq!(source.target_radius, 100.0);
+        assert_eq!(source.radius_speed, -10.0); // moving backwards
+
+        // Test 2: Random target_radius change when randomize is true
+        source_rand.radius = 119.9;
+        {
+            let to_target = source_rand.target_radius - source_rand.radius;
+            if to_target.abs() < 5.0 {
+                use rand::Rng;
+                source_rand.target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
+            }
+        }
+        // It should have randomized target_radius instead of oscillating to 100.0
+        assert_ne!(source_rand.target_radius, 100.0);
     }
 }

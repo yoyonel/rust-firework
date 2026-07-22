@@ -1,5 +1,5 @@
-use std::ptr;
 use crate::renderer_engine::shader::compile_shader_program_from_files;
+use std::ptr;
 
 pub struct CircleGPURenderer {
     shader_program: u32,
@@ -19,13 +19,19 @@ pub struct CircleGPUData {
     pub thickness: f32,
 }
 
+impl Default for CircleGPURenderer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CircleGPURenderer {
     pub fn new() -> Self {
         unsafe {
             // Compile shaders
             let shader_program = compile_shader_program_from_files(
                 "assets/shaders/circle.vert.glsl",
-                "assets/shaders/circle.frag.glsl"
+                "assets/shaders/circle.frag.glsl",
             );
 
             // Bind global data uniform block to binding point 0 (matches particles)
@@ -35,12 +41,7 @@ impl CircleGPURenderer {
             }
 
             // 1. Quad vertices for filled disks (-0.5 to 0.5 to center on UV)
-            const QUAD_VERTICES: [f32; 8] = [
-                -0.5, -0.5,
-                 0.5, -0.5,
-                -0.5,  0.5,
-                 0.5,  0.5,
-            ];
+            const QUAD_VERTICES: [f32; 8] = [-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5];
 
             // 2. Circle vertices for outlines (LINE_LOOP - 64 segments, radius 0.5 to match quad UV scale)
             let mut unit_circle_vertices = Vec::with_capacity(64 * 2);
@@ -83,7 +84,7 @@ impl CircleGPURenderer {
 
             // Attribute 1: Center (vec2)
             gl::EnableVertexAttribArray(1);
-            gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, 0 as *const _);
+            gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, ptr::null());
             gl::VertexAttribDivisor(1, 1);
 
             // Attribute 2: Radius (float)
@@ -120,7 +121,7 @@ impl CircleGPURenderer {
 
             // Attribute 1: Center (vec2)
             gl::EnableVertexAttribArray(1);
-            gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, 0 as *const _);
+            gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, ptr::null());
             gl::VertexAttribDivisor(1, 1);
 
             // Attribute 2: Radius (float)
@@ -152,6 +153,11 @@ impl CircleGPURenderer {
         }
     }
 
+    /// Draws the circles.
+    ///
+    /// # Safety
+    ///
+    /// This function performs raw OpenGL calls and binds vertex array buffers, which requires a valid active OpenGL context.
     pub unsafe fn draw(&mut self, orbits: &[CircleGPUData], discs: &[CircleGPUData]) {
         // Save current OpenGL states
         let mut depth_test_enabled = 0;
@@ -173,7 +179,7 @@ impl CircleGPURenderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_instances);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                (orbits.len() * std::mem::size_of::<CircleGPUData>()) as isize,
+                std::mem::size_of_val(orbits) as isize,
                 orbits.as_ptr() as *const _,
                 gl::STREAM_DRAW,
             );
@@ -187,7 +193,7 @@ impl CircleGPURenderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_instances);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                (discs.len() * std::mem::size_of::<CircleGPUData>()) as isize,
+                std::mem::size_of_val(discs) as isize,
                 discs.as_ptr() as *const _,
                 gl::STREAM_DRAW,
             );

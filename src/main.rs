@@ -100,15 +100,17 @@ fn main() -> Result<()> {
     }
 
     let mut audio_stress_sources = None;
+    let mut randomize_stress_positions = false;
     if let Some(pos) = args.iter().position(|a| a == "--audio-stress-scene") {
         let num_sources: usize = args.get(pos + 1).and_then(|s| s.parse().ok()).unwrap_or(32);
         audio_stress_sources = Some(num_sources);
+        randomize_stress_positions = args.iter().any(|a| a == "--randomize-stress-positions");
         info!(
-            "🎧 [STRESS TEST SCENE] Starting interactive audio stress-test with {} virtual sources...",
-            num_sources
+            "🎧 [STRESS TEST SCENE] Starting interactive audio stress-test with {} virtual sources (randomize positions: {})...",
+            num_sources,
+            randomize_stress_positions
         );
     }
-
 
     let window_width = 1024;
     let window_height = 800;
@@ -134,7 +136,7 @@ fn main() -> Result<()> {
 
     if let Some(n) = audio_stress_sources {
         simulator.set_doppler_sender(doppler_queue.sender.clone());
-        simulator.enable_audio_stress_scene(n);
+        simulator.enable_audio_stress_scene(n, randomize_stress_positions);
     }
 
     simulator.init_console_commands();

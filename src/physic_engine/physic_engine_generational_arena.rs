@@ -203,7 +203,8 @@ impl PhysicEngineFireworks {
         to_deactivate.clear();
 
         // Limiteur de fréquence pour les événements Doppler (max 144 Hz)
-        let send_doppler = self.last_doppler_time.elapsed() >= std::time::Duration::from_secs_f64(1.0 / 144.0);
+        let send_doppler =
+            self.last_doppler_time.elapsed() >= std::time::Duration::from_secs_f64(1.0 / 144.0);
 
         // on parcourt la liste des id de rockets actives
         for &idx in &self.active_indices {

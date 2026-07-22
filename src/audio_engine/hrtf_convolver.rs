@@ -106,7 +106,11 @@ impl SingleChannelConvolver {
 
         // 3. Forward FFT sans aucune allocation : X(f) = FFT(x)
         self.r2c
-            .process_with_scratch(&mut self.fft_in, &mut self.spectrum_buf, &mut self.r2c_scratch)
+            .process_with_scratch(
+                &mut self.fft_in,
+                &mut self.spectrum_buf,
+                &mut self.r2c_scratch,
+            )
             .expect("Forward FFT failed");
 
         // 4. Multiplication complexe point par point dans le domaine fréquentiel : Y(f) = X(f) * H(f)
@@ -116,7 +120,11 @@ impl SingleChannelConvolver {
 
         // 5. Inverse FFT sans aucune allocation : y_raw = IFFT(Y(f))
         self.c2r
-            .process_with_scratch(&mut self.spectrum_buf, &mut self.ifft_out, &mut self.c2r_scratch)
+            .process_with_scratch(
+                &mut self.spectrum_buf,
+                &mut self.ifft_out,
+                &mut self.c2r_scratch,
+            )
             .expect("Inverse FFT failed");
 
         // 6. Normalisation par 1 / fft_len et extraction de la partie valide [history_len .. history_len + n]
@@ -160,7 +168,8 @@ impl HrtfConvolver {
         // quelle que soit la taille globale du buffer matériel (ex: 4096 ou 16384).
         let chunk_size = target_block_size.clamp(128, 512);
 
-        let (fir_ipsi, fir_contra) = generate_synthetic_hrtf_pair(sample_rate, 45.0_f32.to_radians());
+        let (fir_ipsi, fir_contra) =
+            generate_synthetic_hrtf_pair(sample_rate, 45.0_f32.to_radians());
 
         let conv_vl_l = SingleChannelConvolver::new(&fir_ipsi, chunk_size);
         let conv_vl_r = SingleChannelConvolver::new(&fir_contra, chunk_size);
@@ -242,20 +251,16 @@ impl HrtfConvolver {
         let vl = &self.tmp_virtual_l[..n];
         let vr = &self.tmp_virtual_r[..n];
 
-        self.conv_vl_l
-            .process_block(vl, &mut self.tmp_out_l1[..n]);
-        self.conv_vr_l
-            .process_block(vr, &mut self.tmp_out_l2[..n]);
+        self.conv_vl_l.process_block(vl, &mut self.tmp_out_l1[..n]);
+        self.conv_vr_l.process_block(vr, &mut self.tmp_out_l2[..n]);
 
-        self.conv_vl_r
-            .process_block(vl, &mut self.tmp_out_r1[..n]);
-        self.conv_vr_r
-            .process_block(vr, &mut self.tmp_out_r2[..n]);
+        self.conv_vl_r.process_block(vl, &mut self.tmp_out_r1[..n]);
+        self.conv_vr_r.process_block(vr, &mut self.tmp_out_r2[..n]);
 
         // 3. Mixage final stéréo : L = VL->L + VR->L, R = VL->R + VR->R
-        for i in 0..n {
-            acc_out[i][0] = self.tmp_out_l1[i] + self.tmp_out_l2[i];
-            acc_out[i][1] = self.tmp_out_r1[i] + self.tmp_out_r2[i];
+        for (i, acc) in acc_out.iter_mut().enumerate().take(n) {
+            acc[0] = self.tmp_out_l1[i] + self.tmp_out_l2[i];
+            acc[1] = self.tmp_out_r1[i] + self.tmp_out_r2[i];
         }
     }
 }
@@ -292,10 +297,10 @@ pub fn generate_synthetic_hrtf_pair(sample_rate: u32, azimuth_rad: f32) -> (Vec<
 
     // Réponse impulsionnelle passe-bas lissée (gaussienne) autour de contra_idx
     let sigma = 1.8_f32; // Largeur du lissage passe-bas
-    for i in 0..fir_len {
+    for (i, val) in fir_contra.iter_mut().enumerate().take(fir_len) {
         let diff = i as f32 - contra_idx as f32;
         let weight = (-0.5 * (diff / sigma).powi(2)).exp();
-        fir_contra[i] = weight;
+        *val = weight;
     }
 
     // Normalisation de l'énergie du filtre contralatéral

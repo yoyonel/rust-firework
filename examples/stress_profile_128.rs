@@ -1,21 +1,21 @@
+use fireworks_sim::audio_engine::audio_event::doppler_queue::DopplerQueue;
+use fireworks_sim::audio_engine::effect_flags::AudioEffect;
+use fireworks_sim::audio_engine::types::{AudioDebugEvent, AudioSoundType};
+use fireworks_sim::audio_engine::FireworksAudio3D;
+use fireworks_sim::AudioEngine;
+use rand::Rng;
 use std::thread;
 use std::time::{Duration, Instant};
-use rand::Rng;
-use fireworks_sim::audio_engine::audio_event::doppler_queue::DopplerQueue;
-use fireworks_sim::audio_engine::FireworksAudio3D;
-use fireworks_sim::audio_engine::effect_flags::AudioEffect;
-use fireworks_sim::audio_engine::types::{AudioSoundType, AudioDebugEvent};
-use fireworks_sim::AudioEngine;
 
 fn main() -> anyhow::Result<()> {
     println!("🧪 [STRESS PROFILE 128] Starting headless profiler with 128 sources...");
 
     let doppler_queue = DopplerQueue::new();
-    let mut config = fireworks_sim::audio_engine::config::AudioConfig::default()
-        .to_engine_config(128);
+    let mut config =
+        fireworks_sim::audio_engine::config::AudioConfig::default().to_engine_config(128);
     config.max_voices = 128;
     config.doppler_receiver = Some(doppler_queue.receiver.clone());
-    
+
     let mut audio_engine = FireworksAudio3D::new(config)?;
     audio_engine.start_audio_thread(None);
 
@@ -52,7 +52,11 @@ fn main() -> anyhow::Result<()> {
         let radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
         let target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
         let speed = rng.random::<f32>() * 50.0 + 15.0;
-        let radius_speed = if target_radius > radius { speed } else { -speed };
+        let radius_speed = if target_radius > radius {
+            speed
+        } else {
+            -speed
+        };
 
         let pos = center + glam::Vec2::new(radius * angle.cos(), radius * angle.sin());
         sources.push(Source {
@@ -96,26 +100,38 @@ fn main() -> anyhow::Result<()> {
             if to_target.abs() < 5.0 {
                 source.target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
                 let speed = rng.random::<f32>() * 50.0 + 15.0;
-                source.radius_speed = if source.target_radius > source.radius { speed } else { -speed };
+                source.radius_speed = if source.target_radius > source.radius {
+                    speed
+                } else {
+                    -speed
+                };
             } else {
                 source.radius += source.radius_speed * dt;
             }
 
             source.angle += source.angular_speed * dt;
-            source.pos = center + glam::Vec2::new(source.radius * source.angle.cos(), source.radius * source.angle.sin());
+            source.pos = center
+                + glam::Vec2::new(
+                    source.radius * source.angle.cos(),
+                    source.radius * source.angle.sin(),
+                );
 
             // Velocity (derivative)
-            let vx = source.radius_speed * source.angle.cos() - source.radius * source.angular_speed * source.angle.sin();
-            let vy = source.radius_speed * source.angle.sin() + source.radius * source.angular_speed * source.angle.cos();
+            let vx = source.radius_speed * source.angle.cos()
+                - source.radius * source.angular_speed * source.angle.sin();
+            let vy = source.radius_speed * source.angle.sin()
+                + source.radius * source.angular_speed * source.angle.cos();
             let vel = glam::Vec2::new(vx, vy);
 
-            let _ = doppler_queue.sender.send(fireworks_sim::audio_engine::DopplerEvent {
-                id: source.id,
-                pos: source.pos,
-                vel,
-                gain: 1.0,
-                timestamp: Instant::now(),
-            });
+            let _ = doppler_queue
+                .sender
+                .send(fireworks_sim::audio_engine::DopplerEvent {
+                    id: source.id,
+                    pos: source.pos,
+                    vel,
+                    gain: 1.0,
+                    timestamp: Instant::now(),
+                });
         }
 
         // Process debug events
@@ -123,13 +139,21 @@ fn main() -> anyhow::Result<()> {
         audio_engine.pop_debug_events(&mut debug_events_buf);
         for event in &debug_events_buf {
             match event {
-                AudioDebugEvent::Sent { request_id, entity_id, .. } => {
+                AudioDebugEvent::Sent {
+                    request_id,
+                    entity_id,
+                    ..
+                } => {
                     if *entity_id > 0 && *entity_id <= num_sources as u64 {
                         sources[(*entity_id - 1) as usize].active_request_id = Some(*request_id);
                     }
                 }
-                AudioDebugEvent::Completed { request_id, .. } | AudioDebugEvent::Dropped { request_id, .. } => {
-                    if let Some(source) = sources.iter_mut().find(|s| s.active_request_id == Some(*request_id)) {
+                AudioDebugEvent::Completed { request_id, .. }
+                | AudioDebugEvent::Dropped { request_id, .. } => {
+                    if let Some(source) = sources
+                        .iter_mut()
+                        .find(|s| s.active_request_id == Some(*request_id))
+                    {
                         source.active_request_id = None;
                         match source.sound_type {
                             AudioSoundType::Rocket => {
@@ -144,14 +168,26 @@ fn main() -> anyhow::Result<()> {
                                 source.radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
                                 source.target_radius = rng.random::<f32>() * (max_r - 80.0) + 80.0;
                                 let speed = rng.random::<f32>() * 50.0 + 15.0;
-                                source.radius_speed = if source.target_radius > source.radius { speed } else { -speed };
-                                source.pos = center + glam::Vec2::new(source.radius * source.angle.cos(), source.radius * source.angle.sin());
+                                source.radius_speed = if source.target_radius > source.radius {
+                                    speed
+                                } else {
+                                    -speed
+                                };
+                                source.pos = center
+                                    + glam::Vec2::new(
+                                        source.radius * source.angle.cos(),
+                                        source.radius * source.angle.sin(),
+                                    );
                                 audio_engine.play_rocket_with_id(source.id, source.pos, 0.7);
                             }
                         }
                     }
                 }
-                AudioDebugEvent::BlockProcessed { elapsed_us, budget_us: b_us, active_voices: av } => {
+                AudioDebugEvent::BlockProcessed {
+                    elapsed_us,
+                    budget_us: b_us,
+                    active_voices: av,
+                } => {
                     total_blocks += 1;
                     sum_elapsed_us += *elapsed_us;
                     max_elapsed_us = max_elapsed_us.max(*elapsed_us);
@@ -174,14 +210,19 @@ fn main() -> anyhow::Result<()> {
 
     audio_engine.stop_audio_thread();
 
-    let avg_us = if total_blocks > 0 { sum_elapsed_us / total_blocks } else { 0 };
+    let avg_us = sum_elapsed_us.checked_div(total_blocks).unwrap_or(0);
     let load_pct = (avg_us as f64 / budget_us as f64) * 100.0;
     println!("\n📊 [STRESS PROFILE RESULTS]");
     println!("  - Active Voices: {}", active_voices);
     println!("  - Block Budget: {} us", budget_us);
     println!("  - CPU Render Avg: {} us ({:.2}%)", avg_us, load_pct);
     println!("  - CPU Render Max: {} us", max_elapsed_us);
-    println!("  - ALSA Underruns (CPU budget overflows): {} / {} blocks ({:.2}%)", underrun_blocks, total_blocks, (underrun_blocks as f64 / total_blocks as f64) * 100.0);
+    println!(
+        "  - ALSA Underruns (CPU budget overflows): {} / {} blocks ({:.2}%)",
+        underrun_blocks,
+        total_blocks,
+        (underrun_blocks as f64 / total_blocks as f64) * 100.0
+    );
 
     Ok(())
 }

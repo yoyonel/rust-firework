@@ -69,7 +69,10 @@ fn test_dsp_no_glitches_under_normal_play() {
         log_interval: Duration::from_secs(1),
         effect_flags: AudioEffectFlags::new_all_enabled(),
         spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
-        hrtf_convolver: fireworks_sim::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+        hrtf_convolver: fireworks_sim::audio_engine::HrtfConvolver::new_default(
+            sample_rate,
+            block_size,
+        ),
         debug_tx: None,
     };
 
@@ -145,7 +148,10 @@ fn test_dsp_voice_stealing_glitch_limit() {
         log_interval: Duration::from_secs(1),
         effect_flags: AudioEffectFlags::new_all_enabled(),
         spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
-        hrtf_convolver: fireworks_sim::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+        hrtf_convolver: fireworks_sim::audio_engine::HrtfConvolver::new_default(
+            sample_rate,
+            block_size,
+        ),
         debug_tx: None,
     };
 
@@ -253,7 +259,10 @@ fn test_block_processing_budget() {
         log_interval: Duration::from_secs(1),
         effect_flags: AudioEffectFlags::new_all_enabled(),
         spatial_reverb: fireworks_sim::audio_engine::SpatialReverb::new(sample_rate),
-        hrtf_convolver: fireworks_sim::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+        hrtf_convolver: fireworks_sim::audio_engine::HrtfConvolver::new_default(
+            sample_rate,
+            block_size,
+        ),
         debug_tx: None,
     };
 

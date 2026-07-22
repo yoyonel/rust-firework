@@ -124,18 +124,26 @@ impl DspProcessor {
 
         if let Some(debug_tx) = &self.debug_tx {
             let active_voices = self.voices.iter().filter(|v| v.active).count();
-            let _ = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::BlockProcessed {
-                elapsed_us,
-                budget_us,
-                active_voices,
-            });
-
-            if elapsed_us > budget_us {
-                log::warn!("⚠️ CPU Audio Underrun detected: block took {} us (budget: {} us)", elapsed_us, budget_us);
-                if let Err(e) = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Underrun {
+            let _ = debug_tx.try_send(
+                crate::audio_engine::types::AudioDebugEvent::BlockProcessed {
                     elapsed_us,
                     budget_us,
-                }) {
+                    active_voices,
+                },
+            );
+
+            if elapsed_us > budget_us {
+                log::warn!(
+                    "⚠️ CPU Audio Underrun detected: block took {} us (budget: {} us)",
+                    elapsed_us,
+                    budget_us
+                );
+                if let Err(e) =
+                    debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Underrun {
+                        elapsed_us,
+                        budget_us,
+                    })
+                {
                     log::error!("Failed to send Underrun event: {:?}", e);
                 }
             }
@@ -191,9 +199,7 @@ impl DspProcessor {
                     let v_gain = if v.current_gains == [0.0, 0.0] {
                         v.user_gain
                     } else {
-                        v.current_gains[0]
-                            .abs()
-                            .max(v.current_gains[1].abs())
+                        v.current_gains[0].abs().max(v.current_gains[1].abs())
                     }
                     .max(0.001);
                     let volume = v_gain * v_att * v_priority;
@@ -754,7 +760,10 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, total_samples),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                sample_rate,
+                total_samples,
+            ),
             debug_tx: None,
         };
 
@@ -804,7 +813,10 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                sample_rate,
+                block_size,
+            ),
             debug_tx: None,
         };
 
@@ -953,7 +965,10 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                sample_rate,
+                block_size,
+            ),
             debug_tx: None,
         };
 
@@ -999,7 +1014,10 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                sample_rate,
+                block_size,
+            ),
             debug_tx: None,
         };
 
@@ -1081,7 +1099,10 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                sample_rate,
+                block_size,
+            ),
             debug_tx: Some(debug_tx.clone()),
         };
 
@@ -1225,7 +1246,10 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                sample_rate,
+                block_size,
+            ),
             debug_tx: None,
         };
 
@@ -1300,7 +1324,10 @@ mod tests {
             log_interval: Duration::from_secs(1),
             effect_flags: AudioEffectFlags::new_all_enabled(),
             spatial_reverb: SpatialReverb::new(sample_rate),
-            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+            hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(
+                sample_rate,
+                block_size,
+            ),
             debug_tx: None,
         };
 

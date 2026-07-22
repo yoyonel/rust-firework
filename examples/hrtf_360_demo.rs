@@ -22,7 +22,10 @@ fn main() {
     let output_path = "hrtf_360_rotation_demo.wav";
     println!("🎧 Génération du sample binaural 360° HRTF...");
     println!("   Fichier de sortie : {}", output_path);
-    println!("   Durée : {:.1}s | Sample rate : {} Hz | Block size : {}", duration_secs, sample_rate, block_size);
+    println!(
+        "   Durée : {:.1}s | Sample rate : {} Hz | Block size : {}",
+        duration_secs, sample_rate, block_size
+    );
 
     let spec = WavSpec {
         channels: 2,
@@ -31,8 +34,8 @@ fn main() {
         sample_format: SampleFormat::Int,
     };
 
-    let mut writer = WavWriter::create(output_path, spec)
-        .expect("Impossible de créer le fichier WAV de démo");
+    let mut writer =
+        WavWriter::create(output_path, spec).expect("Impossible de créer le fichier WAV de démo");
 
     let mut hrtf_convolver = HrtfConvolver::new_default(sample_rate, block_size);
 
@@ -91,7 +94,9 @@ fn main() {
         }
     }
 
-    writer.finalize().expect("Erreur lors de la finalisation du fichier WAV");
+    writer
+        .finalize()
+        .expect("Erreur lors de la finalisation du fichier WAV");
 
     println!("\n✅ Démo générée avec succès dans : {}", output_path);
     println!("🎧 Mettez votre casque audio et écoutez avec :");

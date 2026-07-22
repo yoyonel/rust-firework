@@ -28,4 +28,4 @@ pub mod bloom;
 pub use self::bloom::BloomPass;
 
 pub mod circle_renderer;
-pub use self::circle_renderer::{CircleGPURenderer, CircleGPUData};
+pub use self::circle_renderer::{CircleGPUData, CircleGPURenderer};
