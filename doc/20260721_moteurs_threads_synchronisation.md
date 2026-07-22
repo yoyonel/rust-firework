@@ -235,7 +235,7 @@ sequenceDiagram
   - **Pilotage du Renderer** ([src/renderer_engine/renderer.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/renderer.rs)) : Transfert des données de particules vers les buffers VBO mappés de manière persistante (AZDO) et émission des commandes de dessin OpenGL.
 
 ### B. Thread Audio CPAL (Real-Time DSP Callback)
-* **Localisation du code** : [src/audio_engine/fireworks_audio.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs), [src/audio_engine/dsp_processor.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs)
+* **Localisation du code** : [src/audio_engine/fireworks_audio.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs), [src/audio_engine/dsp_processor.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs) (avec tests isolés dans [src/audio_engine/dsp_processor/tests.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor/tests.rs))
 * **Rôle** :
   - **Nom du Thread & Priorité** : Nommé `cpal_audio_dsp` / `CPAL Audio Callback`. Configuré sous Linux en priorité temps réel FIFO (`libc::SCHED_FIFO` priorité 20, ou fallback `nice -20`).
   - **Traitement de Bloc Audio (`process_block`)** : Exécuté à l'interruption matérielle de la carte son (ex: toutes les 5.8 ms pour 256 échantillons à 44.1 kHz).
