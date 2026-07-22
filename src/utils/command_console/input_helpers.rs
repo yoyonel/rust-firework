@@ -203,4 +203,3 @@ pub fn generate_noise_texture() -> u32 {
 
     tex_id
 }
-

@@ -781,5 +781,4 @@ where
         self.commands_registry
             .register_hint("physic.explosion.preset", "Usage: <preset> [weight] ...");
     }
-
 }

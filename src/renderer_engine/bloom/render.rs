@@ -1,15 +1,22 @@
+use super::{BloomPass, BlurMethod, CellRect};
 use crate::{pop_debug_group, push_debug_group};
 use gl::types::*;
 use log::info;
-use super::{BloomPass, BlurMethod, CellRect};
 
 impl BloomPass {
+    /// Begins rendering to the HDR framebuffer
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly and changes framebuffer bindings.
     pub unsafe fn begin_scene(&self) {
         gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo);
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
     }
 
     /// Ends scene rendering and applies bloom post-processing
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly and binds textures/programs.
     pub unsafe fn end_scene_and_apply_bloom(&self) {
         // Disable depth test for post-processing
         gl::Disable(gl::DEPTH_TEST);
@@ -53,6 +60,10 @@ impl BloomPass {
         gl::Enable(gl::DEPTH_TEST);
     }
 
+    /// Renders all tone mappings to comparison textures and displays them in a 2x3 grid
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly.
     pub unsafe fn render_comparison(&self) {
         if !self.comparison_mode {
             return;

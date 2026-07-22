@@ -64,7 +64,6 @@ pub struct BloomPass {
     blur_height: i32,
 }
 
-
 impl Drop for BloomPass {
     fn drop(&mut self) {
         unsafe {

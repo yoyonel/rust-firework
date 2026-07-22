@@ -5,7 +5,8 @@ use crate::PhysicEngine;
 pub type AudioCommandFn = dyn Fn(&mut dyn AudioEngine, &str) -> String + 'static;
 pub type PhysicCommandFn = dyn Fn(&mut dyn PhysicEngine, &str) -> String + 'static;
 pub type RendererCommandFn = dyn Fn(&str) -> String + 'static;
-pub type DynamicArgProviderFn = dyn Fn(&dyn AudioEngine, &dyn PhysicEngine) -> Vec<String> + 'static;
+pub type DynamicArgProviderFn =
+    dyn Fn(&dyn AudioEngine, &dyn PhysicEngine) -> Vec<String> + 'static;
 pub type CurrentValueProviderFn = dyn Fn(&dyn AudioEngine, &dyn PhysicEngine) -> String + 'static;
 
 pub struct CommandRegistry {

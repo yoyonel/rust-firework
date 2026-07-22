@@ -1,8 +1,8 @@
+use super::{BloomPass, BlurMethod};
+use crate::label_gl_object;
 use crate::renderer_engine::config::{RendererConfig, ToneMappingMode};
 use crate::renderer_engine::shader::try_compile_shader_program_from_files;
-use crate::label_gl_object;
 use log::info;
-use super::{BloomPass, BlurMethod};
 
 impl BloomPass {
     pub fn new(width: i32, height: i32) -> Result<Self, String> {
@@ -468,6 +468,10 @@ impl BloomPass {
         );
     }
 
+    /// Reloads bloom shaders from disk
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly and manipulates GPU state.
     pub unsafe fn reload_shaders(&mut self) -> Result<(), String> {
         info!("🔄 Reloading bloom shaders...");
 
@@ -521,6 +525,10 @@ impl BloomPass {
         Ok(())
     }
 
+    /// Cleans up OpenGL resources
+    ///
+    /// # Safety
+    /// This function is unsafe because it calls OpenGL functions directly and deletes GPU resources.
     pub unsafe fn close(&mut self) {
         info!("🧹 Cleaning up Bloom Pass");
 

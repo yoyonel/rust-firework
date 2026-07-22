@@ -11,9 +11,12 @@ const SUGGESTION_BOX_HEIGHT: f32 = 80.0;
 pub mod input_helpers;
 pub mod registry;
 
-use input_helpers::{CombinedInputHandler, generate_noise_texture};
-pub use input_helpers::{HistoryCursor, SelectionCycler};
-pub use registry::{CommandRegistry, AudioCommandFn, PhysicCommandFn, RendererCommandFn, DynamicArgProviderFn, CurrentValueProviderFn};
+use input_helpers::CombinedInputHandler;
+pub use input_helpers::{generate_noise_texture, HistoryCursor, SelectionCycler};
+pub use registry::{
+    AudioCommandFn, CommandRegistry, CurrentValueProviderFn, DynamicArgProviderFn, PhysicCommandFn,
+    RendererCommandFn,
+};
 pub struct Console {
     pub open: bool,
     pub focus_previous_widget: bool,
@@ -503,6 +506,3 @@ impl Console {
         self.selected_suggestion = 0;
     }
 }
-
-
-
