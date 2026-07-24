@@ -1,6 +1,6 @@
 extends: existence
 message: "Unescaped underscore '_' found inside block math. Escape it as '\\_' to prevent markdown rendering issues."
 level: error
-scope: raw
+scope: text
 raw:
   - '\$\$(?:[^\$])*?(?<!\\)_(?:[^\$])*?\$\$'
