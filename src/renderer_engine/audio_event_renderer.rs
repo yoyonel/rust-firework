@@ -113,6 +113,8 @@ impl AudioEvent {
 
 pub struct AudioEventRenderer {
     shader_program: u32,
+    /// Cached location of the `uMode` uniform (0=ring, 1=beam).
+    umode_loc: i32,
 
     // Ripple rings: instanced quad (TRIANGLE_STRIP, 4 verts)
     vao_rings: u32,
@@ -145,6 +147,9 @@ impl AudioEventRenderer {
             if block_idx != gl::INVALID_INDEX {
                 gl::UniformBlockBinding(shader_program, block_idx, 0);
             }
+
+            // Cache the uMode uniform location (set per-draw-pass to 0=ring or 1=beam)
+            let umode_loc = gl::GetUniformLocation(shader_program, crate::cstr!("uMode"));
 
             // ── Static geometry buffers ───────────────────────────────────
 
@@ -216,6 +221,7 @@ impl AudioEventRenderer {
 
             Self {
                 shader_program,
+                umode_loc,
                 vao_rings,
                 vbo_quad,
                 vao_beams,
@@ -326,10 +332,12 @@ impl AudioEventRenderer {
         );
 
         // ── Pass 1: ripple rings (TRIANGLE_STRIP quads) ───────────────────
+        gl::Uniform1i(self.umode_loc, 0); // ring mode
         gl::BindVertexArray(self.vao_rings);
         gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, instances.len() as i32);
 
         // ── Pass 2: beam lines (GL_LINES, 2 verts per instance) ──────────
+        gl::Uniform1i(self.umode_loc, 1); // beam mode
         gl::BindVertexArray(self.vao_beams);
         gl::DrawArraysInstanced(gl::LINES, 0, 2, instances.len() as i32);
 

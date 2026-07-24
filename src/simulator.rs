@@ -238,6 +238,11 @@ where
 
         while self.step() {}
 
+        // Libérer explicitement le renderer GPU avant la destruction du contexte OpenGL.
+        // Sans cela, le Drop de AudioEventRenderer appellerait gl::Delete* après que
+        // GLFW ait détruit le contexte → segfault garanti.
+        self.audio_event_renderer = None;
+
         Ok(())
     }
 
@@ -378,6 +383,15 @@ where
                 evt.age += delta;
                 !evt.is_expired()
             });
+
+            // Limiter le nombre maximum d'événements pour éviter les baisses de FPS liées au fillrate
+            const MAX_AUDIO_EVENTS: usize = 48;
+            if self.audio_event_pool.len() > MAX_AUDIO_EVENTS {
+                let to_remove = self.audio_event_pool.len() - MAX_AUDIO_EVENTS;
+                self.audio_event_pool.drain(0..to_remove);
+            }
+        } else if !self.audio_event_pool.is_empty() {
+            self.audio_event_pool.clear();
         }
 
         tracy_zone_with_value!(

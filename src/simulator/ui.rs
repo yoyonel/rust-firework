@@ -113,7 +113,7 @@ where
                         .filled(true)
                         .build();
 
-                    let label = "🎧 Listener (Sol / Centre)";
+                    let label = "Listener (Sol / Centre)";
                     let text_size = ui.calc_text_size(label);
                     draw_list.add_text(
                         [listener_x - text_size[0] * 0.5, listener_y - 45.0],
@@ -157,6 +157,7 @@ where
                 // ── Indicateur B: Labels flottants animés pour les évènements audio actifs ──
                 {
                     let draw_list = ui.get_background_draw_list();
+                    let win_h = ui.io().display_size[1];
 
                     for evt in &self.audio_event_pool {
                         let t = (evt.age / evt.kind.ttl_secs()).clamp(0.0, 1.0);
@@ -166,10 +167,11 @@ where
                             let b = if t > 0.5 { 1.0 - (t - 0.5) / 0.5 } else { 1.0 };
                             a * b
                         };
-                        // Float upward as the event ages
+                        // Float upward (= decreasing screen Y) as the event ages.
+                        // Physics Y is bottom-up; ImGui Y is top-down → flip.
                         let drift_y = evt.age * 55.0;
                         let label_x = evt.pos.x - 28.0;
-                        let label_y = evt.pos.y - drift_y - 18.0;
+                        let label_y = win_h - evt.pos.y - drift_y - 18.0;
 
                         let (label, color) = match evt.kind {
                             crate::renderer_engine::AudioEventKind::Launch => {
@@ -187,12 +189,14 @@ where
                 // ── Indicateur D: Badge ID persistant sur chaque fusée en vol ──
                 {
                     let draw_list = ui.get_background_draw_list();
+                    let win_h = ui.io().display_size[1];
                     let mut rocket_index = 0usize;
                     self.physic_engine.for_each_active_head_not_exploded(
                         &mut |p: &crate::physic_engine::Particle| {
                             rocket_index += 1;
+                            // Physics Y is bottom-up; flip to ImGui screen coords (top-down).
                             let badge_x = p.pos.x + 10.0;
-                            let badge_y = p.pos.y - 14.0;
+                            let badge_y = win_h - p.pos.y - 14.0;
                             // Small dark badge background
                             draw_list
                                 .add_rect(
