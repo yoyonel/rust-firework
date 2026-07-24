@@ -234,8 +234,14 @@ impl GpuProfiler {
 
         #[cfg(feature = "tracy")]
         let tracy_span = self.tracy_ctx.as_ref().and_then(|ctx| {
-            // On utilise les arguments passés depuis la macro
-            ctx.span_alloc_color(name, "GPU", _file, _line, color).ok()
+            #[cfg(feature = "tracy_custom_color")]
+            {
+                ctx.span_alloc_color(name, "GPU", _file, _line, color).ok()
+            }
+            #[cfg(not(feature = "tracy_custom_color"))]
+            {
+                ctx.span_alloc(name, "GPU", _file, _line).ok()
+            }
         });
 
         let record_index = buffer.records.len();
