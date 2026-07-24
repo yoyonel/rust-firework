@@ -155,7 +155,7 @@ where
                 }
 
                 // ── Indicateur B: Labels flottants animés pour les évènements audio actifs ──
-                {
+                if self.show_audio_visual_overlay {
                     let draw_list = ui.get_background_draw_list();
                     let win_h = ui.io().display_size[1];
 
@@ -187,7 +187,7 @@ where
                 }
 
                 // ── Indicateur D: Badge ID persistant sur chaque fusée en vol ──
-                {
+                if self.show_audio_visual_overlay {
                     let draw_list = ui.get_background_draw_list();
                     let win_h = ui.io().display_size[1];
                     let mut rocket_index = 0usize;
@@ -233,6 +233,12 @@ where
                     .collapsible(true)
                     .build(|| {
                         ui.text("=== AUDIO ENGINE REAL-TIME DIAGNOSTIC ===");
+                        ui.separator();
+
+                        ui.checkbox(
+                            "Afficher les indicateurs visuels (ondes/faisceaux/badges)",
+                            &mut self.show_audio_visual_overlay,
+                        );
                         ui.separator();
 
                         // Statistiques globales

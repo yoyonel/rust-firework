@@ -132,6 +132,7 @@ where
     // NOUVEAU: Indicateurs visuels GPU des évènements audio (mode debug F3)
     pub audio_event_renderer: Option<crate::renderer_engine::AudioEventRenderer>,
     pub audio_event_pool: Vec<crate::renderer_engine::AudioEvent>,
+    pub show_audio_visual_overlay: bool,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -207,6 +208,7 @@ where
             explosion_trend_dir: 0,
             audio_event_renderer: None,
             audio_event_pool: Vec::with_capacity(32),
+            show_audio_visual_overlay: true,
         }
     }
 
@@ -362,7 +364,7 @@ where
         );
 
         // NOUVEAU: Alimenter le pool d'indicateurs visuels audio (mode debug F3)
-        if self.show_audio_diagnostic {
+        if self.show_audio_diagnostic && self.show_audio_visual_overlay {
             // Injection des évènements anticipés dans le pool d'animation
             if let Some((_id, pos)) = anticipated_rocket_launch {
                 self.audio_event_pool
@@ -509,7 +511,10 @@ where
         }
 
         // NOUVEAU: Indicateurs visuels GPU des évènements audio (anneau de propagation + beam)
-        if self.show_audio_diagnostic && !self.audio_event_pool.is_empty() {
+        if self.show_audio_diagnostic
+            && self.show_audio_visual_overlay
+            && !self.audio_event_pool.is_empty()
+        {
             // Lazy-init du renderer (crée les VBO/VAO/shaders la première fois)
             if self.audio_event_renderer.is_none() {
                 self.audio_event_renderer = Some(crate::renderer_engine::AudioEventRenderer::new());
