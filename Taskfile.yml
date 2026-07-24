@@ -8,7 +8,8 @@ vars:
     sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev --"; else echo ""; fi'
   CARGO: '{{.DISTROBOX}} cargo'
   COVERAGE_DIR: target/llvm-cov
-  XVFB: xvfb-run -a
+  XVFB:
+    sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev -- xvfb-run -a"; elif command -v xvfb-run >/dev/null 2>&1; then echo "xvfb-run -a"; else echo ""; fi'
   SKILLS_OUTPUT_DIR: '{{.HOME}}/.agents/skills'
   DOC_TEMPLATES_DIR: 'doc/ai_skills'
 
@@ -142,33 +143,33 @@ tasks:
     desc: "Lancement des tests unitaires"
     cmds:
       - echo "▶️  Lancement des tests unitaires..."
-      - "{{.XVFB}} {{.CARGO}} test --all --quiet"
+      - "{{.XVFB}} cargo test --all --quiet"
 
   test-one:
     desc: "Lance un test unitaire (lib) spécifique avec affichage"
     cmds:
       - echo "▶️ Lancement du test ciblé '{{.CLI_ARGS}}'..."
-      - "{{.XVFB}} {{.CARGO}} test --lib {{.CLI_ARGS}} -- --nocapture"
+      - "{{.XVFB}} cargo test --lib {{.CLI_ARGS}} -- --nocapture"
 
   test-integration:
     desc: "Lancement du test d'intégration complet (vidéo + audio)"
     deps: [build-release]
     cmds:
       - echo "▶️  Lancement du test d'intégration (capture Xvfb + ALSA)..."
-      - ./.github/scripts/test_integration.sh
+      - "{{.DISTROBOX}} ./.github/scripts/test_integration.sh"
 
   coverage:
     desc: "Génération du rapport de couverture avec cargo-llvm-cov"
     cmds:
       - echo "📊 Génération du rapport de couverture avec cargo-llvm-cov..."
-      - '{{.XVFB}} {{.CARGO}} llvm-cov --workspace --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/"'
+      - '{{.XVFB}} cargo llvm-cov --workspace --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/"'
       - 'echo "✅ Rapport généré : {{.COVERAGE_DIR}}/index.html"'
       - xdg-open {{.COVERAGE_DIR}}/index.html 2>/dev/null || open {{.COVERAGE_DIR}}/index.html 2>/dev/null || true
 
   ci:coverage:
     desc: "CI: Run unit/integration tests with coverage under virtual framebuffer"
     cmds:
-      - '{{.XVFB}} {{.CARGO}} llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
+      - '{{.XVFB}} cargo llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
 
   test-opengl-mesa:
     desc: "Tests OpenGL headless avec Mesa llvmpipe + debug validation (détecte les violations de spec OpenGL)"
@@ -186,11 +187,7 @@ tasks:
       - echo "🔍 Tests OpenGL headless avec Mesa llvmpipe + debug validation..."
       - |
         set -o pipefail
-        env \
-          LIBGL_ALWAYS_SOFTWARE=1 \
-          MESA_GL_DEBUG=1 \
-          GALLIUM_SOFTPIPE=1 \
-        {{.XVFB}} {{.CARGO}} test --features interactive_tests -- --test-threads=1 2>&1 | \
+        {{.XVFB}} env LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_DEBUG=1 GALLIUM_SOFTPIPE=1 cargo test --features interactive_tests -- --test-threads=1 2>&1 | \
         tee /tmp/mesa_gl_debug.log
       - |
         if grep -qE "GL_INVALID|error generated|API_ID_" /tmp/mesa_gl_debug.log; then
