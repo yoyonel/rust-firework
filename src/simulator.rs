@@ -1,5 +1,5 @@
 use crate::audio_engine::AudioEngine;
-use crate::physic_engine::{config::PhysicConfig, PhysicEngineFull, UpdateResult};
+use crate::physic_engine::{config::PhysicConfig, PhysicEngineFull};
 use crate::renderer_engine::utils::adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler};
 use crate::renderer_engine::RendererEngine;
 use crate::window_engine::WindowEngine;
@@ -94,6 +94,16 @@ where
     // Tone mapping comparison
     pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
+    // NOUVEAU: Métriques de synchronisation physique-audio
+    pub sync_launch_sum: f64,
+    pub sync_launch_count: u64,
+    pub sync_explosion_sum: f64,
+    pub sync_explosion_count: u64,
+    pub phys_launch_times: std::collections::HashMap<u64, std::time::Instant>,
+    pub phys_explosion_times: std::collections::HashMap<u64, std::time::Instant>,
+    pub audio_start_launch_times: std::collections::HashMap<u64, std::time::Instant>,
+    pub audio_start_explosion_times: std::collections::HashMap<u64, std::time::Instant>,
+
     // NOUVEAU: Statistiques et tracking des requêtes audio
     pub audio_debug_records:
         std::collections::VecDeque<crate::audio_engine::types::AudioDebugRecord>,
@@ -115,6 +125,9 @@ where
     pub latency_play_count: u64,
 
     pub audio_stress_scene: AudioStressScene,
+
+    pub launch_trend_dir: i32, // 1: augmentation, -1: diminution, 0: stable
+    pub explosion_trend_dir: i32, // 1: augmentation, -1: diminution, 0: stable
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -161,6 +174,14 @@ where
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 false,
             )),
+            sync_launch_sum: 0.0,
+            sync_launch_count: 0,
+            sync_explosion_sum: 0.0,
+            sync_explosion_count: 0,
+            phys_launch_times: std::collections::HashMap::new(),
+            phys_explosion_times: std::collections::HashMap::new(),
+            audio_start_launch_times: std::collections::HashMap::new(),
+            audio_start_explosion_times: std::collections::HashMap::new(),
             audio_debug_records: std::collections::VecDeque::with_capacity(128),
             audio_events_buf: Vec::with_capacity(2048),
             audio_sent_rocket: 0,
@@ -178,6 +199,8 @@ where
             latency_play_sum: std::time::Duration::ZERO,
             latency_play_count: 0,
             audio_stress_scene: AudioStressScene::new(),
+            launch_trend_dir: 0,
+            explosion_trend_dir: 0,
         }
     }
 
@@ -298,13 +321,120 @@ where
         let update_result = self
             .profiler
             .profile_block("physic - update", || self.physic_engine.update(delta));
-        Self::synch_audio_with_physic(&mut self.audio_engine, &update_result);
+
+        // Extraction des données de update_result pour libérer les borrows sur self.physic_engine
+        let new_rocket_id = update_result.new_rocket.as_ref().map(|r| r.id);
+
+        let mut exploded_ids_buf = [0u64; 16];
+        let exploded_count = update_result.triggered_explosion_ids.len().min(16);
+        exploded_ids_buf[..exploded_count]
+            .copy_from_slice(&update_result.triggered_explosion_ids[..exploded_count]);
+        let exploded_ids = &exploded_ids_buf[..exploded_count];
+
+        let anticipated_rocket_launch = update_result.anticipated_rocket_launch;
+
+        let mut anticipated_explosions_buf = [(0u64, glam::Vec2::ZERO); 16];
+        let anticipated_count = update_result.anticipated_explosions.len().min(16);
+        anticipated_explosions_buf[..anticipated_count]
+            .copy_from_slice(&update_result.anticipated_explosions[..anticipated_count]);
+        let anticipated_explosions = &anticipated_explosions_buf[..anticipated_count];
+
+        // On a extrait toutes les valeurs nécessaires, on n'a plus besoin d'utiliser update_result
+        let _has_new_rocket = update_result.new_rocket.is_some();
+
+        // Maintenant, self n'est plus emprunté et on peut appeler des méthodes prenant &mut self
+        self.track_physical_events(new_rocket_id, exploded_ids);
+        Self::synch_audio_with_physic_extracted(
+            &mut self.audio_engine,
+            anticipated_rocket_launch,
+            anticipated_explosions,
+        );
 
         tracy_zone_with_value!(
             "physics::update",
             0xAA00FF, // Violet
-            update_result.new_rocket.as_ref().map_or(0, |_| 1)
+            if _has_new_rocket { 1 } else { 0 }
         );
+    }
+
+    fn adjust_launch_anticipation_ms(&mut self, error_ms: f32) {
+        let gain = 0.05;
+        let old_val = self.physic_engine.get_config().audio_launch_anticipation_ms;
+        let mut new_val = old_val + error_ms * gain;
+        new_val = new_val.clamp(0.0, 150.0);
+
+        if (new_val - old_val).abs() > 0.001 {
+            self.launch_trend_dir = if new_val > old_val { 1 } else { -1 };
+            let current_explosion = self
+                .physic_engine
+                .get_config()
+                .audio_explosion_anticipation_ms;
+            self.physic_engine
+                .update_anticipation_times(new_val, current_explosion);
+        }
+    }
+
+    fn adjust_explosion_anticipation_ms(&mut self, error_ms: f32) {
+        let gain = 0.05;
+        let old_val = self
+            .physic_engine
+            .get_config()
+            .audio_explosion_anticipation_ms;
+        let mut new_val = old_val + error_ms * gain;
+        new_val = new_val.clamp(0.0, 150.0);
+
+        if (new_val - old_val).abs() > 0.001 {
+            self.explosion_trend_dir = if new_val > old_val { 1 } else { -1 };
+            let current_launch = self.physic_engine.get_config().audio_launch_anticipation_ms;
+            self.physic_engine
+                .update_anticipation_times(current_launch, new_val);
+        }
+    }
+
+    fn track_physical_events(
+        &mut self,
+        new_rocket_id: Option<u64>,
+        triggered_explosion_ids: &[u64],
+    ) {
+        let now = std::time::Instant::now();
+
+        // 1. Lancement physique/visuel
+        if let Some(id) = new_rocket_id {
+            if let Some(audio_start) = self.audio_start_launch_times.remove(&id) {
+                let diff_ms = if audio_start >= now {
+                    audio_start.duration_since(now).as_secs_f32() * 1000.0
+                } else {
+                    now.duration_since(audio_start).as_secs_f32() * -1000.0
+                };
+                self.sync_launch_sum += diff_ms as f64;
+                self.sync_launch_count += 1;
+                self.profiler.record_metric("sync_launch_ms", diff_ms);
+
+                // Ajustement dynamique basé sur l'erreur mesurée
+                self.adjust_launch_anticipation_ms(diff_ms);
+            } else {
+                self.phys_launch_times.insert(id, now);
+            }
+        }
+
+        // 2. Explosion physique/visuelle
+        for &id in triggered_explosion_ids {
+            if let Some(audio_start) = self.audio_start_explosion_times.remove(&id) {
+                let diff_ms = if audio_start >= now {
+                    audio_start.duration_since(now).as_secs_f32() * 1000.0
+                } else {
+                    now.duration_since(audio_start).as_secs_f32() * -1000.0
+                };
+                self.sync_explosion_sum += diff_ms as f64;
+                self.sync_explosion_count += 1;
+                self.profiler.record_metric("sync_explosion_ms", diff_ms);
+
+                // Ajustement dynamique basé sur l'erreur mesurée
+                self.adjust_explosion_anticipation_ms(diff_ms);
+            } else {
+                self.phys_explosion_times.insert(id, now);
+            }
+        }
     }
 
     fn render_frame(&mut self) {
@@ -386,19 +516,25 @@ where
         }
     }
 
-    fn synch_audio_with_physic(audio_engine: &mut A, update_result: &UpdateResult) {
-        if let Some(rocket) = &update_result.new_rocket {
-            debug!("🚀 Rocket spawned at ({}, {})", rocket.pos.x, rocket.pos.y);
-            // MODIFIÉ : On utilise play_rocket_with_id en transmettant rocket.id !
-            audio_engine.play_rocket_with_id(rocket.id, rocket.pos, 0.8);
+    fn synch_audio_with_physic_extracted(
+        audio_engine: &mut A,
+        anticipated_rocket_launch: Option<(u64, glam::Vec2)>,
+        anticipated_explosions: &[(u64, glam::Vec2)],
+    ) {
+        if let Some((id, pos)) = anticipated_rocket_launch {
+            debug!(
+                "🚀 [Anticipated] Rocket launch audio triggered for ID {} at ({}, {})",
+                id, pos.x, pos.y
+            );
+            audio_engine.play_rocket_with_id(id, pos, 0.8);
         }
 
-        for (i, expl) in update_result.triggered_explosions.iter().enumerate() {
+        for (i, &(id, pos)) in anticipated_explosions.iter().enumerate() {
             debug!(
-                "💥 Explosion triggered: {} at ({}, {})",
-                i, expl.pos.x, expl.pos.y
+                "💥 [Anticipated] Explosion audio triggered: {} for ID {} at ({}, {})",
+                i, id, pos.x, pos.y
             );
-            audio_engine.play_explosion(expl.pos, 1.0);
+            audio_engine.play_explosion_with_id(id, pos, 1.0);
         }
     }
 
@@ -431,5 +567,33 @@ where
         self.renderer_engine.close();
         self.physic_engine.close();
         self.audio_engine.stop_audio_thread();
+    }
+
+    /// Helper pour avancer la simulation d'un pas de temps fixe (uniquement pour les tests)
+    pub fn step_custom_dt(&mut self, dt: f32) {
+        self.update_simulation(dt);
+        self.process_audio_debug_events();
+    }
+
+    /// Helper pour obtenir la configuration physique actuelle (uniquement pour les tests)
+    pub fn get_physic_config(&self) -> &PhysicConfig {
+        self.physic_engine.get_config()
+    }
+
+    /// Helper pour obtenir les moyennes de synchronisation de debug (uniquement pour les tests)
+    pub fn get_average_syncs_test_helper(&self) -> (f64, f64) {
+        let avg_launch_sync = if self.sync_launch_count > 0 {
+            self.sync_launch_sum / self.sync_launch_count as f64
+        } else {
+            0.0
+        };
+
+        let avg_explosion_sync = if self.sync_explosion_count > 0 {
+            self.sync_explosion_sum / self.sync_explosion_count as f64
+        } else {
+            0.0
+        };
+
+        (avg_launch_sync, avg_explosion_sync)
     }
 }

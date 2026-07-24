@@ -169,6 +169,9 @@ impl<'a> imgui::InputTextCallbackHandler for CombinedInputHandler<'a> {
 }
 
 pub fn generate_noise_texture() -> u32 {
+    if !gl::GenTextures::is_loaded() {
+        return 0;
+    }
     let mut tex_id = 0;
 
     unsafe {

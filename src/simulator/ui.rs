@@ -201,8 +201,46 @@ where
                             0.0
                         };
 
+                        let avg_sync_launch = if self.sync_launch_count > 0 {
+                            self.sync_launch_sum / self.sync_launch_count as f64
+                        } else {
+                            0.0
+                        };
+
+                        let avg_sync_explosion = if self.sync_explosion_count > 0 {
+                            self.sync_explosion_sum / self.sync_explosion_count as f64
+                        } else {
+                            0.0
+                        };
+
                         ui_text!(ui, "Avg thread transit latency: {:.3} ms", avg_dispatch);
                         ui_text!(ui, "Avg render-to-audio-start latency: {:.3} ms", avg_play);
+                        ui_text!(ui, "Avg physical-to-audio launch sync: {:.3} ms", avg_sync_launch);
+                        ui_text!(ui, "Avg physical-to-audio explosion sync: {:.3} ms", avg_sync_explosion);
+
+                        ui.separator();
+                        ui.text("=== DYNAMIC ANTICIPATION TUNING ===");
+                        let config = self.physic_engine.get_config();
+
+                        ui.text("Launch anticipation:");
+                        ui.same_line();
+                        ui_text!(ui, "{:.2} ms", config.audio_launch_anticipation_ms);
+                        ui.same_line();
+                        match self.launch_trend_dir {
+                            1 => { ui_text_colored!(ui, [0.0, 1.0, 0.0, 1.0], " (⬆️ HAUSSE/UP)"); }      // Green
+                            -1 => { ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], " (⬇️ BAISSE/DOWN)"); }   // Red
+                            _ => { ui_text_colored!(ui, [0.7, 0.7, 0.7, 1.0], " (Stable)"); }           // Grey
+                        }
+
+                        ui.text("Explosion anticipation:");
+                        ui.same_line();
+                        ui_text!(ui, "{:.2} ms", config.audio_explosion_anticipation_ms);
+                        ui.same_line();
+                        match self.launch_trend_dir {
+                            1 => { ui_text_colored!(ui, [0.0, 1.0, 0.0, 1.0], " (⬆️ HAUSSE/UP)"); }      // Green
+                            -1 => { ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], " (⬇️ BAISSE/DOWN)"); }   // Red
+                            _ => { ui_text_colored!(ui, [0.7, 0.7, 0.7, 1.0], " (Stable)"); }           // Grey
+                        }
 
                         // Warning indicator if anything dropped
                         let total_dropped = self.audio_dropped_rocket + self.audio_dropped_explosion;

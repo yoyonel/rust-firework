@@ -22,6 +22,12 @@ pub struct PhysicConfig {
     pub initial_rocket_speed: f32,
     pub explosion_min_vel: f32,
     pub explosion_max_vel: f32,
+
+    /// Temps d'anticipation pour le lancement de la fusée (ms)
+    pub audio_launch_anticipation_ms: f32,
+
+    /// Temps d'anticipation pour l'explosion de la fusée (ms)
+    pub audio_explosion_anticipation_ms: f32,
 }
 
 impl Default for PhysicConfig {
@@ -43,6 +49,8 @@ impl Default for PhysicConfig {
             initial_rocket_speed: 100.0,
             explosion_min_vel: 60.0,
             explosion_max_vel: 200.0,
+            audio_launch_anticipation_ms: 25.0,
+            audio_explosion_anticipation_ms: 25.0,
         }
     }
 }

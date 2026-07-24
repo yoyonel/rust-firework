@@ -38,6 +38,9 @@ pub struct Rocket {
     pub exploded: bool,
     pub active: bool,
 
+    /// Indique si l'explosion audio a déjà été anticipée et déclenchée
+    pub audio_explosion_triggered: bool,
+
     /// Indices dans le pool des particules d'explosions
     pub explosion_particle_indices: Option<Range<usize>>,
 
@@ -68,6 +71,7 @@ impl Rocket {
             color: Color::ONE,
             exploded: false,
             active: false,
+            audio_explosion_triggered: false,
             explosion_particle_indices: None,
             trail_particle_indices: None,
             trail_index: 0,
@@ -468,6 +472,7 @@ impl Rocket {
         self.trail_index = 0;
         self.active = true;
         self.exploded = false;
+        self.audio_explosion_triggered = false;
         self.explosion_particle_indices = None;
         self.trail_particle_indices = None;
     }

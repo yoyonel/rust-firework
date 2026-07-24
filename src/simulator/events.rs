@@ -19,7 +19,9 @@ where
         self.audio_events_buf.clear();
         self.audio_engine
             .pop_debug_events(&mut self.audio_events_buf);
-        for evt in self.audio_events_buf.drain(..) {
+
+        let mut events = std::mem::take(&mut self.audio_events_buf);
+        for evt in events.drain(..) {
             match evt {
                 crate::audio_engine::types::AudioDebugEvent::Sent {
                     request_id,
@@ -97,9 +99,50 @@ where
                         match rec.sound_type {
                             crate::audio_engine::types::AudioSoundType::Rocket => {
                                 self.audio_played_rocket += 1;
+                                // Sync metrics calculation for Rocket launch
+                                if let Some(spawn_time) =
+                                    self.phys_launch_times.remove(&rec.entity_id)
+                                {
+                                    let diff_ms = if started_at >= spawn_time {
+                                        started_at.duration_since(spawn_time).as_secs_f32() * 1000.0
+                                    } else {
+                                        spawn_time.duration_since(started_at).as_secs_f32()
+                                            * -1000.0
+                                    };
+                                    self.sync_launch_sum += diff_ms as f64;
+                                    self.sync_launch_count += 1;
+                                    self.profiler.record_metric("sync_launch_ms", diff_ms);
+
+                                    // Ajustement dynamique
+                                    self.adjust_launch_anticipation_ms(diff_ms);
+                                } else {
+                                    self.audio_start_launch_times
+                                        .insert(rec.entity_id, started_at);
+                                }
                             }
                             crate::audio_engine::types::AudioSoundType::Explosion => {
                                 self.audio_played_explosion += 1;
+                                // Sync metrics calculation for Explosion
+                                if let Some(explode_time) =
+                                    self.phys_explosion_times.remove(&rec.entity_id)
+                                {
+                                    let diff_ms = if started_at >= explode_time {
+                                        started_at.duration_since(explode_time).as_secs_f32()
+                                            * 1000.0
+                                    } else {
+                                        explode_time.duration_since(started_at).as_secs_f32()
+                                            * -1000.0
+                                    };
+                                    self.sync_explosion_sum += diff_ms as f64;
+                                    self.sync_explosion_count += 1;
+                                    self.profiler.record_metric("sync_explosion_ms", diff_ms);
+
+                                    // Ajustement dynamique
+                                    self.adjust_explosion_anticipation_ms(diff_ms);
+                                } else {
+                                    self.audio_start_explosion_times
+                                        .insert(rec.entity_id, started_at);
+                                }
                             }
                         }
                     }
@@ -117,6 +160,13 @@ where
                         rec.dropped_at = Some(dropped_at);
                         rec.drop_reason = Some(reason);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Dropped;
+
+                        // Avoid memory leaks in tracking tables if sound is dropped
+                        self.phys_launch_times.remove(&rec.entity_id);
+                        self.phys_explosion_times.remove(&rec.entity_id);
+                        self.audio_start_launch_times.remove(&rec.entity_id);
+                        self.audio_start_explosion_times.remove(&rec.entity_id);
+
                         match rec.sound_type {
                             crate::audio_engine::types::AudioSoundType::Rocket => {
                                 self.audio_dropped_rocket += 1;
@@ -158,6 +208,7 @@ where
                 _ => {}
             }
         }
+        self.audio_events_buf = events;
     }
 
     pub(crate) fn handle_window_events(&mut self) -> (bool, bool) {
