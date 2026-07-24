@@ -80,7 +80,7 @@ Issue des travaux du *Software Engineering Institute (SEI / Carnegie Mellon)*, l
 └───────────┘   └───────────┘   └───────────┘   └───────────┘   └───────────┘
 ```
 
-1. **Performance Temps Réel** : Temps d'exécution $\mu\text{s}$ par bloc audio ou frame GPU vs budget disponible (ex: 5.33 ms audio, 16.6 ms vidéo).
+1. **Performance Temps Réel** : Temps d'exécution \\( \mu\text{s} \\) par bloc audio ou frame GPU vs budget disponible (ex: 5.33 ms audio, 16.6 ms vidéo).
 2. **Bande Passante Mémoire** : Accès contigus SIMD vectorisables (`vmulps`/`vaddps`), zéro allocation sur la boucle *hot-path*.
 3. **Latence & Réactivité** : Transit time entre événement déclencheur et rendu final.
 4. **Qualité & Immersion** : Richesse acoustique ou visuelle (équivalence ISO, dynamique).

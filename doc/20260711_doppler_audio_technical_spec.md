@@ -17,7 +17,7 @@
 
 ### A. Le constat initial : Les limites du système statique
 Avant cette implémentation, le moteur audio spatialisait les sons (*panning* stéréo ou binauralisation HRTF) et calculait l'atténuation de distance **une seule fois** lors de l'appel à `prepare_voice`, juste avant l'envoi du buffer dans la file de lecture. 
-* **Problème :** Si cette approche est optimale pour des événements ponctuels et immobiles (comme les explosions), elle s'avère incompatible avec des objets en vol continu (les fusées). Le son restait figé aux coordonnées initiales du tir et la fréquence de lecture restait constante ($1.0\times$), privant la simulation d'effet de vitesse et de réalisme spatial.
+* **Problème :** Si cette approche est optimale pour des événements ponctuels et immobiles (comme les explosions), elle s'avère incompatible avec des objets en vol continu (les fusées). Le son restait figé aux coordonnées initiales du tir et la fréquence de lecture restait constante (\\( 1.0\times \\)), privant la simulation d'effet de vitesse et de réalisme spatial.
 * **Composants dormants :** Des structures ébauchées (`DopplerEvent`, `DopplerQueue` et `DopplerState`) témoignaient d'une intention d'intégration, mais l'existence d'un `DopplerState` isolé menaçait d'introduire une seconde boucle de mixage DSP parallèle, redoublant la complexité et les risques de verrous de concurrence.
 
 ### B. La convergence "Suckless" : Unification dans `Voice`
@@ -116,7 +116,7 @@ Le moteur audio `rust-firework` opère désormais dans une architecture 100% Zé
 ## 5. MISE À JOUR DE LA SPÉCIFICATION ET REFACTORING POST-REVUE (13 JUILLET 2026)
 
 Suite à la revue de code du 13 Juillet 2026, des corrections et raffinements critiques ont été implémentés pour garantir la conformité aux standards de code (Smells) et aux spécifications :
-*   **Unification de la spatialisation** : Extraction de toute la logique trigonométrique 2D/3D (ITD, ILD, distance, gains) dans une fonction centrale et partagée `calculate_spatial_params`. En mode 2D (quand $dz = 0$), l'azimut est maintenant calculé par `dx.atan2(dy)` en utilisant Y comme axe de profondeur et l'élévation à `0.0`, restaurant le bon fonctionnement de la trajectoire audio dans le simulateur 2D.
+*   **Unification de la spatialisation** : Extraction de toute la logique trigonométrique 2D/3D (ITD, ILD, distance, gains) dans une fonction centrale et partagée `calculate_spatial_params`. En mode 2D (quand \\( dz = 0 \\)), l'azimut est maintenant calculé par `dx.atan2(dy)` en utilisant Y comme axe de profondeur et l'élévation à `0.0`, restaurant le bon fonctionnement de la trajectoire audio dans le simulateur 2D.
 *   **Migration vers glam::Vec2** : Remplacement systématique de tous les tuples primitifs `(f32, f32)` par `glam::Vec2` pour les vecteurs positionnels et cinématiques.
 *   **Interpolation de gain (LERP)** : Ajout d'une rampe de gain échantillon par échantillon pour chaque bloc dans le DSP pour éliminer les clics et pops.
 *   **Doppler supersonique** : Clamping du taux Doppler à `4.0` en cas d'approche supérieure ou égale à la vitesse du son.

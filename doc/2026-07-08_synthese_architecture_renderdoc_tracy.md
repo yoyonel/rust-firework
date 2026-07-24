@@ -26,7 +26,7 @@ Pour pallier le manque de sémantique, nous avons implémenté l'extension OpenG
     1. `push_debug_group!(id, "Nom")`
     2. `pop_debug_group!()`
     3. `label_gl_object!(type, id, "Nom")`
-* **Le Gain :** Les macros vérifient en $O(1)$ si la fonction (`is_loaded()`) est supportée par le driver. Le code de rendu reste purement sémantique sans être pollué par des vérifications de sécurité OpenGL.
+* **Le Gain :** Les macros vérifient en \\( O(1) \\) si la fonction (`is_loaded()`) est supportée par le driver. Le code de rendu reste purement sémantique sans être pollué par des vérifications de sécurité OpenGL.
 
 ---
 
@@ -44,7 +44,7 @@ Nous avons encerclé les logiques de rendu critiques par des balises `PushDebugG
         * Contient toutes les itérations Ping-Pong (ex: Gaussian ou Kawase).
     * 📂 **`PostFX: ToneMapping & Composition`** (Rendu final sur écran)
 
-* **Le Gain :** La Timeline RenderDoc affiche désormais des segments de couleurs par passe graphique. Le coût temporel de chaque bloc (en $\mu$s) est calculé par RenderDoc instantanément.
+* **Le Gain :** La Timeline RenderDoc affiche désormais des segments de couleurs par passe graphique. Le coût temporel de chaque bloc (en \\( \mu \\)s) est calculé par RenderDoc instantanément.
 
 ---
 
@@ -83,4 +83,4 @@ Pour mesurer l'impact du moteur CPU indépendamment du GPU, nous avons ajouté u
 
 ## 7. CONTEXTE POUR LA PROCHAINE CONVERSATION
 
-L'architecture GPU de base est dorénavant transparente. La prochaine étape logique, basée sur les découvertes de cette instrumentation, sera de s'attaquer au goulot d'étranglement du **Fill-rate / Bande Passante Mémoire** identifié dans le `Bloom Blur Chain` (réduction drastique du temps d'exécution ciblant les $< 300\mu s$ via le *Kawase blur* et l'optimisation des FBO ping-pong).
+L'architecture GPU de base est dorénavant transparente. La prochaine étape logique, basée sur les découvertes de cette instrumentation, sera de s'attaquer au goulot d'étranglement du **Fill-rate / Bande Passante Mémoire** identifié dans le `Bloom Blur Chain` (réduction drastique du temps d'exécution ciblant les \\( < 300\mu s \\) via le *Kawase blur* et l'optimisation des FBO ping-pong).

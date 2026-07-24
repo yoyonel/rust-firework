@@ -11,6 +11,7 @@
   - [Formes d'explosions](physic_explosion_shapes.md)
 
 - [Moteur Audio]()
+  - [Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)](20260724_audio_anticipation_timeshifting_closed_loop.md)
   - [Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU](20260721_audio_diagnostics_underrun_imgui_fixes.md)
   - [Architecture & Spécification Bus Spatial 2D](20260720_spatial_bus_audio_architecture.md)
   - [Spécification & Guide Réverbération Spatiale](20260720_spatial_reverb_technical_spec.md)

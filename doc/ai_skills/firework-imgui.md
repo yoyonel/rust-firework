@@ -8,7 +8,7 @@ description: Compétence spécialisée dans la création d'interfaces GUI en mod
 Référence technique sur l'architecture d'interface en mode immédiat (ImGui) et l'outillage de diagnostic visuel.
 
 ## ⚠️ Invariants et Règles d'Or UI / ImGui (Zéro Compromis)
-1. **Paradigme Immédiat & Découplage de l'État :** Ne jamais dupliquer l'état du domaine dans les structures de l'UI. L'interface est une pure projection de l'état de la simulation ou du rendu au frame $t$. Si un widget doit modifier une valeur, il émet une commande ou modifie directement la configuration source autorisée.
+1. **Paradigme Immédiat & Découplage de l'État :** Ne jamais dupliquer l'état du domaine dans les structures de l'UI. L'interface est une pure projection de l'état de la simulation ou du rendu au frame \\( t \\). Si un widget doit modifier une valeur, il émet une commande ou modifie directement la configuration source autorisée.
 2. **Isolation des Handles GL :** Les widgets ImGui ne doivent jamais manipuler de primitives OpenGL brutes ou de buffers bas niveau de manière ad-hoc. L'affichage de textures dans ImGui (ex: preview d'un FBO de Bloom ou de particules) doit impérativement passer par les abstractions existantes du renderer.
 3. **Ergonomie & Zéro-Allocation dans l'UI Loop :** Éviter les allocations répétées de `String` à chaque frame pour le formattage des textes ImGui (utiliser des buffers réutilisables ou des formattages in-place autant que possible dans les boucles de profiling à haute fréquence).
 

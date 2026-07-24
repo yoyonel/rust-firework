@@ -11,7 +11,7 @@ Ce document présente l'implémentation et l'analyse de performance des trois pi
   Auparavant, nos buffers persistants triple-bufferisés utilisaient `GL_MAP_COHERENT_BIT`. La cohérence matérielle automatique force le CPU et le GPU à synchroniser en continu leurs caches système. 
   Nous avons supprimé ce flag de la création du stockage GPU (`gl::BufferStorage`) et du mapping (`gl::MapBufferRange`), et l'avons remplacé par un flush explicite (`gl::FlushMappedBufferRange`) restreint uniquement aux octets réellement écrits lors de la frame (`count * size_of::<ParticleGPU>()`).
 * **Gain :**
-  Permet au contrôleur mémoire du processeur d'activer le cache de type **Write-Combining** sur la BAR PCIe, augmentant radicalement le débit d'écriture brute CPU $\rightarrow$ GPU tout en évitant les synchronisations de cache matérielles intrusives.
+  Permet au contrôleur mémoire du processeur d'activer le cache de type **Write-Combining** sur la BAR PCIe, augmentant radicalement le débit d'écriture brute CPU \\( \rightarrow \\) GPU tout en évitant les synchronisations de cache matérielles intrusives.
 
 ### 2. Piste 2 : Frustum Culling (Filtrage Screen-Space CPU)
 * **Principe :**

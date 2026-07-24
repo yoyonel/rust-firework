@@ -188,7 +188,7 @@ Les deux fonctionnalités prioritaires du quadrant **P1** ont été intégrées 
 
 2. **Banque d'Échantillons Pré-Spatialisés (`DistanceAudioAtlas`)** :
    - Module dédié : [`src/audio_engine/distance_atlas.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/distance_atlas.rs)
-   - Génération au chargement d'un `SoundAtlas` contenant 3 estratifications spectraux : `near` (plein spectre), `mid` (filtré $f_c = 4000$ Hz) et `far` (filtré $f_c = 1200$ Hz).
+   - Génération au chargement d'un `SoundAtlas` contenant 3 estratifications spectraux : `near` (plein spectre), `mid` (filtré \( f_c = 4000 \) Hz) et `far` (filtré \( f_c = 1200 \) Hz).
    - En runtime, la voix bascule dynamiquement sur l'échantillon pré-filtré sans ré-exécuter la boucle de filtrage IIR passe-bas par échantillon.
    - Activé/Désactivé à la volée via le bitmask atomique `AudioEffect::DistanceAtlas`.
 

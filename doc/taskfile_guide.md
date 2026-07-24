@@ -42,7 +42,7 @@ Toutes les tâches graphiques et audio s'exécutent par défaut dans un tampon d
 | `task test-integration` | Lance les scénarios de tests d'intégration complets (capture d'image et flux audio). |
 | `task coverage` | Calcule la couverture de code locale via `cargo-llvm-cov` et ouvre le rapport HTML. |
 | `task test-opengl-mesa` | Valide les appels OpenGL avec Mesa `llvmpipe` et capture toute violation des spécifications OpenGL via le mécanisme `GL_DEBUG_OUTPUT`. |
-| `task lint` | Exécute la vérification complète de formatage (`rustfmt`) et d'analyse statique (`clippy`). |
+| `task lint` | Exécute la vérification complète de formatage (`rustfmt`), d'analyse statique (`clippy`) et de la syntaxe de la documentation (`vale`). |
 
 ---
 
@@ -70,3 +70,17 @@ Des benchmarks fins mesurent l'impact d'optimisations comme l'usage des instruct
 | `task bench-save-baseline -- <nom>` | Exécute les benchs et sauvegarde les résultats sous un nom de référence. |
 | `task bench-compare -- <nom>` | Compare les performances actuelles par rapport à la référence sauvegardée. |
 | `task bench-open-report` | Lance un serveur HTTP local pour consulter les graphiques Criterion générés. |
+
+---
+
+## 📖 6. Documentation (mdBook & Vale)
+
+Le projet utilise `mdBook` pour compiler les rapports d'architecture et guides en HTML, et `Vale` pour valider la syntaxe mathématique LaTeX de la documentation.
+
+| Commande | Description |
+|:---|:---|
+| `task doc-build` | Compile le livre de documentation en HTML dans le répertoire `book/`. |
+| `task doc-serve` | Lance un serveur web local de documentation avec rechargement automatique sur `http://localhost:3000`. |
+| `task doc-clean` | Nettoie les fichiers de documentation compilés (supprime le répertoire `book/`). |
+| `task doc-setup-vale` | Installe automatiquement la CLI `vale` localement dans `./bin/vale` si elle n'est pas présente dans l'OS. |
+| `task doc-lint` | Valide la syntaxe LaTeX/MathJax des fichiers Markdown de documentation avec Vale. |
