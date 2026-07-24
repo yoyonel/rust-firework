@@ -154,6 +154,72 @@ where
                     }
                 }
 
+                // ── Indicateur B: Labels flottants animés pour les évènements audio actifs ──
+                {
+                    let draw_list = ui.get_background_draw_list();
+
+                    for evt in &self.audio_event_pool {
+                        let t = (evt.age / evt.kind.ttl_secs()).clamp(0.0, 1.0);
+                        // Fade: fast attack, smooth decay
+                        let alpha = {
+                            let a = if t < 0.05 { t / 0.05 } else { 1.0 };
+                            let b = if t > 0.5 { 1.0 - (t - 0.5) / 0.5 } else { 1.0 };
+                            a * b
+                        };
+                        // Float upward as the event ages
+                        let drift_y = evt.age * 55.0;
+                        let label_x = evt.pos.x - 28.0;
+                        let label_y = evt.pos.y - drift_y - 18.0;
+
+                        let (label, color) = match evt.kind {
+                            crate::renderer_engine::AudioEventKind::Launch => {
+                                ("LAUNCH", [0.15_f32, 1.0, 0.4, alpha])
+                            }
+                            crate::renderer_engine::AudioEventKind::Explosion => {
+                                ("BOOM", [1.0_f32, 0.45, 0.05, alpha])
+                            }
+                        };
+
+                        draw_list.add_text([label_x, label_y], color, label);
+                    }
+                }
+
+                // ── Indicateur D: Badge ID persistant sur chaque fusée en vol ──
+                {
+                    let draw_list = ui.get_background_draw_list();
+                    let mut rocket_index = 0usize;
+                    self.physic_engine.for_each_active_head_not_exploded(
+                        &mut |p: &crate::physic_engine::Particle| {
+                            rocket_index += 1;
+                            let badge_x = p.pos.x + 10.0;
+                            let badge_y = p.pos.y - 14.0;
+                            // Small dark badge background
+                            draw_list
+                                .add_rect(
+                                    [badge_x - 2.0, badge_y - 2.0],
+                                    [badge_x + 36.0, badge_y + 14.0],
+                                    [0.0_f32, 0.0, 0.0, 0.55],
+                                )
+                                .rounding(3.0)
+                                .filled(true)
+                                .build();
+                            // Rocket ID text
+                            let mut buf = [0u8; 12];
+                            let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                            use std::io::Write;
+                            let _ = write!(cursor, "#{}", rocket_index);
+                            let pos = cursor.position() as usize;
+                            if let Ok(txt) = std::str::from_utf8(&buf[..pos]) {
+                                draw_list.add_text(
+                                    [badge_x, badge_y],
+                                    [1.0_f32, 1.0, 1.0, 0.90],
+                                    txt,
+                                );
+                            }
+                        },
+                    );
+                }
+
                 let window_width = ui.io().display_size[0];
                 let window_height = ui.io().display_size[1];
                 ui.window("Audio Diagnostic Monitor")
