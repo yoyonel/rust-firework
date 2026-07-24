@@ -3,6 +3,7 @@
 [Introduction](introduction.md)
 [Langage Métier (Glossaire)](ubiquitous_language.md)
 [Guide des Tâches (Taskfile)](taskfile_guide.md)
+[Guide Architecture Build Hybride (Distrobox, Tracy & NVIDIA)](20260724_cross_platform_distrobox_tracy_build_guide.md)
 - [Architecture Globale, Threads & Synchronisation](20260721_moteurs_threads_synchronisation.md)
 
 - [Moteur Physique]()
