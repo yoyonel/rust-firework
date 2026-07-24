@@ -122,6 +122,9 @@ impl PhysicEngine for DummyPhysic {
         UpdateResult {
             new_rocket: None,
             triggered_explosions: &[],
+            triggered_explosion_ids: &[],
+            anticipated_rocket_launch: None,
+            anticipated_explosions: &[],
         }
     }
     fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {}
@@ -346,6 +349,9 @@ impl PhysicEngine for TestPhysic {
         UpdateResult {
             new_rocket: None,
             triggered_explosions: &[],
+            triggered_explosion_ids: &[],
+            anticipated_rocket_launch: None,
+            anticipated_explosions: &[],
         }
     }
     fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {
