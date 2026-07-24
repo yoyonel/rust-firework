@@ -128,6 +128,10 @@ where
 
     pub launch_trend_dir: i32, // 1: augmentation, -1: diminution, 0: stable
     pub explosion_trend_dir: i32, // 1: augmentation, -1: diminution, 0: stable
+
+    // NOUVEAU: Indicateurs visuels GPU des évènements audio (mode debug F3)
+    pub audio_event_renderer: Option<crate::renderer_engine::AudioEventRenderer>,
+    pub audio_event_pool: Vec<crate::renderer_engine::AudioEvent>,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -201,6 +205,8 @@ where
             audio_stress_scene: AudioStressScene::new(),
             launch_trend_dir: 0,
             explosion_trend_dir: 0,
+            audio_event_renderer: None,
+            audio_event_pool: Vec::with_capacity(32),
         }
     }
 
@@ -350,6 +356,30 @@ where
             anticipated_explosions,
         );
 
+        // NOUVEAU: Alimenter le pool d'indicateurs visuels audio (mode debug F3)
+        if self.show_audio_diagnostic {
+            // Injection des évènements anticipés dans le pool d'animation
+            if let Some((_id, pos)) = anticipated_rocket_launch {
+                self.audio_event_pool
+                    .push(crate::renderer_engine::AudioEvent::new(
+                        pos,
+                        crate::renderer_engine::AudioEventKind::Launch,
+                    ));
+            }
+            for &(_id, pos) in anticipated_explosions {
+                self.audio_event_pool
+                    .push(crate::renderer_engine::AudioEvent::new(
+                        pos,
+                        crate::renderer_engine::AudioEventKind::Explosion,
+                    ));
+            }
+            // Vieillissement + élagage des évènements expirés
+            self.audio_event_pool.retain_mut(|evt| {
+                evt.age += delta;
+                !evt.is_expired()
+            });
+        }
+
         tracy_zone_with_value!(
             "physics::update",
             0xAA00FF, // Violet
@@ -462,6 +492,30 @@ where
         if self.audio_stress_scene.enabled {
             self.audio_stress_scene
                 .draw(self.window_size_f32, &self.audio_engine);
+        }
+
+        // NOUVEAU: Indicateurs visuels GPU des évènements audio (anneau de propagation + beam)
+        if self.show_audio_diagnostic && !self.audio_event_pool.is_empty() {
+            // Lazy-init du renderer (crée les VBO/VAO/shaders la première fois)
+            if self.audio_event_renderer.is_none() {
+                self.audio_event_renderer = Some(crate::renderer_engine::AudioEventRenderer::new());
+            }
+            if let Some(renderer) = &mut self.audio_event_renderer {
+                // Position du listener (bas-centre de l'écran en mode normal)
+                let listener = glam::Vec2::new(
+                    self.window_size_f32.0 * 0.5,
+                    self.audio_engine.get_listener_position().y,
+                );
+                // Construire le buffer GPU depuis le pool CPU (pile temporaire, zéro allocation)
+                let mut gpu_buf: Vec<crate::renderer_engine::AudioEventGPUData> =
+                    Vec::with_capacity(self.audio_event_pool.len());
+                for evt in &self.audio_event_pool {
+                    gpu_buf.push(evt.to_gpu(listener));
+                }
+                unsafe {
+                    renderer.draw(&gpu_buf);
+                }
+            }
         }
     }
 
