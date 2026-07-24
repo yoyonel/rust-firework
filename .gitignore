@@ -275,3 +275,6 @@ r*hs/
 # Local Cargo configuration
 .cargo/config.toml
 
+# Local downloaded binary tools (e.g. Vale)
+/bin/
+
