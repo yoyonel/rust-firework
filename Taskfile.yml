@@ -12,6 +12,8 @@ vars:
     sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev -- xvfb-run -a"; elif command -v xvfb-run >/dev/null 2>&1; then echo "xvfb-run -a"; else echo ""; fi'
   SKILLS_OUTPUT_DIR: '{{.HOME}}/.agents/skills'
   DOC_TEMPLATES_DIR: 'doc/ai_skills'
+  VALE_BIN:
+    sh: 'if command -v vale >/dev/null 2>&1; then echo "vale"; else echo "./bin/vale"; fi'
 
 tasks:
   default:
@@ -209,8 +211,8 @@ tasks:
       - "{{.CARGO}} clippy -- -D warnings"
 
   lint:
-    desc: "Vérification complète du code (fmt + clippy)"
-    deps: [fmt, clippy]
+    desc: "Vérification complète du code (fmt + clippy + doc-lint)"
+    deps: [fmt, clippy, doc-lint]
 
   # =========================================
   # ⏱️ BENCHMARKS (Criterion.rs)
@@ -280,6 +282,26 @@ tasks:
     cmds:
       - echo "📖 Compilation de la documentation mdBook..."
       - mdbook build
+
+  doc-setup-vale:
+    desc: "Installe Vale localement dans le projet si non présent"
+    cmds:
+      - |
+        if ! command -v vale &>/dev/null && [ ! -f bin/vale ]; then
+          echo "📥 Téléchargement de Vale CLI..."
+          mkdir -p bin
+          wget -qO- https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz | tar -xzC bin vale
+          echo "✅ Vale CLI installé dans ./bin/vale"
+        fi
+    status:
+      - "test -f bin/vale || command -v vale"
+
+  doc-lint:
+    desc: "Vérifie les formules LaTeX et la syntaxe mathématique de la documentation avec Vale"
+    deps: [doc-setup-vale]
+    cmds:
+      - echo "🕵️  Vérification de la syntaxe mathématique de la documentation..."
+      - "{{.VALE_BIN}} --glob='*.md' doc"
 
   doc-serve:
     desc: "Lance un serveur web local de documentation avec rechargement automatique (Ctrl+C pour arrêter)"
