@@ -29,3 +29,8 @@ pub use self::bloom::BloomPass;
 
 pub mod circle_renderer;
 pub use self::circle_renderer::{CircleGPUData, CircleGPURenderer};
+
+pub mod audio_event_renderer;
+pub use self::audio_event_renderer::{
+    AudioEvent, AudioEventGPUData, AudioEventKind, AudioEventRenderer,
+};
