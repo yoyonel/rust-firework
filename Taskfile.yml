@@ -301,7 +301,7 @@ tasks:
     deps: [doc-setup-vale]
     cmds:
       - echo "🕵️  Vérification de la syntaxe mathématique de la documentation..."
-      - "{{.VALE_BIN}} doc"
+      - "find doc -maxdepth 2 -name \"*.md\" | xargs {{.VALE_BIN}}"
 
   doc-serve:
     desc: "Lance un serveur web local de documentation avec rechargement automatique (Ctrl+C pour arrêter)"

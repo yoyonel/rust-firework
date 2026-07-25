@@ -1,6 +1,6 @@
 extends: existence
-message: "Single dollar math expression '%s' found. Use '\\( ... \\)' for inline math to prevent mdBook rendering issues."
+message: "Single dollar math expression found. Use '\\\\( ... \\\\)' for inline math to prevent mdBook rendering issues."
 level: error
 scope: text
 raw:
-  - '(?<!\$)\$([^$\n\s][^$\n]*?)\$(?!\$)'
+  - '(?:^|[^$\\])\$[^$\n\r]+?\$'
