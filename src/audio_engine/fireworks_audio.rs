@@ -44,7 +44,7 @@ pub struct FireworksAudio3D {
     rocket_data: Arc<Vec<[f32; 2]>>,
     explosion_data: Arc<Vec<[f32; 2]>>,
 
-    listener_pos: Vec2,
+    listener_pos: Arc<crate::audio_engine::types::AtomicVec2>,
     sample_rate: u32,
     block_size: usize,
     voices: Vec<Voice>,
@@ -64,6 +64,14 @@ pub struct FireworksAudio3D {
     /// Masque atomique des effets DSP activés. Partagé avec le `DspProcessor` via `Arc`.
     /// Lock-free : le thread CPAL lit, le main thread écrit.
     effect_flags: std::sync::Arc<AudioEffectFlags>,
+
+    /// Gain du signal réverbéré (Wet gain de 0.00 à 1.00) partagé de manière lock-free.
+    reverb_wet: Arc<std::sync::atomic::AtomicU32>,
+
+    // NOUVEAU : Tracking et debug des événements audio
+    debug_rx: crossbeam_channel::Receiver<crate::audio_engine::types::AudioDebugEvent>,
+    debug_tx: crossbeam_channel::Sender<crate::audio_engine::types::AudioDebugEvent>,
+    next_request_id: std::sync::atomic::AtomicU64,
 }
 
 impl FireworksAudio3D {
@@ -89,20 +97,28 @@ impl FireworksAudio3D {
         rocket_data = resample_linear(&rocket_data, rocket_sr, config.sample_rate);
         explosion_data = resample_linear(&explosion_data, explosion_sr, config.sample_rate);
 
+        let rocket_arc = Arc::new(rocket_data);
+        let explosion_arc = Arc::new(explosion_data);
+
         let mut voices = Vec::with_capacity(config.max_voices);
         voices.resize_with(config.max_voices, Voice::new);
 
         let global_gain = config.settings.global_gain();
 
-        let (garbage_tx, garbage_rx) = crossbeam_channel::bounded(1024);
+        let (garbage_tx, garbage_rx) = crossbeam_channel::unbounded();
 
         // --- NOUVEAU : Ring buffer SPSC borné pour les requêtes audio ---
         let (play_tx, play_rx) = crossbeam_channel::bounded(512);
 
+        // NOUVEAU : Canaux de debug
+        let (debug_tx, debug_rx) = crossbeam_channel::bounded(2048);
+
         Ok(Self {
-            rocket_data: Arc::new(rocket_data),
-            explosion_data: Arc::new(explosion_data),
-            listener_pos: config.listener_pos,
+            rocket_data: rocket_arc,
+            explosion_data: explosion_arc,
+            listener_pos: Arc::new(crate::audio_engine::types::AtomicVec2::new(
+                config.listener_pos,
+            )),
             sample_rate: config.sample_rate,
             block_size: config.block_size,
             voices,
@@ -115,10 +131,15 @@ impl FireworksAudio3D {
             garbage_rx,
             doppler_receiver: config.doppler_receiver,
             effect_flags: AudioEffectFlags::new_all_enabled(),
+            reverb_wet: Arc::new(std::sync::atomic::AtomicU32::new(0.08f32.to_bits())),
+            debug_tx,
+            debug_rx,
+            next_request_id: std::sync::atomic::AtomicU64::new(1),
         })
     }
 
     /// Queue a sound for playback — 100% Zero-Heap Allocation !
+    #[allow(clippy::too_many_arguments)]
     fn enqueue_sound(
         &self,
         id: u64,
@@ -126,6 +147,7 @@ impl FireworksAudio3D {
         pos: Vec2,
         gain: f32,
         is_dynamic: bool,
+        sound_type: crate::audio_engine::types::AudioSoundType,
     ) {
         if self.global_gain == 0.0 {
             return;
@@ -137,6 +159,21 @@ impl FireworksAudio3D {
             tracy_zone!("audio::free_garbage_buffer", 0xFF00AA);
         }
 
+        let request_id = self
+            .next_request_id
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let sent_at = Instant::now();
+
+        // Envoyer l'event "Sent"
+        let _ = self
+            .debug_tx
+            .try_send(crate::audio_engine::types::AudioDebugEvent::Sent {
+                request_id,
+                sound_type,
+                entity_id: id,
+                sent_at,
+            });
+
         let global_gain = self.global_gain * gain;
 
         // Calcul des fades en nombre d'échantillons
@@ -145,36 +182,74 @@ impl FireworksAudio3D {
         let fade_out_samples =
             (self.sample_rate as f32 * (self.settings.fade_out_ms() / 1000.0)) as usize;
 
-        // 🎯 MAGIE ZERO-HEAP : Arc::clone ne fait qu'incrémenter un compteur atomique O(1) !
-        // Plus de data.to_owned(), plus de prepare_voice(), plus de malloc !
         let req = PlayRequest {
             data: Arc::clone(data), // ZÉRO ALLOCATION MÉMOIRE : Pointeur partagé !
             fade_in: fade_in_samples,
             fade_out: fade_out_samples,
             gain: global_gain,
             filter_a: 0.05, // Valeur initiale, recalculée au 1er bloc par DspProcessor
-            sent_at: Instant::now(),
+            sent_at,
+            request_id,
             id,
             pos,
             is_dynamic,
+            sound_type,
         };
 
         if let Err(e) = self.play_tx.try_send(req) {
             log::warn!("⚠️ Audio play_queue full! Dropping sound event: {:?}", e);
+            let _ = self
+                .debug_tx
+                .try_send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                    request_id,
+                    dropped_at: Instant::now(),
+                    reason: "Play queue full",
+                });
         }
     }
 
     pub fn play_rocket(&self, pos: Vec2, gain: f32) {
-        // En passant &self.rocket_data, on transmet proprement la référence vers l'Arc !
-        self.enqueue_sound(0, &self.rocket_data, pos, gain, false);
+        self.enqueue_sound(
+            0,
+            &self.rocket_data,
+            pos,
+            gain,
+            false,
+            crate::audio_engine::types::AudioSoundType::Rocket,
+        );
     }
 
     pub fn play_rocket_with_id(&self, id: u64, pos: Vec2, gain: f32) {
-        self.enqueue_sound(id, &self.rocket_data, pos, gain, true);
+        self.enqueue_sound(
+            id,
+            &self.rocket_data,
+            pos,
+            gain,
+            true,
+            crate::audio_engine::types::AudioSoundType::Rocket,
+        );
     }
 
     pub fn play_explosion(&self, pos: Vec2, gain: f32) {
-        self.enqueue_sound(0, &self.explosion_data, pos, gain, false);
+        self.enqueue_sound(
+            0,
+            &self.explosion_data,
+            pos,
+            gain,
+            false,
+            crate::audio_engine::types::AudioSoundType::Explosion,
+        );
+    }
+
+    pub fn play_explosion_with_id(&self, id: u64, pos: Vec2, gain: f32) {
+        self.enqueue_sound(
+            id,
+            &self.explosion_data,
+            pos,
+            gain,
+            true,
+            crate::audio_engine::types::AudioSoundType::Explosion,
+        );
     }
 
     pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
@@ -190,13 +265,15 @@ impl FireworksAudio3D {
         let profiler = Profiler::new(200);
         let _settings = self.settings.clone();
         let doppler_rx_clone = self.doppler_receiver.clone();
-        let listener_pos_clone = self.listener_pos;
+        let listener_pos_clone = self.listener_pos.clone();
         let effect_flags_clone = self.effect_flags.clone();
+        let reverb_wet_clone = self.reverb_wet.clone();
 
         let export_writer_arc: Option<Arc<Mutex<SafeWavWriter>>> =
             export_path.map(|path| Arc::new(Mutex::new(SafeWavWriter::new(path, sr))));
 
         let garbage_tx = self.garbage_tx.clone();
+        let debug_tx_clone = self.debug_tx.clone();
 
         thread::spawn(move || {
             let audio_result: Result<(), AudioThreadError> = (|| {
@@ -211,7 +288,7 @@ impl FireworksAudio3D {
                     .ok_or(AudioThreadError::NoDevice)?;
 
                 // 1. Configuration Matérielle (déléguée !)
-                let config = get_cpal_config(&device, sr);
+                let config = get_cpal_config(&device, sr, block_size);
 
                 // 2. Instanciation du processeur DSP
                 let max_supported_frames = block_size.max(16384);
@@ -226,9 +303,18 @@ impl FireworksAudio3D {
                     export_writer: export_writer_arc.clone(),
                     block_index: 0,
                     acc: vec![[0.0; 2]; max_supported_frames],
+                    bus_w: vec![0.0; max_supported_frames],
+                    bus_x: vec![0.0; max_supported_frames],
+                    export_buffer: vec![[0.0; 2]; max_supported_frames],
                     last_log: Instant::now(),
                     log_interval: Duration::from_secs(4),
                     effect_flags: effect_flags_clone,
+                    spatial_reverb: crate::audio_engine::SpatialReverb::new_with_wet(
+                        sr,
+                        reverb_wet_clone,
+                    ),
+                    hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sr, block_size),
+                    debug_tx: Some(debug_tx_clone),
                 };
 
                 // 3. Lancement du Flux Audio
@@ -239,6 +325,30 @@ impl FireworksAudio3D {
                             INIT_CPAL_THREAD.call_once(|| {
                                 #[cfg(feature = "tracy")]
                                 tracy_client::set_thread_name!("CPAL Audio Callback");
+
+                                #[allow(deprecated)]
+                                #[cfg(target_arch = "x86_64")]
+                                unsafe {
+                                    use std::arch::x86_64::{_mm_getcsr, _mm_setcsr};
+                                    let mut csr = _mm_getcsr();
+                                    csr |= 0x8000; // FTZ (Bit 15)
+                                    csr |= 0x0040; // DAZ (Bit 6)
+                                    _mm_setcsr(csr);
+                                }
+
+                                #[cfg(target_os = "linux")]
+                                unsafe {
+                                    let mut param: libc::sched_param = std::mem::zeroed();
+                                    param.sched_priority = 20;
+                                    let res = libc::pthread_setschedparam(
+                                        libc::pthread_self(),
+                                        libc::SCHED_FIFO,
+                                        &param,
+                                    );
+                                    if res != 0 {
+                                        libc::setpriority(libc::PRIO_PROCESS, 0, -20);
+                                    }
+                                }
                             });
                             dsp_processor.process_block(data, global_gain, &profiler);
                         },
@@ -306,6 +416,10 @@ impl AudioEngine for FireworksAudio3D {
         self.play_explosion(pos, gain)
     }
 
+    fn play_explosion_with_id(&self, id: u64, pos: Vec2, gain: f32) {
+        self.play_explosion_with_id(id, pos, gain)
+    }
+
     fn start_audio_thread(&mut self, _export_path: Option<&str>) {
         self.start_audio_thread(_export_path)
     }
@@ -315,12 +429,12 @@ impl AudioEngine for FireworksAudio3D {
     }
 
     fn set_listener_position(&mut self, pos: Vec2) {
-        self.listener_pos = pos;
-        info!("🎧️ Listener position set to: {:?}", self.listener_pos);
+        self.listener_pos.store(pos);
+        info!("🎧️ Listener position set to: {:?}", pos);
     }
 
     fn get_listener_position(&self) -> Vec2 {
-        self.listener_pos
+        self.listener_pos.load()
     }
 
     fn mute(&mut self) {
@@ -348,44 +462,39 @@ impl AudioEngine for FireworksAudio3D {
         self.effect_flags.status_string()
     }
 
+    fn pop_debug_events(&self, buf: &mut Vec<crate::audio_engine::types::AudioDebugEvent>) {
+        while let Ok(evt) = self.debug_rx.try_recv() {
+            buf.push(evt);
+        }
+    }
+
+    fn get_max_distance(&self) -> f32 {
+        self.settings.max_distance()
+    }
+
+    fn set_reverb_wet(&self, wet: f32) {
+        self.reverb_wet.store(
+            wet.clamp(0.0, 1.0).to_bits(),
+            std::sync::atomic::Ordering::Relaxed,
+        );
+    }
+
+    fn get_reverb_wet(&self) -> f32 {
+        f32::from_bits(self.reverb_wet.load(std::sync::atomic::Ordering::Relaxed))
+    }
+
     fn as_audio_engine(&self) -> &dyn AudioEngine {
         self
     }
 }
 
-/// Négocie la meilleure taille de buffer (low-latency) avec le matériel
-fn get_cpal_config(device: &cpal::Device, sr: u32) -> cpal::StreamConfig {
-    let buffer_size = match device.supported_output_configs() {
-        Ok(mut configs) => {
-            let target_sr = cpal::SampleRate(sr);
-            let supports_low_latency = configs.any(|c| {
-                c.channels() == 2
-                    && c.min_sample_rate() <= target_sr
-                    && c.max_sample_rate() >= target_sr
-                    && match c.buffer_size() {
-                        cpal::SupportedBufferSize::Range { min, max } => *min <= 256 && *max >= 256,
-                        cpal::SupportedBufferSize::Unknown => true,
-                    }
-            });
-            if supports_low_latency {
-                cpal::BufferSize::Fixed(256)
-            } else {
-                cpal::BufferSize::Default
-            }
-        }
-        Err(e) => {
-            log::warn!(
-                "Impossible d'inspecter les configs audio ({}), fallback sur Fixed(256)",
-                e
-            );
-            cpal::BufferSize::Fixed(256)
-        }
-    };
-
+/// Configure la configuration CPAL avec un buffer par défaut pour autoriser
+/// une gestion de buffer multi-période stable par le système (PipeWire/PulseAudio/ALSA).
+fn get_cpal_config(_device: &cpal::Device, sr: u32, _block_size: usize) -> cpal::StreamConfig {
     cpal::StreamConfig {
         channels: 2,
         sample_rate: cpal::SampleRate(sr),
-        buffer_size,
+        buffer_size: cpal::BufferSize::Default,
     }
 }
 

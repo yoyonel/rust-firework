@@ -17,8 +17,19 @@ pub fn calculate_spatial_params_3d(
     let distance = diff.length().max(1e-6);
 
     // Attenuation par la distance (conditionnelle)
+    // Modèle inverse-distance réaliste de l'industrie avec fondu linéaire à max_distance
     let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-        (1.0 - distance / settings.max_distance()).max(0.0)
+        let ref_distance = 50.0_f32; // Distance de référence sous laquelle le volume est de 1.0 (gain maximal)
+        let max_distance = settings.max_distance().max(ref_distance + 1.0);
+        if distance <= ref_distance {
+            1.0
+        } else if distance >= max_distance {
+            0.0
+        } else {
+            let raw_att = ref_distance / distance;
+            let fade = (max_distance - distance) / (max_distance - ref_distance);
+            raw_att * fade
+        }
     } else {
         1.0 // Bypass : volume constant quelle que soit la distance
     };
@@ -77,8 +88,19 @@ pub fn calculate_spatial_params_2d(
     let distance = diff.length().max(1e-6);
 
     // Atténuation par la distance (conditionnelle)
+    // Modèle inverse-distance réaliste de l'industrie avec fondu linéaire à max_distance
     let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-        (1.0 - distance / settings.max_distance()).max(0.0)
+        let ref_distance = 50.0_f32; // Distance de référence sous laquelle le volume est de 1.0 (gain maximal)
+        let max_distance = settings.max_distance().max(ref_distance + 1.0);
+        if distance <= ref_distance {
+            1.0
+        } else if distance >= max_distance {
+            0.0
+        } else {
+            let raw_att = ref_distance / distance;
+            let fade = (max_distance - distance) / (max_distance - ref_distance);
+            raw_att * fade
+        }
     } else {
         1.0 // Bypass : volume constant quelle que soit la distance
     };

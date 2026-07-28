@@ -30,6 +30,12 @@ pub enum AudioEffect {
     GainLerp = 1 << 6,
     /// Normalisation douce et contrôle du gain appliqués en sortie globale (limiteur doux).
     Normalization = 1 << 7,
+    /// Bus spatial 2D (Harmoniques Circulaires / Ambisonics 2D W, X, Y pré-accumulés).
+    SpatialBus = 1 << 8,
+    /// Réverbération spatiale globale sur bus unique (Feedback Delay Network / Schroeder Reverb).
+    SpatialReverb = 1 << 9,
+    /// Décodeur HRTF binaural sur Bus Spatial 2D (Overlap-Save FFT sur enceintes virtuelles).
+    HrtfBus = 1 << 10,
 }
 
 impl AudioEffect {
@@ -45,6 +51,9 @@ impl AudioEffect {
             ("fade", AudioEffect::FadeInOut),
             ("gain_lerp", AudioEffect::GainLerp),
             ("normalize", AudioEffect::Normalization),
+            ("spatial_bus", AudioEffect::SpatialBus),
+            ("spatial_reverb", AudioEffect::SpatialReverb),
+            ("hrtf_bus", AudioEffect::HrtfBus),
         ]
     }
 
@@ -80,7 +89,10 @@ pub const DEFAULT_FLAGS: u32 = AudioEffect::Binaural as u32
     | AudioEffect::Doppler as u32
     | AudioEffect::FadeInOut as u32
     | AudioEffect::GainLerp as u32
-    | AudioEffect::Normalization as u32;
+    | AudioEffect::Normalization as u32
+    | AudioEffect::SpatialReverb as u32
+    | AudioEffect::SpatialBus as u32
+    | AudioEffect::HrtfBus as u32;
 
 /// Bitmask partagé entre le main thread et le thread CPAL.
 ///
