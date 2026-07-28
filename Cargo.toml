@@ -41,9 +41,8 @@ copypasta = "0.10.2"
 # Tracy (désactivé par défaut, activé via feature)
 tracy-client = { version = "0.18.4", optional = true, features = ["enable", "fibers"] }
 libc = "0.2.186"
+realfft = "3.4"
 
-[patch.crates-io]
-tracy-client = { path = "../rust_tracy_client/tracy-client" }
 
 [dev-dependencies]
 tempfile = "3.8"
@@ -62,6 +61,10 @@ harness = false
 name = "simulator_full_bench"
 harness = false
 
+[[bench]]
+name = "spatial_bus_bench"
+harness = false
+
 [features]
 default = ["simd", "test_helpers"] # SIMD activé par défaut
 fft = []
@@ -70,6 +73,7 @@ simd = []                          # Active le code SIMD
 test_helpers = []
 interactive_tests = []
 tracy = ["tracy-client"]
+tracy_custom_color = ["tracy"]
 
 # =======================================================
 # ⚙️ PROFILS DE COMPILATION
