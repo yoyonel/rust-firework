@@ -2,12 +2,21 @@
 
 [Introduction](introduction.md)
 [Langage Métier (Glossaire)](ubiquitous_language.md)
+[Guide des Tâches (Taskfile)](taskfile_guide.md)
+- [Qualité & Linting de la Documentation (Vale)](20260724_documentation_linting_pipeline.md)
+[Guide Architecture Build Hybride (Distrobox, Tracy & NVIDIA)](20260724_cross_platform_distrobox_tracy_build_guide.md)
+- [Architecture Globale, Threads & Synchronisation](20260721_moteurs_threads_synchronisation.md)
 
 - [Moteur Physique]()
   - [Gestion de la mémoire](physic_memory_management.md)
   - [Formes d'explosions](physic_explosion_shapes.md)
 
 - [Moteur Audio]()
+  - [Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)](20260724_audio_anticipation_timeshifting_closed_loop.md)
+  - [Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU](20260721_audio_diagnostics_underrun_imgui_fixes.md)
+  - [Architecture & Spécification Bus Spatial 2D](20260720_spatial_bus_audio_architecture.md)
+  - [Spécification & Guide Réverbération Spatiale](20260720_spatial_reverb_technical_spec.md)
+  - [Méthodologies d'Évaluation de Fonctionnalités](20260720_feature_evaluation_frameworks.md)
   - [Refactoring et Architecture](20260713_audio_engine_refactoring_report.md)
   - [Spécification Effet Doppler](20260711_doppler_audio_technical_spec.md)
   - [Pipeline Binaural](audio.md)
@@ -17,6 +26,7 @@
 - [Rendu Graphique]()
   - [Persistent Mapped Buffers (AZDO)](opengl_azdo_persistent_mapped_buffers.md)
   - [Manuel du Renderer](renderer_manual.md)
+  - [Validation OpenGL avec Mesa Debug Layer](opengl_debug_validation_guide.md)
 
 - [Profilage et Performance]()
   - [Bilan et Rapport Final (AZDO)](20260716_azdo_refactoring_final_report.md)

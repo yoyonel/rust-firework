@@ -53,7 +53,7 @@ Chaque transition entraîne des appels API OpenGL qui forcent le pilote à reval
 
 ### ⚠️ Point Critique Détecté : Absence de Synchronisation du Buffer Persistant
 Dans l'implémentation actuelle, nous écrivons dans les pointeurs persistants (`mapped_ptr`) directement à chaque frame sans barrière de synchronisation :
-* Si le GPU n'a pas fini de lire le buffer de la frame $N-1$ alors que le CPU commence à écrire la frame $N$, il y a un **conflit d'accès (Write-After-Read)**.
+* Si le GPU n'a pas fini de lire le buffer de la frame \\( N-1 \\) alors que le CPU commence à écrire la frame \\( N \\), il y a un **conflit d'accès (Write-After-Read)**.
 * Pour éviter la corruption visuelle, le pilote graphique effectue souvent une synchronisation implicite sous le capot (ce qui force le CPU à stagner) ou génère des micro-bégaiements.
 
 ---
@@ -64,7 +64,7 @@ L'objectif de ce plan est de réduire au maximum le coût CPU de soumission des 
 
 ### Phase 1 : Triple-Buffering Persistant & Fences (Barrières de Synchronisation)
 Pour éliminer tout blocage CPU implicite du pilote lors de l'écriture des données physiques de particules :
-* **Action 1 :** Rallouer les buffers persistants (`vbo_particles`) avec une capacité triple ($3 \times \text{capacité\_max}$).
+* **Action 1 :** Rallouer les buffers persistants (`vbo_particles`) avec une capacité triple (\\( 3 \times \text{capacité\_max} \\)).
 * **Action 2 :** Diviser logiquement le buffer en 3 sections (Frame 0, Frame 1, Frame 2).
 * **Action 3 :** Utiliser des objets de synchronisation OpenGL (`GLsync`) pour s'assurer que le CPU n'écrit jamais sur une section en cours de lecture par le GPU :
   ```rust

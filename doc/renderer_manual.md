@@ -66,8 +66,9 @@ Alternative performante au flou gaussien pour les grands rayons de flou.
 ### 3. SIMD (Audio)
 Le traitement audio (FFT, filtrage) utilise les instructions SIMD (AVX/SSE) via la feature `simd` de Rust pour paralléliser les calculs sur le CPU.
 
-### 4. Vertex Pulling (Partiel)
-Utilisation de `gl_VertexID` pour générer les quads (fullscreen ou particules) sans VBO complexe, réduisant l'overhead mémoire.
+### 5. RAII & Gestion du Lifecycle GPU (Persistent Mapping)
+- **Support RAII (`impl Drop`)** : `RendererGraphics` et `RendererGraphicsInstanced` implémentent le trait `Drop`. La destruction de ces structures libère automatiquement et de manière sécurisée l'ensemble des ressources OpenGL (`gl::UnmapBuffer` sur le VBO persistant, `gl::DeleteVertexArrays`, `gl::DeleteBuffers`, `gl::DeleteProgram`, `gl::DeleteSync`).
+- **Calcul de Capacité GPU Dynamique (`recreate_buffers`)** : Lors d'une ré-initialisation ou synchronisation des moteurs (`physic.apply`), la taille des buffers de particules pour le rendu par points est recalculée selon la formule `max_rockets * (particles_per_explosion + particles_per_trail)` pour accueillir l'ensemble des particules d'explosions et de traînées actives sans débordement de buffer.
 
 ## ⌨️ Liste des Commandes (Console F1)
 

@@ -118,7 +118,7 @@ Dans l'architecture initiale, le mixage audio s'effectuait en plusieurs passes s
 
 ### Philosophie "Suckless" : Auto-Vectorisation LLVM sans dépendance
 Pour la spatialisation binaurale 3D (`binauralize_mono`), l'algorithme initial calculait l'interpolation linéaire et le retard ITD échantillon par échantillon. 
-* **Le Problème :** La boucle de traitement contenait un test conditionnel (`if idx <= 0.0`), un clamping (`idx.min()`) et un cast flottant-vers-entier (`as usize`) exécutés $N$ fois par buffer. Ces branchements conditionnels cassaient le pipeline CPU (bulles de prédiction de branchement) et interdisaient formellement à LLVM d'auto-vectoriser le code.
+* **Le Problème :** La boucle de traitement contenait un test conditionnel (`if idx <= 0.0`), un clamping (`idx.min()`) et un cast flottant-vers-entier (`as usize`) exécutés \\( N \\) fois par buffer. Ces branchements conditionnels cassaient le pipeline CPU (bulles de prédiction de branchement) et interdisaient formellement à LLVM d'auto-vectoriser le code.
 * **La Solution (Zero-Branch DSP) :** Exploitation de l'invariance de phase. Le retard ITD étant constant sur l'intégralité du quantum audio, la partie entière du décalage (`delay_int`) et le poids d'interpolation (`frac`) sont invariants pour le buffer.
     * **Loop Peeling :** Extraction de la gestion des bords de buffer hors de la boucle principale.
     * **Boucle Chaude Contiguë :** Restructuration de la boucle centrale via un `.zip()` de tranches mémoire contiguës. Sans aucun `if`, ni `min()`, ni conversion de type dans le *Hot Loop*, LLVM supprime automatiquement les *Bounds Checks* (vérifications de limites) et compile la boucle en **instructions vectorielles FMA (AVX2 / NEON)**.
