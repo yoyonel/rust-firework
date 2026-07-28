@@ -337,9 +337,13 @@ impl DspProcessor {
         let _guard = profiler.measure("process_active_voices_bus");
         crate::tracy_zone!("audio::process_dsp_spatial_bus", 0xAA00FF);
 
-        if self.bus_w.len() < frames {
-            self.bus_w.resize(frames, 0.0);
-            self.bus_x.resize(frames, 0.0);
+        if frames > self.bus_w.len() || frames > self.bus_x.len() {
+            log::error!(
+                "Buffer bus_w/bus_x under-allocated! Requested {} frames, available {}",
+                frames,
+                self.bus_w.len()
+            );
+            return;
         }
 
         self.bus_w[..frames].fill(0.0);
