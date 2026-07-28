@@ -81,6 +81,58 @@ fn compute_lowpass_alpha(
     }
 }
 
+#[inline(always)]
+fn interpolate_mono_sample(slice: &[[f32; 2]], pos: f64) -> f32 {
+    if pos < 0.0 {
+        return 0.0;
+    }
+    let index = pos as usize;
+    let total_len = slice.len();
+    if index >= total_len {
+        return 0.0;
+    }
+
+    let sample0 = (slice[index][0] + slice[index][1]) * 0.5;
+    let sample1 = if index + 1 < total_len {
+        (slice[index + 1][0] + slice[index + 1][1]) * 0.5
+    } else {
+        0.0
+    };
+    let fraction = (pos - index as f64) as f32;
+    sample0 + fraction * (sample1 - sample0)
+}
+
+#[inline(always)]
+fn apply_fade_in_out(
+    sample: f32,
+    index: usize,
+    total_len: usize,
+    fade_in_samples: usize,
+    fade_out_samples: usize,
+) -> f32 {
+    let mut result = sample;
+    if index < fade_in_samples {
+        let alpha = index as f32 / fade_in_samples as f32;
+        result *= alpha;
+    } else {
+        let remaining = total_len - index;
+        if remaining < fade_out_samples {
+            let alpha = remaining as f32 / fade_out_samples as f32;
+            result *= alpha;
+        }
+    }
+    result
+}
+
+#[inline(always)]
+fn apply_iir_lowpass(current_sample: f32, prev_filtered: f32, alpha: f32) -> f32 {
+    let mut filtered = prev_filtered + alpha * (current_sample - prev_filtered);
+    if filtered.abs() < 1e-15 {
+        filtered = 0.0;
+    }
+    filtered
+}
+
 impl DspProcessor {
     /// Point d'entrée principal du callback CPAL
     #[inline(always)]
@@ -385,36 +437,23 @@ impl DspProcessor {
                     break;
                 }
 
-                let s0 = (slice_ref[index][0] + slice_ref[index][1]) * 0.5;
-                let s1 = if index + 1 < total_len {
-                    (slice_ref[index + 1][0] + slice_ref[index + 1][1]) * 0.5
-                } else {
-                    0.0
-                };
-                let frac = (current_pos - index as f64) as f32;
-                let mut s = s0 + frac * (s1 - s0);
+                let mut sample = interpolate_mono_sample(slice_ref, current_pos);
 
                 if fx_enabled(fx_mask, AudioEffect::FadeInOut) {
-                    if index < v.fade_in_samples {
-                        let alpha = index as f32 / v.fade_in_samples as f32;
-                        s *= alpha;
-                    } else {
-                        let rem = total_len - index;
-                        if rem < v.fade_out_samples {
-                            let alpha = rem as f32 / v.fade_out_samples as f32;
-                            s *= alpha;
-                        }
-                    }
+                    sample = apply_fade_in_out(
+                        sample,
+                        index,
+                        total_len,
+                        v.fade_in_samples,
+                        v.fade_out_samples,
+                    );
                 }
 
-                s = prev_mono + filter_a * (s - prev_mono);
-                if s.abs() < 1e-15 {
-                    s = 0.0;
-                }
-                prev_mono = s;
+                sample = apply_iir_lowpass(sample, prev_mono, filter_a);
+                prev_mono = sample;
 
-                self.bus_w[i] += s * w_weight;
-                self.bus_x[i] += s * x_weight;
+                self.bus_w[i] += sample * w_weight;
+                self.bus_x[i] += sample * x_weight;
 
                 v.pos += rate;
             }
@@ -533,65 +572,35 @@ impl DspProcessor {
                     break;
                 }
 
-                // 🎯 L'ASTUCE ABSOLUE : Fonction de lecture qui recule dans le temps (ITD)
-                let interpolate = |pos: f64| -> f32 {
-                    if pos < 0.0 {
-                        return 0.0;
-                    } // Silence avant que le son n'atteigne l'oreille
-                    let idx = pos as usize;
-                    if idx >= total_len {
-                        return 0.0;
-                    }
-
-                    // Somme mono de la source stéréo originale
-                    let s0 = (slice_ref[idx][0] + slice_ref[idx][1]) * 0.5;
-                    let s1 = if idx + 1 < total_len {
-                        (slice_ref[idx + 1][0] + slice_ref[idx + 1][1]) * 0.5
-                    } else {
-                        0.0
-                    };
-                    let frac = (pos - idx as f64) as f32;
-                    s0 + frac * (s1 - s0)
-                };
-
                 let current_itd_l = start_itd_l + itd_step_l * i as f32;
                 let current_itd_r = start_itd_r + itd_step_r * i as f32;
 
-                // On lit directement le signal aux deux positions temporelles (Gauche / Droite)
-                let mut l = interpolate(current_pos - current_itd_l as f64);
-                let mut r = interpolate(current_pos - current_itd_r as f64);
+                let mut l = interpolate_mono_sample(slice_ref, current_pos - current_itd_l as f64);
+                let mut r = interpolate_mono_sample(slice_ref, current_pos - current_itd_r as f64);
 
-                // Application des Fades (conditionnelle)
                 if fx_enabled(fx_mask, AudioEffect::FadeInOut) {
-                    if index < v.fade_in_samples {
-                        let alpha = index as f32 / v.fade_in_samples as f32;
-                        l *= alpha;
-                        r *= alpha;
-                    } else {
-                        let rem = total_len - index;
-                        if rem < v.fade_out_samples {
-                            let alpha = rem as f32 / v.fade_out_samples as f32;
-                            l *= alpha;
-                            r *= alpha;
-                        }
-                    }
+                    l = apply_fade_in_out(
+                        l,
+                        index,
+                        total_len,
+                        v.fade_in_samples,
+                        v.fade_out_samples,
+                    );
+                    r = apply_fade_in_out(
+                        r,
+                        index,
+                        total_len,
+                        v.fade_in_samples,
+                        v.fade_out_samples,
+                    );
                 }
 
-                // Filtre IIR Passe-bas (conditionnel — filter_a=1.0 si désactivé = pass-through)
-                l = prev_l + filter_a * (l - prev_l);
-                r = prev_r + filter_a * (r - prev_r);
-
-                if l.abs() < 1e-15 {
-                    l = 0.0;
-                }
-                if r.abs() < 1e-15 {
-                    r = 0.0;
-                }
+                l = apply_iir_lowpass(l, prev_l, filter_a);
+                r = apply_iir_lowpass(r, prev_r, filter_a);
 
                 prev_l = l;
                 prev_r = r;
 
-                // Sommation directe avec gains interpolés (LERP) dans le buffer CPAL final
                 let current_g_l = start_gain_l + gain_step_l * i as f32;
                 let current_g_r = start_gain_r + gain_step_r * i as f32;
                 frame[0] += l * current_g_l;
