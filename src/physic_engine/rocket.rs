@@ -38,6 +38,9 @@ pub struct Rocket {
     pub exploded: bool,
     pub active: bool,
 
+    /// Indique si l'explosion audio a déjà été anticipée et déclenchée
+    pub audio_explosion_triggered: bool,
+
     /// Indices dans le pool des particules d'explosions
     pub explosion_particle_indices: Option<Range<usize>>,
 
@@ -68,6 +71,7 @@ impl Rocket {
             color: Color::ONE,
             exploded: false,
             active: false,
+            audio_explosion_triggered: false,
             explosion_particle_indices: None,
             trail_particle_indices: None,
             trail_index: 0,
@@ -81,10 +85,10 @@ impl Rocket {
     /// Retourne un itérateur paresseux sur toutes les particules "actives" (`is_active`)
     /// appartenant à cette fusée.
     ///
-    /// Cette fonction est **zéro allocation** :  
-    /// - pas de `Vec` temporaire  
-    /// - pas de `Box<dyn Iterator>`  
-    /// - pas de copie CPU → CPU  
+    /// Cette fonction est **zéro allocation** :
+    /// - pas de `Vec` temporaire
+    /// - pas de `Box<dyn Iterator>`
+    /// - pas de copie CPU → CPU
     ///
     /// Le résultat est un pipeline d’itérateurs fusionnés, traité de manière lazy,
     /// extrêmement efficace côté CPU et parfaitement adapté à un transfert contigu
@@ -135,18 +139,18 @@ impl Rocket {
             return;
         }
 
-        const GRAVITY: Vec2 = Vec2::new(0.0, -200.0);
+        let gravity = Vec2::new(0.0, config.gravity);
 
-        self.update_movement(dt, GRAVITY);
+        self.update_movement(dt, gravity);
         self.update_trails(
             dt,
-            GRAVITY,
+            gravity,
             &mut particles_pools.particles_pool_for_trails,
             config,
         );
         self.update_explosions(
             dt,
-            GRAVITY,
+            gravity,
             &mut particles_pools.particles_pool_for_explosions,
             config,
             explosion_shape,
@@ -306,7 +310,7 @@ impl Rocket {
         explosion_shape: &ExplosionShape,
     ) {
         if !self.exploded && self.vel.y <= config.explosion_threshold {
-            self.trigger_explosion(particles_pool, gravity, explosion_shape);
+            self.trigger_explosion(particles_pool, gravity, config, explosion_shape);
         }
 
         if let Some(range) = &self.explosion_particle_indices {
@@ -328,6 +332,7 @@ impl Rocket {
         &mut self,
         particles_pool: &mut ParticlesPool,
         gravity: Vec2,
+        config: &PhysicConfig,
         explosion_shape: &ExplosionShape,
     ) {
         self.exploded = true;
@@ -342,17 +347,19 @@ impl Rocket {
             if let Some(image_shape) = explosion_shape.sample(&mut self.rng) {
                 self.trigger_image_explosion(slice, gravity, image_shape);
             } else {
-                self.trigger_spherical_explosion(slice);
+                self.trigger_spherical_explosion(slice, config);
             }
         }
     }
 
     /// Explosion sphérique classique : directions aléatoires uniformes
     #[inline(always)]
-    fn trigger_spherical_explosion(&mut self, slice: &mut [Particle]) {
+    fn trigger_spherical_explosion(&mut self, slice: &mut [Particle], config: &PhysicConfig) {
         for p in slice.iter_mut() {
             let angle = self.rng.random_range(0.0..(2.0 * std::f32::consts::PI));
-            let speed = self.rng.random_range(60.0..200.0);
+            let speed = self
+                .rng
+                .random_range(config.explosion_min_vel..=config.explosion_max_vel);
             let life = self.rng.random_range(0.75..1.5);
 
             *p = Particle {
@@ -465,6 +472,7 @@ impl Rocket {
         self.trail_index = 0;
         self.active = true;
         self.exploded = false;
+        self.audio_explosion_triggered = false;
         self.explosion_particle_indices = None;
         self.trail_particle_indices = None;
     }

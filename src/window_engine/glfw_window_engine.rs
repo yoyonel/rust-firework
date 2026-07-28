@@ -44,6 +44,7 @@ impl WindowEngine for GlfwWindowEngine {
             .expect("Erreur création fenêtre GLFW");
 
         window.make_current();
+        glfw.set_swap_interval(glfw::SwapInterval::None);
         window.set_key_polling(true);
         window.set_char_polling(true);
         window.set_framebuffer_size_polling(true);
