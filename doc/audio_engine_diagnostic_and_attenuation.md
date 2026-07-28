@@ -42,7 +42,7 @@ L'origine `(0, 0)` se situe en bas à gauche de la fenêtre.
 Dans `src/audio_engine/config.rs`, le moteur audio plafonnait dynamiquement le nombre de voix avec `std::cmp::min(self.max_voices, max_physic_rockets)`. 
 Dans une configuration à 2 fusées (`max_rockets = 2`), cela allouait seulement **2 slots de voix**. Étant donné que les sons de décollage (whoosh) et d'explosion se superposent et possèdent des queues de decay, les voix arrivaient immédiatement à saturation, entraînant le rejet (drop) silencieux du son de l'explosion.
 * **Correction** : Ajustement de la formule de calcul dynamique pour s'assurer d'avoir toujours une marge confortable pour la superposition des sons :
-  `std::cmp::min(self.max_voices, std::cmp::max(32, max_physic_rockets * 4))` (minimum 32 voix).
+  `std::cmp::max(self.max_voices, std::cmp::max(64, max_physic_rockets * 4))` (minimum 64 voix).
 
 ### 2. Coordonnées d'explosion non transmises
 Dans `src/physic_engine/physic_engine_generational_arena.rs`, la position spatiale des explosions n'était pas copiée dans le tableau global lors de leur déclenchement physique. Par conséquent, toutes les explosions étaient envoyées au moteur audio à une position par défaut de `(0,0)`, ce qui annulait l'effet de spatialisation (le son d'explosion venait toujours du coin inférieur gauche).
