@@ -8,7 +8,7 @@ Ce document présente l'analyse des performances et le récapitulatif de l'impl�
 
 Afin de supprimer les blocages implicites du pilote OpenGL (stalls) dus aux conflits d'accès CPU/GPU (Write-After-Read) sur les buffers persistants :
 
-1. **Capacité Triplée :** Nous avons augmenté la capacité des Vertex Buffer Objects (`vbo_particles`) pour stocker $3 \times \text{max\_particles\_on\_gpu}$.
+1. **Capacité Triplée :** Nous avons augmenté la capacité des Vertex Buffer Objects (`vbo_particles`) pour stocker \\( 3 \times \text{max\_particles\_on\_gpu} \\).
 2. **Découpage Logique :** Le buffer est désormais traité comme un ring-buffer à 3 sections de tailles égales (Frames 0, 1, 2).
 3. **Synchronisation explicite GPU/CPU :**
    - Avant d'écrire dans la section `K` (via `fill_particle_data_direct`), le CPU attend que le GPU ait fini sa lecture de cette section à l'aide de `gl::ClientWaitSync` (si une barrière existait).

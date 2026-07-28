@@ -24,7 +24,7 @@ Auparavant, les positions et vecteurs de vitesse dans le système audio transita
 ### B. Unification de la Spatialisation (Élimination du Code Dupliqué)
 Les calculs géométriques tridimensionnels (ITD, ILD, distance et gains de panoramique) étaient auparavant répétés dans plusieurs fonctions de rendu. Ils ont été centralisés dans une fonction unique et optimisée :
 *   **Fonction Partagée** : `calculate_spatial_params_2d` et `calculate_spatial_params_3d` dans [binaural_processing.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/binaural_processing.rs).
-*   **Correction de la Trigonométrie 2D** : Lorsque la profondeur Z est nulle ($dz = 0.0$), la coordonnée Y de l'écran est correctement interprétée comme l'axe de profondeur (devant/derrière l'auditeur). L'azimut est alors calculé par `dx.atan2(dy)` et l'élévation est fixée à `0.0`. Si Z est non nul, les équations repassent de façon transparente en 3D sphérique classique.
+*   **Correction de la Trigonométrie 2D** : Lorsque la profondeur Z est nulle (\\( dz = 0.0 \\)), la coordonnée Y de l'écran est correctement interprétée comme l'axe de profondeur (devant/derrière l'auditeur). L'azimut est alors calculé par `dx.atan2(dy)` et l'élévation est fixée à `0.0`. Si Z est non nul, les équations repassent de façon transparente en 3D sphérique classique.
 
 ### C. Interpolation Linéaire des Gains (Suppression des Clics/Pops)
 Auparavant, le panoramique stéréo et les gains binauraux appliqués aux voix étaient mis à jour de manière discrète au début de chaque bloc audio. Cela provoquait des micro-discontinuités (échelons de gain) audibles sous forme de clics ou de pops lors de mouvements rapides de la source ou du listener.
@@ -36,8 +36,8 @@ Auparavant, le panoramique stéréo et les gains binauraux appliqués aux voix �
     Puis, chaque échantillon du bloc est multiplié par un gain interpolé linéairement (`start_gain + gain_step * i`), éliminant tout artéfact acoustique transitoire.
 
 ### D. Correction de l'Effet Doppler Supersonique
-L'implémentation de la vitesse radiale calculait le pitch-shifting via l'équation classique $\alpha = c / (c - v_{radial})$.
-*   **Bug Supersonique** : Si la source s'approchait à une vitesse supérieure ou égale à la vitesse du son ($v_{radial} \geq c = 343\text{ m/s}$), le dénominateur devenait nul ou négatif, provoquant des divisions par zéro ou des inversions de phase temporelle aberrantes.
+L'implémentation de la vitesse radiale calculait le pitch-shifting via l'équation classique α = c / (c - v_radial).
+*   **Bug Supersonique** : Si la source s'approchait à une vitesse supérieure ou égale à la vitesse du son (v_radial >= c = 343 m/s), le dénominateur devenait nul ou négatif, provoquant des divisions par zéro ou des inversions de phase temporelle aberrantes.
 *   **Correction** : L'algorithme dans [process_doppler](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L92-L108) intercepte désormais les dénominateurs négatifs ou nuls et applique un plafonnement physique robuste de la vitesse de lecture à un facteur maximal de `4.0`.
 
 ### E. Suppression Complète des Buffers Scratch Résiduels
@@ -53,7 +53,7 @@ Lors de la revue de code interactive, les points suivants ont été corrigés po
 *   **Correction des Noms Invertis (Mysterious Name)** : Dans `fireworks_audio.rs`, la fonction `play_rocket` jouait par erreur `explosion_data` et `play_explosion` jouait `rocket_data`. Les variables ont été inversées pour restaurer l'association sémantique correcte.
 *   **Nettoyage du Code Mort (`DopplerState`)** : La structure obsolète `DopplerState` et son bloc d'implémentation ont été définitivement supprimés de `types.rs`, conformément à l'abandon spécifié dans les spécifications techniques.
 *   **Migration vers des Vecteurs Structurés (Primitive Obsession)** : Les signatures des fonctions de spatialisation publique (`binauralize_mono`, `binauralize_mono_fast`, etc.) prenaient des tuples 3D `(f32, f32, f32)` pour les positions. Elles acceptent désormais tout type implémentant `Into<glam::Vec3>`, ce qui simplifie les signatures en interne tout en conservant une compatibilité ascendante totale pour les benchmarks et tests existants.
-*   **Suppression des Collisions 3D à $dz == 0.0$** : La fonction `calculate_spatial_params` a été séparée en deux variantes explicites, `calculate_spatial_params_2d` et `calculate_spatial_params_3d`, éliminant le risque qu'une source 3D traversant le plan Z ne soit interprétée à tort comme une source 2D.
+*   **Suppression des Collisions 3D à \\( dz == 0.0 \\)** : La fonction `calculate_spatial_params` a été séparée en deux variantes explicites, `calculate_spatial_params_2d` et `calculate_spatial_params_3d`, éliminant le risque qu'une source 3D traversant le plan Z ne soit interprétée à tort comme une source 2D.
 *   **Robustesse du Test de Continuité de Phase** : Le test unitaire `test_phase_continuity_across_block_boundaries` a été réécrit pour instancier et exécuter le véritable `DspProcessor` et sa gestion des voix, au lieu d'un simulateur simplifié local, garantissant une validation rigoureuse du code de production.
 *   **Interpolation Temporelle des Retards (ITD)** : Ajout des champs `current_itd` et `target_itd` sur la structure `Voice` et calcul sample-by-sample de l'ITD interpolé dans la boucle DSP pour éviter toute transition brusque de phase lors des mouvements rapides.
 *   **Correction du Checkout CI/CD** : Correction de `.github/workflows/integration.yml` pour cibler le SHA exact déclencheur (`github.event.workflow_run.head_sha`) lors du checkout du code source, garantissant que les tests d'intégration s'exécutent sur la branche du commit de la Pull Request.
@@ -74,9 +74,9 @@ Les modifications ont été rigoureusement testées et validées :
 Dans le cadre des spécifications de flexibilité et d'optimisation en temps réel, le pipeline de traitement DSP a été rendu modulaire et configurable à chaud :
 *   **Masque d'effets atomique (`AudioEffectFlags`)** : Représenté par un bitfield lock-free (`AtomicU32`). Le thread CPAL lit le bitfield une seule fois par bloc via `load(Ordering::Relaxed)` pour éliminer tout overhead de re-lecture et garantir la cohérence des effets sur la durée du bloc. Le thread principal écrit via `fetch_or`/`fetch_and`.
 *   **Zero-Cost Bypass** :
-    *   *Atténuation par la distance et passe-bas* : Désactivés à chaud via le bitfield, le coefficient du filtre $a$ est figé à $1.0$ (transparent) et le gain d'atténuation à $1.0$.
+    *   *Atténuation par la distance et passe-bas* : Désactivés à chaud via le bitfield, le coefficient du filtre \\( a \\) est figé à \\( 1.0 \\) (transparent) et le gain d'atténuation à \\( 1.0 \\).
     *   *Spatialisation binaurale et panoramique* : Si la spatialisation binaurale est désactivée, elle retombe sur le panoramique standard. Si les deux sont désactivés, les gains gauche/droite sont identiques (flat mono).
-    *   *Effet Doppler* : Si désactivé, le calcul de vitesse radiale est ignoré et le taux de lecture est réinitialisé à $1.0$ pour les voix actives dynamiques.
+    *   *Effet Doppler* : Si désactivé, le calcul de vitesse radiale est ignoré et le taux de lecture est réinitialisé à \\( 1.0 \\) pour les voix actives dynamiques.
     *   *Normalisation et Gain Stage* : Si désactivé, le gain global n'est pas appliqué et la saturation douce `.tanh()` est bypassée au profit d'un simple clampage linéaire matériel.
 *   **Commandes de Console intégrées** :
     *   `audio.fx <effect_name> <on|off>` : Active ou désactive individuellement un effet.

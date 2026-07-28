@@ -14,16 +14,42 @@ Access the console by pressing `F1` (or `` ` `` depending on configuration).
 | :--- | :--- | :--- |
 | `audio.mute` | | Mute all audio. |
 | `audio.unmute` | | Unmute audio. |
-| `audio.fx` | `<effect> <on\|off>` | Toggle a specific DSP audio effect at runtime (lock-free).<br>Available: `binaural`, `panning`, `distance_atten`, `lowpass`, `doppler`, `fade`, `gain_lerp`, `normalize`. |
+| `audio.fx` | `<effect> <on\|off>` | Toggle a specific DSP audio effect at runtime (lock-free).<br>Available: `binaural`, `panning`, `distance_atten`, `lowpass`, `doppler`, `fade`, `gain_lerp`, `normalize`, `spatial_bus`, `spatial_reverb`. |
 | `audio.fx_all` | `<on\|off>` | Toggle all DSP audio effects at once. |
 | `audio.fx_status` | | Display current status of all DSP audio effects (ON/OFF). |
+| `audio.reverb_wet` | `<0.0..1.0>` | View or set Spatial Reverb wet mix gain (Default: 0.08 / 8%). |
 
 ## Physics & Simulation
 
 ### General
-| Command | Description |
-| :--- | :--- |
-| `physic.config` | Displays current physics configuration. |
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `physic.config` | | Displays current applied and pending physics configurations. |
+| `physic.apply` | | Applies all pending parameter changes and re-synchronizes engines. |
+| `physic.config.save` | | Saves current applied physics configuration to `assets/config/physic.toml`. |
+| `physic.config.reload` | | Reloads configuration from `assets/config/physic.toml` and re-synchronizes engines. |
+
+### Configuration Parameters
+These commands modify the **pending** configuration. To apply them, run `physic.apply`.
+
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `physic.max_rockets` | `<value>` | Set maximum concurrent rockets. |
+| `physic.particles_per_explosion` | `<value>` | Set particles per explosion. |
+| `physic.particles_per_trail` | `<value>` | Set particles per trail. |
+| `physic.rocket_interval_mean` | `<value>` | Set mean time interval between rocket spawns (seconds). |
+| `physic.rocket_interval_variation` | `<value>` | Set variation of interval between rocket spawns. |
+| `physic.rocket_max_next_interval` | `<value>` | Set maximum interval constraint between rocket spawns. |
+| `physic.spawn_rocket_margin` | `<value>` | Set screen margin for rocket spawns. |
+| `physic.spawn_rocket_vertical_angle` | `<value>` | Set vertical spawn angle of rockets (radians). |
+| `physic.spawn_rocket_angle_variation` | `<value>` | Set random angle variation of spawned rockets. |
+| `physic.spawn_rocket_min_speed` | `<value>` | Set minimum initial speed of spawned rockets. |
+| `physic.spawn_rocket_max_speed` | `<value>` | Set maximum initial speed of spawned rockets. |
+| `physic.explosion_threshold` | `<value>` | Set speed threshold under which rockets explode. |
+| `physic.gravity` | `<value>` | Set gravity value affecting rockets and particles (e.g. -200.0). |
+| `physic.initial_rocket_speed` | `<value>` | Set target initial speed (metadata). |
+| `physic.explosion_min_vel` | `<value>` | Set minimum velocity of explosion particles. |
+| `physic.explosion_max_vel` | `<value>` | Set maximum velocity of explosion particles. |
 
 ### Explosion Shapes (Standard)
 | Command | Usage | Description |
