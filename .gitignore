@@ -271,3 +271,10 @@ r*hs/
 # mdBook output and local binary
 /book/
 /mdbook
+
+# Local Cargo configuration
+.cargo/config.toml
+
+# Local downloaded binary tools (e.g. Vale)
+/bin/
+

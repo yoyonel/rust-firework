@@ -4,9 +4,16 @@ version: "3"
 
 vars:
   APP_NAME: fireworks_sim
-  CARGO: cargo
+  DISTROBOX:
+    sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev --"; else echo ""; fi'
+  CARGO: '{{.DISTROBOX}} cargo'
   COVERAGE_DIR: target/llvm-cov
-  XVFB: xvfb-run -a
+  XVFB:
+    sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev -- xvfb-run -a"; elif command -v xvfb-run >/dev/null 2>&1; then echo "xvfb-run -a"; else echo ""; fi'
+  SKILLS_OUTPUT_DIR: '{{.HOME}}/.agents/skills'
+  DOC_TEMPLATES_DIR: 'doc/ai_skills'
+  VALE_BIN:
+    sh: 'if command -v vale >/dev/null 2>&1; then echo "vale"; else echo "./bin/vale"; fi'
 
 tasks:
   default:
@@ -24,8 +31,9 @@ tasks:
 
   run-debug:
     desc: "Exécute le projet en mode debug"
+    deps: [build-debug]
     cmds:
-      - "{{.CARGO}} run"
+      - "./target/debug/{{.APP_NAME}}"
 
   # =========================================
   # 🚀 RELEASE STANDARD
@@ -38,8 +46,9 @@ tasks:
 
   run-release:
     desc: "Exécute le projet en mode release standard"
+    deps: [build-release]
     cmds:
-      - "{{.CARGO}} run --release"
+      - "./target/release/{{.APP_NAME}}"
 
   # =========================================
   # ⚡ ULTRA-SPEED (FPS MAX)
@@ -52,14 +61,16 @@ tasks:
 
   run-ultra-speed:
     desc: "Exécute le projet avec les performances maximales"
+    deps: [build-ultra-speed]
     cmds:
-      - "{{.CARGO}} run --profile ultra-speed"
+      - "./target/ultra-speed/{{.APP_NAME}}"
 
   run-ultra-speed-with-gamemoderun-and-tracy:
     desc: "Lancement en mode performance maximale absolue sous X11"
+    deps: [build-ultra-speed]
     cmds:
       - echo "🏎️ Run en mode ULTRA-SPEED + MangoHud + GameModeRun + Tracy ..."
-      - mangohud vblank_mode=0 mesa_glthread=true gamemoderun ./target/release/fireworks_sim
+      - mangohud vblank_mode=0 mesa_glthread=true gamemoderun ./target/ultra-speed/{{.APP_NAME}}
   # =========================================
   # 📦 ULTRA-SIZE (TAILLE MIN)
   # =========================================
@@ -92,16 +103,30 @@ tasks:
 
   run-release-with-hud:
     desc: "Gallium HUD (Compatible Intel)"
+    deps: [build-release]
     env:
       vblank_mode: "0"
       __GL_SYNC_TO_VBLANK: "0"
       GALLIUM_HUD_PERIOD: "0.15"
       GALLIUM_HUD: "cpu;fps;N vertices submitted"
     cmds:
-      - "{{.CARGO}} run --release 2>&1"
+      - "./target/release/{{.APP_NAME}} 2>&1"
+
+  run-audio-stress:
+    desc: "Lancement du stress test audio interactif avec Gallium HUD (VSync désactivée)"
+    deps: [build-release]
+    env:
+      vblank_mode: "0"
+      __GL_SYNC_TO_VBLANK: "0"
+      RUST_LOG: "fireworks_sim=INFO"
+      GALLIUM_HUD_PERIOD: "0.15"
+      GALLIUM_HUD: "cpu;fps;N vertices submitted"
+    cmds:
+      - "./target/release/{{.APP_NAME}} --audio-stress-scene {{.CLI_ARGS | default \"128\"}}"
 
   run-prime-with-hud:
-    desc: "MangoHub (Compatible NVidia) Raccourci: RIGHT-SHIFT+F10"
+    desc: "MangoHud (Compatible NVidia) Raccourci: RIGHT-SHIFT+F10"
+    deps: [build-release]
     env:
       __NV_PRIME_RENDER_OFFLOAD: "1"
       __GLX_VENDOR_LIBRARY_NAME: nvidia
@@ -120,33 +145,58 @@ tasks:
     desc: "Lancement des tests unitaires"
     cmds:
       - echo "▶️  Lancement des tests unitaires..."
-      - "{{.XVFB}} {{.CARGO}} test --all --quiet"
+      - "{{.XVFB}} cargo test --all --quiet"
 
   test-one:
     desc: "Lance un test unitaire (lib) spécifique avec affichage"
     cmds:
       - echo "▶️ Lancement du test ciblé '{{.CLI_ARGS}}'..."
-      - "{{.XVFB}} {{.CARGO}} test --lib {{.CLI_ARGS}} -- --nocapture"
+      - "{{.XVFB}} cargo test --lib {{.CLI_ARGS}} -- --nocapture"
 
   test-integration:
     desc: "Lancement du test d'intégration complet (vidéo + audio)"
     deps: [build-release]
     cmds:
       - echo "▶️  Lancement du test d'intégration (capture Xvfb + ALSA)..."
-      - ./.github/scripts/test_integration.sh
+      - "{{.DISTROBOX}} ./.github/scripts/test_integration.sh"
 
   coverage:
     desc: "Génération du rapport de couverture avec cargo-llvm-cov"
     cmds:
       - echo "📊 Génération du rapport de couverture avec cargo-llvm-cov..."
-      - '{{.XVFB}} {{.CARGO}} llvm-cov --workspace --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/"'
+      - '{{.XVFB}} cargo llvm-cov --workspace --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/"'
       - 'echo "✅ Rapport généré : {{.COVERAGE_DIR}}/index.html"'
       - xdg-open {{.COVERAGE_DIR}}/index.html 2>/dev/null || open {{.COVERAGE_DIR}}/index.html 2>/dev/null || true
 
   ci:coverage:
     desc: "CI: Run unit/integration tests with coverage under virtual framebuffer"
     cmds:
-      - '{{.XVFB}} {{.CARGO}} llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
+      - '{{.XVFB}} cargo llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
+
+  test-opengl-mesa:
+    desc: "Tests OpenGL headless avec Mesa llvmpipe + debug validation (détecte les violations de spec OpenGL)"
+    summary: |
+      Exécute les tests interactive_tests avec le renderer logiciel Mesa (llvmpipe, OpenGL 4.5)
+      et le mode debug OpenGL activé (MESA_GL_DEBUG=1).
+
+      Les violations de spec OpenGL (ex: DeleteBuffers sur buffer mappé, états invalides)
+      sont émises sur stderr via le mécanisme GL_DEBUG_OUTPUT et capturées dans un log.
+      La cible échoue si des messages GL_INVALID_* ou API_ID_* sont détectés.
+
+      Prérequis : libgl1-mesa-dri (apt install libgl1-mesa-dri)
+      Voir : doc/opengl_debug_validation_guide.md
+    cmds:
+      - echo "🔍 Tests OpenGL headless avec Mesa llvmpipe + debug validation..."
+      - |
+        set -o pipefail
+        {{.XVFB}} env LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_DEBUG=1 GALLIUM_SOFTPIPE=1 cargo test --features interactive_tests -- --test-threads=1 2>&1 | \
+        tee /tmp/mesa_gl_debug.log
+      - |
+        if grep -qE "GL_INVALID|error generated|API_ID_" /tmp/mesa_gl_debug.log; then
+          echo "❌ Violations OpenGL détectées (voir /tmp/mesa_gl_debug.log)"
+          exit 1
+        fi
+        echo "✅ Aucune violation OpenGL détectée"
 
   fmt:
     desc: "Vérification du formatage"
@@ -161,8 +211,8 @@ tasks:
       - "{{.CARGO}} clippy -- -D warnings"
 
   lint:
-    desc: "Vérification complète du code (fmt + clippy)"
-    deps: [fmt, clippy]
+    desc: "Vérification complète du code (fmt + clippy + doc-lint)"
+    deps: [fmt, clippy, doc-lint]
 
   # =========================================
   # ⏱️ BENCHMARKS (Criterion.rs)
@@ -184,6 +234,12 @@ tasks:
     cmds:
       - echo "⏱️  Benchmarks binaural 3D..."
       - "{{.CARGO}} bench --no-default-features --features simd --bench audio_binaural_bench"
+
+  bench-spatial-bus:
+    desc: "Benchmarks comparatifs du Bus Spatial 2D (Ambisonics 2D) vs rendu Legacy direct (1 à 512 voix)"
+    cmds:
+      - echo "⏱️  Benchmarks comparatifs Bus Spatial 2D vs Legacy..."
+      - "{{.CARGO}} bench --no-default-features --features simd --bench spatial_bus_bench"
 
   bench-save-baseline:
     desc: "Sauvegarde une baseline de performance (usage: task bench-save-baseline -- my_baseline)"
@@ -226,6 +282,26 @@ tasks:
     cmds:
       - echo "📖 Compilation de la documentation mdBook..."
       - mdbook build
+
+  doc-setup-vale:
+    desc: "Installe Vale localement dans le projet si non présent"
+    cmds:
+      - |
+        if ! command -v vale &>/dev/null && [ ! -f bin/vale ]; then
+          echo "📥 Téléchargement de Vale CLI..."
+          mkdir -p bin
+          wget -qO- https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz | tar -xzC bin vale
+          echo "✅ Vale CLI installé dans ./bin/vale"
+        fi
+    status:
+      - "test -f bin/vale || command -v vale"
+
+  doc-lint:
+    desc: "Vérifie les formules LaTeX et la syntaxe mathématique de la documentation avec Vale"
+    deps: [doc-setup-vale]
+    cmds:
+      - echo "🕵️  Vérification de la syntaxe mathématique de la documentation..."
+      - "find doc -maxdepth 2 -name \"*.md\" | xargs {{.VALE_BIN}}"
 
   doc-serve:
     desc: "Lance un serveur web local de documentation avec rechargement automatique (Ctrl+C pour arrêter)"
@@ -284,12 +360,13 @@ tasks:
   # =========================================
   run-tracy:
     desc: "Exécute le projet avec Tracy activé (nécessite le serveur Tracy en arrière-plan)"
+    deps: [build-tracy]
     env:
       RUSTFLAGS: "-C target-cpu=native" # Optimisations pour un profiling précis
     cmds:
       - echo "📊 Démarre le serveur Tracy avant de lancer cette commande !"
       - 'echo "    Exemple: tracy &"'
-      - "{{.CARGO}} run --features tracy --release"
+      - "./target/release/{{.APP_NAME}}"
 
   build-tracy:
     desc: "Compile avec Tracy activé"
@@ -334,7 +411,7 @@ tasks:
         print(f'   - Durée maximale (Max)             : {max(warm_durations)/1000:.2f} us')
         "
 
-# =========================================
+  # =========================================
   # 🎧 PROFILING PERF + HOTSPOT (AUDIO DOPPLER)
   # =========================================
   build-perf:
@@ -371,3 +448,49 @@ tasks:
         # Lancement au PREMIER PLAN sans masquer les erreurs.
         # Si l'AppImage échoue à cause de FUSE, tu verras immédiatement l'erreur dans le terminal !
         - hotspot {{.PERF_DATA}}
+
+  # =========================================
+  # 🧠 IA + Skills
+  # =========================================
+  update-ai-skills:
+      desc: 'Régénère et configure toutes les compétences IA locales pour Antigravity / agy'
+      summary: |
+        Analyse la codebase avec Repomix par sous-système (Audio, Renderer, Physic, ImGui),
+        génère le contexte d'indexation dans ~/.agents/skills/, puis applique automatiquement
+        les overlays personnalisés (SKILL.md) depuis le dossier doc/ai_skills/.
+      cmds:
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-audio'
+            INCLUDE: 'src/audio_engine/**,doc/*audio*,doc/*doppler*'
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-renderer'
+            INCLUDE: 'src/renderer_engine/**,assets/shaders/**,doc/*azdo*,doc/*opengl*,doc/*tracy*,doc/*gpu*'
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-physic'
+            INCLUDE: 'src/physic_engine/**,src/simulator.rs,doc/*physic*,doc/*memory*'
+        - task: _generate-overlay-skill
+          vars:
+            NAME: 'firework-imgui'
+            INCLUDE: 'src/window_engine/**,src/utils/command_console.rs,src/utils/glfw_window.rs,src/profiler.rs,src/renderer_engine/tools.rs,doc/console_commands.md,doc/*profiling*'
+        - echo "✨ Tout est prêt ! Les compétences IA sont à jour et patchées dans {{.SKILLS_OUTPUT_DIR}}."
+      silent: false
+
+  # Tâche interne (masquée du CLI 'task --list') qui sert de template réutilisable (DRY)
+  _generate-overlay-skill:
+    internal: true
+    desc: 'Tâche template : Génère un skill spécifique via Repomix et écrase son SKILL.md'
+    cmds:
+      - echo "🤖 [{{.NAME}}] Génération du contexte Repomix..."
+      - npx -y repomix@latest --include "{{.INCLUDE}}" --skill-generate {{.NAME}} --skill-output {{.SKILLS_OUTPUT_DIR}}/{{.NAME}} --force
+      - |
+        if [ -f "{{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md" ]; then
+          cp -f "{{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md" "{{.SKILLS_OUTPUT_DIR}}/{{.NAME}}/SKILL.md"
+          echo "  ✔ Overlay appliqué avec succès : {{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md -> SKILL.md"
+        else
+          echo "  ⚠️ Attention : Aucun fichier template trouvé dans {{.DOC_TEMPLATES_DIR}}/{{.NAME}}.md (SKILL.md par défaut conservé)"
+        fi
+      - echo ""
+    silent: true
