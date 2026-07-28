@@ -89,6 +89,7 @@ impl AudioEngine for DummyAudio {
     fn play_rocket(&self, _pos: Vec2, _gain: f32) {}
     fn play_rocket_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {}
     fn play_explosion(&self, _pos: Vec2, _gain: f32) {}
+    fn play_explosion_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {}
     fn start_audio_thread(&mut self, _export_path: Option<&str>) {}
     fn stop_audio_thread(&mut self) {}
     fn mute(&mut self) {}
@@ -121,6 +122,9 @@ impl PhysicEngine for DummyPhysic {
         UpdateResult {
             new_rocket: None,
             triggered_explosions: &[],
+            triggered_explosion_ids: &[],
+            anticipated_rocket_launch: None,
+            anticipated_explosions: &[],
         }
     }
     fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {}
@@ -131,6 +135,9 @@ impl PhysicEngine for DummyPhysic {
     }
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+    fn get_config_mut(&mut self) -> &mut PhysicConfig {
+        &mut self.config
     }
     fn set_explosion_shape(&mut self, shape: ExplosionShape) {
         self.explosion_shape = shape;
@@ -271,6 +278,11 @@ impl AudioEngine for TestAudio {
     fn play_explosion(&self, _pos: Vec2, _gain: f32) {
         self.log.borrow_mut().push("play_explosion called".into());
     }
+    fn play_explosion_with_id(&self, _id: u64, _pos: Vec2, _gain: f32) {
+        self.log
+            .borrow_mut()
+            .push("play_explosion_with_id called".into());
+    }
     fn mute(&mut self) {
         self.log.borrow_mut().push("mute called".into());
     }
@@ -310,6 +322,7 @@ impl AudioEngine for TestAudio {
 pub struct TestPhysic {
     pub log: SharedLog,
     pub config: PhysicConfig,
+    pub pending_config: PhysicConfig,
     pub fail_on_update: bool,
     pub explosion_shape: ExplosionShape,
 }
@@ -320,6 +333,7 @@ impl TestPhysic {
         Self {
             log,
             config: PhysicConfig::default(),
+            pending_config: PhysicConfig::default(),
             fail_on_update: false,
             explosion_shape: ExplosionShape::default(),
         }
@@ -335,6 +349,9 @@ impl PhysicEngine for TestPhysic {
         UpdateResult {
             new_rocket: None,
             triggered_explosions: &[],
+            triggered_explosion_ids: &[],
+            anticipated_rocket_launch: None,
+            anticipated_explosions: &[],
         }
     }
     fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {
@@ -348,11 +365,16 @@ impl PhysicEngine for TestPhysic {
     fn close(&mut self) {
         self.log.borrow_mut().push("physic.close".into());
     }
-    fn reload_config(&mut self, _config: &PhysicConfig) -> bool {
+    fn reload_config(&mut self, config: &PhysicConfig) -> bool {
+        self.config = config.clone();
+        self.pending_config = config.clone();
         false
     }
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+    fn get_config_mut(&mut self) -> &mut PhysicConfig {
+        &mut self.pending_config
     }
     fn set_explosion_shape(&mut self, shape: ExplosionShape) {
         self.explosion_shape = shape;

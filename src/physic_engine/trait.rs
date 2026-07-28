@@ -57,6 +57,8 @@ pub trait PhysicEngine {
 
     fn get_config(&self) -> &PhysicConfig;
 
+    fn get_config_mut(&mut self) -> &mut PhysicConfig;
+
     /// Définit la forme des explosions (sphérique par défaut, ou basée sur image).
     fn set_explosion_shape(&mut self, shape: ExplosionShape);
 
@@ -107,6 +109,9 @@ pub trait PhysicEngine {
     // NOUVEAU : Permet de connecter le canal d'émission Doppler.
     // L'implémentation par défaut vide {} évite de casser d'autres moteurs physiques (ex: static_aos).
     fn set_doppler_sender(&mut self, _sender: Sender<DopplerEvent>) {}
+
+    /// Met à jour les temps d'anticipation de l'audio à chaud sans affecter les autres configurations en suspens.
+    fn update_anticipation_times(&mut self, _launch_ms: f32, _explosion_ms: f32) {}
 }
 
 pub trait PhysicEngineFull: PhysicEngine + PhysicEngineIterator {}

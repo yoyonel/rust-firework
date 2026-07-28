@@ -24,7 +24,12 @@ pub struct PhysicEngineFireworks {
     active_indices: Vec<Index>, // Itération rapide sur les fusées actives
     free_indices: Vec<Index>,   // Slots disponibles à réutiliser
     triggered_explosions: Vec<Particle>,
+    triggered_explosion_ids: Vec<u64>, // NOUVEAU
     to_deactivate_scratch: Vec<Index>, // Buffer temporaire réutilisable pour éviter les allocations
+
+    audio_launch_triggered: bool,                   // NOUVEAU
+    anticipated_launch: Option<(u64, glam::Vec2)>,  // NOUVEAU
+    anticipated_explosions: Vec<(u64, glam::Vec2)>, // NOUVEAU
 
     time_since_last_rocket: f32,
     next_rocket_interval: f32,
@@ -32,6 +37,7 @@ pub struct PhysicEngineFireworks {
     rng: rand::rngs::ThreadRng,
 
     config: PhysicConfig,
+    pending_config: PhysicConfig,
     rocket_margin_min_x: f32,
     rocket_margin_max_x: f32,
 
@@ -41,6 +47,7 @@ pub struct PhysicEngineFireworks {
     explosion_shape: ExplosionShape,
 
     doppler_sender: Option<Sender<DopplerEvent>>,
+    last_doppler_time: Instant,
 }
 
 impl PhysicEngineFireworks {
@@ -60,18 +67,24 @@ impl PhysicEngineFireworks {
 
         // il y a autant d'explositions
         let triggered_explosions = vec![Particle::default(); config.max_rockets];
+        let triggered_explosion_ids = vec![0; config.max_rockets];
 
         let mut engine = Self {
             rockets,
             active_indices: Vec::with_capacity(config.max_rockets),
             free_indices,
             triggered_explosions,
+            triggered_explosion_ids,
             to_deactivate_scratch: Vec::with_capacity(config.max_rockets),
+            audio_launch_triggered: false,
+            anticipated_launch: None,
+            anticipated_explosions: vec![(0, glam::Vec2::ZERO); config.max_rockets],
             time_since_last_rocket: 0.0,
             next_rocket_interval: 0.0,
             window_width,
             rng,
             config: config.clone(),
+            pending_config: config.clone(),
             rocket_margin_min_x: 0.0,
             rocket_margin_max_x: 0.0,
             particles_pools_for_rockets: ParticlesPoolsForRockets::new(
@@ -81,6 +94,7 @@ impl PhysicEngineFireworks {
             ),
             explosion_shape: ExplosionShape::default(),
             doppler_sender: None,
+            last_doppler_time: Instant::now(),
         };
 
         engine.next_rocket_interval = engine.compute_next_interval();
@@ -90,30 +104,48 @@ impl PhysicEngineFireworks {
 
     fn reload_config(&mut self, new_config: &PhysicConfig) -> bool {
         let old_max_rockets = self.config.max_rockets;
+        let old_per_explosion = self.config.particles_per_explosion;
+        let old_per_trail = self.config.particles_per_trail;
+
         self.config = new_config.clone();
+        self.pending_config = new_config.clone();
 
         let max_rockets_updated = new_config.max_rockets != old_max_rockets;
-        if max_rockets_updated {
+        let pool_params_updated = new_config.particles_per_explosion != old_per_explosion
+            || new_config.particles_per_trail != old_per_trail;
+
+        if max_rockets_updated || pool_params_updated {
             info!(
-                "Reinitializing physics buffers due to max_rockets change: {} -> {}",
-                old_max_rockets, new_config.max_rockets
+                "Reinitializing physics buffers due to config change: max_rockets ({} -> {}), per_explosion ({} -> {}), per_trail ({} -> {})",
+                old_max_rockets, new_config.max_rockets,
+                old_per_explosion, new_config.particles_per_explosion,
+                old_per_trail, new_config.particles_per_trail
             );
             self.triggered_explosions = vec![Particle::default(); new_config.max_rockets];
+            self.triggered_explosion_ids = vec![0; new_config.max_rockets];
+            self.anticipated_explosions = vec![(0, glam::Vec2::ZERO); new_config.max_rockets];
 
             // Réinitialisation des slots free_indices, active_indices et scratch buffer
             self.active_indices.clear();
             self.free_indices.clear();
             self.to_deactivate_scratch.clear();
 
+            self.rockets.clear();
             for _ in 0..new_config.max_rockets {
                 let idx = self.rockets.insert(Rocket::new(&mut self.rng));
                 self.free_indices.push(idx);
             }
+
+            self.particles_pools_for_rockets = ParticlesPoolsForRockets::new(
+                new_config.max_rockets,
+                new_config.particles_per_explosion,
+                new_config.particles_per_trail,
+            );
         }
 
         self.next_rocket_interval = self.compute_next_interval();
         self.update_spawn_rocket_margin();
-        max_rockets_updated
+        max_rockets_updated || pool_params_updated
     }
 
     fn update_spawn_rocket_margin(&mut self) {
@@ -135,19 +167,6 @@ impl PhysicEngineFireworks {
             .max(self.config.rocket_max_next_interval)
     }
 
-    fn spawn_rocket(&mut self) -> Option<&mut Rocket> {
-        let idx = self.free_indices.pop()?;
-        let cfg = &self.config;
-
-        if let Some(r) = self.rockets.get_mut(idx) {
-            // Réutilisation sans recréer la structure complète
-            r.reset(cfg, self.window_width);
-        }
-
-        self.active_indices.push(idx);
-        self.rockets.get_mut(idx)
-    }
-
     /// Désactive une fusée et libère ses ressources associées (particules, indices, etc.)
     fn deactivate_rocket(&mut self, idx: Index) {
         if let Some(r) = self.rockets.get_mut(idx) {
@@ -166,15 +185,48 @@ impl PhysicEngineFireworks {
 
     fn update(&mut self, dt: f32) -> UpdateResult<'_> {
         let mut triggered_count = 0;
+        let mut anticipated_count = 0;
         let mut new_rocket: Option<Rocket> = None;
 
+        self.anticipated_launch = None;
+        let gravity = glam::Vec2::new(0.0, self.config.gravity);
+        let launch_anticipation_dt = self.config.audio_launch_anticipation_ms / 1000.0;
+        let explosion_anticipation_dt = self.config.audio_explosion_anticipation_ms / 1000.0;
+
+        // 1) ANTICIPATION DU DÉPART (LAUNCH)
         self.time_since_last_rocket += dt;
+        if self.time_since_last_rocket + launch_anticipation_dt >= self.next_rocket_interval
+            && !self.audio_launch_triggered
+        {
+            if let Some(&idx) = self.free_indices.last() {
+                if let Some(r) = self.rockets.get_mut(idx) {
+                    // Initialise la fusée à l'avance avec ses caractéristiques aléatoires (position, vitesse, etc.)
+                    r.reset(&self.config, self.window_width);
+                    r.id = ROCKET_ID_COUNTER.fetch_add(1, Ordering::Relaxed);
+                    // Reste non active physiquement et visuellement pour les frames d'anticipation
+                    r.active = false;
+
+                    self.anticipated_launch = Some((r.id, r.pos));
+                    self.audio_launch_triggered = true;
+                }
+            }
+        }
+
+        // Spawn physique et visuel réel
         if self.time_since_last_rocket >= self.next_rocket_interval {
-            if let Some(r) = self.spawn_rocket() {
-                debug!("🚀 Rocket spawned at ({}, {})", r.pos.x, r.pos.y);
-                new_rocket = Some(r.clone());
+            if let Some(idx) = self.free_indices.pop() {
+                if let Some(r) = self.rockets.get_mut(idx) {
+                    r.active = true;
+                    new_rocket = Some(r.clone());
+                    debug!(
+                        "🚀 Rocket spawned at ({}, {}) with ID {}",
+                        r.pos.x, r.pos.y, r.id
+                    );
+                }
+                self.active_indices.push(idx);
                 self.time_since_last_rocket = 0.0;
                 self.next_rocket_interval = self.compute_next_interval();
+                self.audio_launch_triggered = false;
             }
         }
 
@@ -182,12 +234,31 @@ impl PhysicEngineFireworks {
         let mut to_deactivate = std::mem::take(&mut self.to_deactivate_scratch);
         to_deactivate.clear();
 
+        // Limiteur de fréquence pour les événements Doppler (max 144 Hz)
+        let send_doppler =
+            self.last_doppler_time.elapsed() >= std::time::Duration::from_secs_f64(1.0 / 144.0);
+
         // on parcourt la liste des id de rockets actives
         for &idx in &self.active_indices {
             // si la rocket existe
             if let Some(rocket) = self.rockets.get_mut(idx) {
                 // on sauvegarde l'état de la rocket avant update
                 let exploded_before = rocket.exploded;
+
+                // 2) ANTICIPATION DE L'EXPLOSION
+                if !rocket.exploded && !rocket.audio_explosion_triggered {
+                    let future_vel_y = rocket.vel.y + gravity.y * explosion_anticipation_dt;
+                    if future_vel_y <= self.config.explosion_threshold {
+                        // Position future
+                        let future_pos = rocket.pos
+                            + rocket.vel * explosion_anticipation_dt
+                            + 0.5 * gravity * explosion_anticipation_dt * explosion_anticipation_dt;
+
+                        self.anticipated_explosions[anticipated_count] = (rocket.id, future_pos);
+                        anticipated_count += 1;
+                        rocket.audio_explosion_triggered = true;
+                    }
+                }
 
                 rocket.update(
                     dt,
@@ -197,7 +268,7 @@ impl PhysicEngineFireworks {
                 );
 
                 // On n'envoie le Doppler que si la fusée est active ET n'a pas encore explosé !
-                if rocket.active && !rocket.exploded {
+                if send_doppler && rocket.active && !rocket.exploded {
                     if let Some(tx) = &self.doppler_sender {
                         let _ = tx.try_send(DopplerEvent {
                             id: rocket.id,
@@ -210,8 +281,12 @@ impl PhysicEngineFireworks {
                 }
 
                 // si avant l'update la rocket n'était pas explosée et qu'après elle l'est
-                // on incrémente le compteur d'explosion
-                triggered_count += (!exploded_before && rocket.exploded) as usize;
+                // on copie la particule de tête et on incrémente le compteur d'explosion
+                if !exploded_before && rocket.exploded {
+                    self.triggered_explosions[triggered_count] = *rocket.head_particle();
+                    self.triggered_explosion_ids[triggered_count] = rocket.id;
+                    triggered_count += 1;
+                }
                 // si la rocket n'est plus active, on place son ix dans la liste des rockets à déactiver.
                 // on le fait en déférer car on itère (actuellement) sur la liste (des id) des rockets actives.
                 if !rocket.active {
@@ -228,10 +303,17 @@ impl PhysicEngineFireworks {
         // On remet le buffer de travail dans la structure pour le réutiliser au prochain tour
         self.to_deactivate_scratch = to_deactivate;
 
+        if send_doppler {
+            self.last_doppler_time = Instant::now();
+        }
+
         UpdateResult {
             new_rocket,
             // on renvoie le slice d'explosions déclenchées
             triggered_explosions: &self.triggered_explosions[..triggered_count],
+            triggered_explosion_ids: &self.triggered_explosion_ids[..triggered_count],
+            anticipated_rocket_launch: self.anticipated_launch,
+            anticipated_explosions: &self.anticipated_explosions[..anticipated_count],
         }
     }
 }
@@ -296,6 +378,17 @@ impl PhysicEngine for PhysicEngineFireworks {
 
     fn get_config(&self) -> &PhysicConfig {
         &self.config
+    }
+
+    fn get_config_mut(&mut self) -> &mut PhysicConfig {
+        &mut self.pending_config
+    }
+
+    fn update_anticipation_times(&mut self, launch_ms: f32, explosion_ms: f32) {
+        self.config.audio_launch_anticipation_ms = launch_ms;
+        self.config.audio_explosion_anticipation_ms = explosion_ms;
+        self.pending_config.audio_launch_anticipation_ms = launch_ms;
+        self.pending_config.audio_explosion_anticipation_ms = explosion_ms;
     }
 
     fn set_explosion_shape(&mut self, shape: ExplosionShape) {

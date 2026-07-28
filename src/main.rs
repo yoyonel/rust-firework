@@ -21,6 +21,17 @@ fn main() -> Result<()> {
 
     show_rust_core_dependencies();
 
+    // Auto-détection du dossier de travail : si "assets" n'existe pas en local mais existe chez le parent, on s'y déplace.
+    if !std::path::Path::new("assets").exists() {
+        if let Ok(current) = std::env::current_dir() {
+            if let Some(parent) = current.parent() {
+                if parent.join("assets").exists() {
+                    let _ = std::env::set_current_dir(parent);
+                }
+            }
+        }
+    }
+
     // TODO: mettre en place un vrai gestionnaire de configurations (avec traits) !
     let physic_config = PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
     info!("Physic config loaded:\n{:#?}", physic_config);
@@ -33,6 +44,7 @@ fn main() -> Result<()> {
     // --------------------------
     let export_path = std::env::args()
         .nth(1) // priorité à l'argument CLI
+        .filter(|arg| !arg.starts_with('-')) // ne pas confondre les flags avec un chemin de fichier
         .map(PathBuf::from)
         .or_else(|| env::var("FIREWORKS_AUDIO_EXPORT").ok().map(PathBuf::from));
 
@@ -99,6 +111,19 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    let mut audio_stress_sources = None;
+    let mut randomize_stress_positions = false;
+    if let Some(pos) = args.iter().position(|a| a == "--audio-stress-scene") {
+        let num_sources: usize = args.get(pos + 1).and_then(|s| s.parse().ok()).unwrap_or(32);
+        audio_stress_sources = Some(num_sources);
+        randomize_stress_positions = args.iter().any(|a| a == "--randomize-stress-positions");
+        info!(
+            "🎧 [STRESS TEST SCENE] Starting interactive audio stress-test with {} virtual sources (randomize positions: {})...",
+            num_sources,
+            randomize_stress_positions
+        );
+    }
+
     let window_width = 1024;
     let window_height = 800;
 
@@ -120,6 +145,11 @@ fn main() -> Result<()> {
     // 3. Init Simulator
     info!("🚀 Starting Fireworks Simulator...");
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
+
+    if let Some(n) = audio_stress_sources {
+        simulator.set_doppler_sender(doppler_queue.sender.clone());
+        simulator.enable_audio_stress_scene(n, randomize_stress_positions);
+    }
 
     simulator.init_console_commands();
     let _ = simulator.run(
