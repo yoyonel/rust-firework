@@ -1,6 +1,0 @@
-extends: existence
-message: "Unescaped underscore '_' found inside inline math. Escape it as '\\_' to prevent markdown rendering issues."
-level: error
-scope: text
-raw:
-  - '\\\\+\\([^\n\r]*?(?<!\\)_[^\n\r]*?\\\\+\\)'

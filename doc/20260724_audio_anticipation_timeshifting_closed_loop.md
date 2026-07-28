@@ -6,9 +6,8 @@ Dans tout moteur de jeu ou application interactive 3D, la synchronisation tempor
 
 ### Le Dilemme Latence vs Stabilité (xruns)
 La latence audio globale d'un système informatique est la somme de plusieurs facteurs :
-\\[
-\text{Latence Totale} = \text{Latence de Dispatch} + \text{Latence d'Ordonnancement (Serveur Son)} + \text{Latence du Matériel (DAC)}
-\\]
+
+Latence Totale = Latence de Dispatch + Latence d'Ordonnancement (Serveur Son) + Latence du Matériel (DAC)
 
 1.  **Latence de Dispatch :** Le temps requis pour communiquer la requête de lecture depuis le thread principal (moteur physique) vers le thread audio via des canaux de communication asynchrones lock-free.
 2.  **Latence d'Ordonnancement :** Le serveur audio (PipeWire, PulseAudio ou ALSA) traite le flux par blocs d'échantillons (ex: 20 ms, soit 882 échantillons à 44,1 kHz). Une requête insérée au début d'un cycle ne sera évaluée qu'au cycle suivant.
@@ -23,40 +22,37 @@ Pour éliminer les coupures sonores (glitches/craquements), nous devons mainteni
 
 Plutôt que de chercher à réduire la taille des mémoires tampons matérielles au risque de compromettre la stabilité, nous contournons le problème au niveau logiciel en décalant la chronologie physique par rapport à la chronologie audio.
 
-Cette méthode consiste à **anticiper** l'instant de déclenchement audio. Si nous savons qu'un événement visuel doit se produire à l'instant \\( T\_{\text{visuel}} \\), et que la latence de diffusion audio est estimée à \\( D\_{\text{audio}} \\), nous envoyons la requête de lecture audio au moteur sonore à l'instant exact :
-\\[
-T\_{\text{déclenchement}} = T\_{\text{visuel}} - D\_{\text{audio}}
-\\]
+Cette méthode consiste à **anticiper** l'instant de déclenchement audio. Si nous savons qu'un événement visuel doit se produire à l'instant T_visuel, et que la latence de diffusion audio est estimée à D_audio, nous envoyons la requête de lecture audio au moteur sonore à l'instant exact :
+
+T_déclenchement = T_visuel - D_audio
 
 Le son atteint l'oreille de l'utilisateur précisément à l'instant où l'événement apparaît sur son écran.
 
 ### Projection Cinématique Indépendante du Frame Rate
-La simulation physique n'est pas cadencée à un taux fixe de 60 Hz ; elle s'exécute à la fréquence de rafraîchissement de la carte graphique (variable et non bridée, pouvant dépasser 200 FPS). L'anticipation ne peut donc pas se mesurer en nombre de frames, car la durée d'une frame (\\( dt \\)) fluctue constamment. 
+La simulation physique n'est pas cadencée à un taux fixe de 60 Hz ; elle s'exécute à la fréquence de rafraîchissement de la carte graphique (variable et non bridée, pouvant dépasser 200 FPS). L'anticipation ne peut donc pas se mesurer en nombre de frames, car la durée d'une frame (dt) fluctue constamment. 
 
-L'anticipation est définie par une durée absolue en millisecondes : \\( t\_{\text{anticip}} = \frac{D\_{\text{ms}}}{1000} \\).
+L'anticipation est définie par une durée absolue en millisecondes : t_anticip = D_ms / 1000.
 
 #### A. Anticipation du Lancement (Launch)
-L'intervalle entre les lancements est déterminé par la configuration (\\( I\_{\text{next}} \\)). À chaque frame physique, nous avançons le temps accumulé de la fusée `time_since_last_rocket += dt`. Nous prédisons le lancement imminent si :
-\\[
-t\_{\text{rocket}} + t\_{\text{launch}} \ge I\_{\text{next}}
-\\]
-*(où \\( t\_{\text{rocket}} \\) est la variable accumulée `time_since_last_rocket` et \\( t\_{\text{launch}} \\) est la valeur d'anticipation de lancement).*
+L'intervalle entre les lancements est déterminé par la configuration (I_next). À chaque frame physique, nous avançons le temps accumulé de la fusée `time_since_last_rocket += dt`. Nous prédisons le lancement imminent si :
 
-Lorsque cette condition est remplie, nous pré-allouons la fusée (détermination de sa position, vitesse, couleur et ID unique), nous déclenchons immédiatement son audio à l'avance, tout en la maintenant inactive visuellement et physiquement (`active = false`). Elle n'est activée et rendue visible que lorsque `time_since_last_rocket` franchit réellement le seuil \\( I\_{\text{next}} \\).
+t_rocket + t_launch >= I_next
+
+*(où t_rocket est la variable accumulée `time_since_last_rocket` et t_launch est la valeur d'anticipation de lancement).*
+
+Lorsque cette condition est remplie, nous pré-allouons la fusée (détermination de sa position, vitesse, couleur et ID unique), nous déclenchons immédiatement son audio à l'avance, tout en la maintenant inactive visuellement et physiquement (`active = false`). Elle n'est activée et rendue visible que lorsque `time_since_last_rocket` franchit réellement le seuil I_next.
 
 #### B. Anticipation de l'Explosion
-Une fusée explose lorsque sa vitesse verticale ascendante chute en dessous d'un seuil \\( V\_{\text{seuil}} \\) (décélération sous gravité constante \\( g \\)).
-À chaque frame, nous projetons la vitesse future de la fusée dans \\( t\_{\text{explosion}} \\) secondes (le paramètre d'anticipation de l'explosion) en utilisant l'équation fondamentale de la dynamique :
-\\[
-v\_{\text{future}} = v\_{\text{actuelle}} + g \cdot t\_{\text{explosion}}
-\\]
+Une fusée explose lorsque sa vitesse verticale ascendante chute en dessous d'un seuil V_seuil (décélération sous gravité constante g).
+À chaque frame, nous projetons la vitesse future de la fusée dans t_explosion secondes (le paramètre d'anticipation de l'explosion) en utilisant l'équation fondamentale de la dynamique :
 
-Si \\( v\_{\text{future}} \le V\_{\text{seuil}} \\), nous anticipons l'explosion. Nous calculons par intégration la position spatiale future exacte où la fusée se situera au moment de son explosion réelle :
-\\[
-p\_{\text{future}} = p\_{\text{actuelle}} + v\_{\text{actuelle}} \cdot t\_{\text{explosion}} + \frac{1}{2} g \cdot t\_{\text{explosion}}^2
-\\]
+v_future = v_actuelle + g * t_explosion
 
-Nous envoyons la requête sonore d'explosion immédiatement à cette position projetée \\( p\_{\text{future}} \\), et marquons la fusée comme ayant déclenché son alarme audio. L'explosion visuelle et le spawn des particules physiques d'étincelles se produisent \\( t\_{\text{explosion}} \\) secondes plus tard à la position réelle de fin de vol.
+Si v_future <= V_seuil, nous anticipons l'explosion. Nous calculons par intégration la position spatiale future exacte où la fusée se situera au moment de son explosion réelle :
+
+p_future = p_actuelle + v_actuelle * t_explosion + 0.5 * g * t_explosion²
+
+Nous envoyons la requête sonore d'explosion immédiatement à cette position projetée p_future, et marquons la fusée comme ayant déclenché son alarme audio. L'explosion visuelle et le spawn des particules physiques d'étincelles se produisent t_explosion secondes plus tard à la position réelle de fin de vol.
 
 ---
 
@@ -80,23 +76,20 @@ graph TD
     D -->|Mise à jour en place| A
 ```
 
-Lorsqu'un événement audio démarre matériellement au niveau du pilote, l'audio-thread émet un événement diagnostique `AudioDebugEvent::Started` contenant le timestamp matériel exact du début du bloc sonore (\\( T\_{\text{started}} \\)). 
-De son côté, le moteur physique enregistre l'instant du spawn visuel (\\( T\_{\text{spawn}} \\)).
+Lorsqu'un événement audio démarre matériellement au niveau du pilote, l'audio-thread émet un événement diagnostique `AudioDebugEvent::Started` contenant le timestamp matériel exact du début du bloc sonore (T_started). 
+De son côté, le moteur physique enregistre l'instant du spawn visuel (T_spawn).
 
 L'erreur algébrique de synchronisation (en ms) est définie par :
-\\[
-e = T\_{\text{started}} - T\_{\text{spawn}}
-\\]
+
+e = T_started - T_spawn
+
 *   **e > 0 :** Le son a démarré **après** l'affichage visuel (l'audio est en retard).
 *   **e < 0 :** Le son a démarré **avant** l'affichage visuel (l'audio est en avance).
 
-Le régulateur corrige le paramètre d'anticipation (\\( A \\)) en appliquant un gain proportionnel amorti (\\( g = 0.05 \\)) pour filtrer le bruit de scheduling et stabiliser le système :
-\\[
-A\_{k+1} = A\_k + g \cdot e
-\\]
-\\[
-A\_{k+1} = \text{clamp}(A\_{k+1}, 0.0, 150.0)
-\\]
+Le régulateur corrige le paramètre d'anticipation (A) en appliquant un gain proportionnel amorti (g = 0.05) pour filtrer le bruit de scheduling et stabiliser le système :
+
+A_(k+1) = A_k + g * e
+A_(k+1) = clamp(A_(k+1), 0.0, 150.0)
 
 ### Ajustement In-Place Évitant les Effets de Bord
 La configuration générale de l'application supporte le rechargement à chaud (Hot-Reload) depuis le disque. Modifier la configuration via un rechargement complet (`reload_config`) poserait deux problèmes majeurs :
@@ -137,7 +130,7 @@ self.audio_events_buf = events;
 Pour valider l'exactitude mathématique de notre boucle fermée sans nécessiter de serveur graphique (X11/Wayland) ou de carte son active, nous avons implémenté :
 1.  Un mock d'ordonnanceur audio (`MockFeedbackAudio`) simulant un délai matériel artificiel.
 2.  Un garde-fou de sécurité OpenGL dans la console : `gl::GenTextures::is_loaded()`. Si les pointeurs de fonction OpenGL ne sont pas chargés par la fenêtre (environnement de test unitaire headless), la console évite d'exécuter des appels graphiques qui provoqueraient un crash immédiat.
-3.  Le test d'intégration unitaire compile et prouve la convergence des latences à \\( \pm 0.3\text{ ms} \\) en moins de **1,2 seconde** d'exécution.
+3.  Le test d'intégration unitaire compile et prouve la convergence des latences à ±0.3 ms en moins de **1,2 seconde** d'exécution.
 
 ---
 

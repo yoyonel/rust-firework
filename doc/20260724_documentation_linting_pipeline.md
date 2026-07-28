@@ -1,14 +1,14 @@
 # Pipeline de Linting de la Documentation (Vale CLI)
 
-Ce guide décrit l'intégration de **Vale CLI** dans notre infrastructure afin de valider automatiquement la syntaxe LaTeX/MathJax de notre documentation et de prévenir les régressions de rendu au sein du livre compilé par `mdBook`.
+Ce guide décrit l'intégration de **Vale CLI** dans notre infrastructure afin de valider automatiquement l'absence de délimiteurs LaTeX/MathJax dans notre documentation Markdown et de prévenir les régressions de rendu au sein du livre compilé par `mdBook`.
 
 ---
 
 ## 🎯 1. Pourquoi ce Linter ?
 
-`mdBook` s'appuie sur le moteur client MathJax pour le rendu d'équations. Cependant, le compilateur Markdown (côté serveur) traite le document avant MathJax. Deux conflits majeurs surviennent fréquemment :
-1. **Les délimiteurs simples (`$`) :** Le symbole dollar simple est souvent confondu avec le texte normal ou n'est pas reconnu par défaut sous mdBook, provoquant l'affichage de la formule brute. Les délimiteurs explicites `\\( ... \\)` (inline) et `\\[ ... \\]` ou `$$ ... $$` (block) doivent être préférés.
-2. **Les underscores d'indice (`_`) :** Si une formule contient un caractère de soulignement non échappé (par exemple : `T_{visuel}`), le parseur Markdown le convertit en balise italique HTML `T_{<em>visuel</em>}`. La formule reçue par MathJax est alors brisée. Tout underscore dans une équation doit être échappé sous la forme `\\_`.
+Le serveur de documentation local (`mdBook`) ne gère pas nativement les équations LaTeX (telles que `$ ... $`, `$$ ... $$` ou `\( ... \)`). Conformément à la **Règle 7** du projet, les formules doivent être rédigées en texte clair et caractères Unicode lisibles (ex: `48 kHz` au lieu de `\(48\text{ kHz}\)`, `Δt` au lieu de `$$\Delta t$$`).
+
+Le linter Vale valide automatiquement l'ensemble des fichiers Markdown pour s'assurer qu'aucun délimiteur LaTeX ne soit introduit par inadvertance.
 
 ---
 
@@ -29,12 +29,8 @@ md = markdown
 BasedOnStyles = Firework
 ```
 
-### Règles personnalisées (`doc/styles/Firework/`)
-Quatre règles de détection basées sur des expressions régulières (Regex) analysent le contenu brut (hors blocs de code) des fichiers :
-* **`SingleDollarMath.yml` :** Recherche toute occurrence de simple dollar `$expression$` pour imposer l'utilisation de la syntaxe parenthésée `\\( expression \\)`.
-* **`UnescapedUnderscoreBlockMath.yml` :** Valide les blocs `$$ ... $$` pour s'assurer qu'aucun soulignement non échappé `_` ne s'y trouve.
-* **`UnescapedUnderscoreInlineMath.yml` :** Valide les expressions inline `\\( ... \\)` de la même façon.
-* **`UnescapedUnderscoreBracketMath.yml` :** Valide la syntaxe crochet `\\[ ... \\]`.
+### Règle personnalisée (`doc/styles/Firework/NoLatexMath.yml`)
+Une règle de détection basée sur des expressions régulières (Regex) analyse le contenu des fichiers pour interdire l'utilisation des délimiteurs LaTeX (`$`, `$$`, `\(`, `\[`).
 
 ---
 
