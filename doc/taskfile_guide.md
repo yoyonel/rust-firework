@@ -84,3 +84,11 @@ Le projet utilise `mdBook` pour compiler les rapports d'architecture et guides e
 | `task doc-clean` | Nettoie les fichiers de documentation compilés (supprime le répertoire `book/`). |
 | `task doc-setup-vale` | Installe automatiquement la CLI `vale` localement dans `./bin/vale` si elle n'est pas présente dans l'OS. |
 | `task doc-lint` | Valide la syntaxe LaTeX/MathJax des fichiers Markdown de documentation avec Vale. |
+
+---
+
+## 🧠 7. Compétences IA & Indexation Codebase
+
+| Commande | Description |
+|:---|:---|
+| `task update-ai-skills` | Régénère et configure les compétences IA locales (Repomix + overlays doc/ai_skills/) pour Antigravity / agy. |
