@@ -112,20 +112,18 @@ impl AudioEngine for MockFeedbackAudio {
 #[test]
 fn test_audio_anticipation_feedback_loop() -> anyhow::Result<()> {
     // 1. Initialiser une configuration physique avec des valeurs d'anticipation de départ à 10 ms
-    let mut config = PhysicConfig::default();
-    config.audio_launch_anticipation_ms = 10.0;
-    config.audio_explosion_anticipation_ms = 10.0;
-
-    // Rendre les lancements extrêmement fréquents (chaque 25 ms) pour accélérer la convergence
-    config.rocket_interval_mean = 0.025; // 25 ms
-    config.rocket_interval_variation = 0.0;
-    config.rocket_max_next_interval = 0.025;
-
-    // Ajuster la vitesse de départ et la gravité pour que les fusées explosent en ~100 ms seulement
-    config.spawn_rocket_min_speed = 50.0;
-    config.spawn_rocket_max_speed = 60.0;
-    config.gravity = -200.0;
-    config.explosion_threshold = 40.0;
+    let config = PhysicConfig {
+        audio_launch_anticipation_ms: 10.0,
+        audio_explosion_anticipation_ms: 10.0,
+        rocket_interval_mean: 0.025,
+        rocket_interval_variation: 0.0,
+        rocket_max_next_interval: 0.025,
+        spawn_rocket_min_speed: 50.0,
+        spawn_rocket_max_speed: 60.0,
+        gravity: -200.0,
+        explosion_threshold: 40.0,
+        ..Default::default()
+    };
 
     let physic_engine = PhysicEngineFireworks::new(&config, 800.0);
 
