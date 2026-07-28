@@ -1,0 +1,7 @@
+extends: existence
+message: "LaTeX formula delimiter found. Use clean plain text and Unicode symbols instead (Rule 7)."
+level: error
+scope: raw
+raw:
+  - '\\\\\([^\n\r]*?\\\\\)'
+  - '\\\\\[[^\n\r]*?\\\\\]'

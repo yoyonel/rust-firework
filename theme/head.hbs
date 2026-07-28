@@ -1,0 +1,283 @@
+<style>
+  .mermaid-container {
+    position: relative;
+    width: 100%;
+    margin: 1.5rem 0;
+    padding: 2.5rem 1rem 1rem 1rem;
+    background: rgba(15, 23, 42, 0.75);
+    border: 1px solid rgba(56, 189, 248, 0.3);
+    border-radius: 8px;
+    box-sizing: border-box;
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .mermaid-container:hover {
+    border-color: rgba(56, 189, 248, 0.6);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  .mermaid {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow-x: auto;
+  }
+
+  .mermaid svg {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    display: block;
+    margin: 0 auto;
+  }
+
+  .mermaid-fullscreen-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #1e293b;
+    color: #cbd5e1;
+    border: 1px solid #475569;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 0.82rem;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  }
+
+  .mermaid-fullscreen-btn:hover {
+    background: #38bdf8;
+    color: #0f172a;
+    border-color: #38bdf8;
+    font-weight: bold;
+    transform: translateY(-1px);
+  }
+
+  /* Fullscreen Modal Overlay */
+  .mermaid-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(2, 6, 23, 0.95);
+    backdrop-filter: blur(12px);
+    z-index: 999999;
+    justify-content: center;
+    align-items: center;
+    flex-direction: column;
+    padding: 20px;
+    box-sizing: border-box;
+  }
+
+  .mermaid-modal-overlay.active {
+    display: flex;
+    animation: mermaidFadeIn 0.2s ease;
+  }
+
+  .mermaid-modal-header {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    color: #f8fafc;
+    font-family: system-ui, -apple-system, sans-serif;
+    font-size: 1rem;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .mermaid-modal-close-btn {
+    background: #ef4444;
+    color: white;
+    border: none;
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s ease;
+  }
+
+  .mermaid-modal-close-btn:hover {
+    background: #dc2626;
+  }
+
+  .mermaid-modal-content {
+    flex: 1;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: auto;
+    padding: 20px;
+  }
+
+  .mermaid-modal-content svg {
+    max-width: 95vw !important;
+    max-height: 85vh !important;
+    width: auto !important;
+    height: auto !important;
+  }
+
+  @keyframes mermaidFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+</style>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: false,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#0f172a',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#f8fafc',
+      primaryBorderColor: '#38bdf8',
+      lineColor: '#94a3b8',
+      tertiaryColor: '#1e293b'
+    },
+    flowchart: {
+      useMaxWidth: false,
+      htmlLabels: true,
+      curve: 'basis'
+    }
+  });
+
+  // Global modal initialization
+  function setupModal() {
+    if (document.getElementById('mermaid-modal')) return;
+
+    const modal = document.createElement('div');
+    modal.id = 'mermaid-modal';
+    modal.className = 'mermaid-modal-overlay';
+    modal.innerHTML = `
+      <div class="mermaid-modal-header">
+        <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+        <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+      </div>
+      <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+    `;
+    document.body.appendChild(modal);
+
+    const closeModal = () => {
+      modal.classList.remove('active');
+      document.getElementById('mermaid-modal-content').innerHTML = '';
+    };
+
+    document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+        closeModal();
+      }
+    });
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && modal.classList.contains('active')) {
+        closeModal();
+      }
+    });
+  }
+
+  function openFullscreen(svgElement) {
+    setupModal();
+    const modal = document.getElementById('mermaid-modal');
+    const content = document.getElementById('mermaid-modal-content');
+    content.innerHTML = '';
+    
+    // Clone SVG to preserve original diagram in page
+    const clone = svgElement.cloneNode(true);
+    clone.removeAttribute('height');
+    clone.style.width = '100%';
+    clone.style.height = '100%';
+    content.appendChild(clone);
+
+    modal.classList.add('active');
+  }
+
+  async function renderMermaid() {
+    const elements = document.querySelectorAll("pre code.language-mermaid");
+    if (elements.length === 0) return;
+
+    for (let i = 0; i < elements.length; i++) {
+      const el = elements[i];
+      const pre = el.parentElement;
+      const container = document.createElement("div");
+      container.className = "mermaid-container";
+
+      const div = document.createElement("div");
+      div.className = "mermaid";
+      div.style.cursor = "zoom-in";
+      div.title = "Double-cliquez pour agrandir en plein écran";
+      div.textContent = el.innerHTML
+        .replace(/&gt;/g, '>')
+        .replace(/&lt;/g, '<')
+        .replace(/&amp;/g, '&');
+
+      const btn = document.createElement("button");
+      btn.className = "mermaid-fullscreen-btn";
+      btn.innerHTML = "🔍 Plein écran";
+      btn.title = "Agrandir le diagramme en plein écran";
+
+      container.appendChild(btn);
+      container.appendChild(div);
+      pre.replaceWith(container);
+
+      btn.addEventListener("click", () => {
+        const svg = div.querySelector("svg");
+        if (svg) openFullscreen(svg);
+      });
+      div.addEventListener("dblclick", () => {
+        const svg = div.querySelector("svg");
+        if (svg) openFullscreen(svg);
+      });
+    }
+
+    try {
+      await mermaid.run();
+      // Force all generated SVGs to take 100% width of their container box
+      document.querySelectorAll(".mermaid svg").forEach((svg) => {
+        svg.style.maxWidth = "100%";
+        svg.style.width = "100%";
+        svg.style.height = "auto";
+      });
+    } catch (e) {
+      console.error("Mermaid rendering error:", e);
+    }
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", renderMermaid);
+  } else {
+    renderMermaid();
+  }
+</script>
+
+<!-- MathJax Dynamic Loader -->
+<script type="text/javascript">
+  window.MathJax = {
+    tex: {
+      inlineMath: [['\\(', '\\)']],
+      displayMath: [['\\[', '\\]'], ['$$', '$$']],
+      processEscapes: true
+    },
+    options: {
+      ignoreHtmlClass: 'tex2jax_ignore',
+      processHtmlClass: 'tex2jax_process'
+    }
+  };
+</script>
+<script type="text/javascript" id="MathJax-script" async
+  src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+</script>

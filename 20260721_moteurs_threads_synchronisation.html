@@ -1,0 +1,808 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Architecture Globale, Threads &amp; Synchronisation - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
+        
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">1.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html" class="active"><strong aria-hidden="true">2.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">3.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">3.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html"><strong aria-hidden="true">4.1.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html"><strong aria-hidden="true">4.2.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">4.3.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">4.4.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">4.5.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">4.6.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">4.7.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">4.8.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">4.9.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">4.10.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">5.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">5.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">5.3.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">6.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">6.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">6.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">6.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">6.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">6.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">6.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">6.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">6.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">6.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">6.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">6.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">6.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">7.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="architecture-des-moteurs-threading-et-synchronisation"><a class="header" href="#architecture-des-moteurs-threading-et-synchronisation">Architecture des Moteurs, Threading et Synchronisation</a></h1>
+<blockquote>
+<p><strong>Date</strong> : 21 Juillet 2026<br />
+<strong>Application</strong> : Fireworks Simulator (Rust / OpenGL AZDO / CPAL Audio 3D)<br />
+<strong>Cible</strong> : Documentation Technique de l'Architecture Multi-Thread</p>
+</blockquote>
+<hr />
+<h2 id="-table-des-matières"><a class="header" href="#-table-des-matières">📋 Table des Matières</a></h2>
+<ol>
+<li><a href="#1-vue-densemble--strat%C3%A9gie-darchitecture">Vue d'Ensemble &amp; Stratégie d'Architecture</a></li>
+<li><a href="#2-diagrammes-de-synth%C3%A8se-mermaid">Diagrammes de Synthèse (Mermaid)</a>
+<ul>
+<li><a href="#diagramme-0--vue-macro-%C3%A9pur%C3%A9e-moteurs-threads--orchestrateur">Diagramme 0 : Vue Macro Épurée (Moteurs, Threads &amp; Orchestrateur)</a></li>
+<li><a href="#diagramme-1--vue-darchitecture-d%C3%A9taill%C3%A9e-des-threads-swimlanes">Diagramme 1 : Vue d'Architecture Détaillée des Threads (Swimlanes)</a></li>
+<li><a href="#diagramme-2--canaux-de-communication--primitives-lock-free">Diagramme 2 : Canaux de Communication &amp; Primitives Lock-Free</a></li>
+<li><a href="#diagramme-3--s%C3%A9quence-temporelle--d%C3%A9couplage-des-boucles">Diagramme 3 : Séquence Temporelle &amp; Découplage des Boucles</a></li>
+</ul>
+</li>
+<li><a href="#3-d%C3%A9tail-des-moteurs-et-de-leur-thread-dappartenance">Détail des Moteurs et de leur Thread d'Appartenance</a>
+<ul>
+<li><a href="#a-thread-principal-main--simulation--render-loop">A. Thread Principal (Main / Simulation / Render Loop)</a></li>
+<li><a href="#b-thread-audio-cpal-real-time-dsp-callback">B. Thread Audio CPAL (Real-Time DSP Callback)</a></li>
+<li><a href="#c-pipeline-de-rendu-gpu-contexte-opengl--mat%C3%A9riel">C. Pipeline de Rendu GPU (Contexte OpenGL &amp; Matériel)</a></li>
+</ul>
+</li>
+<li><a href="#4-m%C3%A9canismes-de-communication-inter-threads-ipc">Mécanismes de Communication Inter-Threads (IPC)</a></li>
+<li><a href="#5-strat%C3%A9gies-de-synchronisation-et-gestion-des-risques-temps-r%C3%A9el">Stratégies de Synchronisation et Gestion des Risques Temps Réel</a></li>
+</ol>
+<hr />
+<h2 id="1-vue-densemble--stratégie-darchitecture"><a class="header" href="#1-vue-densemble--stratégie-darchitecture">1. Vue d'Ensemble &amp; Stratégie d'Architecture</a></h2>
+<p>L'application <strong>Fireworks Simulator</strong> repose sur une architecture multi-threadée asynchrone hautement optimisée, découpée en trois moteurs principaux :</p>
+<ul>
+<li><strong>PE (Physic Engine)</strong> : Simulation des particules, fusées, traînées et fumée (exécuté sur le CPU).</li>
+<li><strong>RE (Renderer Engine)</strong> : Rendu graphique haute performance via OpenGL 4.5 AZDO (<em>Approaching Zero Driver Overhead</em>), Persistent Mapped Buffers et Triple Buffering (pilote le GPU).</li>
+<li><strong>AE (Audio Engine)</strong> : Synthèse 3D binaurale temps réel, traitement Doppler, réverbération spatiale et bus DSP (exécuté sur un thread auxiliaire dédié temps réel).</li>
+</ul>
+<p>Le défi majeur de cette architecture est le <strong>découplage temporel</strong> entre la boucle de rendu/physique (cadencée par l'affichage, typiquement 60 Hz à 144 Hz) et le traitement audio (cadencé par la carte son, typiquement 44.1 kHz / 48 kHz avec des blocs de 256 à 512 échantillons, soit ~172 Hz ou 5.8 ms par bloc).</p>
+<hr />
+<h2 id="2-diagrammes-de-synthèse-mermaid"><a class="header" href="#2-diagrammes-de-synthèse-mermaid">2. Diagrammes de Synthèse (Mermaid)</a></h2>
+<h3 id="diagramme-0--vue-macro-Épurée-moteurs-threads--orchestrateur"><a class="header" href="#diagramme-0--vue-macro-Épurée-moteurs-threads--orchestrateur">Diagramme 0 : Vue Macro Épurée (Moteurs, Threads &amp; Orchestrateur)</a></h3>
+<p>Ce diagramme synthétique haut niveau valide et affine l'organisation fondamentale de l'application : l'orchestrateur (<code>Simulator</code>) englobe la physique (<code>PE</code>), le rendu (<code>RE</code>) et l'audio (<code>AE</code>), répartis entre le <strong>Thread Principal</strong> (boucle de simulation CPU et contextes GPU) et le <strong>Thread Auxiliaire</strong> (audio temps réel CPAL).</p>
+<pre><code class="language-mermaid">flowchart LR
+    subgraph ORCHESTRATOR ["🕹️ SIMULATOR (Orchestrator Principal)"]
+        direction LR
+
+        subgraph MAIN_THREAD ["🧵 Thread Principal (Main Loop ~60 FPS)"]
+            direction TB
+            PE["&lt;b&gt;PE : Physic Engine&lt;/b&gt;&lt;br/&gt;&lt;i&gt;Generational Arena &amp; Particle Pools (CPU)&lt;/i&gt;"]
+            RE["&lt;b&gt;RE : Renderer Engine&lt;/b&gt;&lt;br/&gt;&lt;i&gt;OpenGL 4.5 AZDO &amp; Persistent Buffers (GPU)&lt;/i&gt;"]
+        end
+
+        subgraph AUX_THREAD ["🎧 Thread Auxiliaire (Audio CPAL)"]
+            AE["&lt;b&gt;AE : Audio Engine&lt;/b&gt;&lt;br/&gt;&lt;i&gt;DSP Temps Réel, HRTF &amp; Spatial Reverb (CPU)&lt;/i&gt;"]
+        end
+
+        %% Communications validées par l'architecture
+        PE -- "&lt;b&gt;Persistent Mapped VBOs&lt;/b&gt;&lt;br/&gt;&lt;i&gt;(Données Particules &amp; Uniforms)&lt;/i&gt;" --&gt; RE
+        PE -- "&lt;b&gt;Canaux Lock-Free&lt;/b&gt;&lt;br/&gt;&lt;i&gt;(PlayRequest &amp; DopplerEvent)&lt;/i&gt;" --&gt; AE
+        AE -. "&lt;b&gt;Recyclage Arc&lt;/b&gt;&lt;br/&gt;&lt;i&gt;(Garbage Queue)&lt;/i&gt;" .-&gt; PE
+    end
+
+    classDef peNode fill:#1e293b,stroke:#38bdf8,stroke-width:2px,color:#f8fafc;
+    classDef reNode fill:#1e293b,stroke:#34d399,stroke-width:2px,color:#f8fafc;
+    classDef aeNode fill:#1e293b,stroke:#fbbf24,stroke-width:2px,color:#f8fafc;
+    classDef mainBox fill:#0f172a,stroke:#475569,stroke-width:2px,stroke-dasharray: 4 4,color:#cbd5e1;
+    classDef auxBox fill:#0f172a,stroke:#d97706,stroke-width:2px,stroke-dasharray: 4 4,color:#cbd5e1;
+    classDef orchBox fill:#020617,stroke:#64748b,stroke-width:2px,color:#cbd5e1;
+
+    class PE peNode;
+    class RE reNode;
+    class AE aeNode;
+    class MAIN_THREAD mainBox;
+    class AUX_THREAD auxBox;
+    class ORCHESTRATOR orchBox;
+</code></pre>
+<hr />
+<h3 id="diagramme-1--vue-darchitecture-détaillée-des-threads-swimlanes"><a class="header" href="#diagramme-1--vue-darchitecture-détaillée-des-threads-swimlanes">Diagramme 1 : Vue d'Architecture Détaillée des Threads (Swimlanes)</a></h3>
+<p>Ce diagramme illustre l'isolation fine des trois moteurs dans leurs threads respectifs, ainsi que les points de contact inter-threads.</p>
+<pre><code class="language-mermaid">graph TB
+    subgraph MAIN_THREAD["Main Thread (Simulation &amp; Render Loop ~60-144 FPS)"]
+        direction TB
+        SIM["Simulator (Loop Main)"]
+        WENGINE["Window Engine (GLFW / Events / ImGui)"]
+        PHYSIC["Physic Engine (Generational Arena / Particle Pools)"]
+        RENDER["Renderer Engine (AZDO Persistent Mapped Buffers)"]
+        
+        SIM --&gt; WENGINE
+        SIM --&gt; PHYSIC
+        SIM --&gt; RENDER
+    end
+
+    subgraph AUDIO_THREAD["CPAL Audio DSP Thread (Real-Time SCHED_FIFO ~172 Hz / 5.8ms)"]
+        direction TB
+        CPAL_CB["CPAL Audio Callback (dsp_processor.process_block)"]
+        VOICES["Voice Allocation &amp; Spatialization (Binaural HRTF / Doppler)"]
+        DSP_BUS["DSP Bus &amp; Spatial Reverb (FDN Reverb)"]
+        
+        CPAL_CB --&gt; VOICES
+        VOICES --&gt; DSP_BUS
+    end
+
+    subgraph GPU_HW["Hardware GPU (OpenGL Driver &amp; Framebuffer)"]
+        direction TB
+        GPU_EXEC["Display Rasterization &amp; Post-Processing (Bloom Ping-Pong)"]
+    end
+
+    %% Communication Channels
+    PHYSIC -- "1. PlayRequest (bounded 512)" --&gt; CPAL_CB
+    PHYSIC -- "2. DopplerEvent (bounded 8192)" --&gt; CPAL_CB
+    SIM -- "3. Listener Pos (Arc AtomicVec2)" --&gt; CPAL_CB
+    SIM -- "4. DSP Flags (Arc AudioEffectFlags)" --&gt; CPAL_CB
+    CPAL_CB -- "5. Garbage Arc Recycling (bounded 1024)" --&gt; SIM
+    CPAL_CB -- "6. Telemetry Debug Events (bounded 2048)" --&gt; SIM
+    RENDER -- "7. OpenGL Commands &amp; WC Buffers" --&gt; GPU_HW
+</code></pre>
+<hr />
+<h3 id="diagramme-2--canaux-de-communication--primitives-lock-free"><a class="header" href="#diagramme-2--canaux-de-communication--primitives-lock-free">Diagramme 2 : Canaux de Communication &amp; Primitives Lock-Free</a></h3>
+<p>Ce diagramme montre précisément le fonctionnement des structures de données et des primitives de synchronisation entre le Main Thread et le Thread Audio.</p>
+<pre><code class="language-mermaid">classDiagram
+    class MainThread {
+        +PhysicEngineFireworks
+        +Renderer
+        +update(dt)
+        +enqueue_sound()
+        +reclaim_audio_garbage()
+    }
+
+    class AudioThread {
+        +DspProcessor
+        +process_block(data)
+        +update_doppler()
+        +mix_voices()
+    }
+
+    class PlayQueue {
+        +PlayRequest
+    }
+
+    class DopplerQueue {
+        +DopplerEvent
+    }
+
+    class GarbageQueue {
+        +Arc_AudioData
+    }
+
+    class DebugQueue {
+        +AudioDebugEvent
+    }
+
+    class SharedAtomics {
+        +listener_pos: Arc_AtomicVec2
+        +effect_flags: Arc_AudioEffectFlags
+        +reverb_wet: Arc_AtomicU32
+        +running_pair: Arc_Mutex_Condvar
+    }
+
+    MainThread ..&gt; PlayQueue : push try_send()
+    MainThread ..&gt; DopplerQueue : push try_send()
+    MainThread ..&gt; SharedAtomics : write store
+    PlayQueue ..&gt; AudioThread : pop try_recv()
+    DopplerQueue ..&gt; AudioThread : pop try_recv()
+    SharedAtomics ..&gt; AudioThread : read load
+    AudioThread ..&gt; GarbageQueue : push try_send()
+    AudioThread ..&gt; DebugQueue : push try_send()
+    GarbageQueue ..&gt; MainThread : pop try_recv()
+    DebugQueue ..&gt; MainThread : pop try_recv()
+</code></pre>
+<hr />
+<h3 id="diagramme-3--séquence-temporelle--découplage-des-boucles"><a class="header" href="#diagramme-3--séquence-temporelle--découplage-des-boucles">Diagramme 3 : Séquence Temporelle &amp; Découplage des Boucles</a></h3>
+<p>Ce diagramme de séquence chronologique illustre comment la boucle de rendu et la boucle audio s'exécutent en parallèle de manière totalement asynchrone.</p>
+<pre><code class="language-mermaid">sequenceDiagram
+    autonumber
+    participant M as Main Thread (60 FPS ~16.6ms)
+    participant P as Physic Engine
+    participant R as Renderer (OpenGL)
+    participant C as Crossbeam Channels
+    participant A as CPAL Audio Thread (172 Hz ~5.8ms)
+    participant G as Hardware GPU
+
+    note over M,G: --- Trame N (Main Thread) ---
+    M-&gt;&gt;P: update(dt) : mise à jour particules &amp; fusées
+    P-&gt;&gt;C: Push DopplerEvent (Pos, Vel) &amp; PlayRequest (Tir/Explosion)
+    M-&gt;&gt;M: reclaim_audio_garbage() (Drop des Arc audio terminés)
+    M-&gt;&gt;R: render() : écriture Persistent Mapped VBOs
+    R-&gt;&gt;G: glDrawArraysInstanced() / SwapBuffers
+    
+    par Traitement Audio Temps Réel Asynchrone
+        A-&gt;&gt;C: Pop PlayRequest &amp; DopplerEvent (try_recv non-bloquant)
+        A-&gt;&gt;A: Mixage des voix (Binaural HRTF + Doppler + Spatial Reverb)
+        A-&gt;&gt;A: Écriture PCM dans buffer matériel CPAL (256 frames)
+        A-&gt;&gt;C: Push Arc terminés dans GarbageQueue
+        A-&gt;&gt;C: Push Telemetry dans DebugQueue
+    and Rendu GPU Asynchrone
+        G-&gt;&gt;G: Rendu des VBOs &amp; Post-process Bloom (Ping-Pong FBO)
+    end
+
+    note over M,G: --- Trame N+1 (Main Thread) ---
+    M-&gt;&gt;P: update(dt)
+</code></pre>
+<hr />
+<h2 id="3-détail-des-moteurs-et-de-leur-thread-dappartenance"><a class="header" href="#3-détail-des-moteurs-et-de-leur-thread-dappartenance">3. Détail des Moteurs et de leur Thread d'Appartenance</a></h2>
+<h3 id="a-thread-principal-main--simulation--render-loop"><a class="header" href="#a-thread-principal-main--simulation--render-loop">A. Thread Principal (Main / Simulation / Render Loop)</a></h3>
+<ul>
+<li><strong>Localisation du code</strong> : <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/main.rs">src/main.rs</a>, <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs">src/simulator.rs</a>, et ses sous-modules dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/">src/simulator/</a></li>
+<li><strong>Architecture de l'Orchestrateur</strong> : Afin d'éviter le couplage fort et la surcharge de <code>src/simulator.rs</code> (allégé à ~440 lignes), l'orchestrateur délègue désormais ses composants à des sous-modules autonomes dans le dossier <code>src/simulator/</code> (SoC) :
+<ul>
+<li><a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/audio_stress_scene.rs">src/simulator/audio_stress_scene.rs</a> : Gère toute la logique interactive, la cinématique, les statistiques et le dessin GPU de la scène de stress.</li>
+<li><a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/console_commands/">src/simulator/console_commands/</a> : Enregistre à l'initialisation l'intégralité des commandes de la console interactive, divisée de manière modulaire (Audio, Physique, Renderer).</li>
+<li><a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/ui.rs">src/simulator/ui.rs</a> : Contient le rendu de l'interface utilisateur ImGui (dashboard de diagnostics, logs d'événements et console).</li>
+<li><a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/events.rs">src/simulator/events.rs</a> : Centralise la gestion des événements de la fenêtre GLFW (redimensionnement, plein écran, mode curseur) et le traitement des messages de débogage de l'AudioEngine.</li>
+</ul>
+</li>
+<li><strong>Rôle</strong> :
+<ul>
+<li><strong>Gestion de la Fenêtre &amp; Entrées</strong> : Traitement des événements GLFW (clavier, souris) et rendu de l'interface utilisateur ImGui.</li>
+<li><strong>Exécution du Moteur Physique</strong> (<a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/physic_engine_generational_arena.rs">src/physic_engine/physic_engine_generational_arena.rs</a>) : Mise à jour de la <code>GenerationalArena&lt;Rocket&gt;</code>, des pools de particules (<code>ParticlesPoolsForRockets</code>) et du système de fumée (<code>SmokeSystem</code>).</li>
+<li><strong>Transmission des Événements Audio</strong> : Génération des requêtes de son (<code>play_rocket</code>, <code>play_explosion</code>) et diffusion de la position/vitesse des fusées activement suivies dans la <code>DopplerQueue</code>.</li>
+<li><strong>Collecte des Déchets Audio Mémoire</strong> : Vidage de la <code>GarbageQueue</code> pour détruire les références <code>Arc&lt;Vec&lt;[f32; 2]&gt;&gt;</code> libérées par l'audio hors du thread critique audio.</li>
+<li><strong>Pilotage du Renderer</strong> (<a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/renderer.rs">src/renderer_engine/renderer.rs</a>) : Transfert des données de particules vers les buffers VBO mappés de manière persistante (AZDO) et émission des commandes de dessin OpenGL.</li>
+</ul>
+</li>
+</ul>
+<h3 id="b-thread-audio-cpal-real-time-dsp-callback"><a class="header" href="#b-thread-audio-cpal-real-time-dsp-callback">B. Thread Audio CPAL (Real-Time DSP Callback)</a></h3>
+<ul>
+<li><strong>Localisation du code</strong> : <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs">src/audio_engine/fireworks_audio.rs</a>, <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs">src/audio_engine/dsp_processor.rs</a> (avec tests isolés dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor/tests.rs">src/audio_engine/dsp_processor/tests.rs</a>)</li>
+<li><strong>Rôle</strong> :
+<ul>
+<li><strong>Nom du Thread &amp; Priorité</strong> : Nommé <code>cpal_audio_dsp</code> / <code>CPAL Audio Callback</code>. Configuré sous Linux en priorité temps réel FIFO (<code>libc::SCHED_FIFO</code> priorité 20, ou fallback <code>nice -20</code>).</li>
+<li><strong>Traitement de Bloc Audio (<code>process_block</code>)</strong> : Exécuté à l'interruption matérielle de la carte son (ex: toutes les 5.8 ms pour 256 échantillons à 44.1 kHz).</li>
+<li><strong>Zero-Allocation Hot Path</strong> : Aucune allocation mémoire sur le tas (no <code>malloc</code>/<code>Vec::new</code>) dans le callback.</li>
+<li><strong>Calculs DSP &amp; Spacialisation 3D</strong> :
+<ul>
+<li>Dépilage non-bloquant des requêtes et événements (<code>try_recv</code>).</li>
+<li>Interpolation des positions/vitesses et calcul du pitch Doppler.</li>
+<li>Traitement binaural HRTF.</li>
+<li>Application de la réverbération spatiale FDN (<em>Feedback Delay Network</em>).</li>
+<li>Envoi des pointeurs <code>Arc</code> expirés vers le Main Thread via la <code>GarbageQueue</code>.</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<h3 id="c-pipeline-de-rendu-gpu-contexte-opengl--matériel"><a class="header" href="#c-pipeline-de-rendu-gpu-contexte-opengl--matériel">C. Pipeline de Rendu GPU (Contexte OpenGL &amp; Matériel)</a></h3>
+<ul>
+<li><strong>Localisation du code</strong> : <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/renderer_graphics_instanced.rs">src/renderer_engine/renderer_graphics_instanced.rs</a></li>
+<li><strong>Rôle</strong> :
+<ul>
+<li><strong>Contexte OpenGL 4.5</strong> : Détenu et piloté par le Main Thread.</li>
+<li><strong>AZDO &amp; Persistent Mapping</strong> : Buffers VBO/UBO mappés en mémoire hôte avec pointeurs persistants.</li>
+<li><strong>Triple Buffering &amp; Fences</strong> : Découplage de l'écriture CPU et de la lecture GPU pour éviter tout <em>stall</em> de la boucle de rendu.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="4-mécanismes-de-communication-inter-threads-ipc"><a class="header" href="#4-mécanismes-de-communication-inter-threads-ipc">4. Mécanismes de Communication Inter-Threads (IPC)</a></h2>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Canaux / Variable Shared</th><th style="text-align: left">Type de Structure</th><th style="text-align: left">Directivité</th><th style="text-align: left">Description &amp; Rôle</th></tr></thead><tbody>
+<tr><td style="text-align: left"><code>play_tx</code> / <code>play_rx</code></td><td style="text-align: left"><code>crossbeam_channel::bounded(512)</code></td><td style="text-align: left">Main -&gt; Audio</td><td style="text-align: left">Canal Lock-free SPSC/MPMC des requêtes de son (<code>PlayRequest</code>). Transmet un <code>Arc</code> du buffer audio wave sans copie de données.</td></tr>
+<tr><td style="text-align: left"><code>doppler_sender</code> / <code>receiver</code></td><td style="text-align: left"><code>crossbeam_channel::bounded(8192)</code></td><td style="text-align: left">Physic -&gt; Audio</td><td style="text-align: left">Queue Lock-free des événements de déplacement (<code>DopplerEvent</code>). Transmet la position, vitesse et gain de chaque fusée à chaque frame.</td></tr>
+<tr><td style="text-align: left"><code>garbage_tx</code> / <code>garbage_rx</code></td><td style="text-align: left"><code>crossbeam_channel::bounded(1024)</code></td><td style="text-align: left">Audio -&gt; Main</td><td style="text-align: left">Canal de recyclage mémoire. L'audio y pousse les <code>Arc</code> terminés pour que le Main Thread effectue la désallocation.</td></tr>
+<tr><td style="text-align: left"><code>debug_tx</code> / <code>debug_rx</code></td><td style="text-align: left"><code>crossbeam_channel::bounded(2048)</code></td><td style="text-align: left">Audio -&gt; Main</td><td style="text-align: left">Telemétrie et diagnostique audio (latence, sons joués, sons dropped par file pleine).</td></tr>
+<tr><td style="text-align: left"><code>listener_pos</code></td><td style="text-align: left"><code>Arc&lt;AtomicVec2&gt;</code></td><td style="text-align: left">Main -&gt; Audio</td><td style="text-align: left">Position 2D de l'écouteur partagée de manière atomique (Lock-free bitwise float).</td></tr>
+<tr><td style="text-align: left"><code>effect_flags</code></td><td style="text-align: left"><code>Arc&lt;AudioEffectFlags&gt;</code></td><td style="text-align: left">Main -&gt; Audio</td><td style="text-align: left">Masque binaire d'octets atomique (<code>AtomicU32</code>) permettant l'activation/désactivation dynamique des filtres DSP depuis l'UI sans lock.</td></tr>
+<tr><td style="text-align: left"><code>reverb_wet</code></td><td style="text-align: left"><code>Arc&lt;AtomicU32&gt;</code></td><td style="text-align: left">Main -&gt; Audio</td><td style="text-align: left">Réglage atomique du niveau Wet de la réverbération spatiale.</td></tr>
+<tr><td style="text-align: left"><code>running_pair</code></td><td style="text-align: left"><code>Arc&lt;(Mutex&lt;bool&gt;, Condvar)&gt;</code></td><td style="text-align: left">Main &lt;-&gt; Audio</td><td style="text-align: left">Synchronisation de démarrage et signal d'arrêt propre du thread audio lors du shutdown de l'application.</td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="5-stratégies-de-synchronisation-et-gestion-des-risques-temps-réel"><a class="header" href="#5-stratégies-de-synchronisation-et-gestion-des-risques-temps-réel">5. Stratégies de Synchronisation et Gestion des Risques Temps Réel</a></h2>
+<ol>
+<li><strong>Garantie Temps Réel Audio (Zero Lock Contention)</strong> :
+<ul>
+<li>Le callback audio CPAL n'utilise <strong>aucun Mutex ni Lock</strong> sur le chemin critique de traitement audio. Toutes les lectures de paramètres de configuration se font via des primitives atomiques (<code>AtomicU32</code>, <code>AtomicVec2</code>, <code>AudioEffectFlags</code>).</li>
+</ul>
+</li>
+<li><strong>Débordement de File (Graceful Degradation)</strong> :
+<ul>
+<li>En cas d'émission massive de sons sur une seule trame, le canal <code>play_tx</code> (borné à 512) utilise <code>try_send()</code>. Si la file est pleine, l'événement est rejeté et comptabilisé dans les statistiques <code>audio_dropped</code>, évitant tout blocage du moteur physique ou du moteur audio.</li>
+</ul>
+</li>
+<li><strong>Nettoyage de Mémoire Déporté (Garbage Collector Pattern)</strong> :
+<ul>
+<li>Lorsqu'une voix audio termine sa lecture, la désallocation du pointeur <code>Arc&lt;Vec&lt;[f32; 2]&gt;&gt;</code> pourrait déclencher un appel <code>free()</code> potentiellement bloquant sur le thread audio. Le moteur audio transfère la propriété de l'Arc à la <code>GarbageQueue</code>, permettant au Main Thread d'exécuter la libération mémoire lors de son propre passage dans la boucle de trame.</li>
+</ul>
+</li>
+<li><strong>Synchronisation CPU-GPU (AZDO Triple Buffering)</strong> :
+<ul>
+<li>Le moteur de rendu graphique découpe ses VBOs persistent en 3 anneaux (Triple Buffering). Pendant que le GPU lit l'anneau <code>N</code>, le CPU prépare et écrit l'anneau <code>(N+1) % 3</code> via des accès Write-Combining non bloquants.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<p><em>Documentation générée pour la spécification technique des moteurs <code>rust-firework</code>.</em></p>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="20260724_documentation_linting_pipeline.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="physic_memory_management.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="20260724_documentation_linting_pipeline.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="physic_memory_management.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
