@@ -81,15 +81,53 @@ impl RendererGraphicsInstanced {
             }
         }
     }
+    /// Libère le mapping persistant du VBO particules, puis supprime les VAOs et les VBOs
+    /// particules + quad.
+    ///
+    /// Cette fonction centralise la séquence critique :
+    ///   1. `UnmapBuffer` sur `vbo_particles` (persistently mapped — obligatoire avant delete)
+    ///   2. `DeleteVertexArrays` (3 VAOs triple-buffer)
+    ///   3. `DeleteBuffers` pour `vbo_particles` et `vbo_quad`
+    ///
+    /// Note : `vbo_quad` est un buffer statique non-mappé ; il ne nécessite pas d'`UnmapBuffer`.
+    ///
+    /// Elle est appelée par [`recreate_buffers`] ET [`close`] pour garantir que les deux
+    /// chemins appliquent exactement le même protocole — évitant toute divergence future.
+    ///
+    /// # Safety
+    /// Le contexte OpenGL doit être valide et actif.
+    unsafe fn release_particle_buffers(&mut self) {
+        // Unmap the persistent buffer BEFORE deleting it (required by OpenGL spec /
+        // ARB_buffer_storage): deleting a mapped buffer is undefined behavior.
+        // Note: vbo_quad is a static (non-mapped) buffer; no unmap needed for it.
+        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::UnmapBuffer(gl::ARRAY_BUFFER);
+            self.mapped_ptr = std::ptr::null_mut();
+        }
+        if self.vaos[0] != 0 {
+            gl::DeleteVertexArrays(3, self.vaos.as_ptr());
+            self.vaos = [0; 3];
+        }
+        if self.vbo_particles != 0 {
+            gl::DeleteBuffers(1, &self.vbo_particles);
+            self.vbo_particles = 0;
+        }
+        if self.vbo_quad != 0 {
+            gl::DeleteBuffers(1, &self.vbo_quad);
+            self.vbo_quad = 0;
+        }
+    }
+
     /// Recrée les buffers GPU avec une nouvelle taille maximale.
-    /// Cette opération libère les anciens buffers et en crée de nouveaux,
-    /// puis met à jour les champs internes de la structure.
+    /// Cette opération libère les anciens buffers via [`release_particle_buffers`]
+    /// et en crée de nouveaux, puis met à jour les champs internes.
     ///
     /// # Safety
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn recreate_buffers(&mut self, new_max: usize) {
-        // Libérer les anciens fences et reset l'index de frame
+        // 1. Libérer les fences et reset l'index de frame
         for fence in self.fences.iter_mut() {
             if let Some(sync) = fence.take() {
                 gl::DeleteSync(sync);
@@ -97,21 +135,31 @@ impl RendererGraphicsInstanced {
         }
         self.current_frame = 0;
 
-        // 1. Libérer les anciens buffers
-        gl::DeleteVertexArrays(3, self.vaos.as_ptr());
-        gl::DeleteBuffers(1, &self.vbo_particles);
-        gl::DeleteBuffers(1, &self.vbo_quad);
+        // 2. Libérer les anciens buffers (unmap + delete) via la fonction partagée
+        self.release_particle_buffers();
 
-        // 2. Recréer avec la nouvelle taille
+        // 3. Recréer avec la nouvelle taille
         let (vaos, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
             RendererGraphicsInstanced::setup_gpu_buffers(new_max);
 
-        // 3. Mettre à jour les champs
+        // 4. Mettre à jour les champs
         self.vaos = vaos;
         self.vbo_particles = vbo_particles;
         self.vbo_quad = vbo_quad;
         self.mapped_ptr = mapped_ptr;
         self.max_particles_on_gpu = new_max;
+    }
+
+    /// Retourne `true` si le buffer de particules est actuellement mappé en mémoire CPU.
+    /// Utilisé principalement par les tests pour vérifier les invariants de lifecycle GPU.
+    pub fn is_mapped(&self) -> bool {
+        !self.mapped_ptr.is_null()
+    }
+
+    /// Retourne la capacité maximale actuelle du buffer GPU (nombre de particules).
+    /// Utilisé principalement par les tests pour vérifier la bonne mise à jour après `recreate_buffers`.
+    pub fn max_particles(&self) -> usize {
+        self.max_particles_on_gpu
     }
 
     /// Remplit directement le buffer GPU mappé avec les particules du type spécifié.
@@ -249,25 +297,9 @@ impl RendererGraphicsInstanced {
             }
         }
 
-        // Unmap the persistent buffer BEFORE deleting it
-        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
-            gl::UnmapBuffer(gl::ARRAY_BUFFER);
-            self.mapped_ptr = std::ptr::null_mut();
-        }
+        // Libérer les buffers particules (unmap + delete) via la fonction partagée
+        self.release_particle_buffers();
 
-        if self.vbo_particles != 0 {
-            gl::DeleteBuffers(1, &self.vbo_particles);
-            self.vbo_particles = 0;
-        }
-        if self.vbo_quad != 0 {
-            gl::DeleteBuffers(1, &self.vbo_quad);
-            self.vbo_quad = 0;
-        }
-        if self.vaos[0] != 0 {
-            gl::DeleteVertexArrays(3, self.vaos.as_ptr());
-            self.vaos = [0; 3];
-        }
         if self.texture_id != 0 {
             gl::DeleteTextures(1, &self.texture_id);
             self.texture_id = 0;
@@ -499,5 +531,13 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
 
     unsafe fn close(&mut self) {
         self.close();
+    }
+}
+
+impl Drop for RendererGraphicsInstanced {
+    fn drop(&mut self) {
+        unsafe {
+            self.close();
+        }
     }
 }
