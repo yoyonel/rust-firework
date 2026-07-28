@@ -1,4 +1,4 @@
-résumé clair des gains et avantages à utiliser generational-arena par rapport à ton approche legacy (Vec<Rocket> + active_indices + free_indices) :
+résumé clair des gains et avantages à utiliser generational-arena par rapport à ton approche legacy (`Vec<Rocket>` + active_indices + free_indices) :
 
 1️⃣ Gestion automatique des slots
 
