@@ -265,6 +265,14 @@ impl PhysicEngine for PhysicEngineFireworks {
     fn reload_config(&mut self, config: &PhysicConfig) -> bool {
         self.reload_config(config)
     }
+
+    fn get_config(&self) -> &PhysicConfig {
+        &self.config
+    }
+
+    fn get_config_mut(&mut self) -> &mut PhysicConfig {
+        &mut self.config
+    }
 }
 
 #[cfg(any(test, feature = "test_helpers"))]

@@ -1,4 +1,5 @@
 use fireworks_sim::utils::command_console::{CommandRegistry, HistoryCursor, SelectionCycler};
+use fireworks_sim::PhysicEngine;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -359,6 +360,220 @@ fn test_console_audio_fx_all() {
         .log
         .borrow()
         .contains(&"set_all_effects_enabled called: false".to_string()));
+}
+
+#[test]
+fn test_physic_config_setters_and_apply() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut audio = TestAudio::new(log.clone());
+    let mut physic = TestPhysic::new(log.clone());
+    let mut registry = CommandRegistry::default();
+
+    macro_rules! reg_usize_param {
+        ($registry:expr, $name:expr, $field:ident) => {
+            $registry.register_for_physic($name, |engine, args| {
+                let val_str = args.split_whitespace().nth(1).unwrap_or("");
+                if val_str.is_empty() {
+                    let applied = engine.get_config().$field;
+                    let pending = engine.get_config_mut().$field;
+                    return format!(
+                        "Usage: {} <value> (applied: {}, pending: {})",
+                        $name, applied, pending
+                    );
+                }
+                match val_str.parse::<usize>() {
+                    Ok(val) => {
+                        engine.get_config_mut().$field = val;
+                        format!(
+                            "-> Set {} = {} (pending, run 'physic.apply' to apply)",
+                            $name, val
+                        )
+                    }
+                    Err(_) => "x Invalid unsigned integer value".to_string(),
+                }
+            });
+        };
+    }
+
+    reg_usize_param!(registry, "physic.max_rockets", max_rockets);
+
+    // Initial check (no args)
+    let res = registry.execute(&mut audio, &mut physic, "physic.max_rockets");
+    assert!(res.contains("Usage:"));
+    assert!(res.contains("applied:"));
+
+    // Set value (pending)
+    let res2 = registry.execute(&mut audio, &mut physic, "physic.max_rockets 2048");
+    assert!(res2.contains("-> Set"));
+    assert!(res2.contains("pending"));
+    assert_eq!(physic.get_config_mut().max_rockets, 2048);
+}
+
+#[test]
+fn test_physic_config_all_commands_behavior() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut audio = TestAudio::new(log.clone());
+    let mut physic = TestPhysic::new(log.clone());
+    let mut registry = CommandRegistry::default();
+
+    let reinit_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let reinit_requested_clone = reinit_requested.clone();
+    registry.register_for_physic("physic.apply", move |engine, _| {
+        let pending = engine.get_config_mut().clone();
+        let _updated = engine.reload_config(&pending);
+        reinit_requested_clone.store(true, std::sync::atomic::Ordering::Relaxed);
+        "applied".to_string()
+    });
+
+    registry.register_for_physic("physic.config", |engine, _| {
+        let current = engine.get_config().clone();
+        let pending = engine.get_config_mut().clone();
+        if current == pending {
+            format!("applied: {:#?}", current)
+        } else {
+            format!("applied: {:#?}, pending: {:#?}", current, pending)
+        }
+    });
+
+    macro_rules! reg_usize_param_test {
+        ($registry:expr, $name:expr, $field:ident) => {
+            $registry.register_for_physic($name, |engine, args| {
+                let val_str = args.split_whitespace().nth(1).unwrap_or("");
+                if val_str.is_empty() {
+                    let applied = engine.get_config().$field;
+                    let pending = engine.get_config_mut().$field;
+                    return format!(
+                        "Usage: {} (applied: {}, pending: {})",
+                        $name, applied, pending
+                    );
+                }
+                match val_str.parse::<usize>() {
+                    Ok(val) => {
+                        engine.get_config_mut().$field = val;
+                        format!("set pending")
+                    }
+                    Err(_) => "error".to_string(),
+                }
+            });
+        };
+    }
+
+    macro_rules! reg_f32_param_test {
+        ($registry:expr, $name:expr, $field:ident) => {
+            $registry.register_for_physic($name, |engine, args| {
+                let val_str = args.split_whitespace().nth(1).unwrap_or("");
+                if val_str.is_empty() {
+                    let applied = engine.get_config().$field;
+                    let pending = engine.get_config_mut().$field;
+                    return format!(
+                        "Usage: {} (applied: {}, pending: {})",
+                        $name, applied, pending
+                    );
+                }
+                match val_str.parse::<f32>() {
+                    Ok(val) => {
+                        engine.get_config_mut().$field = val;
+                        format!("set pending")
+                    }
+                    Err(_) => "error".to_string(),
+                }
+            });
+        };
+    }
+
+    reg_usize_param_test!(registry, "physic.max_rockets", max_rockets);
+    reg_f32_param_test!(registry, "physic.gravity", gravity);
+
+    // 1. Initial State
+    let conf_out = registry.execute(&mut audio, &mut physic, "physic.config");
+    assert!(conf_out.contains("applied:"));
+    assert!(!conf_out.contains("pending:"));
+
+    // 2. Set Usize Pending
+    let res = registry.execute(&mut audio, &mut physic, "physic.max_rockets 256");
+    assert_eq!(res, "set pending");
+    assert_eq!(physic.get_config_mut().max_rockets, 256);
+
+    // 3. Set F32 Pending
+    let res = registry.execute(&mut audio, &mut physic, "physic.gravity -9.81");
+    assert_eq!(res, "set pending");
+    assert_eq!(physic.get_config_mut().gravity, -9.81);
+
+    // 4. Check Config Show Differences
+    let conf_out2 = registry.execute(&mut audio, &mut physic, "physic.config");
+    assert!(conf_out2.contains("applied:"));
+    assert!(conf_out2.contains("pending:"));
+
+    // 5. Check Invalid Usize
+    let res_err = registry.execute(&mut audio, &mut physic, "physic.max_rockets abc");
+    assert_eq!(res_err, "error");
+
+    // 6. Check Invalid Float
+    let res_err2 = registry.execute(&mut audio, &mut physic, "physic.gravity abc");
+    assert_eq!(res_err2, "error");
+
+    // 7. Apply Changes
+    let res_apply = registry.execute(&mut audio, &mut physic, "physic.apply");
+    assert_eq!(res_apply, "applied");
+    assert!(reinit_requested.load(std::sync::atomic::Ordering::Relaxed));
+}
+
+#[test]
+fn test_physic_config_save_and_reload_commands() {
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let mut audio = TestAudio::new(log.clone());
+    let mut physic = TestPhysic::new(log.clone());
+    let mut registry = CommandRegistry::default();
+
+    let reinit_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+
+    let reinit_flag_reload = reinit_requested.clone();
+    registry.register_for_physic("physic.config.save", |engine, _| {
+        let current = engine.get_config();
+        match current.save_to_file("/tmp/test_physic_save.toml") {
+            Ok(_) => "saved".to_string(),
+            Err(e) => format!("error: {}", e),
+        }
+    });
+
+    registry.register_for_physic("physic.config.reload", move |engine, _| {
+        match fireworks_sim::physic_engine::PhysicConfig::from_file("/tmp/test_physic_save.toml") {
+            Ok(new_cfg) => {
+                *engine.get_config_mut() = new_cfg.clone();
+                engine.reload_config(&new_cfg);
+                reinit_flag_reload.store(true, std::sync::atomic::Ordering::Relaxed);
+                "reloaded".to_string()
+            }
+            Err(e) => format!("error: {}", e),
+        }
+    });
+
+    // Set applied config to test values
+    physic.config.max_rockets = 1024;
+    physic.config.explosion_min_vel = 75.0;
+    physic.pending_config = physic.config.clone();
+
+    // Save config
+    let res_save = registry.execute(&mut audio, &mut physic, "physic.config.save");
+    assert_eq!(res_save, "saved");
+
+    // Reset memory config to defaults
+    physic.config.max_rockets = 64;
+    physic.config.explosion_min_vel = 10.0;
+    physic.pending_config = physic.config.clone();
+
+    // Reload config from file
+    let res_reload = registry.execute(&mut audio, &mut physic, "physic.config.reload");
+    assert_eq!(res_reload, "reloaded");
+
+    // Verify restored values
+    assert_eq!(physic.get_config().max_rockets, 1024);
+    assert_eq!(physic.get_config().explosion_min_vel, 75.0);
+    assert!(reinit_requested.load(std::sync::atomic::Ordering::Relaxed));
+
+    // Cleanup temp file
+    let _ = std::fs::remove_file("/tmp/test_physic_save.toml");
 }
 
 // ============================================================================
