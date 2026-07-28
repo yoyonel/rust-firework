@@ -1,0 +1,658 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Asservissement en Boucle Fermée &amp; Anticipation Audio (Time-Shifting) - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
+        
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">1.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html"><strong aria-hidden="true">2.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">3.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">3.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html" class="active"><strong aria-hidden="true">4.1.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html"><strong aria-hidden="true">4.2.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">4.3.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">4.4.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">4.5.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">4.6.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">4.7.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">4.8.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">4.9.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">4.10.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">5.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">5.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">5.3.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">6.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">6.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">6.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">6.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">6.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">6.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">6.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">6.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">6.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">6.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">6.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">6.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">6.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">7.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="rapport-technique--synchronisation-audio-visuelle-par-anticipation-temporelle-et-asservissement-en-boucle-fermée"><a class="header" href="#rapport-technique--synchronisation-audio-visuelle-par-anticipation-temporelle-et-asservissement-en-boucle-fermée">Rapport Technique : Synchronisation Audio-Visuelle par Anticipation Temporelle et Asservissement en Boucle Fermée</a></h1>
+<h2 id="1-contexte-et-problématique-de-la-latence-audio-temps-réel"><a class="header" href="#1-contexte-et-problématique-de-la-latence-audio-temps-réel">1. Contexte et Problématique de la Latence Audio Temps Réel</a></h2>
+<p>Dans tout moteur de jeu ou application interactive 3D, la synchronisation temporelle entre les stimuli visuels et les événements sonores (dite synchronisation <em>Audio-Video (AV)</em>) est un enjeu critique pour l'immersion. Dans notre application de simulation de feux d'artifice, le départ d'une fusée et le premier instant de son explosion (les <em>onsets</em> de ces événements) doivent coïncider visuellement avec la diffusion du son correspondant.</p>
+<h3 id="le-dilemme-latence-vs-stabilité-xruns"><a class="header" href="#le-dilemme-latence-vs-stabilité-xruns">Le Dilemme Latence vs Stabilité (xruns)</a></h3>
+<p>La latence audio globale d'un système informatique est la somme de plusieurs facteurs :</p>
+<p>Latence Totale = Latence de Dispatch + Latence d'Ordonnancement (Serveur Son) + Latence du Matériel (DAC)</p>
+<ol>
+<li><strong>Latence de Dispatch :</strong> Le temps requis pour communiquer la requête de lecture depuis le thread principal (moteur physique) vers le thread audio via des canaux de communication asynchrones lock-free.</li>
+<li><strong>Latence d'Ordonnancement :</strong> Le serveur audio (PipeWire, PulseAudio ou ALSA) traite le flux par blocs d'échantillons (ex: 20 ms, soit 882 échantillons à 44,1 kHz). Une requête insérée au début d'un cycle ne sera évaluée qu'au cycle suivant.</li>
+<li><strong>Latence Matérielle (DAC) :</strong> Le pilote audio et le convertisseur numérique-analogique (DAC) maintiennent des mémoires tampons matérielles multi-périodes pour éviter les coupures de flux.</li>
+</ol>
+<p><strong>La Contrainte non négociable : Aucun ALSA underrun (xrun).</strong>
+Pour éliminer les coupures sonores (glitches/craquements), nous devons maintenir une taille de bloc matérielle stable de <strong>20 ms</strong>. Réduire cette taille pour diminuer la latence physique surchargerait le processeur d'interruptions système et générerait des underruns sous forte charge de calcul. La latence matérielle est donc incompressible. Les mesures en temps réel de notre application révèlent ainsi un délai moyen de dispatch + ordonnancement d'environ <strong>21 ms</strong>, auquel s'ajoute le tampon matériel (estimé à ~20 ms), donnant une latence de diffusion réelle d'environ <strong>40 à 45 ms</strong>.</p>
+<hr />
+<h2 id="2-stratégie-du-time-shifting-anticipation-temporelle"><a class="header" href="#2-stratégie-du-time-shifting-anticipation-temporelle">2. Stratégie du Time-Shifting (Anticipation Temporelle)</a></h2>
+<p>Plutôt que de chercher à réduire la taille des mémoires tampons matérielles au risque de compromettre la stabilité, nous contournons le problème au niveau logiciel en décalant la chronologie physique par rapport à la chronologie audio.</p>
+<p>Cette méthode consiste à <strong>anticiper</strong> l'instant de déclenchement audio. Si nous savons qu'un événement visuel doit se produire à l'instant T_visuel, et que la latence de diffusion audio est estimée à D_audio, nous envoyons la requête de lecture audio au moteur sonore à l'instant exact :</p>
+<p>T_déclenchement = T_visuel - D_audio</p>
+<p>Le son atteint l'oreille de l'utilisateur précisément à l'instant où l'événement apparaît sur son écran.</p>
+<h3 id="projection-cinématique-indépendante-du-frame-rate"><a class="header" href="#projection-cinématique-indépendante-du-frame-rate">Projection Cinématique Indépendante du Frame Rate</a></h3>
+<p>La simulation physique n'est pas cadencée à un taux fixe de 60 Hz ; elle s'exécute à la fréquence de rafraîchissement de la carte graphique (variable et non bridée, pouvant dépasser 200 FPS). L'anticipation ne peut donc pas se mesurer en nombre de frames, car la durée d'une frame (dt) fluctue constamment.</p>
+<p>L'anticipation est définie par une durée absolue en millisecondes : t_anticip = D_ms / 1000.</p>
+<h4 id="a-anticipation-du-lancement-launch"><a class="header" href="#a-anticipation-du-lancement-launch">A. Anticipation du Lancement (Launch)</a></h4>
+<p>L'intervalle entre les lancements est déterminé par la configuration (I_next). À chaque frame physique, nous avançons le temps accumulé de la fusée <code>time_since_last_rocket += dt</code>. Nous prédisons le lancement imminent si :</p>
+<p>t_rocket + t_launch &gt;= I_next</p>
+<p><em>(où t_rocket est la variable accumulée <code>time_since_last_rocket</code> et t_launch est la valeur d'anticipation de lancement).</em></p>
+<p>Lorsque cette condition est remplie, nous pré-allouons la fusée (détermination de sa position, vitesse, couleur et ID unique), nous déclenchons immédiatement son audio à l'avance, tout en la maintenant inactive visuellement et physiquement (<code>active = false</code>). Elle n'est activée et rendue visible que lorsque <code>time_since_last_rocket</code> franchit réellement le seuil I_next.</p>
+<h4 id="b-anticipation-de-lexplosion"><a class="header" href="#b-anticipation-de-lexplosion">B. Anticipation de l'Explosion</a></h4>
+<p>Une fusée explose lorsque sa vitesse verticale ascendante chute en dessous d'un seuil V_seuil (décélération sous gravité constante g).
+À chaque frame, nous projetons la vitesse future de la fusée dans t_explosion secondes (le paramètre d'anticipation de l'explosion) en utilisant l'équation fondamentale de la dynamique :</p>
+<p>v_future = v_actuelle + g * t_explosion</p>
+<p>Si v_future &lt;= V_seuil, nous anticipons l'explosion. Nous calculons par intégration la position spatiale future exacte où la fusée se situera au moment de son explosion réelle :</p>
+<p>p_future = p_actuelle + v_actuelle * t_explosion + 0.5 * g * t_explosion²</p>
+<p>Nous envoyons la requête sonore d'explosion immédiatement à cette position projetée p_future, et marquons la fusée comme ayant déclenché son alarme audio. L'explosion visuelle et le spawn des particules physiques d'étincelles se produisent t_explosion secondes plus tard à la position réelle de fin de vol.</p>
+<hr />
+<h2 id="3-régulation-dynamique-par-asservissement-en-boucle-fermée-feedback-loop"><a class="header" href="#3-régulation-dynamique-par-asservissement-en-boucle-fermée-feedback-loop">3. Régulation Dynamique par Asservissement en Boucle Fermée (Feedback Loop)</a></h2>
+<h3 id="pourquoi-un-paramètre-danticipation-statique-échoue"><a class="header" href="#pourquoi-un-paramètre-danticipation-statique-échoue">Pourquoi un paramètre d'anticipation statique échoue</a></h3>
+<p>Une valeur statique d'anticipation (ex: 45 ms) n'est pas portable. Elle dépend étroitement :</p>
+<ol>
+<li>Du serveur sonore utilisé (ALSA brut, PulseAudio, ou le graphe dynamique de PipeWire).</li>
+<li>De la charge système et de la latence de réveil (scheduling) des threads de l'OS.</li>
+<li>Des limites imposées par la simulation (par exemple, si l'intervalle entre les fusées est de 25 ms, on ne peut pas anticiper de 45 ms sous peine d'avoir des onsets incohérents).</li>
+</ol>
+<h3 id="architecture-de-la-boucle-dasservissement-contrôleur-pi-amorti"><a class="header" href="#architecture-de-la-boucle-dasservissement-contrôleur-pi-amorti">Architecture de la Boucle d'Asservissement (Contrôleur PI amorti)</a></h3>
+<p>Nous mesurons en temps réel l'erreur de synchronisation pour chaque canal (lancement et explosion) de manière totalement asynchrone :</p>
+<pre><code class="language-mermaid">graph TD
+    A[Moteur Physique] --&gt;|Anticipation| B[Moteur Audio CPAL]
+    B --&gt;|Événement Started matériel| C[process_audio_debug_events]
+    A --&gt;|Spawn Visuel réel| C
+    C --&gt;|Calcul de l'erreur diff_ms| D[Correction Proportionnelle]
+    D --&gt;|Mise à jour en place| A
+</code></pre>
+<p>Lorsqu'un événement audio démarre matériellement au niveau du pilote, l'audio-thread émet un événement diagnostique <code>AudioDebugEvent::Started</code> contenant le timestamp matériel exact du début du bloc sonore (T_started).
+De son côté, le moteur physique enregistre l'instant du spawn visuel (T_spawn).</p>
+<p>L'erreur algébrique de synchronisation (en ms) est définie par :</p>
+<p>e = T_started - T_spawn</p>
+<ul>
+<li><strong>e &gt; 0 :</strong> Le son a démarré <strong>après</strong> l'affichage visuel (l'audio est en retard).</li>
+<li><strong>e &lt; 0 :</strong> Le son a démarré <strong>avant</strong> l'affichage visuel (l'audio est en avance).</li>
+</ul>
+<p>Le régulateur corrige le paramètre d'anticipation (A) en appliquant un gain proportionnel amorti (g = 0.05) pour filtrer le bruit de scheduling et stabiliser le système :</p>
+<p>A_(k+1) = A_k + g * e
+A_(k+1) = clamp(A_(k+1), 0.0, 150.0)</p>
+<h3 id="ajustement-in-place-Évitant-les-effets-de-bord"><a class="header" href="#ajustement-in-place-Évitant-les-effets-de-bord">Ajustement In-Place Évitant les Effets de Bord</a></h3>
+<p>La configuration générale de l'application supporte le rechargement à chaud (Hot-Reload) depuis le disque. Modifier la configuration via un rechargement complet (<code>reload_config</code>) poserait deux problèmes majeurs :</p>
+<ol>
+<li><strong>Réallocation des buffers :</strong> Si des paramètres structurels (comme <code>max_rockets</code>) sont détectés comme modifiés, le moteur réalloue la mémoire graphique et réinitialise les fusées actives, provoquant des saccades.</li>
+<li><strong>Écrasement des modifications en suspens :</strong> Si un utilisateur modifie un paramètre dans la console du jeu (ex: <code>physic.max_rockets 2</code>), ce changement est en attente d'application (<code>pending_config</code>). Recharger toute la configuration via l'asservissement écraserait instantanément les changements en suspens de l'utilisateur avec l'ancienne configuration active.</li>
+</ol>
+<p>Pour résoudre cela, nous avons séparé les canaux et implémenté une mise à jour ciblée en place :</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>fn update_anticipation_times(&amp;mut self, launch_ms: f32, explosion_ms: f32) {
+    self.config.audio_launch_anticipation_ms = launch_ms;
+    self.config.audio_explosion_anticipation_ms = explosion_ms;
+    self.pending_config.audio_launch_anticipation_ms = launch_ms;
+    self.pending_config.audio_explosion_anticipation_ms = explosion_ms;
+}
+<span class="boring">}</span></code></pre></pre>
+<p>L'asservissement modifie uniquement ces deux variables de manière lock-free, sans aucun appel de structure lourd et sans perturber le cycle de vie de la mémoire en suspens.</p>
+<hr />
+<h2 id="4-garanties-de-performance-et-robustesse"><a class="header" href="#4-garanties-de-performance-et-robustesse">4. Garanties de Performance et Robustesse</a></h2>
+<h3 id="résolution-du-borrow-checker-par-migration-de-buffer-stdmemtake"><a class="header" href="#résolution-du-borrow-checker-par-migration-de-buffer-stdmemtake">Résolution du Borrow Checker par Migration de Buffer (<code>std::mem::take</code>)</a></h3>
+<p>Lors du traitement des événements audio en boucle dans le thread principal, le compilateur Rust lève une erreur de prêt (Borrow Checker E0499) car le parcours de la liste d'événements interne (<code>self.audio_events_buf.drain(..)</code>) verrouille mutablement <code>self</code> de manière exclusive, empêchant d'appeler les méthodes de correction <code>self.adjust_launch_anticipation_ms(...)</code> au sein de la boucle.</p>
+<p>Pour éliminer cette restriction sans aucune allocation sur le tas (Heap Allocation), nous déplaçons temporairement le buffer d'événements hors de l'instance en utilisant <code>std::mem::take</code> :</p>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let mut events = std::mem::take(&amp;mut self.audio_events_buf);
+for evt in events.drain(..) {
+    // Le thread principal n'est plus emprunté via audio_events_buf,
+    // nous pouvons appeler librement des méthodes mutables sur self.
+    self.adjust_launch_anticipation_ms(diff_ms);
+}
+// Restauration du vecteur (qui conserve sa capacité mémoire d'origine)
+self.audio_events_buf = events;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="exécution-headless-sous-test-dintégration"><a class="header" href="#exécution-headless-sous-test-dintégration">Exécution Headless sous Test d'Intégration</a></h3>
+<p>Pour valider l'exactitude mathématique de notre boucle fermée sans nécessiter de serveur graphique (X11/Wayland) ou de carte son active, nous avons implémenté :</p>
+<ol>
+<li>Un mock d'ordonnanceur audio (<code>MockFeedbackAudio</code>) simulant un délai matériel artificiel.</li>
+<li>Un garde-fou de sécurité OpenGL dans la console : <code>gl::GenTextures::is_loaded()</code>. Si les pointeurs de fonction OpenGL ne sont pas chargés par la fenêtre (environnement de test unitaire headless), la console évite d'exécuter des appels graphiques qui provoqueraient un crash immédiat.</li>
+<li>Le test d'intégration unitaire compile et prouve la convergence des latences à ±0.3 ms en moins de <strong>1,2 seconde</strong> d'exécution.</li>
+</ol>
+<hr />
+<h2 id="5-références-techniques-et-bibliographie"><a class="header" href="#5-références-techniques-et-bibliographie">5. Références Techniques et Bibliographie</a></h2>
+<p>Les concepts mis en œuvre dans cette architecture s'appuient sur les standards industriels et les publications académiques suivants :</p>
+<ol>
+<li>
+<p><strong>ITU-R BT.1359-1 (Relative timing of sound and vision) :</strong>
+La recommandation officielle de l'Union Internationale des Télécommunications sur la synchronisation son-image. Elle établit les seuils de perception humaine : le son arrivant en avance sur l'image est détectable dès +45 ms (et jugé inacceptable au-delà), tandis que le retard du son (lag) est acceptable jusqu'à +125 ms. L'objectif idéal ciblé par notre asservissement se situe entre 0 et +20 ms (le son arrivant légèrement après le visuel pour simuler la vitesse physique du son).</p>
+<ul>
+<li><em>Lien actif :</em> <a href="https://www.itu.int/rec/R-REC-BT.1359-1-199811-I/en">https://www.itu.int/rec/R-REC-BT.1359-1-199811-I/en</a></li>
+</ul>
+</li>
+<li>
+<p><strong>W3C Audio Output Latency API :</strong>
+La spécification du World Wide Web Consortium détaillant le calcul de la latence de traitement et de rendu des voix sonores dans les navigateurs et applications web interactives modernes.</p>
+<ul>
+<li><em>Lien actif :</em> <a href="https://www.w3.org/TR/audio-output-latency/">https://www.w3.org/TR/audio-output-latency/</a></li>
+</ul>
+</li>
+<li>
+<p><strong>PipeWire Latency and Buffering Design :</strong>
+La documentation d'architecture de PipeWire (le serveur de son standard moderne sous Linux) expliquant le mécanisme de scheduling dynamique par blocs d'échantillons, la gestion de la latence matérielle (quantum) et la synchronisation horloge.</p>
+<ul>
+<li><em>Lien actif :</em> <a href="https://docs.pipewire.org/page_latency.html">https://docs.pipewire.org/page_latency.html</a></li>
+</ul>
+</li>
+<li>
+<p><strong>JACK Audio Connection Kit FAQ on Latency :</strong>
+Une explication claire des formules de calcul de latence nominale et de latence de boucle (périodes, taille de tampon et fréquence d'échantillonnage) dans les systèmes audio temps réel professionnels.</p>
+<ul>
+<li><em>Lien actif :</em> <a href="https://jackaudio.org/faq/latency.html">https://jackaudio.org/faq/latency.html</a></li>
+</ul>
+</li>
+<li>
+<p><strong>Source Multiplayer Networking (Valve Developer Community) :</strong>
+Bien que centré sur le réseau, cet article détaille la projection et la prédiction cinématique d'événements visuels par rapport aux flux asynchrones (principe de compensation temporelle identique à notre gestion de la latence audio).</p>
+<ul>
+<li><em>Lien actif :</em> <a href="https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking">https://developer.valvesoftware.com/wiki/Source_Multiplayer_Networking</a></li>
+</ul>
+</li>
+</ol>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="physic_explosion_shapes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="20260721_audio_diagnostics_underrun_imgui_fixes.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="physic_explosion_shapes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="20260721_audio_diagnostics_underrun_imgui_fixes.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

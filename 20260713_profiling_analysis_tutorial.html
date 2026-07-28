@@ -7,7 +7,290 @@
 
 
         <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
         
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
         <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
@@ -30,6 +313,8 @@
 
         <!-- Custom theme stylesheets -->
 
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     </head>
     <body class="sidebar-visible no-js">
     <div id="body-container">
@@ -88,7 +373,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">4.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">4.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">4.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">4.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">4.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">4.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">4.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">4.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html" class="active"><strong aria-hidden="true">4.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">4.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">1.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html"><strong aria-hidden="true">2.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">3.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">3.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html"><strong aria-hidden="true">4.1.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html"><strong aria-hidden="true">4.2.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">4.3.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">4.4.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">4.5.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">4.6.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">4.7.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">4.8.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">4.9.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">4.10.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">5.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">5.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">5.3.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">6.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">6.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">6.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">6.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">6.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">6.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">6.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">6.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html" class="active"><strong aria-hidden="true">6.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">6.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">6.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">6.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">6.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">7.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>

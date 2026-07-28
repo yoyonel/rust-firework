@@ -1,0 +1,639 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Diagnostics, Atténuation, Résolution d&#x27;Underruns et Rendu GPU - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
+        
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">1.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html"><strong aria-hidden="true">2.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">3.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">3.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html"><strong aria-hidden="true">4.1.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html" class="active"><strong aria-hidden="true">4.2.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">4.3.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">4.4.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">4.5.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">4.6.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">4.7.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">4.8.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">4.9.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">4.10.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">5.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">5.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">5.3.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">6.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">6.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">6.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">6.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">6.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">6.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">6.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">6.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">6.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">6.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">6.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">6.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">6.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">7.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="résolution-des-dysfonctionnements-audio--optimisations-graphiques-du-rendu-diagnostic-21-juillet-2026"><a class="header" href="#résolution-des-dysfonctionnements-audio--optimisations-graphiques-du-rendu-diagnostic-21-juillet-2026">Résolution des Dysfonctionnements Audio &amp; Optimisations Graphiques du Rendu Diagnostic (21 Juillet 2026)</a></h1>
+<p>Ce document récapitule les dysfonctionnements identifiés lors des phases d'évaluation du stress-test audio (128 à 1024 sources) et détaille les solutions techniques implémentées pour résoudre les problèmes d'underruns ALSA, de crash d'indexation ImGui, et de violation d'accès mémoire (Segfault) à la fermeture de l'application.</p>
+<hr />
+<h2 id="-1-correction-du-référentiel-et-panning-stéréo"><a class="header" href="#-1-correction-du-référentiel-et-panning-stéréo">🎧 1. Correction du Référentiel et Panning Stéréo</a></h2>
+<ul>
+<li><strong>Problème</strong> : Lors de la simulation, toutes les sources sonores mobiles semblaient confinées à l'oreille gauche de l'auditeur.</li>
+<li><strong>Cause</strong> : Le moteur physique transmettait les positions absolues des sources à l'écran, tandis que le simulateur calculait la distance par rapport à l'auditeur en soumettant un vecteur déjà relatif, ce qui décalait artificiellement l'origine des coordonnées de spatialisation vers le coin inférieur gauche <code>(0, 0)</code>.</li>
+<li><strong>Résolution</strong> : Les positions absolues à l'écran <code>source.pos</code> sont désormais transmises directement à l'audio-engine. L'alignement géométrique spatialisé et le panning (ITD/ILD) sont parfaitement équilibrés et réactifs gauche/droite.</li>
+</ul>
+<hr />
+<h2 id="-2-Éradication-des-underruns-alsa-snd_pcm_recover"><a class="header" href="#-2-Éradication-des-underruns-alsa-snd_pcm_recover">🔊 2. Éradication des Underruns ALSA (<code>snd_pcm_recover</code>)</a></h2>
+<ul>
+<li><strong>Problème</strong> : Lors de l'explication en mode release, le terminal était inondé d'erreurs <code>ALSA lib pcm.c:8772:(snd_pcm_recover) underrun occurred</code>, altérant la qualité sonore.</li>
+<li><strong>Causes identifiées</strong> :
+<ol>
+<li><strong>Surcharge de messages Doppler</strong> : À 500+ FPS (sans VSync), le moteur physique émettait des mises à jour <code>DopplerEvent</code> à chaque tick graphique, saturant le canal de communication inter-thread et le cache CPU du thread audio.</li>
+<li><strong>Single-Buffering Matériel</strong> : La négociation CPAL imposait une taille fixe de buffer matériel à <code>Fixed(256)</code> échantillons. En l'absence de marge de sécurité, tout décalage d'ordonnancement de 2 à 3 ms (provoqué par les threads de pilotes graphiques ou le compositeur Wayland/X11 à 500 FPS) entraînait une famine de la carte son.</li>
+</ol>
+</li>
+<li><strong>Résolutions implémentées</strong> :
+<ul>
+<li><strong>Throttling Doppler à 144 Hz</strong> : Ajout d'un limiteur temporel dans <code>src/physic_engine/physic_engine_generational_arena.rs</code> pour plafonner l'envoi des événements Doppler à un intervalle minimal de <code>6.94 ms</code> (144 Hz), divisant par 5 le trafic inter-thread.</li>
+<li><strong>Multi-Buffering Matériel via BufferSize::Default</strong> : Modification de <code>get_cpal_config</code> dans <code>src/audio_engine/fireworks_audio.rs</code>. En utilisant le buffer par défaut du système, le serveur audio (PipeWire/PulseAudio/ALSA) alloue un tampon matériel multi-période (ex: 1024 ou 2048 échantillons) offrant une marge de sécurité temporelle robuste face aux pics d'ordonnancement du GPU, sans augmenter la latence ressentie.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="-3-rendu-gpu-instancié-des-cercles-de-diagnostic-bypass-dimgui"><a class="header" href="#-3-rendu-gpu-instancié-des-cercles-de-diagnostic-bypass-dimgui">🎨 3. Rendu GPU Instancié des Cercles de Diagnostic (Bypass d'ImGui)</a></h2>
+<ul>
+<li><strong>Problème</strong> : Lors de l'exécution avec plus de 384 sources actives (ex: <code>cargo run --release -- --audio-stress-scene 384</code>), l'application plantait immédiatement avec l'erreur :
+<code>Assertion 'draw_list-&gt;_VtxCurrentIdx &lt; (1 &lt;&lt; 16) &amp;&amp; "Too many vertices in ImDrawList using 16-bit indices..."' failed.</code></li>
+<li><strong>Cause</strong> : Le tracé des orbites et des sources était géré par le CPU d'ImGui (<code>draw_list.add_circle</code>), générant plus de 36 000 sommets (vertices) complexes. ImGui utilisant des index 16 bits non signés, la limite de 65 536 indices par draw list était instantanément dépassée.</li>
+<li><strong>Résolution (CircleGPURenderer)</strong> :
+<ul>
+<li>Création d'un module de rendu GPU dédié : <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/circle_renderer.rs"><strong><code>src/renderer_engine/circle_renderer.rs</code></strong></a>.</li>
+<li>Confection de shaders GLSL dédiés : <a href="file:///home/latty/Prog/__PERSO__/rust-firework/assets/shaders/circle.vert.glsl"><strong><code>circle.vert.glsl</code></strong></a> et <a href="file:///home/latty/Prog/__PERSO__/rust-firework/assets/shaders/circle.frag.glsl"><strong><code>circle.frag.glsl</code></strong></a>. Les cercles sont dessinés à partir de quads instanciés (4 sommets seulement), le fragment shader calculant l'équation mathématique du disque (<code>length(UV)</code>) en temps réel sur le GPU.</li>
+<li><strong>Isolation de la machine d'état</strong> : Les états <code>GL_DEPTH_TEST</code> et <code>GL_CULL_FACE</code> sont explicitement sauvegardés, désactivés (pour éviter le masquage par la passe de composition HDR/Bloom précédente) puis restaurés après l'appel unique de dessin instancié (<code>glDrawArraysInstanced</code>).</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="-4-Élimination-du-segfault-à-larrêt"><a class="header" href="#-4-Élimination-du-segfault-à-larrêt">⚡ 4. Élimination du Segfault à l'Arrêt</a></h2>
+<ul>
+<li><strong>Problème</strong> : L'application plantait avec un <code>Segmentation fault</code> lors de sa fermeture.</li>
+<li><strong>Cause</strong> : À l'arrêt du programme, les champs de la structure <code>Simulator</code> sont détruits dans leur ordre de déclaration. La fenêtre GLFW (<code>window_engine</code>) étant détruite avant le <code>circle_renderer</code>, le destructeur (<code>Drop</code>) de ce dernier tentait d'appeler <code>glDeleteVertexArrays</code> et <code>glDeleteBuffers</code> sur un contexte OpenGL déjà libéré, provoquant un plantage du driver graphique.</li>
+<li><strong>Résolution</strong> :
+<ol>
+<li>Rendue la méthode <code>destroy()</code> du <code>CircleGPURenderer</code> idempotente (vérifie si les IDs sont non nuls et les remet à zéro).</li>
+<li>Intégré un nettoyage explicite dans la méthode <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs#L1377"><code>close()</code> du <code>Simulator</code></a> en utilisant <code>self.circle_renderer.take()</code>. Les ressources GPU sont ainsi proprement libérées <strong>pendant</strong> que le contexte OpenGL de GLFW est encore valide et actif.</li>
+</ol>
+</li>
+</ul>
+<hr />
+<h2 id="-5-contrôle-du-frame-rate-vsync--déterminisme-des-trajectoires-en-mode-stress-test-22-juillet-2026"><a class="header" href="#-5-contrôle-du-frame-rate-vsync--déterminisme-des-trajectoires-en-mode-stress-test-22-juillet-2026">⏱️ 5. Contrôle du Frame-Rate (VSync) &amp; Déterminisme des Trajectoires en Mode Stress-Test (22 Juillet 2026)</a></h2>
+<ul>
+<li>
+<p><strong>Problèmes identifiés</strong> :</p>
+<ol>
+<li><strong>Frame-Rate plafonné ou instable</strong> : Le framerate restait bloqué à la fréquence de rafraîchissement de l'écran (VSync active par défaut), faussant les mesures de performance pure du moteur de rendu.</li>
+<li><strong>Trajectoires aléatoires sur recyclage</strong> : Les sources virtuelles du stress-test audio changeaient d'orbite aléatoirement à chaque fois que leur cycle sonore (lancement -&gt; explosion) se terminait, empêchant de visualiser et d'étudier de manière stable des trajectoires de référence prédéterminées.</li>
+<li><strong>Dérive de trajectoire continue</strong> : Même au cours de leur mouvement, les sources virtuelles modifiaient continuellement leur rayon cible de manière aléatoire dès qu'elles s'approchaient de leur destination temporaire, empêchant toute stabilité géométrique.</li>
+</ol>
+</li>
+<li>
+<p><strong>Résolutions implémentées</strong> :</p>
+<ul>
+<li><strong>Désactivation matérielle de la VSync</strong> : Ajout de la configuration explicite <code>glfw.set_swap_interval(glfw::SwapInterval::None);</code> dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/window_engine/glfw_window_engine.rs"><code>glfw_window_engine.rs</code></a> pour forcer le driver et le compositeur graphique à ignorer le rafraîchissement vertical, ce qui a débloqué le framerate au-delà de 400 Hz.</li>
+<li><strong>Mise en cache de l'état initial des sources</strong> : Extension de la structure <code>VirtualSource</code> avec des champs <code>initial_*</code> mémorisant les angles, rayons et vitesses de spawn à l'initialisation.</li>
+<li><strong>Oscillation et Relance Déterministes par Défaut</strong> :
+<ul>
+<li>Lors du cycle de vie sonore <code>Explosion -&gt; Rocket</code>, si l'option de randomisation n'est pas demandée, la fusée ne subit aucun repositionnement ou saut spatial, ce qui maintient sa trajectoire d'origine de façon fluide.</li>
+<li>Au cours de la mise à jour de la physique dans <code>update_audio_stress_simulation</code>, si la source s'approche de son rayon cible, elle n'effectue plus de tirage aléatoire mais oscille de manière strictement déterministe entre ses rayons initial et cible d'origine.</li>
+</ul>
+</li>
+<li><strong>Option de Randomisation CLI</strong> : Ajout du drapeau <code>--randomize-stress-positions</code> sur la ligne de commande pour réactiver explicitement le comportement historique de randomisation continue.</li>
+<li><strong>Tests Unitaires Dédiés</strong> : Intégration de tests unitaires (<code>test_virtual_source_determinism</code>) à la fin de <code>simulator.rs</code> pour valider mathématiquement et hors-contexte graphique (headless) le déterminisme de l'oscillation et de la randomisation.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="-6-rationalisation-du-throttling-doppler--fréquence-de-mise-à-jour-crénelage-temporel--bruit-de-fermeture-zipper-noise"><a class="header" href="#-6-rationalisation-du-throttling-doppler--fréquence-de-mise-à-jour-crénelage-temporel--bruit-de-fermeture-zipper-noise">🧠 6. Rationalisation du Throttling Doppler : Fréquence de Mise à Jour, Crénelage Temporel &amp; Bruit de Fermeture (Zipper Noise)</a></h2>
+<p>Lors du développement du système de mise à jour Doppler temps réel, la question s'est posée d'harmoniser la fréquence d'envoi des événements cinématiques (<code>DopplerEvent</code>) depuis le thread de simulation principal vers le thread de traitement audio CPAL. Par défaut, la physique sous-jacente de l'application est simulée à <strong>60 Hz</strong> tandis que les fenêtres graphiques débloquées tournent à <strong>400+ Hz</strong>. Le seuil de throttling temporel a été fixé à <strong>144 Hz</strong> (intervalle minimal de <strong>6.94 ms</strong>).</p>
+<h3 id="a-fréquence-dÉchantillonnage-audio-audio-rate-vs-fréquence-de-contrôle-control-rate"><a class="header" href="#a-fréquence-dÉchantillonnage-audio-audio-rate-vs-fréquence-de-contrôle-control-rate">A. Fréquence d'Échantillonnage Audio (Audio Rate) vs Fréquence de Contrôle (Control Rate)</a></h3>
+<p>En synthèse audio et traitement du signal temps réel, il est courant de distinguer l'<strong>Audio Rate</strong> (le taux d'échantillonnage matériel, ici 48 kHz) et le <strong>Control Rate</strong> (la fréquence de mise à jour des paramètres macroscopiques comme le volume, le pitch, la position).
+Le thread CPAL traite les échantillons par blocs de N = 64 frames. La durée temporelle d'un bloc de traitement DSP est de :</p>
+<p><code>Δt_bloc = N / fs = 64 / 48000 ≈ 1.33 ms</code></p>
+<p>Toutes les 1.33 ms, le processeur DSP (<code>DspProcessor::process_block</code>) calcule l'atténuation de distance, le retard interaural (ITD), et le facteur Doppler (α) pour chaque échantillon.</p>
+<h3 id="b-le-phénomène-du-bruit-de-fermeture-zipper-noise--crénelage-spatial"><a class="header" href="#b-le-phénomène-du-bruit-de-fermeture-zipper-noise--crénelage-spatial">B. Le Phénomène du Bruit de Fermeture (Zipper Noise) &amp; Crénelage Spatial</a></h3>
+<p>Si les coordonnées spatiales de la source ne sont rafraîchies qu'à une fréquence trop basse (ex : le moteur physique standard à 60 Hz, soit toutes les 16.67 ms) :</p>
+<ol>
+<li><strong>Discontinuités des coefficients de gain et de retard</strong> : La position absolue de la fusée à l'écran change par grands sauts discrets toutes les 12 boucles du processeur DSP (16.67 ms / 1.33 ms).</li>
+<li><strong>zipper noise</strong> : L'application brutale de ces nouveaux paramètres à la frontière d'un bloc audio crée des discontinuités de phase et d'amplitude dans la forme d'onde. Ces sauts discrets agissent comme de petites fonctions échelons qui injectent des harmoniques haute fréquence indésirables, perçues par l'auditeur comme un grésillement ou un bruit de fermeture à glissière (<em>zipper noise</em>).</li>
+<li><strong>Crénelage Spatial (Spatial Aliasing)</strong> : Pour des objets balistiques très rapides se déplaçant à proximité immédiate de l'auditeur (où le gradient de distance par rapport au temps est maximal), un échantillonnage spatial à 60 Hz est insuffisant pour représenter le mouvement de façon continue (aliasing de la trajectoire).</li>
+</ol>
+<h3 id="c-la-rationale-du-choix-de-144-hz-694-ms"><a class="header" href="#c-la-rationale-du-choix-de-144-hz-694-ms">C. La Rationale du Choix de 144 Hz (6.94 ms)</a></h3>
+<p>Le throttling à 144 Hz a été choisi comme le compromis architectural optimal (<em>sweet spot</em>) :</p>
+<ul>
+<li><strong>Lissage Acoustique Sub-bloc</strong> : En rafraîchissant les coordonnées toutes les 6.94 ms (environ tous les 5 blocs DSP au lieu de 12), le signal de contrôle est suffisamment dense pour que l'interpolation linéaire interne du DSP (<code>target_gains</code> LERP) produise des rampes lisses et continues, masquant totalement le zipper noise.</li>
+<li><strong>Bande Passante Inter-thread</strong> : Sur le canal <code>crossbeam_channel</code>, cela plafonne le trafic à un maximum de 144 messages par seconde et par source active. À 256 sources, le débit d'événements passe d'une saturation de 102 400 messages/sec (en rendu débloqué à 400 FPS) à seulement 36 864 messages/sec au maximum théorique (et uniquement pour les sources avec voix active), réduisant de près de 3x la charge de synchronisation CPU.</li>
+</ul>
+<h3 id="d-références-et-bibliographie"><a class="header" href="#d-références-et-bibliographie">D. Références et Bibliographie</a></h3>
+<ul>
+<li><strong>J. O. Smith III</strong>, <em>Physical Audio Signal Processing</em>, Center for Computer Research in Music and Acoustics (CCRMA), Stanford University. (Section sur le <em>Control Rate and Audio Rate</em> et l'atténuation du zipper noise par interpolation linéaire).</li>
+<li><strong>D. A. Jaffe &amp; J. O. Smith</strong>, <em>Extensions of the Karplus-Strong Plucked-String Algorithm</em> (1983) — Analyse de l'impact des variations temporelles discontinues de pitch et de phase.</li>
+<li><strong>Woodworth, R. S., &amp; Schlosser, H. C.</strong>, <em>Experimental psychology</em> (1954) — Modélisation de la diffraction et du délai interaural (ITD) dynamique à partir de coordonnées sphériques continues de la tête.</li>
+</ul>
+<hr />
+<h2 id="-7-refactoring-architectural-de-la-scène-de-stress-auto-détection-du-dossier-de-travail--intégration-taskfile-22-juillet-2026"><a class="header" href="#-7-refactoring-architectural-de-la-scène-de-stress-auto-détection-du-dossier-de-travail--intégration-taskfile-22-juillet-2026">🏗️ 7. Refactoring Architectural de la Scène de Stress, Auto-détection du Dossier de Travail &amp; Intégration Taskfile (22 Juillet 2026)</a></h2>
+<p>Afin d'éviter que le fichier <code>src/simulator.rs</code> ne devienne trop volumineux et difficile à maintenir (dépassant 110 Ko), un refactoring structurel majeur a été entrepris pour décommissionner et isoler les composants.</p>
+<h3 id="a-découplage-de-la-scène-de-stress-soc"><a class="header" href="#a-découplage-de-la-scène-de-stress-soc">A. Découplage de la Scène de Stress (SoC)</a></h3>
+<ul>
+<li><strong>Création d'un module dédié</strong> : Tout le code métier, cinématique, d'intégration ImGui, et de rendu de la scène de stress audio a été déplacé dans le nouveau fichier <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/audio_stress_scene.rs"><strong><code>src/simulator/audio_stress_scene.rs</code></strong></a>.</li>
+<li><strong>Encapsulation complète</strong> : Les structures <code>VirtualSource</code> et <code>AudioStressScene</code> y sont définies de manière autonome. La structure <code>Simulator</code> n'a plus qu'un seul champ <code>audio_stress_scene</code> et lui délègue les traitements requis.</li>
+<li><strong>Déplacement des tests unitaires</strong> : Le test unitaire <code>test_virtual_source_determinism</code> a été déplacé de manière cohérente à la fin de ce nouveau module.</li>
+</ul>
+<h3 id="b-auto-détection-de-cwd--robustesse-du-parsing-cli"><a class="header" href="#b-auto-détection-de-cwd--robustesse-du-parsing-cli">B. Auto-détection de CWD &amp; Robustesse du Parsing CLI</a></h3>
+<ul>
+<li><strong>Résolution des crashs de chemins relatifs</strong> : Si le binaire est exécuté à partir d'un sous-dossier (comme <code>src/</code> lors de l'usage de <code>cargo run</code>), le programme détecte automatiquement l'absence du dossier <code>assets</code> et redirige le répertoire de travail vers le dossier parent (racine du projet). Cela élimine les erreurs de fichiers introuvables (<code>os error 2</code>).</li>
+<li><strong>Filtrage des arguments d'export</strong> : Ajout d'un contrôle pour empêcher le programme de confondre des flags de ligne de commande (comme <code>--audio-stress-scene</code>) avec des noms de fichiers d'export WAV à créer.</li>
+</ul>
+<h3 id="c-intégration-de-la-tâche-taskfile"><a class="header" href="#c-intégration-de-la-tâche-taskfile">C. Intégration de la tâche Taskfile</a></h3>
+<ul>
+<li><strong>Nouveau raccourci <code>task run-audio-stress</code></strong> : Ajout d'une tâche dédiée dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml"><strong><code>Taskfile.yml</code></strong></a> qui pré-configure toutes les variables d'environnement optimales (VSync désactivée, HUD de performance graphique activé) et lance la simulation interactive. Le nombre de sources peut être passé en paramètre (ex: <code>task run-audio-stress -- 256</code>, 128 par défaut).</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="20260724_audio_anticipation_timeshifting_closed_loop.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="20260720_spatial_bus_audio_architecture.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="20260724_audio_anticipation_timeshifting_closed_loop.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="20260720_spatial_bus_audio_architecture.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>

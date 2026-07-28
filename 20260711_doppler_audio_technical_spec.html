@@ -7,7 +7,290 @@
 
 
         <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
         
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
         <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="theme-color" content="#ffffff">
@@ -30,6 +313,8 @@
 
         <!-- Custom theme stylesheets -->
 
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
     </head>
     <body class="sidebar-visible no-js">
     <div id="body-container">
@@ -88,7 +373,7 @@
 
         <nav id="sidebar" class="sidebar" aria-label="Table of contents">
             <div class="sidebar-scrollbox">
-                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">1.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">1.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">1.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">2.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">2.1.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html" class="active"><strong aria-hidden="true">2.2.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">2.3.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">2.4.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">2.5.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">3.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">3.2.</strong> Manuel du Renderer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">4.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">4.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">4.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">4.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">4.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">4.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">4.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">4.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">4.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">4.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">4.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">4.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">4.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">5.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">1.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html"><strong aria-hidden="true">2.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">3.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">3.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html"><strong aria-hidden="true">4.1.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html"><strong aria-hidden="true">4.2.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">4.3.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">4.4.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">4.5.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">4.6.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html" class="active"><strong aria-hidden="true">4.7.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">4.8.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">4.9.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">4.10.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">5.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">5.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">5.3.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">6.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">6.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">6.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">6.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">6.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">6.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">6.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">6.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">6.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">6.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">6.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">6.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">6.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">7.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
             </div>
             <div id="sidebar-resize-handle" class="sidebar-resize-handle">
                 <div class="sidebar-resize-indicator"></div>
@@ -193,7 +478,7 @@
 <h3 id="a-le-constat-initial--les-limites-du-système-statique"><a class="header" href="#a-le-constat-initial--les-limites-du-système-statique">A. Le constat initial : Les limites du système statique</a></h3>
 <p>Avant cette implémentation, le moteur audio spatialisait les sons (<em>panning</em> stéréo ou binauralisation HRTF) et calculait l'atténuation de distance <strong>une seule fois</strong> lors de l'appel à <code>prepare_voice</code>, juste avant l'envoi du buffer dans la file de lecture.</p>
 <ul>
-<li><strong>Problème :</strong> Si cette approche est optimale pour des événements ponctuels et immobiles (comme les explosions), elle s'avère incompatible avec des objets en vol continu (les fusées). Le son restait figé aux coordonnées initiales du tir et la fréquence de lecture restait constante ($1.0\times$), privant la simulation d'effet de vitesse et de réalisme spatial.</li>
+<li><strong>Problème :</strong> Si cette approche est optimale pour des événements ponctuels et immobiles (comme les explosions), elle s'avère incompatible avec des objets en vol continu (les fusées). Le son restait figé aux coordonnées initiales du tir et la fréquence de lecture restait constante (\( 1.0\times \)), privant la simulation d'effet de vitesse et de réalisme spatial.</li>
 <li><strong>Composants dormants :</strong> Des structures ébauchées (<code>DopplerEvent</code>, <code>DopplerQueue</code> et <code>DopplerState</code>) témoignaient d'une intention d'intégration, mais l'existence d'un <code>DopplerState</code> isolé menaçait d'introduire une seconde boucle de mixage DSP parallèle, redoublant la complexité et les risques de verrous de concurrence.</li>
 </ul>
 <h3 id="b-la-convergence-suckless--unification-dans-voice"><a class="header" href="#b-la-convergence-suckless--unification-dans-voice">B. La convergence "Suckless" : Unification dans <code>Voice</code></a></h3>
@@ -207,26 +492,36 @@ Une voix est désormais capable de :</p>
 <hr />
 <h2 id="2-architecture-technique-implÉmentÉe"><a class="header" href="#2-architecture-technique-implÉmentÉe">2. ARCHITECTURE TECHNIQUE IMPLÉMENTÉE</a></h2>
 <p>L'implémentation repose sur une séparation stricte des fréquences de calcul : <strong>Block-Rate</strong> (fréquence de bloc audio, ~180 Hz pour des buffers de 256 frames à 48 kHz) et <strong>Sample-Rate</strong> (fréquence d'échantillonnage, 48 000 Hz).</p>
-<h3 id="a-communication-lock-free-physique-to-audio"><a class="header" href="#a-communication-lock-free-physique-to-audio">A. Communication Lock-Free (Physique $\to$ Audio)</a></h3>
+<h3 id="a-communication-lock-free-physique---audio"><a class="header" href="#a-communication-lock-free-physique---audio">A. Communication Lock-Free (Physique -&gt; Audio)</a></h3>
 <p>Le moteur physique émet en continu des événements cinématiques via un canal asynchrone non borné (<code>crossbeam_channel::unbounded</code>) encapsulé dans une <code>DopplerQueue</code>.</p>
 <ul>
-<li>Côté <strong>Physique (<code>update</code>)</strong> : À chaque tick de simulation, pour chaque fusée en vol et non explosée (<code>active &amp;&amp; !exploded</code>), un événement <code>DopplerEvent</code> contenant l'ID unique, la position et le vecteur vitesse est poussé dans le canal en $O(1)$ non-bloquant.</li>
+<li>Côté <strong>Physique (<code>update</code>)</strong> : À chaque tick de simulation, pour chaque fusée en vol et non explosée (<code>active &amp;&amp; !exploded</code>), un événement <code>DopplerEvent</code> contenant l'ID unique, la position et le vecteur vitesse est poussé dans le canal en O(1) non-bloquant.</li>
 <li>Côté <strong>CPAL (<code>output_callback</code>)</strong> : Au début de chaque bloc audio, avant le rendu DSP, le thread audio dépile l'intégralité des messages en attente (<code>try_recv</code>). Les coordonnées de la voix active correspondante (<code>id</code>) sont actualisées instantanément sans jamais bloquer le thread de simulation ni le callback audio.</li>
 </ul>
-<h3 id="b-traitement-au-block-rate-géométrie--facteur-alpha"><a class="header" href="#b-traitement-au-block-rate-géométrie--facteur-alpha">B. Traitement au Block-Rate (Géométrie &amp; Facteur $\alpha$)</a></h3>
+<h3 id="b-traitement-au-block-rate-géométrie--facteur-α"><a class="header" href="#b-traitement-au-block-rate-géométrie--facteur-α">B. Traitement au Block-Rate (Géométrie &amp; Facteur α)</a></h3>
 <p>Pour éviter de saturer le CPU avec des fonctions trigonométriques ou des racines carrées à chaque échantillon, la physique spatiale est calculée <strong>une seule fois par bloc audio</strong> pour les voix dynamiques :</p>
 <ol>
-<li><strong>Vitesse radiale et Pitch Shifting ($\alpha$) :</strong> On projette le vecteur vitesse $\vec{v}$ de la fusée sur le vecteur direction normalisé $\vec{u}$ reliant la source à l'auditeur. Le facteur Doppler est calculé selon la vitesse du son dans l'air ($c = 343\text{ m/s}$) puis borné pour la sécurité DSP :
-$$\alpha = \text{clamp}\left( \frac{c}{c - (\vec{v} \cdot \vec{u})}, ; 0.25, ; 4.0 \right)$$</li>
-<li><strong>Cibles de Panoramique et Filtrage :</strong> L'atténuation de distance, le coefficient du filtre passe-bas d'absorption de l'air (<code>filter_a</code>) et la répartition stéréo gauche/droite sont recalculés à partir de la nouvelle position géométrique et stockés dans <code>target_gains[0]</code> et <code>target_gains[1]</code>.</li>
+<li>
+<p><strong>Vitesse radiale et Pitch Shifting (α) :</strong> On projette le vecteur vitesse v de la fusée sur le vecteur direction normalisé u reliant la source à l'auditeur. Le facteur Doppler est calculé selon la vitesse du son dans l'air (c = 343 m/s) puis borné pour la sécurité DSP :</p>
+<p><code>α = clamp(c / (c - (v · u)), 0.25, 4.0)</code></p>
+</li>
+<li>
+<p><strong>Cibles de Panoramique et Filtrage :</strong> L'atténuation de distance, le coefficient du filtre passe-bas d'absorption de l'air (<code>filter_a</code>) et la répartition stéréo gauche/droite sont recalculés à partir de la nouvelle position géométrique et stockés dans <code>target_gains[0]</code> et <code>target_gains[1]</code>.</p>
+</li>
 </ol>
 <h3 id="c-traitement-au-sample-rate-lecture-continue-sans-état--zéro-buffer-intermédiaire"><a class="header" href="#c-traitement-au-sample-rate-lecture-continue-sans-état--zéro-buffer-intermédiaire">C. Traitement au Sample-Rate (Lecture continue sans état &amp; Zéro Buffer Intermédiaire)</a></h3>
 <p>Au cœur de la boucle de mixage des échantillons (<code>for frame in acc[..frames].iter_mut()</code>), la lecture du signal applique un paradigme de <strong>Lecture Continue Sans État (<em>Stateless Continuous Reading</em>)</strong> :</p>
 <ol>
-<li><strong>Suppression des tampons intermédiaires :</strong> Pour éviter tout artéfact acoustique de bordure de bloc (<em>sample-and-hold</em>, filtre en peigne, son métallique) induit par la perte d'historique entre deux blocs audio successifs, les tampons temporaires (<code>scratch_mono</code>, <code>scratch_stereo</code>) ont été définitivement abandonnés.</li>
-<li><strong>Interpolation temporelle directe (ITD &amp; LERP) :</strong> Pour simuler le décalage interaural (ITD) du binaural ou l'effet Doppler, l'algorithme ne décale plus des tableaux en mémoire. Il lit directement dans le pointeur partagé du fichier source (<code>Arc&lt;Vec&lt;[f32; 2]&gt;&gt;</code>) en évaluant une fonction d'interpolation à reculons dans le temps :
-$$\text{échantillon}(t - \text{ITD}) = \text{LERP}(\lfloor \text{pos} - \text{ITD} \rfloor, ; \lfloor \text{pos} - \text{ITD} \rfloor + 1)$$</li>
-<li><strong>Garantie de continuité de phase :</strong> Ce calcul mathématique continu garantit que la dérivée du signal reste lisse aux frontières des blocs audio (toutes les ~5 ms), assurant une qualité acoustique cristalline, sans aucune distorsion harmonique ni artéfact robotique. La robustesse de ce modèle est prouvée statiquement par la suite de tests unitaires (<code>test_phase_continuity_across_block_boundaries</code>).</li>
+<li>
+<p><strong>Suppression des tampons intermédiaires :</strong> Pour éviter tout artéfact acoustique de bordure de bloc (<em>sample-and-hold</em>, filtre en peigne, son métallique) induit par la perte d'historique entre deux blocs audio successifs, les tampons temporaires (<code>scratch_mono</code>, <code>scratch_stereo</code>) ont été définitivement abandonnés.</p>
+</li>
+<li>
+<p><strong>Interpolation temporelle directe (ITD &amp; LERP) :</strong> Pour simuler le décalage interaural (ITD) du binaural ou l'effet Doppler, l'algorithme ne décale plus des tableaux en mémoire. Il lit directement dans le pointeur partagé du fichier source (<code>Arc&lt;Vec&lt;[f32; 2]&gt;&gt;</code>) en évaluant une fonction d'interpolation à reculons dans le temps :</p>
+<p><code>échantillon(t - ITD) = LERP(floor(pos - ITD), floor(pos - ITD) + 1)</code></p>
+</li>
+<li>
+<p><strong>Garantie de continuité de phase :</strong> Ce calcul mathématique continu garantit que la dérivée du signal reste lisse aux frontières des blocs audio (toutes les ~5 ms), assurant une qualité acoustique cristalline, sans aucune distorsion harmonique ni artéfact robotique. La robustesse de ce modèle est prouvée statiquement par la suite de tests unitaires (<code>test_phase_continuity_across_block_boundaries</code>).ct robotique. La robustesse de ce modèle est prouvée statiquement par la suite de tests unitaires (<code>test_phase_continuity_across_block_boundaries</code>).</p>
+</li>
 </ol>
 <hr />
 <h2 id="3-analyse-physique-et-balistique-des-relevÉs-tracy"><a class="header" href="#3-analyse-physique-et-balistique-des-relevÉs-tracy">3. ANALYSE PHYSIQUE ET BALISTIQUE DES RELEVÉS TRACY</a></h2>
@@ -245,20 +540,20 @@ $$\text{échantillon}(t - \text{ITD}) = \text{LERP}(\lfloor \text{pos} - \text{I
 +---------------------------------------------------------------------------------------------------+
 
 </code></pre>
-<h3 id="a-profil-en-dents-de-scie--le-facteur-de-lecture-alpha"><a class="header" href="#a-profil-en-dents-de-scie--le-facteur-de-lecture-alpha">A. Profil en "Dents de Scie" : Le Facteur de Lecture ($\alpha$)</a></h3>
-<p>La courbe du facteur de rééchantillonnage (<code>Audio: Doppler Rate (alpha)</code>) oscille systématiquement entre <strong>$0.52\times$</strong> (-1 octave, graves) et <strong>$1.64\times$</strong> (+0.7 octave, aigus) selon un motif en dents de scie (<em>sawtooth</em>) hautement asymétrique :</p>
+<h3 id="a-profil-en-dents-de-scie--le-facteur-de-lecture-alpha"><a class="header" href="#a-profil-en-dents-de-scie--le-facteur-de-lecture-alpha">A. Profil en "Dents de Scie" : Le Facteur de Lecture (alpha)</a></h3>
+<p>La courbe du facteur de rééchantillonnage (<code>Audio: Doppler Rate (alpha)</code>) oscille systématiquement entre 0.52x (-1 octave, graves) et 1.64x (+0.7 octave, aigus) selon un motif en dents de scie (<em>sawtooth</em>) hautement asymétrique :</p>
 <ol>
-<li><strong>Le front montant vertical (Lancement au sol) :</strong> Au moment du <em>spawn</em>, la fusée est propulsée avec sa vitesse initiale maximale $\vec{v}_0$. Se dirigeant vers le ciel en direction (ou à proximité) de la position de l'auditeur, la vitesse radiale d'approche est positive et maximale. Le facteur $\alpha$ grimpe instantanément à sa valeur crête ($\approx 1.64$). L'auditeur perçoit un grondement de moteur très nerveux et haut perché.</li>
-<li><strong>La rampe descendante (Décélération gravitationnelle) :</strong> Durant toute la phase d'ascension, la fusée subit une décélération uniforme sous l'effet de la gravité ($\vec{v}(t) = \vec{v}_0 + \vec{g}t$). En parallèle, l'angle visuel entre la trajectoire de vol et le point d'écoute s'ouvre. La composante radiale de la vitesse diminue donc continuellement : la courbe $\alpha$ redescend de manière fluide et monotone.</li>
-<li><strong>Le point d'inflexion (Apogée / Passage au plus près) :</strong> Lorsque la courbe croise précisément la ligne neutre $\alpha = 1.0$, la vitesse radiale est nulle ($\vec{v} \perp \vec{u}$). La fusée passe au plus près de l'auditeur ou atteint son apogée cinématique. Elle s'éloigne ensuite, faisant plonger la vitesse dans le négatif ($\alpha &lt; 1.0$) et étirant le son vers les fréquences graves.</li>
+<li><strong>Le front montant vertical (Lancement au sol) :</strong> Au moment du <em>spawn</em>, la fusée est propulsée avec sa vitesse initiale maximale v0. Se dirigeant vers le ciel en direction (ou à proximité) de la position de l'auditeur, la vitesse radiale d'approche est positive et maximale. Le facteur alpha grimpe instantanément à sa valeur crête (environ 1.64). L'auditeur perçoit un grondement de moteur très nerveux et haut perché.</li>
+<li><strong>La rampe descendante (Décélération gravitationnelle) :</strong> Durant toute la phase d'ascension, la fusée subit une décélération uniforme sous l'effet de la gravité (v(t) = v0 + g * t). En parallèle, l'angle visuel entre la trajectoire de vol et le point d'écoute s'ouvre. La composante radiale de la vitesse diminue donc continuellement : la courbe alpha redescend de manière fluide et monotone.</li>
+<li><strong>Le point d'inflexion (Apogée / Passage au plus près) :</strong> Lorsque la courbe croise précisément la ligne neutre alpha = 1.0, la vitesse radiale est nulle (v perpendiculaire à u). La fusée passe au plus près de l'auditeur ou atteint son apogée cinématique. Elle s'éloigne ensuite, faisant plonger la vitesse dans le négatif (alpha &lt; 1.0) et étirant le son vers les fréquences graves.</li>
 <li><strong>La rupture de pente (Explosion) :</strong> À l'instant exact de l'explosion, la condition physique de suivi (<code>!rocket.exploded</code>) coupe l'émission des événements cinématiques de la propulsion. Le tracé de la voix s'interrompt net pour laisser place au déclenchement de l'échantillon d'explosion statique spatialisé.</li>
 </ol>
 <h3 id="b-profil-en-collines--débit-des-messages-eventsblock"><a class="header" href="#b-profil-en-collines--débit-des-messages-eventsblock">B. Profil en "Collines" : Débit des Messages (<code>Events/Block</code>)</a></h3>
-<p>La courbe inférieure (<code>Audio: Doppler Events/Block</code>) trace le nombre d'événements physiques dépilés par le callback CPAL à chaque buffer de 5 ms (pics atteignant <strong>227 événements/bloc</strong>) :</p>
+<p>La courbe inférieure (<code>Audio: Doppler Events/Block</code>) trace le nombre d'événements physiques dépilés par le callback CPAL à chaque buffer de 5 ms (pics atteignant 227 événements par bloc) :</p>
 <ul>
 <li><strong>Modélisation par salves :</strong> La forme en vagues ou collines isolées reflète fidèlement la génération par rafales (<em>salvos</em>) du moteur de feux d'artifice. Lors d'un tir multiple, la quantité de fusées actives augmente rapidement, multipliant proportionnellement les écritures dans le canal <code>crossbeam</code> à chaque frame de rendu physique (60 à 144 FPS).</li>
-<li><strong>Consommation par lots :</strong> Le thread audio, cadencé à $\approx 180\text{ Hz}$, absorbe l'intégralité des positions accumulées depuis son dernier appel. Dès que l'ensemble des fusées d'une vague ont explosé, le canal se vide, l'émission cesse et le débit retombe à une ligne de base parfaite de <strong>0 événement</strong>, prouvant l'absence de fuite ou de message fantôme.</li>
-<li><strong>Épaisseur du tracé (Multivoix temps réel) :</strong> Lorsque plusieurs fusées volent simultanément à des altitudes et vitesses différentes, la boucle de dépilage exécute <code>tracy_plot!</code> séquentiellement pour des valeurs de $\alpha$ hétérogènes au sein du même bloc micro-secondaire. Tracy relie ces points, créant visuellement une bande colorée dense qui matérialise l'éventail complet des vitesses de vol présentes dans le ciel à l'instant $T$.</li>
+<li><strong>Consommation par lots :</strong> Le thread audio, cadencé à environ 180 Hz, absorbe l'intégralité des positions accumulées depuis son dernier appel. Dès que l'ensemble des fusées d'une vague ont explosé, le canal se vide, l'émission cesse et le débit retombe à une ligne de base parfaite de 0 événement, prouvant l'absence de fuite ou de message fantôme.</li>
+<li><strong>Épaisseur du tracé (Multivoix temps réel) :</strong> Lorsque plusieurs fusées volent simultanément à des altitudes et vitesses différentes, la boucle de dépilage exécute <code>tracy_plot!</code> séquentiellement pour des valeurs de alpha hétérogènes au sein du même bloc micro-secondaire. Tracy relie ces points, créant visuellement une bande colorée dense qui matérialise l'éventail complet des vitesses de vol présentes dans le ciel à l'instant T.</li>
 </ul>
 <hr />
 <h2 id="4-bilan-de-performance-et-conclusion--architecture-100-zÉro-heap--sans-État"><a class="header" href="#4-bilan-de-performance-et-conclusion--architecture-100-zÉro-heap--sans-État">4. BILAN DE PERFORMANCE ET CONCLUSION : ARCHITECTURE 100% ZÉRO-HEAP &amp; SANS ÉTAT</a></h2>
@@ -266,23 +561,23 @@ $$\text{échantillon}(t - \text{ITD}) = \text{LERP}(\lfloor \text{pos} - \text{I
 <h3 id="a-Élimination-totale-des-allocations-et-tampons-temporaires"><a class="header" href="#a-Élimination-totale-des-allocations-et-tampons-temporaires">A. Élimination totale des allocations et tampons temporaires</a></h3>
 <p>Le pipeline de rendu atteint une efficacité bas niveau maximale grâce à une double refonte :</p>
 <ol>
-<li><strong>Thread Principal (UI / Physique) — Pointeur atomique $O(1)$ :</strong> La méthode synchrone <code>prepare_voice</code> et le clonage de buffers audio (<code>data.to_owned()</code>) ont été éradiqués de <code>enqueue_sound</code>. La mise en file d'attente d'un événement sonore transmet directement une référence de pointeur intelligent (<code>&amp;Arc&lt;Vec&lt;[f32; 2]&gt;&gt;</code>). Le clonage du pointeur (<code>Arc::clone</code>) s'exécute par une simple instruction d'incrémentation atomique ($&lt; 5\text{ ns}$), soulageant totalement l'allocateur mémoire du noyau sur le thread de simulation.</li>
-<li><strong>Thread CPAL (Temps Réel) — Lecture continue sans état (<em>Stateless Reading</em>) :</strong> Pour prévenir la perte d'historique entre les blocs audio (source d'artéfacts métalliques de type filtre en peigne ou <em>sample-and-hold</em>), les tampons de brouillon intermédiaires (<code>scratch_mono</code>, <code>scratch_stereo</code>) ont été définitivement supprimés. Le processeur <code>DspProcessor</code> lit le signal en évaluant une interpolation LERP temporelle directe depuis le tampon source partagé (<code>Arc</code>), garantissant une <strong>continuité de phase absolue aux frontières des blocs audio</strong>, prouvée par la suite de tests unitaires (<code>test_phase_continuity_across_block_boundaries</code>).</li>
+<li><strong>Thread Principal (UI / Physique) — Pointeur atomique O(1) :</strong> La méthode synchrone <code>prepare_voice</code> et le clonage de buffers audio (<code>data.to_owned()</code>) ont été éradiqués de <code>enqueue_sound</code>. La mise en file d'attente d'un événement sonore transmet directement une référence de pointeur intelligent (<code>&amp;Arc&lt;Vec&lt;[f32; 2]&gt;&gt;</code>). Le clonage du pointeur (<code>Arc::clone</code>) s'exécute par une simple instruction d'incrémentation atomique (inférieur à 5 ns), soulageant totalement l'allocateur mémoire du noyau sur le thread de simulation.</li>
+<li><strong>Thread CPAL (Temps Réel) — Lecture continue sans état (<em>Stateless Reading</em>) :</strong> Pour prévenir la perte d'historique entre les blocs audio (source d'artéfacts métalliques de type filtre en peigne ou <em>sample-and-hold</em>), les tampons de brouillon intermédiaires (<code>scratch_mono</code>, <code>scratch_stereo</code>) ont été définitivement supprimés. Le processeur <code>DspProcessor</code> lit le signal en évaluant une interpolation LERP temporelle directe depuis le tampon source partagé (<code>Arc</code>), garantissant une continuité de phase absolue aux frontières des blocs audio, prouvée par la suite de tests unitaires (<code>test_phase_continuity_across_block_boundaries</code>).</li>
 </ol>
 <h3 id="b-synthèse-des-métriques-dexécution-perf--hotspot"><a class="header" href="#b-synthèse-des-métriques-dexécution-perf--hotspot">B. Synthèse des métriques d'exécution (<code>perf</code> / Hotspot)</a></h3>
 <p>La suppression combinée des allocations sur le tas (<em>heap</em>) et des tampons intermédiaires se traduit par une chute radicale du coût de traitement CPU sous charge extrême :</p>
 <ul>
-<li><strong>Baseline initiale (avec allocations &amp; pré-calculs UI) :</strong> $3,304 \times 10^9$ cycles CPU agrégés.</li>
-<li><strong>Étape intermédiaire (Zero-Heap DSP avec tampons scratch) :</strong> $2,056 \times 10^9$ cycles CPU agrégés ($-38%$).</li>
-<li><strong>Architecture finale (Stateless Zero-Heap global avec <code>Arc::clone</code>) :</strong> <strong>$1,082 \times 10^9$ cycles CPU agrégés</strong>.</li>
+<li><strong>Baseline initiale (avec allocations &amp; pré-calculs UI) :</strong> 3.304 * 10^9 cycles CPU agrégés.</li>
+<li><strong>Étape intermédiaire (Zero-Heap DSP avec tampons scratch) :</strong> 2.056 * 10^9 cycles CPU agrégés (environ -38%).</li>
+<li><strong>Architecture finale (Stateless Zero-Heap global avec <code>Arc::clone</code>) :</strong> 1.082 * 10^9 cycles CPU agrégés.</li>
 </ul>
 <h3 id="c-conclusion"><a class="header" href="#c-conclusion">C. Conclusion</a></h3>
-<p>Le moteur audio <code>rust-firework</code> opère désormais dans une <strong>architecture 100% Zéro-Heap (aucune allocation dynamique en boucle chaude) et Zéro Buffer Intermédiaire</strong>. Ce refactoring a permis de <strong>réduire la charge CPU totale du moteur de $67%$</strong> (plus de $2,2$ milliards de cycles économisés par scénario de test) tout en restaurant une pureté acoustique de référence, une stabilité sans faille (<em>zéro underrun</em>) et une latence de restitution minimale ($\approx 4\text{ ms}$).</p>
+<p>Le moteur audio <code>rust-firework</code> opère désormais dans une architecture 100% Zéro-Heap (aucune allocation dynamique en boucle chaude) et Zéro Buffer Intermédiaire. Ce refactoring a permis de réduire la charge CPU totale du moteur de 67% (plus de 2.2 milliards de cycles économisés par scénario de test) tout en restaurant une pureté acoustique de référence, une stabilité sans faille (<em>zéro underrun</em>) et une latence de restitution minimale (environ 4 ms).</p>
 <hr />
 <h2 id="5-mise-À-jour-de-la-spÉcification-et-refactoring-post-revue-13-juillet-2026"><a class="header" href="#5-mise-À-jour-de-la-spÉcification-et-refactoring-post-revue-13-juillet-2026">5. MISE À JOUR DE LA SPÉCIFICATION ET REFACTORING POST-REVUE (13 JUILLET 2026)</a></h2>
 <p>Suite à la revue de code du 13 Juillet 2026, des corrections et raffinements critiques ont été implémentés pour garantir la conformité aux standards de code (Smells) et aux spécifications :</p>
 <ul>
-<li><strong>Unification de la spatialisation</strong> : Extraction de toute la logique trigonométrique 2D/3D (ITD, ILD, distance, gains) dans une fonction centrale et partagée <code>calculate_spatial_params</code>. En mode 2D (quand $dz = 0$), l'azimut est maintenant calculé par <code>dx.atan2(dy)</code> en utilisant Y comme axe de profondeur et l'élévation à <code>0.0</code>, restaurant le bon fonctionnement de la trajectoire audio dans le simulateur 2D.</li>
+<li><strong>Unification de la spatialisation</strong> : Extraction de toute la logique trigonométrique 2D/3D (ITD, ILD, distance, gains) dans une fonction centrale et partagée <code>calculate_spatial_params</code>. En mode 2D (quand \( dz = 0 \)), l'azimut est maintenant calculé par <code>dx.atan2(dy)</code> en utilisant Y comme axe de profondeur et l'élévation à <code>0.0</code>, restaurant le bon fonctionnement de la trajectoire audio dans le simulateur 2D.</li>
 <li><strong>Migration vers glam::Vec2</strong> : Remplacement systématique de tous les tuples primitifs <code>(f32, f32)</code> par <code>glam::Vec2</code> pour les vecteurs positionnels et cinématiques.</li>
 <li><strong>Interpolation de gain (LERP)</strong> : Ajout d'une rampe de gain échantillon par échantillon pour chaque bloc dans le DSP pour éliminer les clics et pops.</li>
 <li><strong>Doppler supersonique</strong> : Clamping du taux Doppler à <code>4.0</code> en cas d'approche supérieure ou égale à la vitesse du son.</li>
