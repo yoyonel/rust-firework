@@ -29,7 +29,7 @@ impl Default for AudioConfig {
             listener_pos: [0.0, 0.0],
             sample_rate: 48000,
             block_size: 512,
-            max_voices: 64,
+            max_voices: 256,
             settings: None,
         }
     }
@@ -53,8 +53,10 @@ impl AudioConfig {
             listener_pos: glam::Vec2::new(self.listener_pos[0], self.listener_pos[1]),
             sample_rate: self.sample_rate,
             block_size: self.block_size,
-            // On conserve votre logique de plafonnement dynamique
-            max_voices: std::cmp::min(self.max_voices, max_physic_rockets),
+            // Permet d'avoir assez de voix pour les fusées ET les explosions (qui se superposent).
+            // On prend max_physic_rockets * 4, mais au moins 64 voix pour assurer que tous les
+            // sons (lancements, explosions) soient joués sans coupure ni drop.
+            max_voices: std::cmp::max(self.max_voices, std::cmp::max(64, max_physic_rockets * 4)),
             settings,
             doppler_receiver: None, // NOUVEAU : On initialise le champ à None par défaut
         }

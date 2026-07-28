@@ -2,9 +2,35 @@ use crate::audio_engine::DopplerEvent;
 use crate::AudioEngineSettings;
 use crossbeam::channel::Receiver;
 use glam::Vec2;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
+
+#[derive(Debug)]
+pub struct AtomicVec2 {
+    x: AtomicU32,
+    y: AtomicU32,
+}
+
+impl AtomicVec2 {
+    pub fn new(val: Vec2) -> Self {
+        Self {
+            x: AtomicU32::new(val.x.to_bits()),
+            y: AtomicU32::new(val.y.to_bits()),
+        }
+    }
+
+    pub fn load(&self) -> Vec2 {
+        let x_bits = self.x.load(Ordering::Relaxed);
+        let y_bits = self.y.load(Ordering::Relaxed);
+        Vec2::new(f32::from_bits(x_bits), f32::from_bits(y_bits))
+    }
+
+    pub fn store(&self, val: Vec2) {
+        self.x.store(val.x.to_bits(), Ordering::Relaxed);
+        self.y.store(val.y.to_bits(), Ordering::Relaxed);
+    }
+}
 
 // Global static compteur unique
 static ROCKET_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -51,6 +77,9 @@ pub struct Voice {
     pub target_gains: [f32; 2],  // Gain cible gauche/droite à atteindre à la fin du bloc
     pub current_itd: [f32; 2],   // ITD actuel gauche/droite (en échantillons)
     pub target_itd: [f32; 2],    // ITD cible gauche/droite à la fin du bloc
+
+    pub request_id: u64,            // NOUVEAU : ID de la requête de playback
+    pub sound_type: AudioSoundType, // NOUVEAU : Type de son joué par cette voix
 }
 
 impl Voice {
@@ -74,6 +103,8 @@ impl Voice {
             target_gains: [1.0, 1.0],  // NOUVEAU
             current_itd: [0.0, 0.0],
             target_itd: [0.0, 0.0],
+            request_id: 0,
+            sound_type: AudioSoundType::Rocket,
         }
     }
 
@@ -93,10 +124,12 @@ impl Voice {
             user_gain: req.gain,
             filter_state: [0.0; 2],
             id: req.id, // MODIFIÉ : Relie la voix à l'ID physique (renommer _id -> id)
+            request_id: req.request_id,
+            sound_type: req.sound_type,
             // NOUVEAU : On initialise les gains à 0 pour forcer une rampe d'apparition
             // ou à des valeurs neutres. Le vrai calcul aura lieu au premier bloc.
             current_gains: [0.0, 0.0],
-            target_gains: [0.0, 0.0],
+            target_gains: [req.gain, req.gain],
             current_itd: [0.0, 0.0],
             target_itd: [0.0, 0.0],
         }
@@ -121,9 +154,11 @@ pub struct PlayRequest {
     pub filter_a: f32,    // Low-pass coefficient
     pub sent_at: Instant, // Timestamp of request
 
-    pub id: u64,          // ID de la entité physique (0 si statique)
-    pub pos: Vec2,        // Position initiale
-    pub is_dynamic: bool, // true si sujet au Doppler
+    pub request_id: u64,            // NOUVEAU : ID de la requête de playback
+    pub id: u64,                    // ID de la entité physique (0 si statique)
+    pub pos: Vec2,                  // Position initiale
+    pub is_dynamic: bool,           // true si sujet au Doppler
+    pub sound_type: AudioSoundType, // NOUVEAU : Type de son
 }
 
 // =========================
@@ -140,4 +175,76 @@ pub struct FireworksAudioConfig {
     pub settings: AudioEngineSettings,
     pub doppler_receiver: Option<Receiver<DopplerEvent>>,
     // pub export_in_wav: bool,
+}
+
+// =========================================
+// NOUVEAU : Types pour le Debug Audio
+// =========================================
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum AudioSoundType {
+    #[default]
+    Rocket,
+    Explosion,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioPlayStatus {
+    Sent,
+    Received,
+    Playing,
+    Dropped,
+    Completed,
+}
+
+#[derive(Debug, Clone)]
+pub enum AudioDebugEvent {
+    Sent {
+        request_id: u64,
+        sound_type: AudioSoundType,
+        entity_id: u64,
+        sent_at: Instant,
+    },
+    Received {
+        request_id: u64,
+        received_at: Instant,
+    },
+    Started {
+        request_id: u64,
+        started_at: Instant,
+        voice_index: usize,
+    },
+    Dropped {
+        request_id: u64,
+        dropped_at: Instant,
+        reason: &'static str,
+    },
+    Completed {
+        request_id: u64,
+        completed_at: Instant,
+    },
+    Underrun {
+        elapsed_us: u64,
+        budget_us: u64,
+    },
+    BlockProcessed {
+        elapsed_us: u64,
+        budget_us: u64,
+        active_voices: usize,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct AudioDebugRecord {
+    pub request_id: u64,
+    pub sound_type: AudioSoundType,
+    pub entity_id: u64,
+    pub sent_at: Instant,
+    pub received_at: Option<Instant>,
+    pub started_at: Option<Instant>,
+    pub dropped_at: Option<Instant>,
+    pub completed_at: Option<Instant>,
+    pub status: AudioPlayStatus,
+    pub voice_index: Option<usize>,
+    pub drop_reason: Option<&'static str>,
 }

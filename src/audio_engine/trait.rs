@@ -5,6 +5,7 @@ pub trait AudioEngine {
     fn play_rocket(&self, pos: Vec2, gain: f32);
     fn play_rocket_with_id(&self, id: u64, pos: Vec2, gain: f32);
     fn play_explosion(&self, pos: Vec2, gain: f32);
+    fn play_explosion_with_id(&self, id: u64, pos: Vec2, gain: f32);
     fn start_audio_thread(&mut self, export_path: Option<&str>);
     fn stop_audio_thread(&mut self);
 
@@ -28,6 +29,22 @@ pub trait AudioEngine {
 
     /// Retourne une chaîne listant tous les effets et leur état courant (pour la console).
     fn get_effects_status(&self) -> String;
+
+    /// Récupère les événements de diagnostic de debug accumulés par le moteur audio.
+    fn pop_debug_events(&self, _buf: &mut Vec<crate::audio_engine::types::AudioDebugEvent>) {}
+
+    /// Récupère la distance d'atténuation maximale configurée.
+    fn get_max_distance(&self) -> f32 {
+        1000.0
+    }
+
+    /// Définir le gain wet de la réverbération spatiale (0.00 à 1.00).
+    fn set_reverb_wet(&self, _wet: f32) {}
+
+    /// Obtenir le gain wet de la réverbération spatiale.
+    fn get_reverb_wet(&self) -> f32 {
+        0.08
+    }
 
     fn as_audio_engine(&self) -> &dyn AudioEngine;
 }
