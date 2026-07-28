@@ -1,4 +1,4 @@
-use crate::audio_engine::types::{FireworksAudioConfig, PlayRequest};
+use crate::audio_engine::types::{AudioSoundType, FireworksAudioConfig, PlayRequest};
 use crate::AudioEngineSettings;
 use std::time::Instant;
 
@@ -13,7 +13,7 @@ fn dummy_data() -> Vec<[f32; 2]> {
 // Version test-friendly de enqueue_sound qui ignore l'atténuation distance
 fn enqueue_sound_test(engine: &FireworksAudio3D, pos: glam::Vec2, gain: f32) -> PlayRequest {
     // Panning simple
-    let dx = pos.x - engine.listener_pos.x;
+    let dx = pos.x - engine.get_listener_position().x;
     let pan = (dx / engine.settings.max_distance()).clamp(-1.0, 1.0);
 
     let mut data_panned = dummy_data();
@@ -32,9 +32,11 @@ fn enqueue_sound_test(engine: &FireworksAudio3D, pos: glam::Vec2, gain: f32) -> 
         filter_a: 0.0025,
         sent_at: Instant::now(),
         // --- NOUVEAUX CHAMPS REQUIS ---
+        request_id: 1,
         id: 0,
         pos,
         is_dynamic: false,
+        sound_type: AudioSoundType::Rocket,
     }
 }
 

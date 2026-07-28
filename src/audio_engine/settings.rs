@@ -25,7 +25,7 @@ pub struct AudioEngineSettings {
     pub use_binaural: bool,
 
     /// Maximum distance at which sounds are audible
-    #[builder(default = "1000.0")]
+    #[builder(default = "2000.0")]
     pub max_distance: f32,
 
     /// Global gain applied to all output
