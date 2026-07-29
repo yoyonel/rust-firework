@@ -1,0 +1,691 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Diagnostics, Latences &amp; Modèle d&#x27;Atténuation - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
+        
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">1.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html"><strong aria-hidden="true">2.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">3.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">3.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">3.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">4.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="audio_engine_diagnostic_and_attenuation.html" class="active"><strong aria-hidden="true">4.1.</strong> Diagnostics, Latences & Modèle d'Atténuation</a></li><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html"><strong aria-hidden="true">4.2.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html"><strong aria-hidden="true">4.3.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">4.4.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">4.5.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">4.6.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">4.7.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">4.8.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">4.9.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">4.10.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">4.11.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">5.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">5.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">5.3.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">6.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">6.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">6.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">6.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">6.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">6.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">6.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">6.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">6.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">6.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">6.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">6.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">6.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Console Interactive</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">7.1.</strong> Manuel des Commandes Console</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="documentation-du-moteur-audio--diagnostics-latences-et-modèle-datténuation-de-distance"><a class="header" href="#documentation-du-moteur-audio--diagnostics-latences-et-modèle-datténuation-de-distance">Documentation du Moteur Audio : Diagnostics, Latences, et Modèle d'Atténuation de Distance</a></h1>
+<p>Ce document récapitule les analyses, corrections de bugs, et améliorations apportées au moteur audio de la simulation de feu d'artifice, notamment en ce qui concerne la latence, l'atténuation de distance, le positionnement de l'auditeur, et le système de diagnostic en temps réel.</p>
+<hr />
+<h2 id="-positionnement-géométrique-et-spatial-de-lauditeur-listener"><a class="header" href="#-positionnement-géométrique-et-spatial-de-lauditeur-listener">🎧 Positionnement Géométrique et Spatial de l'Auditeur (Listener)</a></h2>
+<p>L'auditeur est positionné à chaque frame (ou lors du redimensionnement de la fenêtre) de façon dynamique :</p>
+<ul>
+<li><strong>Axe X (Horizontal)</strong> : <code>window_width / 2.0</code> (parfaitement centré au milieu de l'écran).</li>
+<li><strong>Axe Y (Vertical)</strong> : <code>0.0</code> (sol / bas de la fenêtre de rendu).</li>
+</ul>
+<p>Dans l'espace physique OpenGL de la simulation, le sol est situé à <code>y = 0</code> (les fusées y apparaissent/décollent) et la gravité s'applique vers le bas. Le Listener est donc situé précisément au <strong>sol et au centre</strong>.</p>
+<h3 id="schéma-ascii-de-lespace-audio-virtuel-coordonnées-physiquesopengl"><a class="header" href="#schéma-ascii-de-lespace-audio-virtuel-coordonnées-physiquesopengl">Schéma ASCII de l'Espace Audio Virtuel (Coordonnées Physiques/OpenGL)</a></h3>
+<p>L'origine <code>(0, 0)</code> se situe en bas à gauche de la fenêtre.</p>
+<pre><code class="language-text"> ------------------------------------------------------------- y = 800 (Sommet de la fenêtre)
+ |                                                           |
+ |        * [Explosion fusée 1]                              |
+ |          (x1, y1)                                         |
+ |                                                           |
+ |                                      * [Fusée 2 en vol]   |
+ |                                        (x2, y2)           |
+ |                                                           |
+ |                    Zone d'atténuation                     |
+ |                       (1/d decay)                         |
+ |                                                           |
+ |                 .- - - - - - - - - -.                     |
+ |               .  Zone Volume Max (50px).                  |
+ |              .        [🎧 Listener]     .                 |
+ ---------------------------(w/2, 0)-------------------------- y = 0 (Sol / Bas de l'écran)
+ x = 0 (Gauche)              (Centré)                   x = w (Droite)
+</code></pre>
+<hr />
+<h2 id="-bugs-résolus"><a class="header" href="#-bugs-résolus">🛠️ Bugs résolus</a></h2>
+<h3 id="1-saturation-de-la-limite-dynamique-de-voix-max_voices"><a class="header" href="#1-saturation-de-la-limite-dynamique-de-voix-max_voices">1. Saturation de la limite dynamique de voix (<code>max_voices</code>)</a></h3>
+<p>Dans <code>src/audio_engine/config.rs</code>, le moteur audio plafonnait dynamiquement le nombre de voix avec <code>std::cmp::min(self.max_voices, max_physic_rockets)</code>.
+Dans une configuration à 2 fusées (<code>max_rockets = 2</code>), cela allouait seulement <strong>2 slots de voix</strong>. Étant donné que les sons de décollage (whoosh) et d'explosion se superposent et possèdent des queues de decay, les voix arrivaient immédiatement à saturation, entraînant le rejet (drop) silencieux du son de l'explosion.</p>
+<ul>
+<li><strong>Correction</strong> : Ajustement de la formule de calcul dynamique pour s'assurer d'avoir toujours une marge confortable pour la superposition des sons :
+<code>std::cmp::max(self.max_voices, std::cmp::max(64, max_physic_rockets * 4))</code> (minimum 64 voix).</li>
+</ul>
+<h3 id="2-coordonnées-dexplosion-non-transmises"><a class="header" href="#2-coordonnées-dexplosion-non-transmises">2. Coordonnées d'explosion non transmises</a></h3>
+<p>Dans <code>src/physic_engine/physic_engine_generational_arena.rs</code>, la position spatiale des explosions n'était pas copiée dans le tableau global lors de leur déclenchement physique. Par conséquent, toutes les explosions étaient envoyées au moteur audio à une position par défaut de <code>(0,0)</code>, ce qui annulait l'effet de spatialisation (le son d'explosion venait toujours du coin inférieur gauche).</p>
+<ul>
+<li><strong>Correction</strong> : Ajout de la copie de la particule de tête lors de la détection de l'explosion physique.</li>
+</ul>
+<hr />
+<h2 id="-amélioration-du-modèle-datténuation-de-distance"><a class="header" href="#-amélioration-du-modèle-datténuation-de-distance">🔊 Amélioration du Modèle d'Atténuation de Distance</a></h2>
+<p>L'ancien modèle d'atténuation utilisait une relation linéaire abrupte :
+<code>gain = 1.0 - (distance / max_distance)</code></p>
+<p>Cela provoquait une baisse de volume trop rapide et une coupure sonore instantanée et artificielle dès que l'objet dépassait <code>max_distance</code> (qui valait <code>1000.0</code> pixels, soit moins que la diagonale de l'écran de 1024x800).</p>
+<h3 id="nouveau-modèle--inverse-distance-roll-off"><a class="header" href="#nouveau-modèle--inverse-distance-roll-off">Nouveau Modèle : Inverse-Distance Roll-off</a></h3>
+<p>Nous avons implémenté le modèle physique <strong>standard de l'industrie (OpenAL/FMOD)</strong> :</p>
+<ol>
+<li><strong>Zone de Volume Maximal</strong> : Sous un rayon de <strong><code>50px</code></strong> (<code>ref_distance</code>), le son est joué à plein volume (<code>gain = 1.0</code>).</li>
+<li><strong>Zone de Propagation Logarithmique</strong> : Au-delà de <code>50px</code>, le gain décroît de façon inversement proportionnelle à la distance : <code>gain = ref_distance / distance</code>.</li>
+<li><strong>Zone de Sécurité &amp; Fondu</strong> : Pour libérer proprement les ressources de voix CPU, un fondu linéaire (fade) s'applique à l'approche de <code>max_distance</code> (qui a été augmentée à <strong><code>2000px</code></strong> par défaut dans les paramètres) pour ramener le volume doucement à <code>0.0</code> sans coupure brusque.</li>
+</ol>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>let ref_distance = 50.0_f32; 
+let max_distance = settings.max_distance().max(ref_distance + 1.0);
+if distance &lt;= ref_distance {
+    1.0
+} else if distance &gt;= max_distance {
+    0.0
+} else {
+    let raw_att = ref_distance / distance;
+    let fade = (max_distance - distance) / (max_distance - ref_distance);
+    raw_att * fade
+}
+<span class="boring">}</span></code></pre></pre>
+<hr />
+<h2 id="-système-de-diagnostic-en-temps-réel"><a class="header" href="#-système-de-diagnostic-en-temps-réel">📊 Système de Diagnostic en Temps Réel</a></h2>
+<p>Un système de tracking sans verrous (lock-free) a été mis en place pour transmettre la télémétrie du thread audio temps réel (callback CPAL) vers le thread principal :</p>
+<ul>
+<li><strong>Compteurs stricts</strong> : Total des sons envoyés, reçus par le thread audio, effectivement démarrés (joués), rejetés (drops en cas de saturation de voix), et terminés.</li>
+<li><strong>Télémétrie de Latence</strong> :
+<ul>
+<li><strong>Transit de thread (Transit latency)</strong> : Temps de transfert de la commande de jeu à travers le canal de communication entre le thread de simulation et le thread audio.</li>
+<li><strong>Simulation vers Début Audio (Render-to-start latency)</strong> : Temps réel total écoulé entre le déclenchement de l'événement dans le moteur physique et l'écriture du premier échantillon du sample dans le buffer audio CPAL.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h2 id="-représentation-graphique-de-debug"><a class="header" href="#-représentation-graphique-de-debug">🎨 Représentation Graphique de Debug</a></h2>
+<p>Lorsque la <strong>console ImGui est ouverte</strong> (<code>self.console.open</code>), le simulateur affiche des outils graphiques de diagnostic :</p>
+<h3 id="1-audio-diagnostic-monitor"><a class="header" href="#1-audio-diagnostic-monitor">1. Audio Diagnostic Monitor</a></h3>
+<p>Une fenêtre ImGui dédiée montrant les compteurs d'événements par type (Fusée/Explosion), les latences moyennes précises en temps réel, un indicateur d'erreur rouge si un son a été perdu, et le journal (log) déroulant des 15 dernières requêtes.</p>
+<h3 id="2-superposition-graphique-du-listener"><a class="header" href="#2-superposition-graphique-du-listener">2. Superposition Graphique du Listener</a></h3>
+<p>Une visualisation géométrique dessinée en arrière-plan à l'écran :</p>
+<ul>
+<li>Une icône de casque vert <code>🎧 Listener (Sol / Centre)</code> située au milieu bas de la fenêtre.</li>
+<li>Un demi-cercle bleu de rayon <code>50px</code> indiquant la limite de volume maximal.</li>
+<li>Un demi-cercle orange indiquant le rayon de la distance maximale d'audibilité (<code>max_distance</code> dynamique récupérée depuis les réglages audio, ex: <code>2000px</code>).</li>
+</ul>
+<h3 id="schéma-ascii-de-la-visualisation-Écran-de-debug-coordonnées-Écran-imgui"><a class="header" href="#schéma-ascii-de-la-visualisation-Écran-de-debug-coordonnées-Écran-imgui">Schéma ASCII de la Visualisation Écran de Debug (Coordonnées Écran ImGui)</a></h3>
+<p>Dans les coordonnées de l'écran, le point <code>(0, 0)</code> est en haut à gauche et <code>y</code> grandit vers le bas.</p>
+<pre><code class="language-text"> ------------------------------------------------------------- y = 0 (Haut de l'écran)
+ |                                                           |
+ |                                                           |
+ |                                                           |
+ |                   Zone d'atténuation orange               |
+ |                   . - - - - - - - - - - - .               |
+ |                 .                           .             |
+ |               .      Zone Volume Max bleu     .           |
+ |              .             .---.               .          |
+ |             .             ( 🎧  )               .         |
+ -----------------------------(w/2, h)------------------------ y = h (Bas de l'écran)
+ x = 0 (Gauche)             [Listener]                  x = w (Droite)
+</code></pre>
+<hr />
+<h2 id="-gestion-du-focus-et-de-la-priorité-daffichage-z-order"><a class="header" href="#-gestion-du-focus-et-de-la-priorité-daffichage-z-order">🔝 Gestion du Focus et de la Priorité d'Affichage (Z-Order)</a></h2>
+<p>Dans ImGui, la console de commande occupe une large bande en haut de l'écran. Lors de l'ouverture simultanée de la console et du <em>Audio Diagnostic Monitor</em>, cliquer sur le fond de la console ramenait celle-ci au premier plan, masquant la fenêtre de diagnostic (qui passait en arrière-plan mais restait visible en transparence, interceptant ainsi tous les clics utilisateur).</p>
+<ul>
+<li><strong>Correction</strong> : Nous avons ajouté le flag <code>imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS</code> lors de la création de la fenêtre <code>"Console"</code> dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/utils/command_console/mod.rs">src/utils/command_console/mod.rs</a>.
+Ce flag force la console à <strong>rester systématiquement en arrière-plan</strong> des autres fenêtres d'outils flottantes. Ainsi, même si l'utilisateur interagit avec le terminal de commande, la fenêtre de diagnostic audio reste au premier plan, conserve le focus d'entrée de souris, et demeure entièrement manipulable et repositionnable.</li>
+</ul>
+<hr />
+<h2 id="-correction-du-référentiel-spatial-désynchronisation-du-listener"><a class="header" href="#-correction-du-référentiel-spatial-désynchronisation-du-listener">🛰️ Correction du Référentiel Spatial (Désynchronisation du Listener)</a></h2>
+<p>Lors de nos tests d'écoute et d'analyse géométrique, nous avons identifié une anomalie où les sons sur la gauche de l'écran étaient extrêmement forts, tandis que ceux du centre (pourtant proches de l'auditeur) et de la droite étaient très étouffés ou inaudibles.</p>
+<h3 id="cause-du-bug-"><a class="header" href="#cause-du-bug-">Cause du bug :</a></h3>
+<ol>
+<li>Dans <code>Simulator::run</code>, le thread audio CPAL était démarré en premier, clonant la position du Listener (<code>listener_pos</code>) qui valait alors sa valeur d'initialisation par défaut : <code>(0, 0)</code> (en bas à gauche).</li>
+<li>Ensuite, le thread principal mettait à jour la position du Listener vers <code>(width / 2, 0)</code> (le centre bas de l'écran).</li>
+<li><strong>Absence de synchronisation</strong> : La structure <code>DspProcessor</code> s'exécutant sur le thread audio CPAL ne recevait jamais cette mise à jour et continuait d'effectuer tous les calculs d'ITD/ILD et d'atténuation par rapport à <code>(0, 0)</code>!</li>
+</ol>
+<h3 id="correction-"><a class="header" href="#correction-">Correction :</a></h3>
+<p>Nous avons conçu un mécanisme de partage de position temps réel, lock-free et thread-safe :</p>
+<ul>
+<li>Création du type <code>AtomicVec2</code> dans <code>src/audio_engine/types.rs</code> : stocke les coordonnées X et Y sous forme de <code>AtomicU32</code> (les bits binaires des <code>f32</code> y sont chargés/sauvegardés de manière atomique sans verrous).</li>
+<li>Remplacement du type de <code>listener_pos</code> par <code>Arc&lt;AtomicVec2&gt;</code> dans <code>FireworksAudio3D</code> et <code>DspProcessor</code>.</li>
+<li>Synchronisation automatique : À chaque appel de <code>set_listener_position(pos)</code> côté simulation, la nouvelle position est écrite de manière atomique. Côté thread audio temps réel, chaque traitement de bloc lit dynamiquement cette position via <code>.load()</code>, garantissant un référentiel spatial parfait à 100% à chaque instant.</li>
+</ul>
+<hr />
+<h2 id="-stratégie-dÉvitement-de-sature-voice-stealing--vol-de-voix"><a class="header" href="#-stratégie-dÉvitement-de-sature-voice-stealing--vol-de-voix">🦹 Stratégie d'Évitement de Sature (Voice Stealing / Vol de Voix)</a></h2>
+<p>Lors du retour à une configuration élevée (ex: 64 fusées en vol), la multitude de sons (whooshes de fusées + explosions superposées) a provoqué de nombreuses alertes de drop : <code>No inactive voice available</code>. Les 64 slots de voix d'origine étaient saturés.</p>
+<h3 id="corrections-apportées-"><a class="header" href="#corrections-apportées-">Corrections apportées :</a></h3>
+<ol>
+<li><strong>Augmentation des voix dans la configuration</strong> : Nous avons doublé la limite de voix par défaut de <strong><code>64</code> à <code>128</code></strong> dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/assets/config/audio.toml">assets/config/audio.toml</a>.</li>
+<li><strong>Algorithme de Voice Stealing (Vol de Voix) avec Priorisation</strong> :
+Plutôt que de rejeter silencieusement un nouveau son lorsque les 128 slots sont occupés, nous avons implémenté un système de vol de voix dynamique et prioritaire dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs">dsp_processor.rs</a> :
+<ul>
+<li><strong>Calcul Spatiale de Pré-Atténuation</strong> : La comparaison de volume entre la nouvelle requête et les voix en cours de lecture utilise désormais le gain <strong>pré-atténué spatialement</strong> de la requête (calculé à partir de sa distance réelle à l'auditeur) au lieu de son gain initial brut. Cela évite qu'une explosion extrêmement éloignée (donc inaudible) ne vole la voix d'un sifflement de fusée très proche.</li>
+<li><strong>Pondération par Type (Priorisation)</strong> : Nous avons introduit des poids de priorité selon le type de son (<code>Explosion</code> a un multiplicateur de <code>2.0</code> vs <code>1.0</code> pour <code>Rocket</code>). Ainsi, les explosions de feux d'artifice (événements critiques pour l'utilisateur) sont sanctuarisées et ne peuvent pas être volées par de simples sifflements.</li>
+<li><strong>Recherche de la voix la plus faible</strong> : Le processeur parcourt toutes les voix actives et identifie celle ayant le produit (volume atténué * priorité) le plus faible.</li>
+<li><strong>Remplacement conditionnel</strong> : Si la nouvelle requête a une priorité sonore strictement supérieure à la voix active la plus faible, cette dernière est interrompue (volée). Un événement de drop pour vol est envoyé au diagnostic (<code>stolen_req_id</code> avec le motif <code>"Voice stolen (quieter)"</code>), et le nouveau son démarre immédiatement.</li>
+<li><strong>Sécurité à l'initialisation</strong> : Les voix fraîchement créées reçoivent un <code>target_gains</code> initialisé à <code>[req.gain, req.gain]</code> (dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/types.rs">types.rs</a>) pour éviter d'être volées instantanément avant leur premier bloc de rendu audio.</li>
+</ul>
+</li>
+</ol>
+<hr />
+<h2 id="-optimisations-de-mémoire-et-Élimination-des-allocations-sur-le-tas-règles-azdo--memory"><a class="header" href="#-optimisations-de-mémoire-et-Élimination-des-allocations-sur-le-tas-règles-azdo--memory">⚡ Optimisations de Mémoire et Élimination des Allocations sur le Tas (Règles AZDO / Memory)</a></h2>
+<p>Pour respecter scrupuleusement les exigences de non-allocation mémoire dans les boucles critiques (thread audio CPAL, boucle de mise à jour de la physique et boucle de rendu graphique), plusieurs optimisations clés ont été intégrées :</p>
+<h3 id="1-thread-audio-cpal-garanti-sans-allocation--lock-free"><a class="header" href="#1-thread-audio-cpal-garanti-sans-allocation--lock-free">1. Thread Audio CPAL (Garanti sans allocation / Lock-free)</a></h3>
+<ul>
+<li><strong>Canal de Debug Borné</strong> : Remplacement de <code>crossbeam_channel::unbounded()</code> par un canal borné pré-alloué <code>crossbeam_channel::bounded(2048)</code>.</li>
+<li><strong>try_send non-bloquant</strong> : Le thread audio utilise exclusivement <code>.try_send()</code> au lieu de <code>.send()</code>. Cette opération est garantie sans lock et sans allocation mémoire sur le tas, protégeant le callback temps réel des interruptions et du ramasse-miettes du système d'exploitation.</li>
+</ul>
+<h3 id="2-récupération-des-Événements-et-logs-zéro-allocation-par-frame"><a class="header" href="#2-récupération-des-Événements-et-logs-zéro-allocation-par-frame">2. Récupération des Événements et logs (Zéro Allocation par frame)</a></h3>
+<ul>
+<li><strong>Réutilisation de Vecteur de Transit</strong> : La méthode <code>pop_debug_events</code> a été modifiée pour accepter un buffer mutable (<code>&amp;mut Vec&lt;AudioDebugEvent&gt;</code>). Le simulateur maintient un vecteur persistant <code>audio_events_buf</code> dans sa structure principale, le vide via <code>.clear()</code>, et le passe par référence.</li>
+<li><strong>Buffer Circulaire Borné (<code>VecDeque</code>)</strong> : Le journal des événements <code>audio_debug_records</code> a été converti d'une <code>HashMap</code> dynamique vers un <code>VecDeque</code> borné à une capacité fixe de 100 éléments (pré-allouée). L'ajout se fait via <code>push_back()</code> et <code>pop_front()</code>, et la recherche se fait via un simple parcours linéaire <code>iter_mut().find(...)</code>. Une fois la capacité de 100 atteinte, plus aucune allocation sur le tas ne se produit.</li>
+</ul>
+<h3 id="3-rendu-dear-imgui-zéro-allocation-par-frame"><a class="header" href="#3-rendu-dear-imgui-zéro-allocation-par-frame">3. Rendu Dear ImGui (Zéro Allocation par frame)</a></h3>
+<ul>
+<li><strong>Macros de Formating sur la Pile</strong> : Conception des macros <code>ui_text!</code> et <code>ui_text_colored!</code> qui écrivent et formatent les chaînes de caractères dynamiques dans un tampon temporaire sur la pile (<code>[u8; 256]</code>) via <code>std::io::Cursor</code> et <code>std::io::Write</code>. Cela évite la création de milliers d'objets <code>String</code> via <code>format!</code> à chaque frame de rendu dans la boucle de dessin du diagnostic ImGui.</li>
+<li><strong>Itération Inverse Directe</strong> : L'affichage des 15 derniers logs se fait en parcourant le <code>VecDeque</code> en sens inverse (<code>self.audio_debug_records.iter().rev().take(15)</code>), ce qui élimine le besoin d'allouer un vecteur intermédiaire de références et de le trier à chaque tick.</li>
+</ul>
+<h3 id="4-configuration-de-la-latence-matérielle-block-size"><a class="header" href="#4-configuration-de-la-latence-matérielle-block-size">4. Configuration de la Latence Matérielle (Block Size)</a></h3>
+<ul>
+<li><strong>Négociation Universelle CPAL</strong> : Le moteur audio utilise <code>cpal::BufferSize::Default</code> dans <code>get_cpal_config</code> pour s'adapter dynamiquement à la taille de tampon optimale recommandée par le serveur audio de l'OS (PipeWire/PulseAudio/ALSA) et garantir une compatibilité matérielle universelle sans échecs de création de flux audio.</li>
+<li><strong>Traitement Interne par Bloc</strong> : Le moteur découpe et traite le signal audio selon le paramètre <code>block_size</code> configuré par l'utilisateur (par exemple <code>64</code> échantillons à 48 kHz = <code>1.33 ms</code>).
+<ul>
+<li>Avec un tampon matériel de <code>512</code> échantillons à 48 kHz, le temps de réponse maximum (attente du prochain cycle) est de <code>10.6 ms</code> (soit une latence moyenne de transit de <code>5.3 ms</code>).</li>
+<li>Avec un tampon matériel ramené à <strong><code>64</code></strong> échantillons (<code>block_size = 64</code> dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/assets/config/audio.toml">audio.toml</a>), l'intervalle de réveil du thread audio est réduit à seulement <code>1.33 ms</code>. La latence moyenne chute ainsi en dessous de <strong><code>0.7 ms</code></strong> (et le "render-to-audio-start" est également réduit sous les <strong><code>0.7 ms</code></strong>), offrant un rendu sonore instantané et parfaitement synchrone avec l'affichage graphique.</li>
+</ul>
+</li>
+</ul>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="physic_explosion_shapes.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="20260724_audio_anticipation_timeshifting_closed_loop.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="physic_explosion_shapes.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="20260724_audio_anticipation_timeshifting_closed_loop.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
