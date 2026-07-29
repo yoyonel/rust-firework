@@ -27,6 +27,10 @@ Ce document formalise la terminologie et le langage omniprésent (*Ubiquitous La
 | Terme | Définition | Synonymes / Alias à éviter |
 | :--- | :--- | :--- |
 | **Voix (Voice)** | Une instance active de lecture audio (comme le son d'une fusée ou d'une explosion) gérée par le moteur audio. | Son, Piste, Track |
+| **Vol de Voix Prioritaire (Voice Stealing)** | Algorithme réattribuant une voix active faible à un nouveau son plus prioritaire lorsque les 128 voix sont saturées. | Drop sonore, Interruption voix |
+| **Atténuation Inverse-Distance (Inverse-Distance Roll-off)** | Modèle d'atténuation logarithmique de la puissance sonore selon la distance $1/d$ entre la source et l'auditeur. | Décroissance linéaire, Fade audio |
+| **Positionnement Atomique (`AtomicVec2`)** | Transmission thread-safe sans verrou (lock-free) des coordonnées $f32$ du Listener du thread principal au thread audio CPAL. | Thread lock, Mutex listener |
+| **Moniteur de Diagnostic Audio (Audio Diagnostic Monitor)** | Interface ImGui et télémétrie temps réel affichant les latences (transit / render-to-start) et l'état des événements sonores. | Profiler audio, Log window |
 | **Effet Doppler (Doppler Effect)** | Le décalage de fréquence d'un son causé par le déplacement relatif d'une source audio par rapport à l'auditeur. | Pitch shift, Glissement de fréquence |
 | **Événement Doppler (Doppler Event)** | Un message asynchrone transmettant la position et la vitesse d'une source sonore au moteur audio. | Message Doppler, Audio update |
 | **Binauralisation (Spatialisation 3D)** | Le traitement audio simulant la provenance 3D d'un son dans un casque audio à l'aide de fonctions de transfert (HRTF). | Son 3D, Stéréo 3D |
