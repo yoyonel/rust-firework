@@ -595,7 +595,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_new_with_opengl_context() {
-        let _window = create_test_context();
         let console = Console::new();
 
         assert!(!console.open);
@@ -604,7 +603,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_default_trait() {
-        let _window = create_test_context();
         let console = Console::default();
 
         assert!(!console.open);
@@ -628,7 +626,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_log() {
-        let _window = create_test_context();
         let mut console = Console::new();
 
         console.log("First message");
@@ -646,7 +643,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_update_autocomplete_empty_input() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let registry = CommandRegistry::new();
 
@@ -663,7 +659,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_update_autocomplete_matches_commands() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
@@ -687,7 +682,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_update_autocomplete_fuzzy_match() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
@@ -710,7 +704,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_update_autocomplete_includes_internal_commands() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let registry = CommandRegistry::new();
 
@@ -728,7 +721,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_update_autocomplete_with_arg_suggestions() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
@@ -751,7 +743,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_update_autocomplete_arg_fuzzy_match() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
@@ -777,7 +768,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_update_autocomplete_adds_trailing_space() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
@@ -801,7 +791,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_execute_clear_command() {
-        let _window = create_test_context();
         let log = Rc::new(RefCell::new(vec![]));
         let mut audio = TestAudio::new(log.clone());
         let mut physic = TestPhysic::new(log);
@@ -823,7 +812,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_execute_help_command() {
-        let _window = create_test_context();
         let log = Rc::new(RefCell::new(vec![]));
         let mut audio = TestAudio::new(log.clone());
         let mut physic = TestPhysic::new(log);
@@ -845,7 +833,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_execute_registered_command() {
-        let _window = create_test_context();
         let log = Rc::new(RefCell::new(vec![]));
         let mut audio = TestAudio::new(log.clone());
         let mut physic = TestPhysic::new(log);
@@ -865,7 +852,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_execute_unknown_command() {
-        let _window = create_test_context();
         let log = Rc::new(RefCell::new(vec![]));
         let mut audio = TestAudio::new(log.clone());
         let mut physic = TestPhysic::new(log);
@@ -880,7 +866,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_execute_with_whitespace() {
-        let _window = create_test_context();
         let log = Rc::new(RefCell::new(vec![]));
         let mut audio = TestAudio::new(log.clone());
         let mut physic = TestPhysic::new(log);
@@ -899,7 +884,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_open_state() {
-        let _window = create_test_context();
         let mut console = Console::new();
 
         assert!(!console.open);
@@ -909,7 +893,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_focus_state() {
-        let _window = create_test_context();
         let mut console = Console::new();
 
         assert!(!console.focus_previous_widget);
@@ -921,7 +904,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_autocomplete_no_match() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let registry = CommandRegistry::new();
 
@@ -938,7 +920,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_autocomplete_selection_resets() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
@@ -958,7 +939,6 @@ mod console_integration_tests {
 
     #[test]
     fn test_console_multiple_autocomplete_updates() {
-        let _window = create_test_context();
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
@@ -987,5 +967,33 @@ mod console_integration_tests {
         console.set_input("");
         console.update_autocomplete(&registry, &audio, &physic);
         assert!(console.get_suggestions().is_empty());
+    }
+
+    #[test]
+    fn test_console_execute_physic_and_renderer_commands() {
+        let log = Rc::new(RefCell::new(vec![]));
+        let mut audio = TestAudio::new(log.clone());
+        let mut physic = TestPhysic::new(log);
+        let mut console = Console::new();
+        let mut registry = CommandRegistry::new();
+
+        registry.register_for_physic("physic.config", |engine, _| {
+            format!("Config: max_rockets={}", engine.get_config().max_rockets)
+        });
+        registry.register_for_physic("physic.apply", |_, _| "Applied".to_string());
+        registry.register_for_renderer("renderer.bloom", |input| {
+            format!("Bloom command: {}", input)
+        });
+
+        let res_config =
+            console.execute_command("physic.config", &mut audio, &mut physic, &registry);
+        assert!(res_config.contains("Config: max_rockets"));
+
+        let res_apply = console.execute_command("physic.apply", &mut audio, &mut physic, &registry);
+        assert_eq!(res_apply, "Applied");
+
+        let res_bloom =
+            console.execute_command("renderer.bloom enable", &mut audio, &mut physic, &registry);
+        assert!(res_bloom.contains("Bloom command"));
     }
 }

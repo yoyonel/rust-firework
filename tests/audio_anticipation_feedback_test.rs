@@ -132,7 +132,7 @@ fn test_audio_anticipation_feedback_loop() -> anyhow::Result<()> {
     let audio_engine = MockFeedbackAudio::new(simulated_transit);
 
     let renderer_engine = DummyRenderer::default();
-    let window_engine = DummyWindowEngine;
+    let window_engine = DummyWindowEngine::default();
 
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
 
