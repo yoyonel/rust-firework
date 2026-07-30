@@ -237,6 +237,10 @@ where
                     self.show_audio_diagnostic = !self.show_audio_diagnostic;
                     self.update_cursor_mode();
                 }
+                glfw::WindowEvent::Key(Key::F4, _, Action::Press, _) => {
+                    self.gui_settings.open = !self.gui_settings.open;
+                    self.update_cursor_mode();
+                }
                 glfw::WindowEvent::Key(Key::GraveAccent, _, Action::Press, _) => {
                     self.toggle_console();
                 }
@@ -249,7 +253,11 @@ where
                 glfw::WindowEvent::Key(_, _, _, _) | glfw::WindowEvent::Char(_)
             );
 
-            if self.console.open || self.show_audio_diagnostic || !is_key_event {
+            if self.console.open
+                || self.show_audio_diagnostic
+                || self.gui_settings.open
+                || !is_key_event
+            {
                 let imgui_system = self.window_engine.get_imgui_system_mut();
                 imgui_system
                     .glfw
@@ -325,11 +333,12 @@ where
     }
 
     fn update_cursor_mode(&mut self) {
-        let cursor_mode = if self.console.open || self.show_audio_diagnostic {
-            glfw::CursorMode::Normal
-        } else {
-            glfw::CursorMode::Disabled
-        };
+        let cursor_mode =
+            if self.console.open || self.show_audio_diagnostic || self.gui_settings.open {
+                glfw::CursorMode::Normal
+            } else {
+                glfw::CursorMode::Disabled
+            };
         self.window_engine.set_cursor_mode(cursor_mode);
     }
 

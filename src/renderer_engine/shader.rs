@@ -453,4 +453,17 @@ mod tests {
         let out = format_glsl_error_context(multi, 4);
         assert!(out.contains(">   4 | line4"));
     }
+
+    #[test]
+    fn test_load_shader_from_file() -> anyhow::Result<()> {
+        use std::io::Write;
+        use tempfile::NamedTempFile;
+
+        let mut temp_file = NamedTempFile::new()?;
+        writeln!(temp_file, "void main() {{}}")?;
+
+        let loaded = load_shader_from_file(temp_file.path());
+        assert!(loaded.contains("void main()"));
+        Ok(())
+    }
 }

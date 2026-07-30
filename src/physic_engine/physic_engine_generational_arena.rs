@@ -519,6 +519,9 @@ impl PhysicEngine for PhysicEngineFireworks {
     }
 
     fn set_explosion_image_weight(&mut self, name: &str, new_weight: f32) -> Result<(), String> {
+        if new_weight <= 0.0 {
+            return self.remove_explosion_image(name);
+        }
         match &mut self.explosion_shape {
             ExplosionShape::MultiImage {
                 shapes,
@@ -538,6 +541,34 @@ impl PhysicEngine for PhysicEngineFireworks {
             }
             _ => Err("Current explosion shape is not MultiImage".to_string()),
         }
+    }
+
+    fn remove_explosion_image(&mut self, name: &str) -> Result<(), String> {
+        let mut to_spherical = false;
+        match &mut self.explosion_shape {
+            ExplosionShape::MultiImage {
+                shapes,
+                total_weight,
+            } => {
+                if let Some(pos) = shapes.iter().position(|(s, _)| s.file_stem == name) {
+                    let (_, removed_weight) = shapes.remove(pos);
+                    *total_weight -= removed_weight;
+                    if shapes.is_empty() {
+                        to_spherical = true;
+                    }
+                } else {
+                    return Err(format!("Image '{}' not found in MultiImage set", name));
+                }
+            }
+            ExplosionShape::Image(existing) if existing.file_stem == name => {
+                to_spherical = true;
+            }
+            _ => return Err(format!("Image '{}' not active", name)),
+        }
+        if to_spherical {
+            self.explosion_shape = ExplosionShape::Spherical;
+        }
+        Ok(())
     }
 
     fn as_physic_engine(&self) -> &dyn PhysicEngine {
@@ -571,5 +602,71 @@ impl PhysicEngineTestHelpers for PhysicEngineFireworks {
 
     fn rockets_count(&self) -> usize {
         self.active_indices.len()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::physic_engine::config::PhysicConfig;
+
+    #[test]
+    fn test_physic_engine_creation_and_defaults() {
+        let config = PhysicConfig::default();
+        let engine = PhysicEngineFireworks::new(&config, 800.0);
+
+        assert_eq!(engine.rockets_count(), 0);
+        assert_eq!(engine.get_config().max_rockets, config.max_rockets);
+        assert_eq!(engine.get_explosion_shape(), &ExplosionShape::Spherical);
+    }
+
+    #[test]
+    fn test_physic_engine_rocket_spawning_and_update() {
+        let mut config = PhysicConfig::default();
+        config.max_rockets = 5;
+        config.rocket_interval_mean = 0.1;
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+
+        engine.force_next_launch();
+        let res = engine.update(0.05);
+        let has_new_rocket = res.new_rocket.is_some();
+        drop(res);
+        assert!(has_new_rocket || engine.rockets_count() > 0);
+    }
+
+    #[test]
+    fn test_physic_engine_reload_config() {
+        let mut config = PhysicConfig::default();
+        config.max_rockets = 10;
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+
+        let mut new_config = config.clone();
+        new_config.max_rockets = 20;
+        let reinitialized = engine.reload_config(&new_config);
+
+        assert!(reinitialized);
+        assert_eq!(engine.get_config().max_rockets, 20);
+    }
+
+    #[test]
+    fn test_physic_engine_explosion_shape_removal() {
+        let config = PhysicConfig::default();
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+
+        assert!(engine.remove_explosion_image("nonexistent").is_err());
+
+        engine.set_explosion_shape(ExplosionShape::Spherical);
+        assert!(engine.remove_explosion_image("heart").is_err());
+    }
+
+    #[test]
+    fn test_physic_engine_doppler_channel() {
+        let config = PhysicConfig::default();
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+        let (tx, rx) = crossbeam_channel::unbounded();
+
+        engine.set_doppler_sender(tx);
+        let _ = engine.update(0.1);
+        drop(rx);
     }
 }

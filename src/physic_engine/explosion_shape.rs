@@ -10,7 +10,7 @@ use rand::Rng;
 use std::path::Path;
 
 /// Configuration d'une forme d'explosion
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum ExplosionShape {
     /// Explosion sphérique classique (directions aléatoires uniformes)
     #[default]
@@ -57,7 +57,7 @@ impl ExplosionShape {
 ///
 /// Les pixels blancs (ou non-noirs) de l'image sont échantillonnés pour
 /// définir les positions cibles des particules d'explosion.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ImageShape {
     pub file_stem: String,
     /// Points échantillonnés, normalisés dans l'espace [-0.5, 0.5] x [-0.5, 0.5]
@@ -369,5 +369,33 @@ mod tests {
 
         // Allow some variance, but 10k samples should be close
         assert!(ratio > 2.5 && ratio < 3.5, "Ratio should be around 3.0");
+    }
+
+    #[test]
+    fn test_empty_multi_image_sampling() {
+        let mut rng = rand::rng();
+        let empty_multi = ExplosionShape::MultiImage {
+            shapes: vec![],
+            total_weight: 0.0,
+        };
+        assert!(empty_multi.sample(&mut rng).is_none());
+
+        let spherical = ExplosionShape::Spherical;
+        assert!(spherical.sample(&mut rng).is_none());
+    }
+
+    #[test]
+    fn test_get_target_position_image_shape() {
+        let shape = ImageShape {
+            file_stem: "heart".to_string(),
+            sampled_points: vec![Vec2::new(0.1, 0.2), Vec2::new(-0.3, 0.4)],
+            scale: 200.0,
+            flight_time: 1.5,
+        };
+        let target_image = shape.get_target_position(0, Vec2::new(100.0, 50.0));
+        assert_eq!(
+            target_image,
+            Vec2::new(100.0 + 0.1 * 200.0, 50.0 + 0.2 * 200.0)
+        );
     }
 }

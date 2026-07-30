@@ -15,6 +15,9 @@ pub trait AudioEngine {
 
     fn mute(&mut self);
     fn unmute(&mut self) -> f32;
+    fn is_muted(&self) -> bool {
+        false
+    }
 
     // --- Contrôle des effets DSP à chaud ---
 
@@ -44,6 +47,14 @@ pub trait AudioEngine {
     /// Obtenir le gain wet de la réverbération spatiale.
     fn get_reverb_wet(&self) -> f32 {
         0.08
+    }
+
+    /// Définir le volume général du rendu audio (0.00 à 2.00). Opération lock-free.
+    fn set_master_volume(&self, _volume: f32) {}
+
+    /// Obtenir le volume général du rendu audio (0.00 à 2.00).
+    fn get_master_volume(&self) -> f32 {
+        0.8
     }
 
     fn as_audio_engine(&self) -> &dyn AudioEngine;

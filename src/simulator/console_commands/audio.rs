@@ -24,6 +24,51 @@ where
                 "Audio unmuted".to_string()
             });
 
+        // audio.volume <0.0..2.0> — Ajuste ou affiche le volume principal audio
+        self.commands_registry
+            .register_for_audio("audio.volume", |engine, input| {
+                let parts: Vec<&str> = input.split_whitespace().collect();
+                match parts.as_slice() {
+                    [_, value_str] => {
+                        if let Ok(val) = value_str.parse::<f32>() {
+                            let clamped = val.clamp(0.0, 2.0);
+                            engine.set_master_volume(clamped);
+                            format!(
+                                "Master Audio Volume -> {:.2} ({:.0}%)",
+                                clamped,
+                                clamped * 100.0
+                            )
+                        } else {
+                            "Valeur invalide. Attendu : nombre flottant entre 0.0 et 2.0 (ex: 0.8)"
+                                .to_string()
+                        }
+                    }
+                    _ => {
+                        let current = engine.get_master_volume();
+                        format!(
+                            "Master Audio Volume = {:.2} ({:.0}%)\n\
+                            • 0.00 (0%)   : Silencieux / Mute.\n\
+                            • 0.25 (25%)  : Volume faible.\n\
+                            • 0.50 (50%)  : Volume moyen.\n\
+                            • 0.80 (80%)  : [Par défaut] Volume nominal équilibré.\n\
+                            • 1.00 (100%) : Volume maximum sans gain.\n\
+                            • 1.50 (150%) : Boost de volume.\n\
+                            Usage: audio.volume <0.0..2.0>",
+                            current,
+                            current * 100.0
+                        )
+                    }
+                }
+            });
+        self.commands_registry.register_hint(
+            "audio.volume",
+            "<0.0..2.0> — Set or view Master Audio Output Volume (Default: 0.80)",
+        );
+        self.commands_registry
+            .register_current_value("audio.volume", |audio, _| {
+                format!("{:.2}", audio.get_master_volume())
+            });
+
         // --- Commandes de contrôle des effets DSP ---
 
         // audio.fx <effect_name> <on|off>

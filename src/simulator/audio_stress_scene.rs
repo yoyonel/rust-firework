@@ -599,4 +599,16 @@ mod tests {
         // It should have randomized target_radius instead of oscillating to 100.0
         assert_ne!(source_rand.target_radius, 100.0);
     }
+
+    #[test]
+    fn test_audio_stress_scene_lifecycle() {
+        let mut scene = AudioStressScene::new();
+        assert!(!scene.enabled);
+        assert_eq!(scene.num_sources, 0);
+
+        let (tx, rx) = crossbeam_channel::unbounded();
+        scene.set_doppler_sender(tx);
+        assert!(scene.doppler_sender.is_some());
+        drop(rx);
+    }
 }
