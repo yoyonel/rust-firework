@@ -42,8 +42,20 @@ where
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
 
-        if !self.console.open && !comparison_active && !self.show_audio_diagnostic {
+        if !self.console.open
+            && !comparison_active
+            && !self.show_audio_diagnostic
+            && !self.gui_settings.open
+        {
             return;
+        }
+
+        if let Some(new_theme) = self.gui_settings.pending_theme_change.take() {
+            let (_, imgui_system) = self.window_engine.get_window_and_imgui_mut();
+            crate::simulator::gui_settings::apply_theme_to_context(
+                &mut imgui_system.context,
+                new_theme,
+            );
         }
 
         let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
@@ -375,6 +387,24 @@ where
                             });
                     });
             }
+        }
+
+        // NOUVEAU: Control Panel ImGui GUI (Settings audio, physic, renderer) - toggle via F4
+        if self.gui_settings.open {
+            self.gui_settings.draw(
+                ui,
+                &mut self.audio_engine,
+                &mut self.physic_engine,
+                &self.commands_registry,
+                &self.renderer_config,
+                &self.reload_shaders_requested,
+                &self.physic_reinit_requested,
+                &self.tonemapping_comparison_mode,
+                &mut self.show_audio_diagnostic,
+                &mut self.show_audio_visual_overlay,
+                &mut self.audio_stress_scene,
+                self.window_size_f32,
+            );
         }
 
         // Finalize ImGui Draw

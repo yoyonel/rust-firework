@@ -68,6 +68,10 @@ pub struct FireworksAudio3D {
     /// Gain du signal réverbéré (Wet gain de 0.00 à 1.00) partagé de manière lock-free.
     reverb_wet: Arc<std::sync::atomic::AtomicU32>,
 
+    /// Volume principal général (0.00 à 2.00) partagé de manière lock-free avec le thread CPAL.
+    master_volume: Arc<std::sync::atomic::AtomicU32>,
+    saved_master_volume: Arc<std::sync::atomic::AtomicU32>,
+
     // NOUVEAU : Tracking et debug des événements audio
     debug_rx: crossbeam_channel::Receiver<crate::audio_engine::types::AudioDebugEvent>,
     debug_tx: crossbeam_channel::Sender<crate::audio_engine::types::AudioDebugEvent>,
@@ -132,6 +136,8 @@ impl FireworksAudio3D {
             doppler_receiver: config.doppler_receiver,
             effect_flags: AudioEffectFlags::new_all_enabled(),
             reverb_wet: Arc::new(std::sync::atomic::AtomicU32::new(0.08f32.to_bits())),
+            master_volume: Arc::new(std::sync::atomic::AtomicU32::new(global_gain.to_bits())),
+            saved_master_volume: Arc::new(std::sync::atomic::AtomicU32::new(0.8f32.to_bits())),
             debug_tx,
             debug_rx,
             next_request_id: std::sync::atomic::AtomicU64::new(1),
@@ -259,7 +265,7 @@ impl FireworksAudio3D {
         let local_voices = self.voices.clone();
         let sr = self.sample_rate;
         let block_size = self.block_size;
-        let global_gain = self.settings.global_gain();
+        let master_volume_clone = self.master_volume.clone();
         let running_pair_clone = self.running_pair.clone();
 
         let profiler = Profiler::new(200);
@@ -350,7 +356,10 @@ impl FireworksAudio3D {
                                     }
                                 }
                             });
-                            dsp_processor.process_block(data, global_gain, &profiler);
+                            let cur_gain = f32::from_bits(
+                                master_volume_clone.load(std::sync::atomic::Ordering::Relaxed),
+                            );
+                            dsp_processor.process_block(data, cur_gain, &profiler);
                         },
                         move |err| eprintln!("CPAL error: {:?}", err),
                         None,
@@ -399,7 +408,7 @@ impl FireworksAudio3D {
     }
 
     pub fn set_volume(&mut self, volume: f32) {
-        self.global_gain = volume;
+        self.set_master_volume(volume);
     }
 }
 
@@ -438,12 +447,43 @@ impl AudioEngine for FireworksAudio3D {
     }
 
     fn mute(&mut self) {
-        self.set_volume(0.0);
+        let cur = self.get_master_volume();
+        if cur > 0.0001 {
+            self.saved_master_volume
+                .store(cur.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        }
+        self.set_master_volume(0.0);
     }
 
     fn unmute(&mut self) -> f32 {
-        self.set_volume(self.settings.global_gain());
-        self.settings.global_gain()
+        let saved = f32::from_bits(
+            self.saved_master_volume
+                .load(std::sync::atomic::Ordering::Relaxed),
+        );
+        let restore = if saved > 0.0001 { saved } else { 0.8 };
+        self.set_master_volume(restore);
+        restore
+    }
+
+    fn is_muted(&self) -> bool {
+        self.get_master_volume() <= 0.0001
+    }
+
+    fn set_master_volume(&self, volume: f32) {
+        let clamped = volume.clamp(0.0, 2.0);
+        self.master_volume
+            .store(clamped.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        if clamped > 0.0001 {
+            self.saved_master_volume
+                .store(clamped.to_bits(), std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    fn get_master_volume(&self) -> f32 {
+        f32::from_bits(
+            self.master_volume
+                .load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     fn set_effect_enabled(&self, effect: AudioEffect, enabled: bool) {

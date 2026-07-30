@@ -103,6 +103,11 @@ pub trait PhysicEngine {
     /// * `weight` - Nouveau poids
     fn set_explosion_image_weight(&mut self, name: &str, weight: f32) -> Result<(), String>;
 
+    /// Supprime une forme d'image de la configuration MultiImage (ou repasse en Spherical).
+    fn remove_explosion_image(&mut self, _name: &str) -> Result<(), String> {
+        Ok(())
+    }
+
     /// Helper for upcasting from dyn PhysicEngineFull or other subtraits
     fn as_physic_engine(&self) -> &dyn PhysicEngine;
 

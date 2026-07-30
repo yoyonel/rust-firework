@@ -1,6 +1,0 @@
-rocket_path = "assets/sounds/rocket.wav"
-explosion_path = "assets/sounds/explosion.wav"
-listener_pos = [0.0, 0.0]
-sample_rate = 48000
-block_size = 256
-max_voices = 128

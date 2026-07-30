@@ -275,6 +275,10 @@ r*hs/
 # Local Cargo configuration
 .cargo/config.toml
 
+# ImGui & runtime configuration files
+imgui.ini
+assets/config/*.toml
+
 # Local downloaded binary tools (e.g. Vale)
 /bin/
 

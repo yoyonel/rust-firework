@@ -81,7 +81,10 @@ impl WindowEngine for GlfwWindowEngine {
         }]);
 
         imgui.fonts().build_rgba32_texture();
-        imgui.style_mut().use_dark_colors();
+        let session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
+            crate::simulator::gui_settings::GUI_SESSION_PATH,
+        );
+        crate::simulator::gui_settings::apply_theme_to_context(&mut imgui, session.theme);
 
         let imgui_glfw = ImguiGLFW::new(&mut imgui, &mut window);
 
