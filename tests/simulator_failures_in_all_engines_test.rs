@@ -1,6 +1,5 @@
 #![cfg(feature = "interactive_tests")]
 
-use fireworks_sim::window_engine::{GlfwWindowEngine, WindowEngine};
 use fireworks_sim::Simulator;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -34,7 +33,7 @@ fn run_failure_test(failure: EngineFailure) {
     }
 
     let mut sim = {
-        let window_engine = GlfwWindowEngine::init(800, 600, "Test Simulator").unwrap();
+        let window_engine = helpers::DummyWindowEngine::default();
         Simulator::new(renderer, physic, audio, window_engine)
     };
 
