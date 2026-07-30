@@ -70,7 +70,7 @@ Pour éviter un écho plat centré en mono, le canal droit applique un décalage
 - Droite : `[1600, 2176, 2848, 3594]`
 
 ### 2.4. Performance & Complexité O(1)
-Plutôt que d'instancier un effet de réverbération par fusée (incalculable à 128 voix), l'effet s'exécute **une seule fois par bloc CPAL** dans [dsp_processor.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L66) directement sur le buffer accumulé `self.acc`.
+Plutôt que d'instancier un effet de réverbération par fusée (incalculable à 128 voix), l'effet s'exécute **une seule fois par bloc CPAL** dans [dsp_processor.rs](../src/audio_engine/dsp_processor.rs#L66) directement sur le buffer accumulé `self.acc`.
 
 ---
 
@@ -122,8 +122,8 @@ Toutes les modifications sont transmises au thread audio de manière **lock-free
 
 ## 5. Fichiers et Symboles du Code
 
-- **Module Réverbération** : [SpatialReverb](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/spatial_reverb.rs)
-- **Traitement par Bloc** : [DspProcessor::process_block](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L66)
-- **Drapeau DSP** : [AudioEffect::SpatialReverb](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/effect_flags.rs#L35)
-- **Commande Console** : [simulator.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs#L1075)
-- **Manuel des Commandes** : [console_commands.md](file:///home/latty/Prog/__PERSO__/rust-firework/doc/console_commands.md#L17)andes** : [console_commands.md](file:///home/latty/Prog/__PERSO__/rust-firework/doc/console_commands.md#L17)
+- **Module Réverbération** : [SpatialReverb](../src/audio_engine/spatial_reverb.rs)
+- **Traitement par Bloc** : [DspProcessor::process_block](../src/audio_engine/dsp_processor.rs#L66)
+- **Drapeau DSP** : [AudioEffect::SpatialReverb](../src/audio_engine/effect_flags.rs#L35)
+- **Commande Console** : [simulator.rs](../src/simulator.rs#L1075)
+- **Manuel des Commandes** : [console_commands.md](console_commands.md#L17)andes** : [console_commands.md](console_commands.md#L17)

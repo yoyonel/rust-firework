@@ -27,8 +27,8 @@ Ce document récapitule les dysfonctionnements identifiés lors des phases d'év
   `Assertion 'draw_list->_VtxCurrentIdx < (1 << 16) && "Too many vertices in ImDrawList using 16-bit indices..."' failed.`
 * **Cause** : Le tracé des orbites et des sources était géré par le CPU d'ImGui (`draw_list.add_circle`), générant plus de 36 000 sommets (vertices) complexes. ImGui utilisant des index 16 bits non signés, la limite de 65 536 indices par draw list était instantanément dépassée.
 * **Résolution (CircleGPURenderer)** :
-  * Création d'un module de rendu GPU dédié : [**`src/renderer_engine/circle_renderer.rs`**](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/circle_renderer.rs).
-  * Confection de shaders GLSL dédiés : [**`circle.vert.glsl`**](file:///home/latty/Prog/__PERSO__/rust-firework/assets/shaders/circle.vert.glsl) et [**`circle.frag.glsl`**](file:///home/latty/Prog/__PERSO__/rust-firework/assets/shaders/circle.frag.glsl). Les cercles sont dessinés à partir de quads instanciés (4 sommets seulement), le fragment shader calculant l'équation mathématique du disque (`length(UV)`) en temps réel sur le GPU.
+  * Création d'un module de rendu GPU dédié : [**`src/renderer_engine/circle_renderer.rs`**](../src/renderer_engine/circle_renderer.rs).
+  * Confection de shaders GLSL dédiés : [**`circle.vert.glsl`**](../assets/shaders/circle.vert.glsl) et [**`circle.frag.glsl`**](../assets/shaders/circle.frag.glsl). Les cercles sont dessinés à partir de quads instanciés (4 sommets seulement), le fragment shader calculant l'équation mathématique du disque (`length(UV)`) en temps réel sur le GPU.
   * **Isolation de la machine d'état** : Les états `GL_DEPTH_TEST` et `GL_CULL_FACE` sont explicitement sauvegardés, désactivés (pour éviter le masquage par la passe de composition HDR/Bloom précédente) puis restaurés après l'appel unique de dessin instancié (`glDrawArraysInstanced`).
 
 ---
@@ -38,7 +38,7 @@ Ce document récapitule les dysfonctionnements identifiés lors des phases d'év
 * **Cause** : À l'arrêt du programme, les champs de la structure `Simulator` sont détruits dans leur ordre de déclaration. La fenêtre GLFW (`window_engine`) étant détruite avant le `circle_renderer`, le destructeur (`Drop`) de ce dernier tentait d'appeler `glDeleteVertexArrays` et `glDeleteBuffers` sur un contexte OpenGL déjà libéré, provoquant un plantage du driver graphique.
 * **Résolution** :
   1. Rendue la méthode `destroy()` du `CircleGPURenderer` idempotente (vérifie si les IDs sont non nuls et les remet à zéro).
-  2. Intégré un nettoyage explicite dans la méthode [`close()` du `Simulator`](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs#L1377) en utilisant `self.circle_renderer.take()`. Les ressources GPU sont ainsi proprement libérées **pendant** que le contexte OpenGL de GLFW est encore valide et actif.
+  2. Intégré un nettoyage explicite dans la méthode [`close()` du `Simulator`](../src/simulator.rs#L1377) en utilisant `self.circle_renderer.take()`. Les ressources GPU sont ainsi proprement libérées **pendant** que le contexte OpenGL de GLFW est encore valide et actif.
 
 ---
 
@@ -50,7 +50,7 @@ Ce document récapitule les dysfonctionnements identifiés lors des phases d'év
   3. **Dérive de trajectoire continue** : Même au cours de leur mouvement, les sources virtuelles modifiaient continuellement leur rayon cible de manière aléatoire dès qu'elles s'approchaient de leur destination temporaire, empêchant toute stabilité géométrique.
 
 * **Résolutions implémentées** :
-  * **Désactivation matérielle de la VSync** : Ajout de la configuration explicite `glfw.set_swap_interval(glfw::SwapInterval::None);` dans [`glfw_window_engine.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/window_engine/glfw_window_engine.rs) pour forcer le driver et le compositeur graphique à ignorer le rafraîchissement vertical, ce qui a débloqué le framerate au-delà de 400 Hz.
+  * **Désactivation matérielle de la VSync** : Ajout de la configuration explicite `glfw.set_swap_interval(glfw::SwapInterval::None);` dans [`glfw_window_engine.rs`](../src/window_engine/glfw_window_engine.rs) pour forcer le driver et le compositeur graphique à ignorer le rafraîchissement vertical, ce qui a débloqué le framerate au-delà de 400 Hz.
   * **Mise en cache de l'état initial des sources** : Extension de la structure `VirtualSource` avec des champs `initial_*` mémorisant les angles, rayons et vitesses de spawn à l'initialisation.
   * **Oscillation et Relance Déterministes par Défaut** :
     * Lors du cycle de vie sonore `Explosion -> Rocket`, si l'option de randomisation n'est pas demandée, la fusée ne subit aucun repositionnement ou saut spatial, ce qui maintient sa trajectoire d'origine de façon fluide.
@@ -95,7 +95,7 @@ Le throttling à 144 Hz a été choisi comme le compromis architectural optimal 
 Afin d'éviter que le fichier `src/simulator.rs` ne devienne trop volumineux et difficile à maintenir (dépassant 110 Ko), un refactoring structurel majeur a été entrepris pour décommissionner et isoler les composants.
 
 ### A. Découplage de la Scène de Stress (SoC)
-* **Création d'un module dédié** : Tout le code métier, cinématique, d'intégration ImGui, et de rendu de la scène de stress audio a été déplacé dans le nouveau fichier [**`src/simulator/audio_stress_scene.rs`**](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/audio_stress_scene.rs).
+* **Création d'un module dédié** : Tout le code métier, cinématique, d'intégration ImGui, et de rendu de la scène de stress audio a été déplacé dans le nouveau fichier [**`src/simulator/audio_stress_scene.rs`**](../src/simulator/audio_stress_scene.rs).
 * **Encapsulation complète** : Les structures `VirtualSource` et `AudioStressScene` y sont définies de manière autonome. La structure `Simulator` n'a plus qu'un seul champ `audio_stress_scene` et lui délègue les traitements requis.
 * **Déplacement des tests unitaires** : Le test unitaire `test_virtual_source_determinism` a été déplacé de manière cohérente à la fin de ce nouveau module.
 
@@ -104,7 +104,7 @@ Afin d'éviter que le fichier `src/simulator.rs` ne devienne trop volumineux et 
 * **Filtrage des arguments d'export** : Ajout d'un contrôle pour empêcher le programme de confondre des flags de ligne de commande (comme `--audio-stress-scene`) avec des noms de fichiers d'export WAV à créer.
 
 ### C. Intégration de la tâche Taskfile
-* **Nouveau raccourci `task run-audio-stress`** : Ajout d'une tâche dédiée dans [**`Taskfile.yml`**](file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml) qui pré-configure toutes les variables d'environnement optimales (VSync désactivée, HUD de performance graphique activé) et lance la simulation interactive. Le nombre de sources peut être passé en paramètre (ex: `task run-audio-stress -- 256`, 128 par défaut).
+* **Nouveau raccourci `task run-audio-stress`** : Ajout d'une tâche dédiée dans [**`Taskfile.yml`**](../Taskfile.yml) qui pré-configure toutes les variables d'environnement optimales (VSync désactivée, HUD de performance graphique activé) et lance la simulation interactive. Le nombre de sources peut être passé en paramètre (ex: `task run-audio-stress -- 256`, 128 par défaut).
 
 
 

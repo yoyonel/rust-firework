@@ -39,8 +39,8 @@ Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq so
 
 ### A. Élimination des allocations de chaînes du Profiler
 * **Problème détecté :** Le profiler de performance interne acceptait des clés génériques via `label: impl Into<String>`. 
-  Dans [dsp_processor.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L56), chaque appel à `profile_block("write_cpal_buffer")` ou `record_metric("audio latency", ...)` convertissait le littéral `&str` en un `String` alloué sur le tas, générant plus de **10 000 allocations temporaires** par tranche de 10 secondes dans le thread audio.
-* **Correction dans [profiler.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/profiler.rs) :**
+  Dans [dsp_processor.rs](../src/audio_engine/dsp_processor.rs#L56), chaque appel à `profile_block("write_cpal_buffer")` ou `record_metric("audio latency", ...)` convertissait le littéral `&str` en un `String` alloué sur le tas, générant plus de **10 000 allocations temporaires** par tranche de 10 secondes dans le thread audio.
+* **Correction dans [profiler.rs](../src/profiler.rs) :**
   Les HashMaps et les signatures de fonctions ont été réécrites pour stocker et consommer des références statiques `&'static str` :
   ```rust
   // AVANT (allouait une String à chaque appel)
@@ -52,7 +52,7 @@ Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq so
 ### B. Remplacement de `Box<dyn Iterator>` par des closures
 * **Problème détecté :** L'interface d'itération physique `PhysicEngineIterator` renvoyait des itérateurs dynamiques boxés (`Box<dyn Iterator<Item = &Particle>>`). 
   À chaque frame de rendu, la méthode `fill_particle_data_direct` appelait ces fonctions, allouant un objet `Box` sur le tas pour encapsuler le pipeline de filtrage, créant des milliers d'allocations temporaires dans la boucle de rendu.
-* **Correction dans [trait.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/trait.rs) & [physic_engine_generational_arena.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/physic_engine_generational_arena.rs) :**
+* **Correction dans [trait.rs](../src/physic_engine/trait.rs) & [physic_engine_generational_arena.rs](../src/physic_engine/physic_engine_generational_arena.rs) :**
   Nous avons remplacé l'itération externe (renvoi d'itérateurs) par de l'**itération interne** en passant des closures temporaires (`&mut dyn FnMut(&Particle)`) :
   ```rust
   // AVANT (allocation sur le tas)
@@ -74,12 +74,12 @@ Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq so
 ### C. Canal borné pour la file Doppler (`crossbeam-channel`)
 * **Problème détecté :** Pour transmettre la télémétrie des fusées au moteur audio en temps réel, nous utilisions un canal non borné (`crossbeam::channel::unbounded()`).
   En arrière-plan, chaque appel à `try_send` allouait un nœud de liste chaînée sur le tas, générant des milliers d'allocations temporaires à mesure que les feux d'artifice se déplaçaient.
-* **Correction dans [audio_event.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/audio_event.rs) :**
+* **Correction dans [audio_event.rs](../src/audio_engine/audio_event.rs) :**
   Remplacement du canal par un canal borné (`crossbeam::channel::bounded(8192)`). Le canal pré-alloue sa file d'attente circulaire une fois au démarrage. Les appels `try_send` écrivent désormais directement dans les slots existants en **zéro allocation**.
 
 ### D. Pattern "Scratch Buffer" pour `to_deactivate`
 * **Problème détecté :** Dans la méthode `update` de la physique des fusées, un vecteur temporaire `let mut to_deactivate = Vec::new()` était instancié à chaque frame pour collecter les indices des fusées éteintes, forçant des allocations de réajustement de capacité sur le tas.
-* **Correction dans [physic_engine_generational_arena.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/physic_engine_generational_arena.rs) :**
+* **Correction dans [physic_engine_generational_arena.rs](../src/physic_engine/physic_engine_generational_arena.rs) :**
   Nous avons déporté ce buffer temporaire en tant que membre de la structure `PhysicEngineFireworks` sous la forme de `to_deactivate_scratch: Vec<Index>`, pré-alloué au démarrage.
   Pour satisfaire le Borrow Checker de Rust (qui interdit de modifier la physique tout en empruntant le buffer temporaire), nous utilisons `std::mem::take` pour extraire temporairement le vecteur de la structure, effectuer les traitements, puis le réinjecter en fin de frame :
   ```rust
@@ -100,7 +100,7 @@ Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq so
 
 ### E. Canal borné pour le Garbage Collector audio
 * **Problème détecté :** Lorsque le thread audio termine de jouer une voix, il renvoie son tampon audio au thread principal pour déallocation via un canal `garbage_tx` non borné (`unbounded()`). L'appel à `try_send` sur ce canal dans la boucle temps réel CPAL causait une allocation de nœud sur le tas.
-* **Correction dans [fireworks_audio.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs) :**
+* **Correction dans [fireworks_audio.rs](../src/audio_engine/fireworks_audio.rs) :**
   Modification du canal de recyclage pour utiliser une file bornée pré-allouée (`crossbeam::channel::bounded(1024)`), garantissant qu'aucune allocation dynamique ne se produit lorsque les voix terminent leur lecture.
 
 ---

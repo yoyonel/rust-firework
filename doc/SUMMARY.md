@@ -3,6 +3,7 @@
 [Introduction](introduction.md)
 [Langage Métier (Glossaire)](ubiquitous_language.md)
 [Guide des Tâches (Taskfile)](taskfile_guide.md)
+- [Guide des Tests Unitaires, Mocks & Couverture](20260730_unit_testing_and_coverage_guide.md)
 - [Qualité & Linting de la Documentation (Vale)](20260724_documentation_linting_pipeline.md)
 [Guide Architecture Build Hybride (Distrobox, Tracy & NVIDIA)](20260724_cross_platform_distrobox_tracy_build_guide.md)
 - [Architecture Globale, Threads & Synchronisation](20260721_moteurs_threads_synchronisation.md)
@@ -44,5 +45,6 @@
   - [Historique - Rendu GPU AZDO](2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.md)
   - [Historique - RenderDoc & Tracy](2026-07-08_synthese_architecture_renderdoc_tracy.md)
 
-- [Console Interactive]()
+- [Console Interactive & Interface Graphical GUI]()
   - [Manuel des Commandes Console](console_commands.md)
+  - [Panneau de Contrôle GUI ImGui & Session Persistante](20260729_imgui_control_panel_and_session_persistence.md)

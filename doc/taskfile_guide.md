@@ -1,6 +1,6 @@
 # 🛠️ Guide des Tâches de Compilation et Exécution (Taskfile)
 
-Ce projet utilise **Go-Task** (`task`) via le fichier [**`Taskfile.yml`**](file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml) pour automatiser et standardiser les commandes de développement, de test, de benchmark et de profilage.
+Ce projet utilise **Go-Task** (`task`) via le fichier [**`Taskfile.yml`**](../Taskfile.yml) pour automatiser et standardiser les commandes de développement, de test, de benchmark et de profilage.
 
 ---
 
@@ -33,7 +33,7 @@ Pour mesurer précisément les limites du moteur ou jouer dans les meilleures co
 
 ## 🧪 3. Tests, Qualité & Couverture
 
-Toutes les tâches graphiques et audio s'exécutent par défaut dans un tampon d'affichage virtuel (`xvfb-run`) afin de pouvoir tourner sans écran physique (ex: sur une CI).
+Toutes les tâches graphiques et audio s'exécutent par défaut dans un tampon d'affichage virtuel (`xvfb-run`) afin de pouvoir tourner sans écran physique (ex: sur une CI). Pour les détails d'architecture des mocks et de sérialisation des threads GLFW, consulter le [**Guide des Tests Unitaires, Mocks & Couverture**](20260730_unit_testing_and_coverage_guide.md).
 
 | Commande | Description |
 |:---|:---|
