@@ -26,15 +26,17 @@ pub struct RendererConfig {
     pub tone_mapping_mode: ToneMappingMode,
 }
 
+use crate::renderer_engine::constants;
+
 impl Default for RendererConfig {
     fn default() -> Self {
         Self {
-            bloom_enabled: true,
-            bloom_intensity: 1.5,
-            bloom_iterations: 3,
-            bloom_downsample: 2,
-            bloom_blur_method: BlurMethod::Gaussian,
-            tone_mapping_mode: ToneMappingMode::KhronosPBR,
+            bloom_enabled: constants::DEFAULT_BLOOM_ENABLED,
+            bloom_intensity: constants::DEFAULT_BLOOM_INTENSITY,
+            bloom_iterations: constants::DEFAULT_BLOOM_ITERATIONS,
+            bloom_downsample: constants::DEFAULT_BLOOM_DOWNSAMPLE,
+            bloom_blur_method: constants::DEFAULT_BLOOM_BLUR_METHOD,
+            tone_mapping_mode: constants::DEFAULT_TONE_MAPPING_MODE,
         }
     }
 }

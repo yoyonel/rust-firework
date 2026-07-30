@@ -22,6 +22,8 @@ pub use self::types::ParticleGPU;
 pub mod config;
 pub use self::config::RendererConfig;
 
+pub mod constants;
+
 pub mod utils;
 
 pub mod bloom;
