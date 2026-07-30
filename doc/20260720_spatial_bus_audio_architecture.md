@@ -130,7 +130,7 @@ engine.effect_flags.set(AudioEffect::SpatialBus, false);
 
 ### 3.2 Vol de Voix Optimisé (*Spatial Distance Voice Stealing*)
 
-En complément du Bus Spatial, l'algorithme de *Voice Stealing* dans [`dsp_processor.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L122-L144) intègre l'atténuation spatiale temps réel des voix actives :
+En complément du Bus Spatial, l'algorithme de *Voice Stealing* dans [`dsp_processor.rs`](../src/audio_engine/dsp_processor.rs#L122-L144) intègre l'atténuation spatiale temps réel des voix actives :
 
 > **Volume<sub>perçu</sub> = user_gain &times; A(d<sub>voix</sub>) &times; Priorité<sub>type</sub>**
 
@@ -181,13 +181,13 @@ Grâce à cette architecture basée sur un bus spatial intermédiaire, plusieurs
 Les deux fonctionnalités prioritaires du quadrant **P1** ont été intégrées avec succès au moteur audio :
 
 1. **Réverbération Spatiale sur Bus Unique (`SpatialReverb`)** :
-   - Module dédié : [`src/audio_engine/spatial_reverb.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/spatial_reverb.rs)
+   - Module dédié : [`src/audio_engine/spatial_reverb.rs`](../src/audio_engine/spatial_reverb.rs)
    - Combinaison de **4 filtres de peigne en parallèle** avec atténuation passe-bas HF (absorption de l'air) et **2 filtres tout-passe en série** (densification de l'écho).
    - Traitement exécuté **une seule fois par bloc d'audio stéréo** après accumulation du bus spatial, garantissant un coût CPU strictement constant <b><i>O</i>(1)</b>.
    - Activé/Désactivé à la volée via le bitmask atomique `AudioEffect::SpatialReverb`.
 
 2. **Banque d'Échantillons Pré-Spatialisés (`DistanceAudioAtlas`)** :
-   - Module dédié : [`src/audio_engine/distance_atlas.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/distance_atlas.rs)
+   - Module dédié : `src/audio_engine/distance_atlas.rs`
    - Génération au chargement d'un `SoundAtlas` contenant 3 estratifications spectraux : `near` (plein spectre), `mid` (filtré \\( f\_c = 4000 \\) Hz) et `far` (filtré \\( f\_c = 1200 \\) Hz).
    - En runtime, la voix bascule dynamiquement sur l'échantillon pré-filtré sans ré-exécuter la boucle de filtrage IIR passe-bas par échantillon.
    - Activé/Désactivé à la volée via le bitmask atomique `AudioEffect::DistanceAtlas`.

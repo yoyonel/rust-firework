@@ -123,5 +123,5 @@ Suite à la revue de code du 13 Juillet 2026, des corrections et raffinements cr
 *   **Suppression des buffers scratch résiduels** : Nettoyage définitif de `scratch_mono` et `scratch_stereo` du `DspProcessor`.
 
 Pour un compte rendu détaillé de ce refactoring et de l'analyse du profil de performance associé, veuillez vous référer aux documents suivants :
-*   [Rapport de Refactoring](file:///home/latty/Prog/__PERSO__/rust-firework/doc/20260713_audio_engine_refactoring_report.md)
-*   [Analyse des Hotspots CPU post-refactoring](file:///home/latty/Prog/__PERSO__/rust-firework/doc/20260713_audio_performance_profile_analysis.md)
+*   [Rapport de Refactoring](20260713_audio_engine_refactoring_report.md)
+*   [Analyse des Hotspots CPU post-refactoring](20260713_audio_performance_profile_analysis.md)
