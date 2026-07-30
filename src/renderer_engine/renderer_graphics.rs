@@ -12,8 +12,10 @@ macro_rules! cstr {
     };
 }
 
-const VERTEX_SHADER_PATH: &str = "assets/shaders/point_rendering.vert.glsl";
-const FRAGMENT_SHADER_PATH: &str = "assets/shaders/point_rendering.frag.glsl";
+use crate::renderer_engine::constants;
+
+const VERTEX_SHADER_PATH: &str = constants::SHADER_POINT_VERTEX_PATH;
+const FRAGMENT_SHADER_PATH: &str = constants::SHADER_POINT_FRAGMENT_PATH;
 
 pub struct RendererGraphics {
     pub vao: u32,

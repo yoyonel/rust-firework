@@ -67,8 +67,12 @@ impl AudioEventKind {
     /// Total lifetime in seconds of the visual effect.
     pub fn ttl_secs(self) -> f32 {
         match self {
-            AudioEventKind::Launch => 0.55,
-            AudioEventKind::Explosion => 0.75,
+            AudioEventKind::Launch => {
+                crate::renderer_engine::constants::AUDIO_EVENT_LAUNCH_TTL_SECS
+            }
+            AudioEventKind::Explosion => {
+                crate::renderer_engine::constants::AUDIO_EVENT_EXPLOSION_TTL_SECS
+            }
         }
     }
 }
