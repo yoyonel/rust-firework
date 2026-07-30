@@ -217,7 +217,7 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         if ui.slider(
             "Max Concurrent Rockets (`physic.max_rockets`)",
             1,
-            200,
+            2048,
             &mut max_rockets,
         ) {
             cfg_mut.max_rockets = max_rockets.max(1) as usize;
