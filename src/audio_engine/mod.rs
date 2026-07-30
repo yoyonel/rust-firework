@@ -40,3 +40,5 @@ pub use hrtf_convolver::HrtfConvolver;
 
 pub mod config;
 pub use config::AudioConfig;
+
+pub mod constants;

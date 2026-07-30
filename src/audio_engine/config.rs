@@ -21,15 +21,17 @@ pub struct AudioConfig {
     pub settings: Option<AudioEngineSettings>,
 }
 
+use crate::audio_engine::constants;
+
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
             rocket_path: PathBuf::from("assets/sounds/rocket.wav"),
             explosion_path: PathBuf::from("assets/sounds/explosion.wav"),
             listener_pos: [0.0, 0.0],
-            sample_rate: 48000,
-            block_size: 512,
-            max_voices: 256,
+            sample_rate: constants::DEFAULT_SAMPLE_RATE,
+            block_size: constants::DEFAULT_BLOCK_SIZE,
+            max_voices: constants::DEFAULT_MAX_VOICES,
             settings: None,
         }
     }
@@ -54,11 +56,15 @@ impl AudioConfig {
             sample_rate: self.sample_rate,
             block_size: self.block_size,
             // Permet d'avoir assez de voix pour les fusées ET les explosions (qui se superposent).
-            // On prend max_physic_rockets * 4, mais au moins 64 voix pour assurer que tous les
-            // sons (lancements, explosions) soient joués sans coupure ni drop.
-            max_voices: std::cmp::max(self.max_voices, std::cmp::max(64, max_physic_rockets * 4)),
+            max_voices: std::cmp::max(
+                self.max_voices,
+                std::cmp::max(
+                    constants::MIN_VOICES_FLOOR,
+                    max_physic_rockets * constants::VOICE_SAFETY_MULTIPLIER,
+                ),
+            ),
             settings,
-            doppler_receiver: None, // NOUVEAU : On initialise le champ à None par défaut
+            doppler_receiver: None,
         }
     }
 }
