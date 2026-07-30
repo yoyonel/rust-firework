@@ -42,7 +42,7 @@ Lors du premier lancement des tests de profilage, un crash de type `Segmentation
 * **Cause identifiée sous GDB :**
   Le flag `GL_MAP_FLUSH_EXPLICIT_BIT` est une option de mapping dynamique destinée uniquement à `glMapBufferRange`. Passer ce flag à `glBufferStorage` est illégal selon la spécification OpenGL 4.3. Le driver graphique a immédiatement renvoyé l'erreur `GL_INVALID_VALUE` et a échoué à allouer le stockage. La fonction `glMapBufferRange` a par conséquent retourné un pointeur nul (`0x0`), ce qui a provoqué un Segfault dès la première frame lors de la tentative de copie mémoire.
 * **Correction appliquée :**
-  Retrait du flag `GL_MAP_FLUSH_EXPLICIT_BIT` des arguments de `gl::BufferStorage` dans les fichiers [renderer_graphics.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/renderer_graphics.rs) et [renderer_graphics_instanced.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/renderer_graphics_instanced.rs). L'application s'exécute désormais avec un cycle de vie parfait et s'arrête proprement.
+  Retrait du flag `GL_MAP_FLUSH_EXPLICIT_BIT` des arguments de `gl::BufferStorage` dans les fichiers [renderer_graphics.rs](../src/renderer_engine/renderer_graphics.rs) et [renderer_graphics_instanced.rs](../src/renderer_engine/renderer_graphics_instanced.rs). L'application s'exécute désormais avec un cycle de vie parfait et s'arrête proprement.
 
 ---
 

@@ -221,21 +221,21 @@ sequenceDiagram
 ## 3. Détail des Moteurs et de leur Thread d'Appartenance
 
 ### A. Thread Principal (Main / Simulation / Render Loop)
-* **Localisation du code** : [src/main.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/main.rs), [src/simulator.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs), et ses sous-modules dans [src/simulator/](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/)
+* **Localisation du code** : [src/main.rs](../src/main.rs), [src/simulator.rs](../src/simulator.rs), et ses sous-modules dans [src/simulator/](../src/simulator/)
 * **Architecture de l'Orchestrateur** : Afin d'éviter le couplage fort et la surcharge de `src/simulator.rs` (allégé à ~440 lignes), l'orchestrateur délègue désormais ses composants à des sous-modules autonomes dans le dossier `src/simulator/` (SoC) :
-  - [src/simulator/audio_stress_scene.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/audio_stress_scene.rs) : Gère toute la logique interactive, la cinématique, les statistiques et le dessin GPU de la scène de stress.
-  - [src/simulator/console_commands/](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/console_commands/) : Enregistre à l'initialisation l'intégralité des commandes de la console interactive, divisée de manière modulaire (Audio, Physique, Renderer).
-  - [src/simulator/ui.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/ui.rs) : Contient le rendu de l'interface utilisateur ImGui (dashboard de diagnostics, logs d'événements et console).
-  - [src/simulator/events.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator/events.rs) : Centralise la gestion des événements de la fenêtre GLFW (redimensionnement, plein écran, mode curseur) et le traitement des messages de débogage de l'AudioEngine.
+  - [src/simulator/audio_stress_scene.rs](../src/simulator/audio_stress_scene.rs) : Gère toute la logique interactive, la cinématique, les statistiques et le dessin GPU de la scène de stress.
+  - [src/simulator/console_commands/](../src/simulator/console_commands/) : Enregistre à l'initialisation l'intégralité des commandes de la console interactive, divisée de manière modulaire (Audio, Physique, Renderer).
+  - [src/simulator/ui.rs](../src/simulator/ui.rs) : Contient le rendu de l'interface utilisateur ImGui (dashboard de diagnostics, logs d'événements et console).
+  - [src/simulator/events.rs](../src/simulator/events.rs) : Centralise la gestion des événements de la fenêtre GLFW (redimensionnement, plein écran, mode curseur) et le traitement des messages de débogage de l'AudioEngine.
 * **Rôle** :
   - **Gestion de la Fenêtre & Entrées** : Traitement des événements GLFW (clavier, souris) et rendu de l'interface utilisateur ImGui.
-  - **Exécution du Moteur Physique** ([src/physic_engine/physic_engine_generational_arena.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/physic_engine_generational_arena.rs)) : Mise à jour de la `GenerationalArena<Rocket>`, des pools de particules (`ParticlesPoolsForRockets`) et du système de fumée (`SmokeSystem`).
+  - **Exécution du Moteur Physique** ([src/physic_engine/physic_engine_generational_arena.rs](../src/physic_engine/physic_engine_generational_arena.rs)) : Mise à jour de la `GenerationalArena<Rocket>`, des pools de particules (`ParticlesPoolsForRockets`) et du système de fumée (`SmokeSystem`).
   - **Transmission des Événements Audio** : Génération des requêtes de son (`play_rocket`, `play_explosion`) et diffusion de la position/vitesse des fusées activement suivies dans la `DopplerQueue`.
   - **Collecte des Déchets Audio Mémoire** : Vidage de la `GarbageQueue` pour détruire les références `Arc<Vec<[f32; 2]>>` libérées par l'audio hors du thread critique audio.
-  - **Pilotage du Renderer** ([src/renderer_engine/renderer.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/renderer.rs)) : Transfert des données de particules vers les buffers VBO mappés de manière persistante (AZDO) et émission des commandes de dessin OpenGL.
+  - **Pilotage du Renderer** ([src/renderer_engine/renderer.rs](../src/renderer_engine/renderer.rs)) : Transfert des données de particules vers les buffers VBO mappés de manière persistante (AZDO) et émission des commandes de dessin OpenGL.
 
 ### B. Thread Audio CPAL (Real-Time DSP Callback)
-* **Localisation du code** : [src/audio_engine/fireworks_audio.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs), [src/audio_engine/dsp_processor.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs) (avec tests isolés dans [src/audio_engine/dsp_processor/tests.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor/tests.rs))
+* **Localisation du code** : [src/audio_engine/fireworks_audio.rs](../src/audio_engine/fireworks_audio.rs), [src/audio_engine/dsp_processor.rs](../src/audio_engine/dsp_processor.rs) (avec tests isolés dans [src/audio_engine/dsp_processor/tests.rs](../src/audio_engine/dsp_processor/tests.rs))
 * **Rôle** :
   - **Nom du Thread & Priorité** : Nommé `cpal_audio_dsp` / `CPAL Audio Callback`. Configuré sous Linux en priorité temps réel FIFO (`libc::SCHED_FIFO` priorité 20, ou fallback `nice -20`).
   - **Traitement de Bloc Audio (`process_block`)** : Exécuté à l'interruption matérielle de la carte son (ex: toutes les 5.8 ms pour 256 échantillons à 44.1 kHz).
@@ -248,7 +248,7 @@ sequenceDiagram
     - Envoi des pointeurs `Arc` expirés vers le Main Thread via la `GarbageQueue`.
 
 ### C. Pipeline de Rendu GPU (Contexte OpenGL & Matériel)
-* **Localisation du code** : [src/renderer_engine/renderer_graphics_instanced.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/renderer_engine/renderer_graphics_instanced.rs)
+* **Localisation du code** : [src/renderer_engine/renderer_graphics_instanced.rs](../src/renderer_engine/renderer_graphics_instanced.rs)
 * **Rôle** :
   - **Contexte OpenGL 4.5** : Détenu et piloté par le Main Thread.
   - **AZDO & Persistent Mapping** : Buffers VBO/UBO mappés en mémoire hôte avec pointeurs persistants.

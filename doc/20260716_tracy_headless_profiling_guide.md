@@ -18,7 +18,7 @@ Pour mesurer les bénéfices d'optimisations comme le UBO ou AZDO de manière re
 
 ## 🚀 Tâche Taskfile Dédiée
 
-Une tâche `profile-tracy-headless` a été ajoutée dans [Taskfile.yml](file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml). 
+Une tâche `profile-tracy-headless` a été ajoutée dans [Taskfile.yml](../Taskfile.yml). 
 
 Pour exécuter le cycle complet de capture et d'analyse en une seule commande, lancez :
 
@@ -57,7 +57,7 @@ Trace size 9880.76 KB
 ## 📂 Fichiers et Outils Utilisés
 
 - **Binaire du Simulateur :** `target/profiling/fireworks_sim`
-- **Utilitaire Capture (Tracy) :** `/home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture`
-- **Utilitaire Export CSV (Tracy) :** `/home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport`
+- **Utilitaire Capture (Tracy) :** `~/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture`
+- **Utilitaire Export CSV (Tracy) :** `~/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport`
 - **Trace Enregistrée :** `/tmp/fireworks.tracy` (peut être ouverte par la suite dans la GUI standard de Tracy pour une inspection visuelle).
 - **Données CSV Temporaires :** `/tmp/durations.csv`

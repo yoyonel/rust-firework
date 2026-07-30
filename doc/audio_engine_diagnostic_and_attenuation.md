@@ -126,7 +126,7 @@ Dans les coordonnées de l'écran, le point `(0, 0)` est en haut à gauche et `y
 
 Dans ImGui, la console de commande occupe une large bande en haut de l'écran. Lors de l'ouverture simultanée de la console et du *Audio Diagnostic Monitor*, cliquer sur le fond de la console ramenait celle-ci au premier plan, masquant la fenêtre de diagnostic (qui passait en arrière-plan mais restait visible en transparence, interceptant ainsi tous les clics utilisateur).
 
-* **Correction** : Nous avons ajouté le flag `imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS` lors de la création de la fenêtre `"Console"` dans [src/utils/command_console/mod.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/utils/command_console/mod.rs). 
+* **Correction** : Nous avons ajouté le flag `imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS` lors de la création de la fenêtre `"Console"` dans [src/utils/command_console/mod.rs](../src/utils/command_console/mod.rs). 
   Ce flag force la console à **rester systématiquement en arrière-plan** des autres fenêtres d'outils flottantes. Ainsi, même si l'utilisateur interagit avec le terminal de commande, la fenêtre de diagnostic audio reste au premier plan, conserve le focus d'entrée de souris, et demeure entièrement manipulable et repositionnable.
 
 ---
@@ -153,14 +153,14 @@ Nous avons conçu un mécanisme de partage de position temps réel, lock-free et
 Lors du retour à une configuration élevée (ex: 64 fusées en vol), la multitude de sons (whooshes de fusées + explosions superposées) a provoqué de nombreuses alertes de drop : `No inactive voice available`. Les 64 slots de voix d'origine étaient saturés.
 
 ### Corrections apportées :
-1. **Augmentation des voix dans la configuration** : Nous avons doublé la limite de voix par défaut de **`64` à `128`** dans [assets/config/audio.toml](file:///home/latty/Prog/__PERSO__/rust-firework/assets/config/audio.toml).
+1. **Augmentation des voix dans la configuration** : Nous avons doublé la limite de voix par défaut de **`64` à `128`** dans [assets/config/audio.toml](../assets/config/audio.toml).
 2. **Algorithme de Voice Stealing (Vol de Voix) avec Priorisation** :
-   Plutôt que de rejeter silencieusement un nouveau son lorsque les 128 slots sont occupés, nous avons implémenté un système de vol de voix dynamique et prioritaire dans [dsp_processor.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs) :
+   Plutôt que de rejeter silencieusement un nouveau son lorsque les 128 slots sont occupés, nous avons implémenté un système de vol de voix dynamique et prioritaire dans [dsp_processor.rs](../src/audio_engine/dsp_processor.rs) :
    * **Calcul Spatiale de Pré-Atténuation** : La comparaison de volume entre la nouvelle requête et les voix en cours de lecture utilise désormais le gain **pré-atténué spatialement** de la requête (calculé à partir de sa distance réelle à l'auditeur) au lieu de son gain initial brut. Cela évite qu'une explosion extrêmement éloignée (donc inaudible) ne vole la voix d'un sifflement de fusée très proche.
    * **Pondération par Type (Priorisation)** : Nous avons introduit des poids de priorité selon le type de son (`Explosion` a un multiplicateur de `2.0` vs `1.0` pour `Rocket`). Ainsi, les explosions de feux d'artifice (événements critiques pour l'utilisateur) sont sanctuarisées et ne peuvent pas être volées par de simples sifflements.
    * **Recherche de la voix la plus faible** : Le processeur parcourt toutes les voix actives et identifie celle ayant le produit (volume atténué * priorité) le plus faible.
    * **Remplacement conditionnel** : Si la nouvelle requête a une priorité sonore strictement supérieure à la voix active la plus faible, cette dernière est interrompue (volée). Un événement de drop pour vol est envoyé au diagnostic (`stolen_req_id` avec le motif `"Voice stolen (quieter)"`), et le nouveau son démarre immédiatement.
-   * **Sécurité à l'initialisation** : Les voix fraîchement créées reçoivent un `target_gains` initialisé à `[req.gain, req.gain]` (dans [types.rs](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/types.rs)) pour éviter d'être volées instantanément avant leur premier bloc de rendu audio.
+   * **Sécurité à l'initialisation** : Les voix fraîchement créées reçoivent un `target_gains` initialisé à `[req.gain, req.gain]` (dans [types.rs](../src/audio_engine/types.rs)) pour éviter d'être volées instantanément avant leur premier bloc de rendu audio.
 
 ---
 
@@ -184,7 +184,7 @@ Pour respecter scrupuleusement les exigences de non-allocation mémoire dans les
 * **Négociation Universelle CPAL** : Le moteur audio utilise `cpal::BufferSize::Default` dans `get_cpal_config` pour s'adapter dynamiquement à la taille de tampon optimale recommandée par le serveur audio de l'OS (PipeWire/PulseAudio/ALSA) et garantir une compatibilité matérielle universelle sans échecs de création de flux audio.
 * **Traitement Interne par Bloc** : Le moteur découpe et traite le signal audio selon le paramètre `block_size` configuré par l'utilisateur (par exemple `64` échantillons à 48 kHz = `1.33 ms`).
   * Avec un tampon matériel de `512` échantillons à 48 kHz, le temps de réponse maximum (attente du prochain cycle) est de `10.6 ms` (soit une latence moyenne de transit de `5.3 ms`).
-  * Avec un tampon matériel ramené à **`64`** échantillons (`block_size = 64` dans [audio.toml](file:///home/latty/Prog/__PERSO__/rust-firework/assets/config/audio.toml)), l'intervalle de réveil du thread audio est réduit à seulement `1.33 ms`. La latence moyenne chute ainsi en dessous de **`0.7 ms`** (et le "render-to-audio-start" est également réduit sous les **`0.7 ms`**), offrant un rendu sonore instantané et parfaitement synchrone avec l'affichage graphique.
+  * Avec un tampon matériel ramené à **`64`** échantillons (`block_size = 64` dans [audio.toml](../assets/config/audio.toml)), l'intervalle de réveil du thread audio est réduit à seulement `1.33 ms`. La latence moyenne chute ainsi en dessous de **`0.7 ms`** (et le "render-to-audio-start" est également réduit sous les **`0.7 ms`**), offrant un rendu sonore instantané et parfaitement synchrone avec l'affichage graphique.
 
 
 

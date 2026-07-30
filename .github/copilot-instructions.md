@@ -31,4 +31,4 @@
      - E.g., write `16.67 ms` instead of `$16.67\text{ ms}$`.
    - This ensures the documentation is clean, readable, and functional from the first iteration.
 8. **Taskfile Documentation Sync**:
-   - Every time a task is added, modified, or removed in [**`Taskfile.yml`**](file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml), the corresponding documentation in [**`doc/taskfile_guide.md`**](file:///home/latty/Prog/__PERSO__/rust-firework/doc/taskfile_guide.md) MUST be updated immediately to maintain accurate sync.
+   - Every time a task is added, modified, or removed in [**`Taskfile.yml`**](../Taskfile.yml), the corresponding documentation in [**`doc/taskfile_guide.md`**](../doc/taskfile_guide.md) MUST be updated immediately to maintain accurate sync.
