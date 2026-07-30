@@ -23,11 +23,32 @@ pub type SharedLog = Rc<RefCell<Vec<String>>>;
 // --- Dummy Window Engine ---
 
 #[allow(dead_code)]
-pub struct DummyWindowEngine;
+pub struct DummyWindowEngine {
+    pub events: WindowEvents,
+}
+
+impl Default for DummyWindowEngine {
+    fn default() -> Self {
+        let glfw = glfw::init(glfw::fail_on_errors)
+            .ok()
+            .or_else(|| glfw::init(glfw::log_errors).ok());
+
+        let events = if let Some(mut g) = glfw {
+            g.window_hint(glfw::WindowHint::Visible(false));
+            g.create_window(1, 1, "dummy", glfw::WindowMode::Windowed)
+                .map(|(_, rx)| rx)
+        } else {
+            None
+        };
+
+        let events = events.expect("DummyWindowEngine requires GLFW context for WindowEvents");
+        Self { events }
+    }
+}
 
 impl WindowEngine for DummyWindowEngine {
     fn init(_width: i32, _height: i32, _title: &str) -> Result<Self> {
-        Ok(Self)
+        Ok(Self::default())
     }
 
     fn poll_events(&mut self) {}
@@ -64,7 +85,7 @@ impl WindowEngine for DummyWindowEngine {
         panic!("DummyWindowEngine does not have a real window")
     }
     fn get_events(&self) -> &WindowEvents {
-        panic!("DummyWindowEngine does not have real events")
+        &self.events
     }
     fn get_imgui_system_mut(&mut self) -> &mut ImguiSystem {
         panic!("DummyWindowEngine does not have a real imgui system")

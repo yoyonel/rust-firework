@@ -145,7 +145,7 @@ tasks:
     desc: "Lancement des tests unitaires"
     cmds:
       - echo "▶️  Lancement des tests unitaires..."
-      - "{{.XVFB}} cargo test --all --quiet"
+      - "{{.XVFB}} cargo test --all --quiet -- --test-threads=1"
 
   test-one:
     desc: "Lance un test unitaire (lib) spécifique avec affichage"
@@ -161,12 +161,12 @@ tasks:
       - "{{.DISTROBOX}} ./.github/scripts/test_integration.sh"
 
   coverage:
-    desc: "Génération du rapport de couverture avec cargo-llvm-cov"
+    desc: "Génération du rapport de couverture de code (résumé console + HTML)"
     cmds:
-      - echo "📊 Génération du rapport de couverture avec cargo-llvm-cov..."
-      - '{{.XVFB}} cargo llvm-cov --workspace --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/"'
-      - 'echo "✅ Rapport généré : {{.COVERAGE_DIR}}/index.html"'
-      - xdg-open {{.COVERAGE_DIR}}/index.html 2>/dev/null || open {{.COVERAGE_DIR}}/index.html 2>/dev/null || true
+      - echo "📊 Génération du rapport de couverture (résumé console)..."
+      - '{{.XVFB}} cargo llvm-cov --lib --tests --features interactive_tests --ignore-filename-regex "tests/" -- --test-threads=1'
+      - '{{.XVFB}} cargo llvm-cov --lib --tests --features interactive_tests --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/" --no-report -- --test-threads=1'
+      - 'echo "✅ Rapport HTML mis à jour : {{.COVERAGE_DIR}}/index.html"'
 
   ci:coverage:
     desc: "CI: Run unit/integration tests with coverage under virtual framebuffer"
@@ -213,6 +213,16 @@ tasks:
   lint:
     desc: "Vérification complète du code (fmt + clippy + doc-lint)"
     deps: [fmt, clippy, doc-lint]
+
+  gui-persistence-check:
+    desc: "Vérifie que l'inventaire GUI et les cibles de persistence restent synchronisés"
+    cmds:
+      - "./scripts/check_gui_persistence.sh"
+
+  hooks:install:
+    desc: "Active le hook pre-commit versionné du projet"
+    cmds:
+      - "git config core.hooksPath .githooks"
 
   # =========================================
   # ⏱️ BENCHMARKS (Criterion.rs)
@@ -387,13 +397,13 @@ tasks:
           SIM_PID=$!
           sleep 2
           echo "📊 Lancement de la capture Tracy (5s)..."
-          /home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture -f -o /tmp/fireworks.tracy -s 5
+          {{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture -f -o /tmp/fireworks.tracy -s 5
           echo "🧹 Arrêt du simulateur..."
           kill $SIM_PID
           wait $SIM_PID 2>/dev/null || true
         '
       - echo "📊 Extraction des statistiques de Renderer::render_frame..."
-      - "/home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport -u -f 'Renderer::render_frame' /tmp/fireworks.tracy > /tmp/durations.csv"
+      - "{{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport -u -f 'Renderer::render_frame' /tmp/fireworks.tracy > /tmp/durations.csv"
       - echo "📈 Statistiques de Renderer::render_frame (hors warmup) :"
       - |
         python3 -c "
