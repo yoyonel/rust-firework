@@ -97,14 +97,14 @@ impl ImageShape {
         let (width, height) = gray.dimensions();
 
         // Seuil pour considérer un pixel comme "blanc" (non-noir)
-        const THRESHOLD: u8 = 128;
+        let threshold = crate::physic_engine::constants::IMAGE_SHAPE_THRESHOLD;
 
         // Collecte tous les pixels blancs
         let mut white_pixels: Vec<(u32, u32)> = Vec::new();
         for y in 0..height {
             for x in 0..width {
                 let Luma([intensity]) = gray.get_pixel(x, y);
-                if *intensity >= THRESHOLD {
+                if *intensity >= threshold {
                     white_pixels.push((x, y));
                 }
             }
@@ -114,7 +114,7 @@ impl ImageShape {
             return Err(anyhow::anyhow!(
                 "L'image '{}' ne contient aucun pixel blanc (seuil: {})",
                 path,
-                THRESHOLD
+                threshold
             ));
         }
 

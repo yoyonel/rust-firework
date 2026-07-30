@@ -30,27 +30,29 @@ pub struct PhysicConfig {
     pub audio_explosion_anticipation_ms: f32,
 }
 
+use crate::physic_engine::constants;
+
 impl Default for PhysicConfig {
     fn default() -> Self {
         Self {
-            max_rockets: 1024,
-            particles_per_explosion: 256,
-            particles_per_trail: 64,
-            rocket_interval_mean: 1.0 * 0.025,
-            rocket_interval_variation: 0.75 * 0.025,
-            rocket_max_next_interval: 0.025,
-            spawn_rocket_margin: 50.0,
-            spawn_rocket_vertical_angle: std::f32::consts::FRAC_PI_2, // π/2 radians
-            spawn_rocket_angle_variation: 0.3, // Amplitude de variation autour de la verticale (±0.3 rad ≈ ±17°)
-            spawn_rocket_min_speed: 350.0,
-            spawn_rocket_max_speed: 500.0,
-            explosion_threshold: 50.0, // en m/s
-            gravity: -200.0,
-            initial_rocket_speed: 100.0,
-            explosion_min_vel: 60.0,
-            explosion_max_vel: 200.0,
-            audio_launch_anticipation_ms: 25.0,
-            audio_explosion_anticipation_ms: 25.0,
+            max_rockets: constants::DEFAULT_MAX_ROCKETS,
+            particles_per_explosion: constants::DEFAULT_PARTICLES_PER_EXPLOSION,
+            particles_per_trail: constants::DEFAULT_PARTICLES_PER_TRAIL,
+            rocket_interval_mean: constants::DEFAULT_ROCKET_INTERVAL_MEAN,
+            rocket_interval_variation: constants::DEFAULT_ROCKET_INTERVAL_VARIATION,
+            rocket_max_next_interval: constants::DEFAULT_ROCKET_MAX_NEXT_INTERVAL,
+            spawn_rocket_margin: constants::DEFAULT_SPAWN_ROCKET_MARGIN,
+            spawn_rocket_vertical_angle: constants::DEFAULT_SPAWN_ROCKET_VERTICAL_ANGLE,
+            spawn_rocket_angle_variation: constants::DEFAULT_SPAWN_ROCKET_ANGLE_VARIATION,
+            spawn_rocket_min_speed: constants::DEFAULT_SPAWN_ROCKET_MIN_SPEED,
+            spawn_rocket_max_speed: constants::DEFAULT_SPAWN_ROCKET_MAX_SPEED,
+            explosion_threshold: constants::DEFAULT_EXPLOSION_THRESHOLD_SPEED,
+            gravity: constants::DEFAULT_GRAVITY,
+            initial_rocket_speed: constants::DEFAULT_INITIAL_ROCKET_SPEED,
+            explosion_min_vel: constants::DEFAULT_EXPLOSION_MIN_VELOCITY,
+            explosion_max_vel: constants::DEFAULT_EXPLOSION_MAX_VELOCITY,
+            audio_launch_anticipation_ms: constants::DEFAULT_AUDIO_LAUNCH_ANTICIPATION_MS,
+            audio_explosion_anticipation_ms: constants::DEFAULT_AUDIO_EXPLOSION_ANTICIPATION_MS,
         }
     }
 }
