@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
 pub enum BlurMethod {
     Gaussian = 0,
     Kawase = 1,
@@ -47,7 +47,60 @@ impl RendererConfig {
 
     pub fn save_to_file(&self, path: &str) -> anyhow::Result<()> {
         let text = toml::to_string_pretty(self)?;
+        if let Some(parent) = std::path::Path::new(path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         std::fs::write(path, text)?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_renderer_config_defaults() {
+        let config = RendererConfig::default();
+        assert!(config.bloom_enabled);
+        assert_eq!(config.bloom_intensity, 1.5);
+        assert_eq!(config.bloom_iterations, 3);
+        assert_eq!(config.bloom_downsample, 2);
+        assert_eq!(config.bloom_blur_method, BlurMethod::Gaussian);
+        assert_eq!(config.tone_mapping_mode, ToneMappingMode::KhronosPBR);
+    }
+
+    #[test]
+    fn test_renderer_config_file_persistence() -> anyhow::Result<()> {
+        let temp_file = NamedTempFile::new()?;
+        let file_path = temp_file.path().to_str().unwrap();
+
+        let config = RendererConfig {
+            bloom_enabled: false,
+            bloom_intensity: 4.2,
+            bloom_iterations: 5,
+            bloom_downsample: 4,
+            bloom_blur_method: BlurMethod::Kawase,
+            tone_mapping_mode: ToneMappingMode::ACES,
+        };
+
+        config.save_to_file(file_path)?;
+
+        let loaded = RendererConfig::from_file(file_path)?;
+        assert_eq!(loaded.bloom_enabled, config.bloom_enabled);
+        assert_eq!(loaded.bloom_intensity, config.bloom_intensity);
+        assert_eq!(loaded.bloom_iterations, config.bloom_iterations);
+        assert_eq!(loaded.bloom_downsample, config.bloom_downsample);
+        assert_eq!(loaded.bloom_blur_method, config.bloom_blur_method);
+        assert_eq!(loaded.tone_mapping_mode, config.tone_mapping_mode);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_blur_method_and_tonemapping_enums() {
+        assert_ne!(BlurMethod::Gaussian, BlurMethod::Kawase);
+        assert_ne!(ToneMappingMode::ACES, ToneMappingMode::KhronosPBR);
     }
 }

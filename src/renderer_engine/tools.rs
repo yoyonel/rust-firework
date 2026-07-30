@@ -298,4 +298,45 @@ mod tests {
             assert_eq!(counts.get(&id), Some(&1));
         }
     }
+
+    #[test]
+    fn test_gl_debug_callback_sources_and_severities() {
+        use std::ffi::CString;
+
+        let msg = CString::new("Test source severity").unwrap();
+
+        // Notification severity (ignored)
+        gl_debug_callback(
+            gl::DEBUG_SOURCE_API,
+            gl::DEBUG_TYPE_OTHER,
+            0x9999,
+            gl::DEBUG_SEVERITY_NOTIFICATION,
+            0,
+            msg.as_ptr(),
+            std::ptr::null_mut(),
+        );
+
+        // Test various sources with unique IDs
+        let sources = [
+            (0x9001, gl::DEBUG_SOURCE_WINDOW_SYSTEM),
+            (0x9002, gl::DEBUG_SOURCE_SHADER_COMPILER),
+            (0x9003, gl::DEBUG_SOURCE_THIRD_PARTY),
+            (0x9004, gl::DEBUG_SOURCE_OTHER),
+            (0x9005, 0xFFFF), // Unknown source
+        ];
+
+        for (id, src) in sources {
+            gl_debug_callback(
+                src,
+                gl::DEBUG_TYPE_PERFORMANCE,
+                id,
+                gl::DEBUG_SEVERITY_MEDIUM,
+                0,
+                msg.as_ptr(),
+                std::ptr::null_mut(),
+            );
+            let logged = LOGGED_IDS.lock().unwrap();
+            assert!(logged.contains(&id));
+        }
+    }
 }

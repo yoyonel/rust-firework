@@ -45,6 +45,7 @@ macro_rules! tracy_zone_with_value {
 pub mod audio_stress_scene;
 pub mod console_commands;
 pub mod events;
+pub mod gui_settings;
 pub mod ui;
 pub use audio_stress_scene::{AudioStressScene, VirtualSource};
 
@@ -90,6 +91,7 @@ where
     first_frame: bool,
     pub last_audio_debug_update: Instant,
     pub show_audio_diagnostic: bool,
+    pub gui_settings: crate::simulator::gui_settings::GuiSettings,
 
     // Tone mapping comparison
     pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -145,8 +147,11 @@ where
     pub fn new(renderer_engine: R, physic_engine: P, audio_engine: A, window_engine: W) -> Self {
         let window_size = window_engine.get_size();
         let window_pos = window_engine.get_pos();
+        let gui_session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
+            crate::simulator::gui_settings::GUI_SESSION_PATH,
+        );
 
-        Self {
+        let mut sim = Self {
             renderer_engine,
             physic_engine,
             audio_engine,
@@ -176,8 +181,9 @@ where
             first_frame: true,
             last_audio_debug_update: Instant::now(),
             show_audio_diagnostic: false,
+            gui_settings: crate::simulator::gui_settings::GuiSettings::new(),
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
-                false,
+                gui_session.tonemapping_comparison_mode,
             )),
             sync_launch_sum: 0.0,
             sync_launch_count: 0,
@@ -209,6 +215,34 @@ where
             audio_event_renderer: None,
             audio_event_pool: Vec::with_capacity(32),
             show_audio_visual_overlay: true,
+        };
+
+        sim.gui_settings.apply_session_to_audio(
+            &mut sim.audio_engine,
+            &mut sim.show_audio_diagnostic,
+            &mut sim.show_audio_visual_overlay,
+        );
+        sim.gui_settings
+            .apply_session_to_physic(&mut sim.physic_engine);
+
+        sim
+    }
+
+    pub fn save_gui_session(&self) {
+        self.gui_settings.save_session_state(
+            &self.audio_engine,
+            &self.physic_engine,
+            self.show_audio_diagnostic,
+            self.show_audio_visual_overlay,
+            self.tonemapping_comparison_mode
+                .load(std::sync::atomic::Ordering::Relaxed),
+        );
+        let _ = self
+            .physic_engine
+            .get_config()
+            .save_to_file("assets/config/physic.toml");
+        if let Ok(renderer) = self.renderer_config.read() {
+            let _ = renderer.save_to_file("assets/config/renderer.toml");
         }
     }
 
@@ -252,6 +286,7 @@ where
     pub fn step(&mut self) -> bool {
         // Early exit check
         if self.window_engine.should_close() {
+            self.save_gui_session();
             return false;
         }
 
@@ -634,6 +669,7 @@ where
     }
 
     pub fn close(&mut self) {
+        self.save_gui_session();
         if let Some(mut renderer) = self.audio_stress_scene.circle_renderer.take() {
             renderer.destroy();
         }

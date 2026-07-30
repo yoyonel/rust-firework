@@ -782,3 +782,19 @@ where
             .register_hint("physic.explosion.preset", "Usage: <preset> [weight] ...");
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::simulator::gui_settings::PRESET_DEFINITIONS;
+
+    #[test]
+    fn test_physic_preset_definitions_available() {
+        assert_eq!(PRESET_DEFINITIONS.len(), 5);
+        let names: Vec<&str> = PRESET_DEFINITIONS
+            .iter()
+            .map(|(name, _, _, _, _)| *name)
+            .collect();
+        assert!(names.contains(&"Heart"));
+        assert!(names.contains(&"Star"));
+    }
+}
