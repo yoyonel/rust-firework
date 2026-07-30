@@ -21,6 +21,8 @@ pub use self::particle::Particle;
 pub mod config;
 pub use self::config::PhysicConfig;
 
+pub mod constants;
+
 pub mod explosion_shape;
 pub use self::explosion_shape::{ExplosionShape, ImageShape};
 
