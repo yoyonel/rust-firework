@@ -40,15 +40,19 @@ impl CircleGPURenderer {
                 gl::UniformBlockBinding(shader_program, block_idx, 0);
             }
 
+            use crate::renderer_engine::constants;
+
             // 1. Quad vertices for filled disks (-0.5 to 0.5 to center on UV)
-            const QUAD_VERTICES: [f32; 8] = [-0.5, -0.5, 0.5, -0.5, -0.5, 0.5, 0.5, 0.5];
+            let quad_vertices = constants::QUAD_VERTICES;
 
             // 2. Circle vertices for outlines (LINE_LOOP - 64 segments, radius 0.5 to match quad UV scale)
-            let mut unit_circle_vertices = Vec::with_capacity(64 * 2);
-            for i in 0..64 {
-                let angle = 2.0 * std::f32::consts::PI * (i as f32) / 64.0;
-                unit_circle_vertices.push(0.5 * angle.cos());
-                unit_circle_vertices.push(0.5 * angle.sin());
+            let segments = constants::CIRCLE_OUTLINE_SEGMENTS;
+            let radius_mult = constants::CIRCLE_RADIUS_MULTIPLIER;
+            let mut unit_circle_vertices = Vec::with_capacity(segments * 2);
+            for i in 0..segments {
+                let angle = 2.0 * std::f32::consts::PI * (i as f32) / (segments as f32);
+                unit_circle_vertices.push(radius_mult * angle.cos());
+                unit_circle_vertices.push(radius_mult * angle.sin());
             }
 
             let mut vao = 0;
@@ -72,8 +76,8 @@ impl CircleGPURenderer {
             gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                (QUAD_VERTICES.len() * std::mem::size_of::<f32>()) as isize,
-                QUAD_VERTICES.as_ptr() as *const _,
+                (quad_vertices.len() * std::mem::size_of::<f32>()) as isize,
+                quad_vertices.as_ptr() as *const _,
                 gl::STATIC_DRAW,
             );
             gl::EnableVertexAttribArray(0);
