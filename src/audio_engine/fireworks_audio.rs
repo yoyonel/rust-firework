@@ -111,11 +111,15 @@ impl FireworksAudio3D {
 
         let (garbage_tx, garbage_rx) = crossbeam_channel::unbounded();
 
-        // --- NOUVEAU : Ring buffer SPSC borné pour les requêtes audio ---
-        let (play_tx, play_rx) = crossbeam_channel::bounded(512);
+        // --- Ring buffer SPSC borné pour les requêtes audio ---
+        let (play_tx, play_rx) = crossbeam_channel::bounded(
+            crate::audio_engine::constants::PLAY_REQUEST_CHANNEL_CAPACITY,
+        );
 
-        // NOUVEAU : Canaux de debug
-        let (debug_tx, debug_rx) = crossbeam_channel::bounded(2048);
+        // Canaux de debug
+        let (debug_tx, debug_rx) = crossbeam_channel::bounded(
+            crate::audio_engine::constants::DEBUG_EVENT_CHANNEL_CAPACITY,
+        );
 
         Ok(Self {
             rocket_data: rocket_arc,
@@ -135,9 +139,13 @@ impl FireworksAudio3D {
             garbage_rx,
             doppler_receiver: config.doppler_receiver,
             effect_flags: AudioEffectFlags::new_all_enabled(),
-            reverb_wet: Arc::new(std::sync::atomic::AtomicU32::new(0.08f32.to_bits())),
+            reverb_wet: Arc::new(std::sync::atomic::AtomicU32::new(
+                crate::audio_engine::constants::REVERB_DEFAULT_WET_GAIN.to_bits(),
+            )),
             master_volume: Arc::new(std::sync::atomic::AtomicU32::new(global_gain.to_bits())),
-            saved_master_volume: Arc::new(std::sync::atomic::AtomicU32::new(0.8f32.to_bits())),
+            saved_master_volume: Arc::new(std::sync::atomic::AtomicU32::new(
+                crate::audio_engine::constants::DEFAULT_GLOBAL_GAIN.to_bits(),
+            )),
             debug_tx,
             debug_rx,
             next_request_id: std::sync::atomic::AtomicU64::new(1),
@@ -297,7 +305,8 @@ impl FireworksAudio3D {
                 let config = get_cpal_config(&device, sr, block_size);
 
                 // 2. Instanciation du processeur DSP
-                let max_supported_frames = block_size.max(16384);
+                let max_supported_frames =
+                    block_size.max(crate::audio_engine::constants::HARDWARE_BUFFER_SIZE as usize);
                 let mut dsp_processor = crate::audio_engine::dsp_processor::DspProcessor {
                     voices: local_voices,
                     play_rx,
