@@ -1,0 +1,723 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Panneau de Contrôle GUI ImGui &amp; Session Persistante - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
+        
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260730_unit_testing_and_coverage_guide.html"><strong aria-hidden="true">1.</strong> Guide des Tests Unitaires, Mocks & Couverture</a></li><li class="chapter-item expanded "><a href="20260730_ssot_constants_structural_refactoring.html"><strong aria-hidden="true">2.</strong> Refactoring SSOT & Éradication des Constantes Magiques</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">3.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html"><strong aria-hidden="true">4.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">5.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">5.2.</strong> Formes d'explosions</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="audio_engine_diagnostic_and_attenuation.html"><strong aria-hidden="true">6.1.</strong> Diagnostics, Latences & Modèle d'Atténuation</a></li><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html"><strong aria-hidden="true">6.2.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html"><strong aria-hidden="true">6.3.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">6.4.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">6.5.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">6.6.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">6.7.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">6.8.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">6.9.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">6.10.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">6.11.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">7.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">7.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">7.3.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">8.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">8.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">8.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">8.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">8.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">8.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">8.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">8.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">8.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">8.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">8.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">8.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">8.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">8.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">9.</strong> Console Interactive & Interface Graphical GUI</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">9.1.</strong> Manuel des Commandes Console</a></li><li class="chapter-item expanded "><a href="20260729_imgui_control_panel_and_session_persistence.html" class="active"><strong aria-hidden="true">9.2.</strong> Panneau de Contrôle GUI ImGui & Session Persistante</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="imgui-control-panel--session-persistence-technical-documentation"><a class="header" href="#imgui-control-panel--session-persistence-technical-documentation">ImGui Control Panel &amp; Session Persistence Technical Documentation</a></h1>
+<p>This document describes the design, architecture, and feature set of the ImGui Engine Control Panel (<code>F4</code>) and the persistent session system introduced in the Fireworks Simulator.</p>
+<hr />
+<h2 id="-overview--architecture"><a class="header" href="#-overview--architecture">📌 Overview &amp; Architecture</a></h2>
+<p>The ImGui Control Panel provides an interactive graphical user interface (GUI) integrating all engine settings across <strong>Audio</strong>, <strong>Physics</strong>, and <strong>Renderer &amp; Post-FX</strong> into a unified 4-tab window.</p>
+<ul>
+<li><strong>Shortcut Key</strong>: <code>F4</code> (toggles panel visibility &amp; cursor mode).</li>
+<li><strong>Core Code</strong>:
+<ul>
+<li><code>src/simulator/gui_settings.rs</code> (<a href="../src/simulator/gui_settings.rs#L60-L88">GuiSettings</a>)</li>
+<li><code>src/simulator/ui.rs</code> (<a href="../src/simulator/ui.rs">ui.rs</a>)</li>
+<li><code>src/simulator/events.rs</code> (<a href="../src/simulator/events.rs">events.rs</a>)</li>
+</ul>
+</li>
+<li><strong>Session File</strong>: <code>assets/config/gui_session.toml</code> (<a href="../src/simulator/gui_settings.rs#L13-L45">GuiSessionState</a>)</li>
+</ul>
+<hr />
+<h2 id="-gui-control-panel-structure"><a class="header" href="#-gui-control-panel-structure">🎛️ GUI Control Panel Structure</a></h2>
+<pre><code>+-----------------------------------------------------------------------------------------------+
+| Engine Control Panel -- Settings (F4)                                                         |
++-----------------------------------------------------------------------------------------------+
+| [SAVE SESSION]  [RELOAD SESSION]  Theme: [Cyberpunk Cyan v]  Filter: [Filter settings...    ] |
++-----------------------------------------------------------------------------------------------+
+| [ Audio ]  [ Physics ]  [ Renderer &amp; Post-FX ]  [ Console Commands ]                         |
++-----------------------------------------------------------------------------------------------+
+|                                                                                               |
+|  (Tab Content rendered based on selected tab and live search filter)                          |
+|                                                                                               |
++-----------------------------------------------------------------------------------------------+
+
+---
+
+### 🎨 ImGui Themes &amp; Visual Styling
+
+The ImGui Control Panel includes a live **Theme Selector** in the header toolbar, allowing instant switching between 5 distinct visual styles:
+
+| Theme Name | Visual Style &amp; Color Palette | Highlights &amp; Accents |
+| :--- | :--- | :--- |
+| **Cyberpunk Cyan** *(Default)* | Obsidian dark (`#0f121a`), Neon Cyan borders | Cyan (`#00d9f2`) buttons/sliders &amp; Magenta (`#f233a6`) active highlights |
+| **Deep Sapphire** | Sleek Slate (`#1a1f29`), Soft rounded frame corners | Sapphire Blue (`#3380f2`) &amp; Ice Blue (`#59b3ff`) accents |
+| **Emerald Firework** | Deep Charcoal (`#141714`), Nature-inspired palette | Emerald Green (`#33e68c`) &amp; Gold Spark (`#f2b333`) highlights |
+| **Dracula Synthwave** | Purple Navy (`#1f1c2b`), Synthwave aesthetic | Pink Synth (`#fa73b3`) &amp; Purple Glow (`#bf66e6`) accents |
+| **Classic Dark** | Standard ImGui dark theme | Classic grey frames and sharp edges |
+
+- **Live Theme Switching**: Theme changes take effect instantly without restarting the application.
+- **Persistence**: Selected theme is saved to `assets/config/gui_session.toml` (`theme = "CyberpunkCyan"`) and automatically restored across runs.
+</code></pre>
+<hr />
+<h3 id="1-tab-1-audio-engine-controls"><a class="header" href="#1-tab-1-audio-engine-controls">1. Tab 1: Audio Engine Controls</a></h3>
+<ul>
+<li><strong>Global Audio Controls</strong>:
+<ul>
+<li>Master Output Volume Slider (<code>audio.volume</code>): Continuous volume control (<code>0%</code> to <code>200%</code>, default <code>80%</code>) with <code>[Reset Vol]</code>.</li>
+<li>Quick Volume Presets: <code>Mute (0%)</code>, <code>Low (25%)</code>, <code>Medium (50%)</code>, <code>Default (80%)</code>, <code>Full (100%)</code>, <code>Boost (150%)</code>.</li>
+<li>Master Mute toggle reading live status (<code>audio_engine.is_muted()</code>) + <code>Mute</code> / <code>Unmute</code> buttons.</li>
+<li><code>[RESET AUDIO DEFAULTS]</code> button (resets volume to 80%, unmutes, sets reverb wet to 8%, enables all DSP effects).</li>
+</ul>
+</li>
+<li><strong>Spatial Reverb Wet Mix (<code>audio.reverb_wet</code>)</strong>:
+<ul>
+<li>Continuous slider (<code>0.00</code> to <code>1.00</code>).</li>
+<li>Presets: <code>Dry (0%)</code>, <code>Default (8%) [Reset]</code>, <code>Medium (20%)</code>, <code>Cathedral (50%)</code>, <code>Full Wet (100%)</code>.</li>
+</ul>
+</li>
+<li><strong>DSP Effects Matrix (<code>audio.fx</code>, <code>audio.fx_all</code>)</strong>:
+<ul>
+<li>Live checkboxes for all 11 DSP effects (<code>binaural</code>, <code>panning</code>, <code>distance_atten</code>, <code>lowpass</code>, <code>doppler</code>, <code>fade</code>, <code>gain_lerp</code>, <code>normalize</code>, <code>spatial_bus</code>, <code>spatial_reverb</code>, <code>hrtf_bus</code>).</li>
+<li><code>[ON] Enable All DSP Effects</code> and <code>[OFF] Disable All DSP Effects</code> buttons + <code>[RESET DSP EFFECTS]</code>.</li>
+</ul>
+</li>
+<li><strong>Audio Diagnostics &amp; Stress Scene</strong>:
+<ul>
+<li>Checkboxes for Audio Diagnostic Monitor (<code>F3</code>) and Visual Event Overlay (waves / beams / badges).</li>
+<li>Start / Stop Audio Stress Test Scene (32 active 3D sound sources).</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h3 id="2-tab-2-physics-engine-controls"><a class="header" href="#2-tab-2-physics-engine-controls">2. Tab 2: Physics Engine Controls</a></h3>
+<ul>
+<li><strong>Configuration Sync Banner &amp; Actions</strong>:
+<ul>
+<li>Live status badge (<code>[OK] Physics Configuration Synced</code> vs <code>WARNING: Pending Physics Changes Detected!</code>).</li>
+<li>Buttons: <code>[APPLY] PENDING CHANGES</code> (<code>physic.apply</code>), <code>[SAVE] Save Config</code>, <code>[RELOAD] Reload Disk Config</code>, <code>[RESET PHYSICS DEFAULTS]</code>.</li>
+</ul>
+</li>
+<li><strong>Simulation Capacity &amp; Buffers</strong>:
+<ul>
+<li>Sliders: <code>Max Concurrent Rockets</code> (1..2048), <code>Particles / Explosion</code> (10..2000), <code>Particles / Trail</code> (0..500) + <code>Reset Capacity Defaults</code>.</li>
+</ul>
+</li>
+<li><strong>Rocket Launch &amp; Spawn Dynamics</strong>:
+<ul>
+<li>Sliders: <code>Spawn Interval Mean (s)</code>, <code>Interval Variation</code>, <code>Max Next Interval</code>, <code>Spawn Margin</code>, <code>Vertical Angle (rad)</code>, <code>Angle Variation</code>, <code>Spawn Min Speed</code>, <code>Spawn Max Speed</code>, <code>Initial Rocket Speed</code> + <code>Reset Spawn Defaults</code>.</li>
+</ul>
+</li>
+<li><strong>Forces &amp; Particle Physics</strong>:
+<ul>
+<li>Sliders: <code>Gravity</code> (-2000..2000), <code>Explosion Speed Threshold</code>, <code>Explosion Min Velocity</code>, <code>Explosion Max Velocity</code> + <code>Reset Forces Defaults</code>.</li>
+</ul>
+</li>
+<li><strong>Explosion Shape &amp; Presets (<code>physic.explosion.*</code>)</strong>:
+<ul>
+<li>Mode indicator (<code>Spherical</code>, <code>Single Image</code>, <code>MultiImage</code>).</li>
+<li><code>Spherical Mode</code> button + <code>Reset to Spherical</code>.</li>
+<li><strong>Presets &amp; Weight Adjustment</strong>:
+<ul>
+<li>Vertical row layout per preset (<code>Heart</code>, <code>Star</code>, <code>Smiley</code>, <code>Note</code>, <code>Ring</code>).</li>
+<li>Dedicated weight slider per preset (<code>0.1</code> to <code>10.0</code>) + <code>Reset W</code> button.</li>
+<li>Buttons: <code>Set Single</code> (single image mode) and <code>+ Add (&lt;w&gt;w)</code> (cumulative weighted MultiImage mode).</li>
+</ul>
+</li>
+<li><strong>Active Shape Controls &amp; Parameter Reset</strong>:
+<ul>
+<li>Displays active probability breakdown (e.g. <code>heart (33.3% d'apparition)</code>).</li>
+<li>Dedicated live sliders for <code>Weight</code>, <code>Image Scale (px)</code> (20..500), and <code>Flight Time (s)</code> (0.2..5.0) per active shape.</li>
+<li>Dedicated reset buttons per parameter (<code>Reset W</code>, <code>Reset Scale</code>, <code>Reset Flight</code>, <code>[Reset Defaults]</code>).</li>
+<li>Dedicated <strong><code>[X Delete]</code></strong> button to remove any shape from the MultiImage group (reverts to Spherical if empty).</li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h3 id="3-tab-3-renderer--post-fx-controls"><a class="header" href="#3-tab-3-renderer--post-fx-controls">3. Tab 3: Renderer &amp; Post-FX Controls</a></h3>
+<ul>
+<li><strong>Shader &amp; Config Actions</strong>:
+<ul>
+<li>Buttons: <code>[RELOAD] Reload Shaders</code> (<code>renderer.reload_shaders</code>), <code>[SAVE] Save Config</code>, <code>[RELOAD] Reload Disk Config</code>, <code>[RESET RENDERER DEFAULTS]</code>.</li>
+</ul>
+</li>
+<li><strong>Tonemapping (<code>renderer.tonemapping</code>)</strong>:
+<ul>
+<li>Combo dropdown selector: <code>Reinhard</code>, <code>Reinhard Extended</code>, <code>ACES</code>, <code>Uncharted 2</code>, <code>AgX</code>, <code>Khronos PBR</code>.</li>
+<li>Checkbox: <code>Grid Comparison Mode</code> (<code>renderer.tonemapping.compare</code>).</li>
+<li>Button: <code>Reset Tonemapping</code>.</li>
+</ul>
+</li>
+<li><strong>Bloom Pipeline (<code>renderer.bloom.*</code>)</strong>:
+<ul>
+<li>Checkbox <code>Enable Bloom</code>.</li>
+<li>Sliders: <code>Intensity</code> (0.0..10.0), <code>Iterations</code> (1..10).</li>
+<li>Combo: <code>Downsample</code> (<code>1x (Native)</code>, <code>2x (Half)</code>, <code>4x (Quarter)</code>).</li>
+<li>Combo: <code>Blur Method</code> (<code>Gaussian (Classic 5-tap dual)</code>, <code>Kawase (Optimized pyramid)</code>).</li>
+<li>Button: <code>Reset Bloom Defaults</code>.</li>
+</ul>
+</li>
+</ul>
+<hr />
+<h3 id="4-tab-4-console-commands-overview"><a class="header" href="#4-tab-4-console-commands-overview">4. Tab 4: Console Commands Overview</a></h3>
+<ul>
+<li>Complete catalog of all registered console commands sorted alphabetically.</li>
+<li>Real-time value inspection (<code>= &lt;current_value&gt;</code>) and usage hints.</li>
+</ul>
+<hr />
+<h2 id="-session-persistence-assetsconfiggui_sessiontoml"><a class="header" href="#-session-persistence-assetsconfiggui_sessiontoml">💾 Session Persistence (<code>assets/config/gui_session.toml</code>)</a></h2>
+<p>The GUI session state is serialized using <code>serde</code> and <code>toml</code> into <code>assets/config/gui_session.toml</code>.</p>
+<h3 id="persisted-fields"><a class="header" href="#persisted-fields">Persisted Fields</a></h3>
+<pre><code class="language-toml">gui_open = true
+active_tab = 1
+search_filter = ""
+show_audio_diagnostic = false
+show_audio_visual_overlay = true
+audio_muted = false
+audio_reverb_wet = 0.08
+audio_dsp_mask = 2047
+window_pos = [25.6, 34.8]
+window_size = [660.0, 580.0]
+scroll_y = 120.5
+</code></pre>
+<h3 id="automatic-lifecycle"><a class="header" href="#automatic-lifecycle">Automatic Lifecycle</a></h3>
+<ol>
+<li><strong>Startup (<code>Simulator::new</code>)</strong>: <code>GuiSessionState::load_from_file</code> restores window visibility (<code>open</code>), active tab, search filter, window position (<code>window_pos</code>), window size (<code>window_size</code>), vertical scroll offset (<code>scroll_y</code>), diagnostic overlay state, mute status, spatial reverb gain, and DSP mask onto the engine.</li>
+<li><strong>Shutdown (<code>Simulator::step</code>)</strong>: Automatically saves the exact GUI state, layout, and scroll position when closing or exiting.</li>
+<li><strong>Manual</strong>: Buttons <code>[SAVE SESSION]</code> and <code>[RELOAD SESSION]</code> in the top GUI toolbar.</li>
+</ol>
+<hr />
+<h2 id="-systemic-rule-reset-to-default"><a class="header" href="#-systemic-rule-reset-to-default">🛡️ Systemic Rule: "Reset to Default"</a></h2>
+<blockquote>
+<p><strong>Systemic UI Directive</strong>:
+<em>Every single parameter, slider, control, or input added to any GUI tab MUST have a clear, dedicated "Reset to Default" button next to it.</em></p>
+</blockquote>
+<h3 id="reset-hierarchy"><a class="header" href="#reset-hierarchy">Reset Hierarchy</a></h3>
+<ol>
+<li><strong>Parameter Level</strong>: <code>Reset W</code>, <code>Reset Scale</code>, <code>Reset Flight</code> buttons next to individual sliders.</li>
+<li><strong>Section Level</strong>: <code>Reset Capacity Defaults</code>, <code>Reset Spawn Defaults</code>, <code>Reset Forces Defaults</code>, <code>Reset Bloom Defaults</code>, <code>Reset Tonemapping</code>.</li>
+<li><strong>Global Level</strong>: <code>[RESET AUDIO DEFAULTS]</code>, <code>[RESET PHYSICS DEFAULTS]</code>, <code>[RESET RENDERER DEFAULTS]</code>.</li>
+</ol>
+<hr />
+<h2 id="-exhaustive-comparison-console-commands-vs-imgui-gui"><a class="header" href="#-exhaustive-comparison-console-commands-vs-imgui-gui">📊 Exhaustive Comparison: Console Commands vs ImGui GUI</a></h2>
+<div class="table-wrapper"><table><thead><tr><th>Feature / Setting</th><th>Console Command</th><th>ImGui GUI (<code>F4</code>)</th><th>GUI Status &amp; Capabilities</th></tr></thead><tbody>
+<tr><td>Mute Audio</td><td><code>audio.mute</code> / <code>audio.unmute</code></td><td>Checkbox + Mute/Unmute buttons</td><td>✅ Fully supported with live status query</td></tr>
+<tr><td>Spatial Reverb Wet Gain</td><td><code>audio.reverb_wet &lt;val&gt;</code></td><td>Slider (0.0..1.0) + 5 Presets</td><td>✅ Fully supported with presets &amp; reset</td></tr>
+<tr><td>DSP Effects (11 effects)</td><td><code>audio.fx &lt;name&gt; &lt;on/off&gt;</code></td><td>11 Checkboxes</td><td>✅ Fully supported with live toggles</td></tr>
+<tr><td>Enable/Disable All DSP</td><td><code>audio.fx_all &lt;on/off&gt;</code></td><td><code>[ON] Enable All</code> / <code>[OFF] Disable All</code></td><td>✅ Fully supported</td></tr>
+<tr><td>Physics Config Sync</td><td><code>physic.apply</code></td><td><code>[APPLY] PENDING CHANGES</code> button</td><td>✅ Fully supported</td></tr>
+<tr><td>Physics Disk Config</td><td><code>physic.config.save</code> / <code>reload</code></td><td><code>[SAVE]</code> / <code>[RELOAD]</code> buttons</td><td>✅ Fully supported</td></tr>
+<tr><td>Simulation Capacity</td><td><code>physic.max_rockets</code>, etc.</td><td>3 Sliders + Reset Defaults</td><td>✅ Fully supported</td></tr>
+<tr><td>Rocket Spawn Dynamics</td><td><code>physic.spawn_*</code>, <code>interval_*</code></td><td>9 Sliders + Reset Defaults</td><td>✅ Fully supported</td></tr>
+<tr><td>Forces &amp; Gravity</td><td><code>physic.gravity</code>, <code>explosion_*</code></td><td>4 Sliders + Reset Defaults</td><td>✅ Fully supported</td></tr>
+<tr><td>Spherical Shape Mode</td><td><code>physic.explosion.shape spherical</code></td><td><code>Spherical Mode</code> button</td><td>✅ Fully supported</td></tr>
+<tr><td>Preset Shapes (Heart, Star, etc.)</td><td><code>physic.explosion.preset &lt;name&gt;</code></td><td>Vertical Rows per Preset</td><td>✅ Fully supported with Set &amp; + Add</td></tr>
+<tr><td>Preset Add Weight</td><td><code>physic.explosion.add &lt;path&gt; &lt;w&gt;</code></td><td>Weight Slider per Preset</td><td>✅ Fully supported with individual sliders</td></tr>
+<tr><td>Shape Weight Adjustment</td><td><code>physic.explosion.weight &lt;name&gt; &lt;w&gt;</code></td><td>Live Weight Slider per Active Shape</td><td>✅ Fully supported with <code>Reset W</code></td></tr>
+<tr><td>Shape Scale Adjustment</td><td><code>physic.explosion.scale &lt;val&gt;</code></td><td>Live Image Scale Slider per Shape</td><td>✅ Fully supported with <code>Reset Scale</code></td></tr>
+<tr><td>Shape Flight Time</td><td><code>physic.explosion.flight_time &lt;val&gt;</code></td><td>Live Flight Time Slider per Shape</td><td>✅ Fully supported with <code>Reset Flight</code></td></tr>
+<tr><td>Shape Probability Stats</td><td><code>physic.explosion.stats</code></td><td>Live Probability Breakdown (%)</td><td>✅ Fully supported</td></tr>
+<tr><td>Shape Deletion</td><td><em>(N/A via single cmd)</em></td><td><strong><code>[X Delete]</code></strong> button per Shape</td><td>✅ <strong>GUI Exclusive Feature</strong></td></tr>
+<tr><td>Reload Shaders</td><td><code>renderer.reload_shaders</code></td><td><code>[RELOAD] Reload Shaders</code> button</td><td>✅ Fully supported</td></tr>
+<tr><td>Tonemapping Curve</td><td><code>renderer.tonemapping &lt;mode&gt;</code></td><td>Combo Dropdown (6 modes)</td><td>✅ Fully supported</td></tr>
+<tr><td>Grid Tonemapping Compare</td><td><code>renderer.tonemapping.compare</code></td><td>Checkbox <code>Grid Comparison Mode</code></td><td>✅ Fully supported</td></tr>
+<tr><td>Bloom Enable/Disable</td><td><code>renderer.bloom.enable</code> / <code>disable</code></td><td>Checkbox <code>Enable Bloom</code></td><td>✅ Fully supported</td></tr>
+<tr><td>Bloom Parameters</td><td><code>intensity</code>, <code>iterations</code>, <code>downsample</code>, <code>method</code></td><td>Sliders &amp; Combo Dropdowns</td><td>✅ Fully supported</td></tr>
+</tbody></table>
+</div>
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="console_commands.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="console_commands.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
