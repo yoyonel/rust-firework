@@ -4,6 +4,7 @@
 [Langage Métier (Glossaire)](ubiquitous_language.md)
 [Guide des Tâches (Taskfile)](taskfile_guide.md)
 - [Guide des Tests Unitaires, Mocks & Couverture](20260730_unit_testing_and_coverage_guide.md)
+- [Refactoring SSOT & Éradication des Constantes Magiques](20260730_ssot_constants_structural_refactoring.md)
 - [Qualité & Linting de la Documentation (Vale)](20260724_documentation_linting_pipeline.md)
 [Guide Architecture Build Hybride (Distrobox, Tracy & NVIDIA)](20260724_cross_platform_distrobox_tracy_build_guide.md)
 - [Architecture Globale, Threads & Synchronisation](20260721_moteurs_threads_synchronisation.md)
