@@ -99,3 +99,89 @@ fn test_ballistic_calculation() {
     assert!((v0_g.x - 50.0).abs() < 0.001);
     assert!((v0_g.y - 10.0).abs() < 0.001);
 }
+
+/// Teste l'ajout cumulatif et la suppression de formes d'explosion (MultiImage)
+#[test]
+fn test_multi_image_shape_addition_and_deletion() {
+    use fireworks_sim::physic_engine::explosion_shape::ExplosionShape;
+    use fireworks_sim::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
+    use fireworks_sim::physic_engine::PhysicEngine;
+
+    let config = fireworks_sim::physic_engine::config::PhysicConfig::default();
+    let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+
+    // Initialement Spherical
+    match engine.get_explosion_shape() {
+        ExplosionShape::Spherical => {}
+        _ => panic!("Expected Spherical initial shape"),
+    }
+
+    // Chargement de la première forme avec un poids de 1.0 (Heart)
+    let _ = engine.load_explosion_image_weighted(
+        "assets/textures/explosion_shapes/heart.png",
+        150.0,
+        1.5,
+        1.0,
+    );
+
+    match engine.get_explosion_shape() {
+        ExplosionShape::MultiImage {
+            shapes,
+            total_weight,
+        } => {
+            assert_eq!(shapes.len(), 1);
+            assert_eq!(shapes[0].0.file_stem, "heart");
+            assert_eq!(*total_weight, 1.0);
+        }
+        _ => panic!("Expected MultiImage after loading weighted heart shape"),
+    }
+
+    // Ajout d'une 2ème forme avec un poids de 2.0 (Star)
+    let _ = engine.load_explosion_image_weighted(
+        "assets/textures/explosion_shapes/star.png",
+        180.0,
+        1.5,
+        2.0,
+    );
+
+    match engine.get_explosion_shape() {
+        ExplosionShape::MultiImage {
+            shapes,
+            total_weight,
+        } => {
+            assert_eq!(shapes.len(), 2);
+            assert_eq!(*total_weight, 3.0);
+        }
+        _ => panic!("Expected 2 MultiImage shapes"),
+    }
+
+    // Modification du poids de "heart" à 3.0
+    let _ = engine.set_explosion_image_weight("heart", 3.0);
+    match engine.get_explosion_shape() {
+        ExplosionShape::MultiImage { total_weight, .. } => {
+            assert_eq!(*total_weight, 5.0);
+        }
+        _ => panic!("Expected MultiImage total weight 5.0"),
+    }
+
+    // Suppression de la forme "star"
+    let _ = engine.remove_explosion_image("star");
+    match engine.get_explosion_shape() {
+        ExplosionShape::MultiImage {
+            shapes,
+            total_weight,
+        } => {
+            assert_eq!(shapes.len(), 1);
+            assert_eq!(shapes[0].0.file_stem, "heart");
+            assert_eq!(*total_weight, 3.0);
+        }
+        _ => panic!("Expected 1 MultiImage shape after deleting star"),
+    }
+
+    // Suppression de la dernière forme "heart" -> doit repasser automatiquement en Spherical
+    let _ = engine.remove_explosion_image("heart");
+    match engine.get_explosion_shape() {
+        ExplosionShape::Spherical => {}
+        _ => panic!("Expected Spherical shape after removing all shapes"),
+    }
+}
