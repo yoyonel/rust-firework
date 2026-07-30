@@ -2,6 +2,8 @@ use crate::audio_engine::effect_flags::{fx_enabled, AudioEffect};
 use crate::AudioEngineSettings;
 use glam::{Vec2, Vec3};
 
+use crate::audio_engine::constants;
+
 pub struct SpatialParams {
     pub itd_left_sec: f32,
     pub itd_right_sec: f32,
@@ -14,12 +16,12 @@ pub fn calculate_spatial_params_3d(
     settings: &AudioEngineSettings,
     fx_mask: u32,
 ) -> SpatialParams {
-    let distance = diff.length().max(1e-6);
+    let distance = diff.length().max(constants::MIN_DISTANCE_EPSILON);
 
     // Attenuation par la distance (conditionnelle)
     // Modèle inverse-distance réaliste de l'industrie avec fondu linéaire à max_distance
     let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-        let ref_distance = 50.0_f32; // Distance de référence sous laquelle le volume est de 1.0 (gain maximal)
+        let ref_distance = constants::REFERENCE_DISTANCE_METERS;
         let max_distance = settings.max_distance().max(ref_distance + 1.0);
         if distance <= ref_distance {
             1.0
@@ -40,9 +42,12 @@ pub fn calculate_spatial_params_3d(
         let elevation = diff.y.atan2((diff.x * diff.x + diff.z * diff.z).sqrt());
 
         let theta = azimuth.abs();
-        let c = 343.0_f32;
-        let itd = ((settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
-        let ild_db = settings.max_ild_db() * theta.sin() * (1.0 - 0.25 * elevation.sin().abs());
+        let c = constants::SPEED_OF_SOUND_M_S;
+        let itd = ((settings.head_radius() / c) * (theta + theta.sin()))
+            .clamp(0.0, constants::MAX_ITD_SECONDS);
+        let ild_db = settings.max_ild_db()
+            * theta.sin()
+            * (1.0 - constants::ILD_ELEVATION_ATTENUATION_FACTOR * elevation.sin().abs());
         let far_gain = 10f32.powf(-ild_db / 20.0);
 
         if azimuth >= 0.0 {
@@ -85,12 +90,12 @@ pub fn calculate_spatial_params_2d(
     settings: &AudioEngineSettings,
     fx_mask: u32,
 ) -> SpatialParams {
-    let distance = diff.length().max(1e-6);
+    let distance = diff.length().max(constants::MIN_DISTANCE_EPSILON);
 
     // Atténuation par la distance (conditionnelle)
     // Modèle inverse-distance réaliste de l'industrie avec fondu linéaire à max_distance
     let att = if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-        let ref_distance = 50.0_f32; // Distance de référence sous laquelle le volume est de 1.0 (gain maximal)
+        let ref_distance = constants::REFERENCE_DISTANCE_METERS;
         let max_distance = settings.max_distance().max(ref_distance + 1.0);
         if distance <= ref_distance {
             1.0
@@ -109,8 +114,9 @@ pub fn calculate_spatial_params_2d(
     if settings.use_binaural() && fx_enabled(fx_mask, AudioEffect::Binaural) {
         let azimuth = diff.x.atan2(diff.y);
         let theta = azimuth.abs();
-        let c = 343.0_f32;
-        let itd = ((settings.head_radius() / c) * (theta + theta.sin())).clamp(0.0, 0.001);
+        let c = constants::SPEED_OF_SOUND_M_S;
+        let itd = ((settings.head_radius() / c) * (theta + theta.sin()))
+            .clamp(0.0, constants::MAX_ITD_SECONDS);
         let ild_db = settings.max_ild_db() * theta.sin();
         let far_gain = 10f32.powf(-ild_db / 20.0);
 

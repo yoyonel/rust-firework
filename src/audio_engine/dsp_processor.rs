@@ -45,7 +45,7 @@ fn compute_distance_attenuation(
     fx_mask: u32,
 ) -> f32 {
     if fx_enabled(fx_mask, AudioEffect::DistanceAtten) {
-        let ref_distance = 50.0_f32;
+        let ref_distance = crate::audio_engine::constants::REFERENCE_DISTANCE_METERS;
         let max_distance = settings.max_distance().max(ref_distance + 1.0);
         if distance <= ref_distance {
             1.0

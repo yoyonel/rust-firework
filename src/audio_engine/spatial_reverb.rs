@@ -63,15 +63,9 @@ impl AllPassFilter {
     }
 }
 
+use crate::audio_engine::constants;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
-
-/// Longueurs de délai de base (en échantillons @ 44.1 kHz) pour l'écho d'espace extérieur (Outdoor Open-Air Echo)
-const COMB_DELAYS_BASE_SAMPLES: [usize; 4] = [1553, 2129, 2801, 3547];
-/// Décalage stéréo inter-aural pour éviter la corrélation mono phase
-const STEREO_UNCORRELATION_OFFSET_SAMPLES: usize = 47;
-/// Longueurs de délai tout-passe pour la diffusion sans coloration fréquentielle
-const ALLPASS_DELAYS_BASE_SAMPLES: [usize; 2] = [641, 317];
 
 pub struct SpatialReverb {
     combs_l: Vec<CombFilter>,
@@ -84,37 +78,39 @@ pub struct SpatialReverb {
 impl SpatialReverb {
     /// Crée une nouvelle instance de réverbération spatiale pré-allouée avec un wet_gain partagé.
     pub fn new_with_wet(sample_rate: u32, wet_gain: Arc<AtomicU32>) -> Self {
-        let scale = sample_rate as f32 / 44100.0;
+        let scale = sample_rate as f32 / constants::REVERB_BASE_SAMPLE_RATE;
 
-        let feedback = 0.68;
-        let damp = 0.50; // Amortissement HF fort (absorption de l'air en extérieur)
+        let feedback = constants::REVERB_DEFAULT_FEEDBACK;
+        let damp = constants::REVERB_DEFAULT_DAMPING;
 
-        let combs_l = COMB_DELAYS_BASE_SAMPLES
+        let combs_l = constants::REVERB_COMB_DELAYS_BASE_SAMPLES
             .iter()
             .map(|&d| CombFilter::new((d as f32 * scale) as usize, feedback, damp))
             .collect();
 
-        let combs_r = COMB_DELAYS_BASE_SAMPLES
+        let combs_r = constants::REVERB_COMB_DELAYS_BASE_SAMPLES
             .iter()
             .map(|&d| {
                 CombFilter::new(
-                    ((d + STEREO_UNCORRELATION_OFFSET_SAMPLES) as f32 * scale) as usize,
+                    ((d + constants::REVERB_STEREO_UNCORRELATION_OFFSET_SAMPLES) as f32 * scale)
+                        as usize,
                     feedback,
                     damp,
                 )
             })
             .collect();
 
-        let allpasses_l = ALLPASS_DELAYS_BASE_SAMPLES
+        let allpasses_l = constants::REVERB_ALLPASS_DELAYS_BASE_SAMPLES
             .iter()
             .map(|&d| AllPassFilter::new((d as f32 * scale) as usize, 0.35))
             .collect();
 
-        let allpasses_r = ALLPASS_DELAYS_BASE_SAMPLES
+        let allpasses_r = constants::REVERB_ALLPASS_DELAYS_BASE_SAMPLES
             .iter()
             .map(|&d| {
                 AllPassFilter::new(
-                    ((d + STEREO_UNCORRELATION_OFFSET_SAMPLES) as f32 * scale) as usize,
+                    ((d + constants::REVERB_STEREO_UNCORRELATION_OFFSET_SAMPLES) as f32 * scale)
+                        as usize,
                     0.35,
                 )
             })
