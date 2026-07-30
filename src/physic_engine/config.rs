@@ -33,7 +33,7 @@ pub struct PhysicConfig {
 impl Default for PhysicConfig {
     fn default() -> Self {
         Self {
-            max_rockets: 4096 * 4,
+            max_rockets: 1024,
             particles_per_explosion: 256,
             particles_per_trail: 64,
             rocket_interval_mean: 1.0 * 0.025,

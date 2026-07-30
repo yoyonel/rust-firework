@@ -152,7 +152,7 @@ fn test_physic_config_resets_defaults() {
     let default_cfg = PhysicConfig::default();
     config = default_cfg.clone();
     assert_eq!(config, default_cfg);
-    assert_eq!(config.max_rockets, 16384);
+    assert_eq!(config.max_rockets, 1024);
     assert_eq!(config.gravity, -200.0);
 }
 
