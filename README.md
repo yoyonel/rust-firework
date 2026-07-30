@@ -89,9 +89,22 @@ Les paramètres modifiables incluent :
 |--------|--------|
 | `R` | Recharger la configuration physique (`physic.toml`) |
 | `S` | Recharger les shaders à chaud |
+| `F3` | Afficher/Masquer le Moniteur de Diagnostic Audio & Overlay |
+| `F4` | Ouvrir/Fermer le Panneau de Contrôle GUI ImGui (Réglages Audio, Physique, Rendu) |
 | `F11` | Basculer en plein écran |
 | `Echap` | Quitter l'application |
 | `` ` `` (Grave) / `F1` | Ouvrir/Fermer la console de commande |
+
+### 🎛️ Panneau de Contrôle GUI ImGui (`F4`)
+
+Pressez **`F4`** pour ouvrir la fenêtre interactive ImGui regroupant l'ensemble des réglages du moteur :
+- **Onglet 1 (Audio)** : Mute/Unmute avec statut en direct, curseur & presets de réverbération spatiale (`audio.reverb_wet`), matrice interactive des 11 effets DSP, suivi F3 et scène de stress-test.
+- **Onglet 2 (Physique)** : Synchronisation & application à chaud (`physic.apply`), capacité de simulation, paramètres de spawn & forces, formes d'explosion & presets multiples (`Heart`, `Star`, `Smiley`, `Note`, `Ring`) avec réglage individuel des poids, échelles (px), temps de vol (s), réinitialisations dédiées (`[Reset W]`, `[Reset Scale]`, etc.) et suppression ciblée (`[X Delete]`).
+- **Onglet 3 (Rendu & Post-FX)** : Rechargement des shaders, sélecteur de Tone Mapping (`Reinhard`, `ACES`, `AgX`, `Khronos PBR`, `Uncharted 2`), mode grille de comparaison 2x3 et contrôle du Bloom (Intensité, Itérations, Sous-échantillonnage 1x/2x/4x, méthode Gaussian vs Kawase).
+- **Onglet 4 (Console Commands)** : Catalogue de toutes les commandes inscrites avec lecture des valeurs courantes.
+- **Persistence de Session (`assets/config/gui_session.toml`)** : Sauvegarde et restauration automatique de l'état du GUI, des filtres, des moniteurs F3 et des paramètres audio à la relance.
+
+Pour plus de détails, consultez la **[Spécification du Panneau de Contrôle GUI ImGui & Persistence](doc/20260729_imgui_control_panel_and_session_persistence.md)**.
 
 ### Commandes Console
 

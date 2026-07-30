@@ -4,6 +4,11 @@ edition = "2021"
 name = "fireworks_sim"
 version = "0.1.0"
 
+[[bin]]
+name = "fireworks_sim"
+path = "src/main.rs"
+test = false
+
 [dependencies]
 # Création fenêtre + gestion input
 # last version using glfw2
@@ -32,7 +37,7 @@ itertools = "0.14.0"
 generational-arena = "0.2.9"
 glam = "0.30.9"
 crossbeam-channel = "0.5.15"
-image = "0.25.8"
+image = { version = "0.25.8", default-features = false, features = ["png", "jpeg"] }
 imgui = "0.12.0"
 imgui-glfw-rs = "0.12.0"
 fuzzy-matcher = "0.3.7"
@@ -86,10 +91,11 @@ opt-level = 0
 debug = true
 strip = false
 
-# 2. RELEASE STANDARD (Bon compromis vitesse d'exécution / temps de compilation)
+# 2. RELEASE STANDARD (Bon compromis vitesse d'exécution / temps de compilation rapide)
 [profile.release]
 opt-level = 3
-lto = "thin"         # LTO léger : optimise bien sans prendre des heures
+lto = false          # LTO désactivé pour des builds release rapides (~10s au lieu de 53s)
+incremental = true   # Active la réutilisation incrémentale LLVM des modules non modifiés
 strip = true         # Supprime les symboles (réduit la taille de 90%)
 panic = "unwind"     # Garde le déroulement de pile par défaut
 
