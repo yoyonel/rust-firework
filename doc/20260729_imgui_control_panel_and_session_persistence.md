@@ -75,7 +75,7 @@ The ImGui Control Panel includes a live **Theme Selector** in the header toolbar
   - Live status badge (`[OK] Physics Configuration Synced` vs `WARNING: Pending Physics Changes Detected!`).
   - Buttons: `[APPLY] PENDING CHANGES` (`physic.apply`), `[SAVE] Save Config`, `[RELOAD] Reload Disk Config`, `[RESET PHYSICS DEFAULTS]`.
 - **Simulation Capacity & Buffers**:
-  - Sliders: `Max Concurrent Rockets` (1..200), `Particles / Explosion` (10..2000), `Particles / Trail` (0..500) + `Reset Capacity Defaults`.
+  - Sliders: `Max Concurrent Rockets` (1..2048), `Particles / Explosion` (10..2000), `Particles / Trail` (0..500) + `Reset Capacity Defaults`.
 - **Rocket Launch & Spawn Dynamics**:
   - Sliders: `Spawn Interval Mean (s)`, `Interval Variation`, `Max Next Interval`, `Spawn Margin`, `Vertical Angle (rad)`, `Angle Variation`, `Spawn Min Speed`, `Spawn Max Speed`, `Initial Rocket Speed` + `Reset Spawn Defaults`.
 - **Forces & Particle Physics**:
