@@ -280,7 +280,10 @@ where
         self.audio_engine.set_listener_position(listener_pos);
     }
 
-    fn toggle_fullscreen(&mut self) {
+    pub(crate) fn toggle_fullscreen(&mut self) {
+        unsafe {
+            gl::Finish();
+        }
         if self.window_engine.is_fullscreen() {
             self.window_engine.set_monitor(
                 WindowMode::Windowed,
@@ -303,24 +306,31 @@ where
             self.window_last_pos = self.window_engine.get_pos();
             self.window_last_size = self.window_engine.get_size();
 
-            let mut glfw = self.window_engine.get_glfw().clone();
-            let window = self.window_engine.get_window_mut();
-            glfw.with_primary_monitor(|_, primary_monitor| {
-                if let Some(mon) = primary_monitor {
-                    if let Some(video_mode) = mon.get_video_mode() {
-                        window.set_fullscreen(mon);
-                        self.window_size = (video_mode.width as i32, video_mode.height as i32);
-                        self.window_size_f32 =
-                            (self.window_size.0 as f32, self.window_size.1 as f32);
-                        info!(
-                            "🖥️ Fullscreen: {} x {}",
-                            self.window_size.0, self.window_size.1
-                        );
+            let window_engine = &mut self.window_engine;
+            let res = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut glfw = window_engine.get_glfw().clone();
+                let window = window_engine.get_window_mut();
+                glfw.with_primary_monitor(|_, primary_monitor| {
+                    if let Some(mon) = primary_monitor {
+                        if let Some(video_mode) = mon.get_video_mode() {
+                            window.set_fullscreen(mon);
+                            Some((video_mode.width as i32, video_mode.height as i32))
+                        } else {
+                            None
+                        }
                     } else {
-                        info!("⚠️ Could not get monitor video mode, staying windowed");
+                        None
                     }
-                }
-            });
+                })
+            }));
+
+            if let Ok(Some((w, h))) = res {
+                self.window_size = (w, h);
+                self.window_size_f32 = (w as f32, h as f32);
+                info!("🖥️ Fullscreen: {} x {}", w, h);
+            } else {
+                info!("⚠️ Could not enter fullscreen (headless or dummy window)");
+            }
         }
     }
 
