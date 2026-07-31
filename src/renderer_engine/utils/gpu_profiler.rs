@@ -123,7 +123,7 @@ impl GpuProfiler {
             write_index: 0,
             read_index: 1,
             latest_results: Vec::with_capacity(32),
-            enabled: true,
+            enabled: false,
             #[cfg(feature = "tracy")]
             tracy_ctx,
         }

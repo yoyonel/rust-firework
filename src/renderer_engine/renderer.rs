@@ -38,6 +38,7 @@ pub struct GlobalDataUBO {
 
 // ---------------------------------------------------------
 pub struct Renderer {
+    config: crate::renderer_engine::RendererConfig,
     max_particles_on_gpu: usize,
     ubo_global: u32,
     // Window management
@@ -89,10 +90,14 @@ impl Renderer {
                 crate::physic_engine::ParticleType::Rocket,
                 "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png",
             )),
+            Box::new(crate::renderer_engine::smoke_renderer::SmokeRenderer::new(
+                physic_config.max_smoke_particles,
+                "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png",
+            )),
         ];
 
-        // 🏷️ Phase 2 : Tri d'états (State Sorting)
-        renderers.sort_by_key(|r| (r.get_shader_program(), r.get_texture_id()));
+        // 🏷️ Phase 2 : Tri d'états (State Sorting) avec ordre de passe explicite
+        renderers.sort_by_key(|r| (r.render_order(), r.get_shader_program(), r.get_texture_id()));
 
         // Initialize bloom pass
         let bloom_pass = BloomPass::new(width, height)
@@ -121,6 +126,10 @@ impl Renderer {
         }
 
         Ok(Self {
+            config: crate::renderer_engine::RendererConfig::from_file(
+                "assets/config/renderer.toml",
+            )
+            .unwrap_or_default(),
             window_size_f32: (width as f32, height as f32),
             renderers,
             max_particles_on_gpu,
@@ -146,6 +155,20 @@ impl Renderer {
         let mut active_texture = 0u32;
         let mut total_particles = 0;
         for renderer in &mut self.renderers {
+            let is_enabled = match renderer.particle_type() {
+                Some(crate::physic_engine::ParticleType::Rocket) => self.config.render_rockets,
+                Some(crate::physic_engine::ParticleType::Smoke) => self.config.render_smoke,
+                _ => {
+                    renderer
+                        .set_visibility(self.config.render_trails, self.config.render_explosions);
+                    self.config.render_trails || self.config.render_explosions
+                }
+            };
+
+            if !is_enabled {
+                continue;
+            }
+
             let nb;
             // Remplit le buffer GPU (Opération purement CPU, on utilise uniquement tracy)
             {
@@ -191,7 +214,7 @@ impl RendererEngine for Renderer {
                 u_tex_ratio: self
                     .renderers
                     .iter()
-                    .find(|r| r.get_texture_id() != 0)
+                    .find(|r| r.render_order() == 20)
                     .map_or(1.0, |r| r.get_tex_ratio()),
                 u_bloom_intensity: self.bloom_pass.intensity,
             };
@@ -329,6 +352,7 @@ impl RendererEngine for Renderer {
     }
 
     fn sync_bloom_config(&mut self, config: &crate::renderer_engine::RendererConfig) {
+        self.config = *config;
         self.bloom_pass.sync_with_renderer_config(config);
     }
 }
