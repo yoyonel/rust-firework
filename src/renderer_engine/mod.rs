@@ -9,6 +9,10 @@ pub mod renderer_graphics;
 pub use self::renderer_graphics::RendererGraphics;
 pub mod renderer_graphics_instanced;
 pub use self::renderer_graphics_instanced::RendererGraphicsInstanced;
+pub mod smoke_renderer;
+pub use self::smoke_renderer::{SmokeInstanceGPU, SmokeRenderer};
+pub mod smoke_preview;
+pub use self::smoke_preview::{PreviewContext, SmokePreviewRenderer};
 
 pub mod tools;
 pub use self::tools::show_opengl_context_info;

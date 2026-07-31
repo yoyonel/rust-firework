@@ -37,6 +37,19 @@ pub trait ParticleGraphicsRenderer {
     /// Retourne le ratio d'aspect de la texture.
     fn get_tex_ratio(&self) -> f32;
 
+    /// Retourne le type de particule spécifique géré par ce renderer, ou None si générique.
+    fn particle_type(&self) -> Option<crate::physic_engine::ParticleType> {
+        None
+    }
+
+    /// Définit les bascules de visibilité pour les sous-types de particules (ex: trails, explosions).
+    fn set_visibility(&mut self, _render_trails: bool, _render_explosions: bool) {}
+
+    /// Retourne l'ordre de priorité de rendu (pass order) pour trier les passes.
+    fn render_order(&self) -> u32 {
+        0
+    }
+
     /// Recharge les shaders depuis les fichiers.
     ///
     /// # Safety

@@ -28,6 +28,9 @@ pub struct RendererGraphics {
 
     pub max_particles_on_gpu: usize,
 
+    pub render_trails: bool,
+    pub render_explosions: bool,
+
     // Triple buffering
     pub current_frame: usize,
     pub fences: [Option<gl::types::GLsync>; 3],
@@ -62,6 +65,8 @@ impl RendererGraphics {
                 mapped_ptr,
                 shader_program,
                 max_particles_on_gpu,
+                render_trails: true,
+                render_explosions: true,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -203,15 +208,26 @@ impl RendererGraphics {
         let gpu_slice =
             std::slice::from_raw_parts_mut(self.mapped_ptr.add(offset), self.max_particles_on_gpu);
 
-        // Ici, on remplit sans allocations temporaires en passant par for_each_active_particle
+        let all_visible = self.render_trails && self.render_explosions;
         physic.for_each_active_particle(&mut |p| {
-            if count < self.max_particles_on_gpu {
+            let visible = if all_visible {
+                true
+            } else {
+                match p.particle_type {
+                    crate::physic_engine::ParticleType::Trail => self.render_trails,
+                    crate::physic_engine::ParticleType::Explosion => self.render_explosions,
+                    _ => true,
+                }
+            };
+            if visible && count < self.max_particles_on_gpu {
                 // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
                 let src_ptr =
                     p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
                 let mut gpu_p = *src_ptr;
-                // Assigne la luminosité calculée
-                gpu_p.brightness = (p.life / p.max_life).powi(4);
+                // Assigne la luminosité calculée (x^4 via multiplication rapide sans libm powi)
+                let l = p.life / p.max_life.max(0.0001);
+                let l2 = l * l;
+                gpu_p.brightness = l2 * l2;
 
                 gpu_slice[count] = gpu_p;
                 count += 1;
@@ -266,6 +282,11 @@ impl RendererGraphics {
 
         push_debug_group!(20, "Draw Points");
 
+        // Active l'Additive Blending pour les particules de traînée et d'explosion
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE);
+        gl::DepthMask(gl::FALSE);
+
         // Active le shader de rendu des particules (seulement s'il n'est pas déjà actif)
         if *active_shader != self.shader_program {
             gl::UseProgram(self.shader_program);
@@ -278,6 +299,10 @@ impl RendererGraphics {
         // Dessine les particules sous forme de points en décalant l'index de départ selon la section courante
         let first_vertex = (self.current_frame * self.max_particles_on_gpu) as i32;
         gl::DrawArrays(gl::POINTS, first_vertex, count as i32);
+
+        // Restore default alpha blending and depth mask
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        gl::DepthMask(gl::TRUE);
 
         pop_debug_group!();
 
@@ -380,6 +405,15 @@ impl ParticleGraphicsRenderer for RendererGraphics {
 
     fn get_tex_ratio(&self) -> f32 {
         1.0
+    }
+
+    fn set_visibility(&mut self, render_trails: bool, render_explosions: bool) {
+        self.render_trails = render_trails;
+        self.render_explosions = render_explosions;
+    }
+
+    fn render_order(&self) -> u32 {
+        30
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {

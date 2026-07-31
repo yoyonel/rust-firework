@@ -18,17 +18,20 @@ impl BloomPass {
     /// # Safety
     /// This function is unsafe because it calls OpenGL functions directly and binds textures/programs.
     pub unsafe fn end_scene_and_apply_bloom(&self) {
-        // Disable depth test for post-processing
+        // Disable depth test and blending for post-processing
         gl::Disable(gl::DEPTH_TEST);
+        gl::Disable(gl::BLEND);
 
         // Bind the dummy VAO once for all fullscreen passes (AZDO VAO caching)
         gl::BindVertexArray(self.dummy_vao);
 
         // 2. Blur passes - method selection
         push_debug_group!(1, "PostFX: Bloom Blur Chain");
-        match self.blur_method {
-            BlurMethod::Gaussian => self.apply_gaussian_blur(),
-            BlurMethod::Kawase => self.apply_kawase_blur(),
+        if self.enabled && self.intensity > 0.001 {
+            match self.blur_method {
+                BlurMethod::Gaussian => self.apply_gaussian_blur(),
+                BlurMethod::Kawase => self.apply_kawase_blur(),
+            }
         }
         pop_debug_group!();
 
@@ -44,7 +47,7 @@ impl BloomPass {
         gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture);
 
-        // Bind bloom texture (result of blur)
+        // Bind bloom texture (result of blur in ping_pong_textures[0])
         gl::ActiveTexture(gl::TEXTURE1);
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
 
@@ -56,8 +59,9 @@ impl BloomPass {
         // Unbind VAO
         gl::BindVertexArray(0);
 
-        // Re-enable depth test
+        // Re-enable depth test and blending
         gl::Enable(gl::DEPTH_TEST);
+        gl::Enable(gl::BLEND);
     }
 
     /// Renders all tone mappings to comparison textures and displays them in a 2x3 grid
@@ -69,8 +73,9 @@ impl BloomPass {
             return;
         }
 
-        // Disable depth test for post-processing
+        // Disable depth test and blending for post-processing
         gl::Disable(gl::DEPTH_TEST);
+        gl::Disable(gl::BLEND);
 
         // Bind the dummy VAO once for all fullscreen passes (AZDO VAO caching)
         gl::BindVertexArray(self.dummy_vao);
@@ -157,6 +162,7 @@ impl BloomPass {
 
         // Re-enable depth test
         gl::Enable(gl::DEPTH_TEST);
+        gl::Enable(gl::BLEND);
     }
 
     pub fn get_comparison_textures(&self) -> &[GLuint; 5] {
@@ -197,6 +203,7 @@ impl BloomPass {
 
         // Première passe : bright_texture -> ping_pong[1]
         gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[1]);
+        gl::ActiveTexture(gl::TEXTURE0);
         gl::BindTexture(gl::TEXTURE_2D, self.bright_texture);
         gl::Uniform2f(self.loc_blur_direction, 1.0, 0.0);
         self.render_fullscreen_quad();
@@ -208,6 +215,7 @@ impl BloomPass {
             let write_idx = 1 - read_idx;
 
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[write_idx]);
+            gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[read_idx]);
             gl::Uniform2f(
                 self.loc_blur_direction,
@@ -224,7 +232,7 @@ impl BloomPass {
         let half_pixel_x = 0.5 / self.blur_width as f32;
         let half_pixel_y = 0.5 / self.blur_height as f32;
 
-        // Downsample passes (3 iterations)
+        // Downsample passes (3 iterations: bright -> 0, 0 -> 1, 1 -> 0)
         gl::UseProgram(self.kawase_downsample_shader);
 
         for i in 0..3 {
@@ -244,12 +252,12 @@ impl BloomPass {
             self.render_fullscreen_quad();
         }
 
-        // Upsample passes (3 iterations)
+        // Upsample passes (4 iterations to land result cleanly in ping_pong_textures[0])
         gl::UseProgram(self.kawase_upsample_shader);
 
-        for i in 0..3 {
-            let source_idx = (2 - i) % 2;
-            let target_idx = (2 - i + 1) % 2;
+        for i in 0..4 {
+            let source_idx = i % 2;
+            let target_idx = (i + 1) % 2;
 
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[target_idx]);
             gl::ActiveTexture(gl::TEXTURE0);
