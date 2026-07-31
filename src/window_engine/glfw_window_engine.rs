@@ -66,6 +66,7 @@ impl WindowEngine for GlfwWindowEngine {
         }
 
         let mut imgui = ImContext::create();
+        imgui.set_ini_filename(Some(std::path::PathBuf::from("assets/config/imgui.ini")));
 
         let font_data =
             std::fs::read("assets/fonts/PerfectDOSVGA437.ttf").expect("Failed to read font file");
