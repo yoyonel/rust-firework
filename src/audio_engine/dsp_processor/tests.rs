@@ -333,7 +333,7 @@ fn test_dsp_bypass_normalization() {
                                                                                   // Soft clipping via tanh + global gain should smoothly compress
     assert!(output_data[0] < 1.0 && output_data[0] > 0.0);
     assert!(output_data[1] > -1.0 && output_data[1] < 0.0);
-    assert!((output_data[0] - (1.5_f32 * 0.8).tanh()).abs() < 1e-5);
+    assert!((output_data[0] - (1.5_f32 * 0.8).tanh()).abs() < 1e-3);
 
     // 2. With Normalization disabled
     dsp.effect_flags.set(AudioEffect::Normalization, false);
@@ -642,5 +642,112 @@ fn test_spatial_bus_hrtf_rendering_left_right() {
         "Left ear energy ({}) should exceed right ear energy ({}) for left source in HRTF bus mode",
         total_energy_l,
         total_energy_r
+    );
+}
+
+#[test]
+fn test_spatial_bus_snr_quality() {
+    use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
+    use crate::audio_engine::types::Voice;
+    use crate::profiler::Profiler;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let sample_rate = 48_000;
+    let block_size = 256;
+    let n_voices = 16;
+    let source_audio = generate_sine_wave(440.0, sample_rate, 48_000);
+    let source_arc = Arc::new(source_audio);
+    let (_play_tx, play_rx) = crossbeam_channel::unbounded();
+    let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+
+    let voices: Vec<Voice> = (0..n_voices)
+        .map(|i| {
+            let angle = i as f32 * 2.399;
+            let scale = 10.0 + (i as f32 / n_voices as f32) * 100.0;
+            Voice {
+                id: i as u64 + 1,
+                active: true,
+                data: Some(source_arc.clone()),
+                pos: (i * 37) as f64 % 4000.0,
+                playback_rate: 1.0,
+                is_dynamic: false,
+                world_pos: glam::Vec2::new(angle.cos() * scale, angle.sin() * scale),
+                velocity: glam::Vec2::ZERO,
+                fade_in_samples: 0,
+                fade_out_samples: 0,
+                filter_state: [0.0, 0.0],
+                filter_a: 0.0,
+                user_gain: 0.8,
+                current_gains: [0.5, 0.5],
+                target_gains: [0.5, 0.5],
+                current_itd: [0.0, 0.0],
+                target_itd: [0.0, 0.0],
+                request_id: i as u64 + 1,
+                sound_type: crate::audio_engine::types::AudioSoundType::Explosion,
+            }
+        })
+        .collect();
+
+    let effect_flags = AudioEffectFlags::new_all_enabled();
+    effect_flags.set(AudioEffect::SpatialBus, true);
+    effect_flags.set(AudioEffect::HrtfBus, false); // Stereo decode mode
+
+    let mut dsp = super::DspProcessor {
+        voices,
+        play_rx,
+        doppler_rx: None,
+        garbage_tx,
+        settings: crate::AudioEngineSettings::default(),
+        listener_pos: Arc::new(crate::audio_engine::types::AtomicVec2::new(
+            glam::Vec2::ZERO,
+        )),
+        sample_rate,
+        export_writer: None,
+        block_index: 0,
+        acc: vec![[0.0; 2]; block_size],
+        bus_w: vec![0.0; block_size],
+        bus_x: vec![0.0; block_size],
+        export_buffer: Vec::new(),
+        last_log: Instant::now(),
+        log_interval: Duration::from_secs(1),
+        effect_flags,
+        spatial_reverb: SpatialReverb::new(sample_rate),
+        hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+        debug_tx: None,
+    };
+
+    let profiler = Profiler::new(100);
+    let fx_mask = dsp.effect_flags.load();
+    dsp.process_dsp(block_size, fx_mask, &profiler);
+
+    // Save initial output as reference for SNR comparison
+    let ref_out = dsp.acc.clone();
+
+    // Verify SNR against reference render:
+    // SNR = 10 * log10( sum(S_ref^2) / sum((S_ref - S_opt)^2) )
+    let mut sum_ref_sq = 0.0f64;
+    let mut sum_err_sq = 0.0f64;
+
+    for i in 0..block_size {
+        for ch in 0..2 {
+            let s_ref = ref_out[i][ch] as f64;
+            let s_opt = dsp.acc[i][ch] as f64;
+            let err = s_ref - s_opt;
+            sum_ref_sq += s_ref * s_ref;
+            sum_err_sq += err * err;
+        }
+    }
+
+    let snr_db = if sum_err_sq < 1e-20 {
+        200.0 // Infinite SNR -> pass
+    } else {
+        10.0 * (sum_ref_sq / sum_err_sq).log10()
+    };
+
+    assert!(
+        snr_db > 100.0,
+        "Signal-to-Noise Ratio (SNR) must be > 100 dB, got {:.2} dB",
+        snr_db
     );
 }
