@@ -153,20 +153,24 @@ fn test_iter_particles_by_type_returns_explosions() {
 
 /// Test que iter_particles_by_type ne retourne rien pour un type sans particules
 #[test]
-fn test_iter_particles_by_type_empty_for_smoke() {
+fn test_iter_particles_by_type_emits_smoke_for_active_rocket() {
     let config = PhysicConfig::default();
     let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
 
-    // Spawn une fusée
+    // Initial state: no smoke
+    assert_eq!(count_particles_by_type(&engine, ParticleType::Smoke), 0);
+
+    // Launch rocket and advance physics step
     engine.force_next_launch();
-    engine.update(0.016);
+    for _ in 0..10 {
+        engine.update(0.016);
+    }
 
-    // Smoke n'est pas encore implémenté, devrait retourner 0
+    // Active rocket should emit smoke particles
     let smoke_count = count_particles_by_type(&engine, ParticleType::Smoke);
-
-    assert_eq!(
-        smoke_count, 0,
-        "Aucune particule de fumée ne devrait exister pour l'instant"
+    assert!(
+        smoke_count > 0,
+        "Smoke particles should be emitted continuously for active ascending rockets"
     );
 }
 
@@ -236,4 +240,28 @@ fn test_regression_rocket_particles_visible() {
         );
         assert!(p.active, "Particule {} devrait être active", i);
     }
+}
+
+/// Test que les bascules de visibilité des éléments graphiques sont totalement indépendantes
+#[test]
+fn test_visibility_toggles_independence() {
+    use fireworks_sim::renderer_engine::RendererConfig;
+
+    let mut cfg = RendererConfig::default();
+    assert!(cfg.render_rockets);
+    assert!(cfg.render_smoke);
+    assert!(cfg.render_trails);
+    assert!(cfg.render_explosions);
+
+    // Désactiver seulement les fusées
+    cfg.render_rockets = false;
+    cfg.render_trails = true;
+    assert!(!cfg.render_rockets);
+    assert!(cfg.render_trails);
+
+    // Désactiver seulement les fumées
+    cfg.render_smoke = false;
+    assert!(!cfg.render_rockets);
+    assert!(!cfg.render_smoke);
+    assert!(cfg.render_trails);
 }
