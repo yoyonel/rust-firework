@@ -154,3 +154,48 @@ pub const DEFAULT_AUDIO_EXPLOSION_ANTICIPATION_MS: f32 = 25.0;
 /// - **Bounds:** `1` to `254`.
 /// - **System influence:** Filters out dark background pixels when converting images to particle positions.
 pub const IMAGE_SHAPE_THRESHOLD: u8 = 128;
+
+/// Default smoke spawn rate (particles per second per rocket).
+pub const DEFAULT_SMOKE_SPAWN_RATE: f32 = 30.0;
+
+/// Default initial particle scale for smoke sprites.
+pub const DEFAULT_SMOKE_INITIAL_SIZE: f32 = 10.0;
+
+/// Default expansion rate multiplier for smoke particles over lifetime.
+pub const DEFAULT_SMOKE_GROWTH_RATE_MULTIPLIER: f32 = 1.2;
+
+/// Default fade-out duration (lifetime) of smoke particles in seconds.
+pub const DEFAULT_SMOKE_FADE_DURATION: f32 = 0.75;
+
+/// Default maximum number of smoke particles in the physics pool.
+pub const DEFAULT_MAX_SMOKE_PARTICLES: usize = 2048;
+
+/// Default smoke intensity / brightness blending factor (0.0 = invisible, 1.0 = normal, 2.0 = boost).
+pub const DEFAULT_SMOKE_INTENSITY: f32 = 0.5;
+
+/// Default custom color for smoke particles (RGB).
+pub const DEFAULT_SMOKE_CUSTOM_COLOR: [f32; 3] = [0.85, 0.85, 0.85];
+
+/// Default intensity factor for inherited rocket color applied to smoke (0.0 to 2.0, default 1.0).
+pub const DEFAULT_SMOKE_INHERITED_COLOR_INTENSITY: f32 = 1.0;
+
+/// Distance offset from rocket center to combustion base exhaust (cyan area above wooden stick).
+pub const ROCKET_BASE_EXHAUST_OFFSET: f32 = 6.0;
+
+/// Default toggle flag for noise alpha erosion (dissolve effect) on smoke particles.
+pub const DEFAULT_SMOKE_EROSION_ENABLED: bool = true;
+
+/// Default aggressiveness / scale multiplier for smoke noise alpha erosion.
+pub const DEFAULT_SMOKE_EROSION_SCALE: f32 = 1.0;
+
+/// Default noise alpha erosion edge width for smoke dissipation dissolve effect.
+pub const DEFAULT_SMOKE_EROSION_EDGE_WIDTH: f32 = 0.08;
+
+/// Default glowing burn edge color (RGB) along the alpha erosion dissipation seam.
+pub const DEFAULT_SMOKE_EROSION_EDGE_COLOR: [f32; 3] = [1.0, 0.45, 0.15];
+
+/// Default Flow Map UV distortion strength for smoke turbulence.
+pub const DEFAULT_FLOW_DISTORTION_STRENGTH: f32 = 0.15;
+
+/// Default Flow Map animation speed multiplier for smoke turbulence.
+pub const DEFAULT_FLOW_ANIMATION_SPEED: f32 = 1.0;

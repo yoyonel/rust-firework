@@ -121,6 +121,16 @@ impl Rocket {
         &self.head
     }
 
+    /// Returns the position of the rocket base/tail (cyan area: bottom of rocket body cylinder where combustion occurs).
+    pub fn base_pos(&self) -> Vec2 {
+        let dir = if self.vel.length_squared() > 0.001 {
+            self.vel.normalize()
+        } else {
+            Vec2::Y
+        };
+        self.pos - dir * crate::physic_engine::constants::ROCKET_BASE_EXHAUST_OFFSET
+    }
+
     /// Met à jour la fusée (mouvement, trails, explosions)
     ///
     /// # Arguments
@@ -219,7 +229,7 @@ impl Rocket {
         let slice = particles_pool.get_particles_mut(range);
 
         // 1) SPAWN : génération des particules de trail
-        if !self.exploded {
+        if (config.particles_per_trail > 0) && !self.exploded {
             self.spawn_trail_particles(slice, config);
         }
 

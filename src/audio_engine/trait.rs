@@ -57,5 +57,10 @@ pub trait AudioEngine {
         0.8
     }
 
+    /// Obtenir le dernier volume non nul sauvegardé (pour la persistance GUI en mode mute).
+    fn get_saved_master_volume(&self) -> f32 {
+        self.get_master_volume()
+    }
+
     fn as_audio_engine(&self) -> &dyn AudioEngine;
 }

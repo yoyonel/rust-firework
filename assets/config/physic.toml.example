@@ -14,8 +14,8 @@ gravity = -200.0
 initial_rocket_speed = 100.0
 explosion_min_vel = 60.0
 explosion_max_vel = 200.0
-audio_launch_anticipation_ms = 68.96822
-audio_explosion_anticipation_ms = 39.050404
+audio_launch_anticipation_ms = 20.0
+audio_explosion_anticipation_ms = 20.0
 smoke_spawn_rate = 30.0
 smoke_initial_size = 10.0
 smoke_growth_rate_multiplier = 1.2
@@ -23,19 +23,11 @@ smoke_fade_duration = 0.75
 max_smoke_particles = 2048
 smoke_intensity = 0.5
 smoke_color_mode = "RocketColor"
-smoke_custom_color = [
-    0.85,
-    0.85,
-    0.85,
-]
-smoke_inherited_color_intensity = 0.324
+smoke_custom_color = [0.85, 0.85, 0.85]
+smoke_inherited_color_intensity = 0.15
 smoke_erosion_enabled = true
-smoke_erosion_scale = 0.268
+smoke_erosion_scale = 0.15
 smoke_erosion_edge_width = 0.08
-smoke_erosion_edge_color = [
-    0.61868346,
-    0.63701636,
-    0.29144704,
-]
-flow_distortion_strength = 0.263
-flow_animation_speed = 1.496
+smoke_erosion_edge_color = [0.5, 0.5, 0.5]
+flow_distortion_strength = 0.25
+flow_animation_speed = 2.8

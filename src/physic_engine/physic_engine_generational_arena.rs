@@ -43,6 +43,10 @@ pub struct PhysicEngineFireworks {
 
     particles_pools_for_rockets: ParticlesPoolsForRockets,
 
+    /// System handling smoke trail particle lifecycle and rendering buffer
+    smoke_system: crate::physic_engine::smoke_system::SmokeSystem,
+    smoke_spawn_accumulators: Vec<f32>,
+
     /// Forme des explosions (sphérique ou basée sur image)
     explosion_shape: ExplosionShape,
 
@@ -92,6 +96,10 @@ impl PhysicEngineFireworks {
                 config.particles_per_explosion,
                 config.particles_per_trail,
             ),
+            smoke_system: crate::physic_engine::smoke_system::SmokeSystem::new(
+                config.max_smoke_particles,
+            ),
+            smoke_spawn_accumulators: vec![0.0; config.max_rockets],
             explosion_shape: ExplosionShape::default(),
             doppler_sender: None,
             last_doppler_time: Instant::now(),
@@ -113,13 +121,15 @@ impl PhysicEngineFireworks {
         let max_rockets_updated = new_config.max_rockets != old_max_rockets;
         let pool_params_updated = new_config.particles_per_explosion != old_per_explosion
             || new_config.particles_per_trail != old_per_trail;
+        let smoke_updated = new_config.max_smoke_particles != self.smoke_system.particles.len();
 
-        if max_rockets_updated || pool_params_updated {
+        if max_rockets_updated || pool_params_updated || smoke_updated {
             info!(
-                "Reinitializing physics buffers due to config change: max_rockets ({} -> {}), per_explosion ({} -> {}), per_trail ({} -> {})",
+                "Reinitializing physics buffers due to config change: max_rockets ({} -> {}), per_explosion ({} -> {}), per_trail ({} -> {}), max_smoke ({})",
                 old_max_rockets, new_config.max_rockets,
                 old_per_explosion, new_config.particles_per_explosion,
-                old_per_trail, new_config.particles_per_trail
+                old_per_trail, new_config.particles_per_trail,
+                new_config.max_smoke_particles
             );
             self.triggered_explosions = vec![Particle::default(); new_config.max_rockets];
             self.triggered_explosion_ids = vec![0; new_config.max_rockets];
@@ -141,6 +151,10 @@ impl PhysicEngineFireworks {
                 new_config.particles_per_explosion,
                 new_config.particles_per_trail,
             );
+
+            self.smoke_system.resize(new_config.max_smoke_particles);
+            self.smoke_system.clear();
+            self.smoke_spawn_accumulators = vec![0.0; new_config.max_rockets];
         }
 
         self.next_rocket_interval = self.compute_next_interval();
@@ -174,6 +188,11 @@ impl PhysicEngineFireworks {
             self.particles_pools_for_rockets.free_blocks(r);
         }
 
+        let slot_idx = idx.into_raw_parts().0;
+        if slot_idx < self.smoke_spawn_accumulators.len() {
+            self.smoke_spawn_accumulators[slot_idx] = 0.0;
+        }
+
         // Retire de active_indices en O(1) grâce à swap_remove
         if let Some(pos) = self.active_indices.iter().position(|&i| i == idx) {
             self.active_indices.swap_remove(pos);
@@ -187,6 +206,18 @@ impl PhysicEngineFireworks {
         let mut triggered_count = 0;
         let mut anticipated_count = 0;
         let mut new_rocket: Option<Rocket> = None;
+
+        // Sync dynamic non-structural smoke settings from pending_config (edited by ImGui) to active config
+        self.config.smoke_spawn_rate = self.pending_config.smoke_spawn_rate;
+        self.config.smoke_initial_size = self.pending_config.smoke_initial_size;
+        self.config.smoke_growth_rate_multiplier = self.pending_config.smoke_growth_rate_multiplier;
+        self.config.smoke_fade_duration = self.pending_config.smoke_fade_duration;
+        self.config.smoke_intensity = self.pending_config.smoke_intensity;
+        self.config.smoke_color_mode = self.pending_config.smoke_color_mode;
+        self.config.smoke_custom_color = self.pending_config.smoke_custom_color;
+        self.config.smoke_inherited_color_intensity =
+            self.pending_config.smoke_inherited_color_intensity;
+        self.config.max_smoke_particles = self.pending_config.max_smoke_particles;
 
         self.anticipated_launch = None;
         let gravity = glam::Vec2::new(0.0, self.config.gravity);
@@ -267,6 +298,26 @@ impl PhysicEngineFireworks {
                     &self.explosion_shape,
                 );
 
+                // 💨 Emit smoke particles continuously while ascending (stop emission when rocket explodes)
+                if rocket.active && !rocket.exploded && self.config.smoke_spawn_rate > 0.0 {
+                    let slot_idx = idx.into_raw_parts().0;
+                    if slot_idx >= self.smoke_spawn_accumulators.len() {
+                        self.smoke_spawn_accumulators.resize(slot_idx + 1, 0.0);
+                    }
+                    let interval = 1.0 / self.config.smoke_spawn_rate;
+                    self.smoke_spawn_accumulators[slot_idx] += dt;
+                    while self.smoke_spawn_accumulators[slot_idx] >= interval {
+                        self.smoke_spawn_accumulators[slot_idx] -= interval;
+                        self.smoke_system.emit(
+                            rocket.base_pos(),
+                            rocket.vel,
+                            rocket.color,
+                            &self.config,
+                            &mut self.rng,
+                        );
+                    }
+                }
+
                 // On n'envoie le Doppler que si la fusée est active ET n'a pas encore explosé !
                 if send_doppler && rocket.active && !rocket.exploded {
                     if let Some(tx) = &self.doppler_sender {
@@ -294,6 +345,9 @@ impl PhysicEngineFireworks {
                 }
             }
         }
+
+        // update smoke particle simulation (growth, decay, movement)
+        self.smoke_system.update(dt, &self.config);
 
         // on désactive les rockets
         for &idx in &to_deactivate {
@@ -345,6 +399,10 @@ impl PhysicEngineIterator for PhysicEngineFireworks {
     fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
         if particle_type == ParticleType::Rocket {
             self.for_each_active_head_not_exploded(f);
+        } else if particle_type == ParticleType::Smoke {
+            self.smoke_system.for_each_active(&mut |sp| {
+                f(&sp.to_particle());
+            });
         } else {
             self.for_each_active_particle(&mut |p| {
                 if p.particle_type == particle_type {
@@ -352,6 +410,33 @@ impl PhysicEngineIterator for PhysicEngineFireworks {
                 }
             });
         }
+    }
+
+    fn for_each_smoke_particle(
+        &self,
+        f: &mut dyn FnMut(&crate::physic_engine::smoke_system::SmokeParticle),
+    ) {
+        self.smoke_system.for_each_active(f);
+    }
+
+    fn get_smoke_intensity(&self) -> f32 {
+        self.config.smoke_intensity
+    }
+
+    fn get_smoke_erosion_params(&self) -> (bool, f32, f32, [f32; 3]) {
+        (
+            self.config.smoke_erosion_enabled,
+            self.config.smoke_erosion_scale,
+            self.config.smoke_erosion_edge_width,
+            self.config.smoke_erosion_edge_color,
+        )
+    }
+
+    fn get_smoke_flow_params(&self) -> (f32, f32) {
+        (
+            self.config.flow_distortion_strength,
+            self.config.flow_animation_speed,
+        )
     }
 }
 
@@ -622,22 +707,26 @@ mod tests {
 
     #[test]
     fn test_physic_engine_rocket_spawning_and_update() {
-        let mut config = PhysicConfig::default();
-        config.max_rockets = 5;
-        config.rocket_interval_mean = 0.1;
+        let config = PhysicConfig {
+            max_rockets: 5,
+            rocket_interval_mean: 0.1,
+            ..PhysicConfig::default()
+        };
         let mut engine = PhysicEngineFireworks::new(&config, 800.0);
 
         engine.force_next_launch();
         let res = engine.update(0.05);
         let has_new_rocket = res.new_rocket.is_some();
-        drop(res);
+        let _ = res;
         assert!(has_new_rocket || engine.rockets_count() > 0);
     }
 
     #[test]
     fn test_physic_engine_reload_config() {
-        let mut config = PhysicConfig::default();
-        config.max_rockets = 10;
+        let config = PhysicConfig {
+            max_rockets: 10,
+            ..PhysicConfig::default()
+        };
         let mut engine = PhysicEngineFireworks::new(&config, 800.0);
 
         let mut new_config = config.clone();

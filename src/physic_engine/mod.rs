@@ -23,6 +23,9 @@ pub use self::config::PhysicConfig;
 
 pub mod constants;
 
+pub mod smoke_system;
+pub use self::smoke_system::{SmokeParticle, SmokeSystem};
+
 pub mod explosion_shape;
 pub use self::explosion_shape::{ExplosionShape, ImageShape};
 

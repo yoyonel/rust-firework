@@ -495,6 +495,18 @@ impl AudioEngine for FireworksAudio3D {
         )
     }
 
+    fn get_saved_master_volume(&self) -> f32 {
+        let saved = f32::from_bits(
+            self.saved_master_volume
+                .load(std::sync::atomic::Ordering::Relaxed),
+        );
+        if saved > 0.0001 {
+            saved
+        } else {
+            self.get_master_volume()
+        }
+    }
+
     fn set_effect_enabled(&self, effect: AudioEffect, enabled: bool) {
         self.effect_flags.set(effect, enabled);
     }

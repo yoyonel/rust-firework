@@ -28,9 +28,119 @@ pub struct PhysicConfig {
 
     /// Temps d'anticipation pour l'explosion de la fusée (ms)
     pub audio_explosion_anticipation_ms: f32,
+
+    /// Taux d'émission de particules de fumée (particules / seconde / fusée)
+    #[serde(default = "default_smoke_spawn_rate")]
+    pub smoke_spawn_rate: f32,
+
+    /// Taille initiale des particules de fumée
+    #[serde(default = "default_smoke_initial_size")]
+    pub smoke_initial_size: f32,
+
+    /// Multiplicateur d'expansion de la fumée au cours de sa vie
+    #[serde(default = "default_smoke_growth_rate_multiplier")]
+    pub smoke_growth_rate_multiplier: f32,
+
+    /// Durée de dissipation / fondu de la fumée (secondes)
+    #[serde(default = "default_smoke_fade_duration")]
+    pub smoke_fade_duration: f32,
+
+    /// Capacité maximale de particules de fumée simultanées
+    #[serde(default = "default_max_smoke_particles")]
+    pub max_smoke_particles: usize,
+
+    /// Intensité / luminosité dynamique du mélange de fumée (0.0 à 2.0)
+    #[serde(default = "default_smoke_intensity")]
+    pub smoke_intensity: f32,
+
+    /// Mode de couleur de la fumée (RocketColor par défaut, ou Custom)
+    #[serde(default)]
+    pub smoke_color_mode: SmokeColorMode,
+
+    /// Couleur personnalisée de la fumée lorsque smoke_color_mode est Custom
+    #[serde(default = "default_smoke_custom_color")]
+    pub smoke_custom_color: [f32; 3],
+
+    /// Intensité de la couleur d'origine/héritée de la fusée à appliquer à la fumée (0.0 à 2.0, default 1.0)
+    #[serde(default = "default_smoke_inherited_color_intensity")]
+    pub smoke_inherited_color_intensity: f32,
+
+    /// Indique si l'effet d'érosion alpha (dissolution de bruit) est activé
+    #[serde(default = "default_smoke_erosion_enabled")]
+    pub smoke_erosion_enabled: bool,
+
+    /// Multiplicateur d'agressivité/vitesse d'érosion de la fumée (0.0 à 2.0)
+    #[serde(default = "default_smoke_erosion_scale")]
+    pub smoke_erosion_scale: f32,
+
+    /// Largeur de la bordure incandescente/bruit pour l'érosion alpha (dissolution)
+    #[serde(default = "default_smoke_erosion_edge_width")]
+    pub smoke_erosion_edge_width: f32,
+
+    /// Couleur de la bordure incandescente lors de l'érosion de la fumée (RGB)
+    #[serde(default = "default_smoke_erosion_edge_color")]
+    pub smoke_erosion_edge_color: [f32; 3],
+
+    /// Force/Intensité de la distortion Flow Map UV (0.0 à 1.0)
+    #[serde(default = "default_flow_distortion_strength")]
+    pub flow_distortion_strength: f32,
+
+    /// Vitesse de l'animation de tourbillonnement Flow Map (0.0 à 5.0)
+    #[serde(default = "default_flow_animation_speed")]
+    pub flow_animation_speed: f32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum SmokeColorMode {
+    #[default]
+    RocketColor,
+    Custom,
 }
 
 use crate::physic_engine::constants;
+
+fn default_smoke_erosion_enabled() -> bool {
+    constants::DEFAULT_SMOKE_EROSION_ENABLED
+}
+fn default_smoke_erosion_scale() -> f32 {
+    constants::DEFAULT_SMOKE_EROSION_SCALE
+}
+fn default_flow_distortion_strength() -> f32 {
+    constants::DEFAULT_FLOW_DISTORTION_STRENGTH
+}
+fn default_flow_animation_speed() -> f32 {
+    constants::DEFAULT_FLOW_ANIMATION_SPEED
+}
+fn default_smoke_spawn_rate() -> f32 {
+    constants::DEFAULT_SMOKE_SPAWN_RATE
+}
+fn default_smoke_initial_size() -> f32 {
+    constants::DEFAULT_SMOKE_INITIAL_SIZE
+}
+fn default_smoke_growth_rate_multiplier() -> f32 {
+    constants::DEFAULT_SMOKE_GROWTH_RATE_MULTIPLIER
+}
+fn default_smoke_fade_duration() -> f32 {
+    constants::DEFAULT_SMOKE_FADE_DURATION
+}
+fn default_max_smoke_particles() -> usize {
+    constants::DEFAULT_MAX_SMOKE_PARTICLES
+}
+fn default_smoke_intensity() -> f32 {
+    constants::DEFAULT_SMOKE_INTENSITY
+}
+fn default_smoke_custom_color() -> [f32; 3] {
+    constants::DEFAULT_SMOKE_CUSTOM_COLOR
+}
+fn default_smoke_inherited_color_intensity() -> f32 {
+    constants::DEFAULT_SMOKE_INHERITED_COLOR_INTENSITY
+}
+fn default_smoke_erosion_edge_width() -> f32 {
+    constants::DEFAULT_SMOKE_EROSION_EDGE_WIDTH
+}
+fn default_smoke_erosion_edge_color() -> [f32; 3] {
+    constants::DEFAULT_SMOKE_EROSION_EDGE_COLOR
+}
 
 impl Default for PhysicConfig {
     fn default() -> Self {
@@ -53,6 +163,21 @@ impl Default for PhysicConfig {
             explosion_max_vel: constants::DEFAULT_EXPLOSION_MAX_VELOCITY,
             audio_launch_anticipation_ms: constants::DEFAULT_AUDIO_LAUNCH_ANTICIPATION_MS,
             audio_explosion_anticipation_ms: constants::DEFAULT_AUDIO_EXPLOSION_ANTICIPATION_MS,
+            smoke_spawn_rate: constants::DEFAULT_SMOKE_SPAWN_RATE,
+            smoke_initial_size: constants::DEFAULT_SMOKE_INITIAL_SIZE,
+            smoke_growth_rate_multiplier: constants::DEFAULT_SMOKE_GROWTH_RATE_MULTIPLIER,
+            smoke_fade_duration: constants::DEFAULT_SMOKE_FADE_DURATION,
+            max_smoke_particles: constants::DEFAULT_MAX_SMOKE_PARTICLES,
+            smoke_intensity: constants::DEFAULT_SMOKE_INTENSITY,
+            smoke_color_mode: SmokeColorMode::default(),
+            smoke_custom_color: constants::DEFAULT_SMOKE_CUSTOM_COLOR,
+            smoke_inherited_color_intensity: constants::DEFAULT_SMOKE_INHERITED_COLOR_INTENSITY,
+            smoke_erosion_enabled: constants::DEFAULT_SMOKE_EROSION_ENABLED,
+            smoke_erosion_scale: constants::DEFAULT_SMOKE_EROSION_SCALE,
+            smoke_erosion_edge_width: constants::DEFAULT_SMOKE_EROSION_EDGE_WIDTH,
+            smoke_erosion_edge_color: constants::DEFAULT_SMOKE_EROSION_EDGE_COLOR,
+            flow_distortion_strength: constants::DEFAULT_FLOW_DISTORTION_STRENGTH,
+            flow_animation_speed: constants::DEFAULT_FLOW_ANIMATION_SPEED,
         }
     }
 }

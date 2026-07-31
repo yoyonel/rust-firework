@@ -24,7 +24,7 @@ impl ParticleType {
                 "assets/textures/kenney_particle-pack/PNG (Black background)/circle_05.png"
             }
             ParticleType::Smoke => {
-                "assets/textures/kenney_particle-pack/PNG (Black background)/smoke_01.png"
+                "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png"
             }
             ParticleType::Trail => {
                 "assets/textures/kenney_particle-pack/PNG (Black background)/trace_03.png"
