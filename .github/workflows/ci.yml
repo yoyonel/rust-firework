@@ -57,9 +57,10 @@ jobs:
             libxrandr-dev libxinerama-dev libglu1-mesa-dev \
             libasound2-dev alsa-utils alsa-oss \
             pulseaudio pulseaudio-utils \
-            xvfb xauth pkg-config make git ca-certificates curl
+            xvfb xauth pkg-config make git ca-certificates curl \
+            ffmpeg xdotool
 
-      # 🧰 3. Cache rustup + toolchain LLVM
+      # 🧰 3. Cache Rustup + toolchain LLVM
       - name: Cache Rustup and LLVM tools
         uses: actions/cache@v4
         with:
@@ -134,9 +135,14 @@ jobs:
         run: |
           task build-release
 
-      # --- Étape 6 : Lancer les tests avec coverage ---
+      # --- Étape 6 : Lancer les tests avec coverage (3 Keyframes) ---
       - name: Run tests with coverage
         run: task ci:coverage
+
+      # --- Étape 7 : Full 120-Frame Visual Non-Regression (Pre-Merge Master) ---
+      - name: Run Full 120-Frame Visual Non-Regression (Pre-Merge Master)
+        if: github.event_name == 'pull_request' && github.base_ref == 'master'
+        run: task test-visual-full
 
       - name: SCCache stop server
         run: |

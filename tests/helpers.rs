@@ -12,7 +12,7 @@ use fireworks_sim::renderer_engine::RendererEngine;
 
 use anyhow::Result;
 use fireworks_sim::window_engine::{ImguiSystem, WindowEngine, WindowEvents};
-use glfw::{CursorMode, WindowMode};
+use glfw::{Context, CursorMode, WindowMode};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -24,25 +24,30 @@ pub type SharedLog = Rc<RefCell<Vec<String>>>;
 
 #[allow(dead_code)]
 pub struct DummyWindowEngine {
+    pub window: glfw::PWindow,
     pub events: WindowEvents,
+    pub glfw: std::mem::ManuallyDrop<glfw::Glfw>,
 }
 
 impl Default for DummyWindowEngine {
     fn default() -> Self {
-        let glfw = glfw::init(glfw::fail_on_errors)
+        let mut glfw = glfw::init(glfw::fail_on_errors)
             .ok()
-            .or_else(|| glfw::init(glfw::log_errors).ok());
+            .or_else(|| glfw::init(glfw::log_errors).ok())
+            .expect("DummyWindowEngine requires GLFW context for WindowEvents");
 
-        let events = if let Some(mut g) = glfw {
-            g.window_hint(glfw::WindowHint::Visible(false));
-            g.create_window(1, 1, "dummy", glfw::WindowMode::Windowed)
-                .map(|(_, rx)| rx)
-        } else {
-            None
-        };
+        glfw.window_hint(glfw::WindowHint::Visible(false));
+        let (mut window, events) = glfw
+            .create_window(1, 1, "dummy", glfw::WindowMode::Windowed)
+            .expect("DummyWindowEngine requires window creation");
+        window.make_current();
+        gl::load_with(|symbol| window.get_proc_address(symbol) as *const _);
 
-        let events = events.expect("DummyWindowEngine requires GLFW context for WindowEvents");
-        Self { events }
+        Self {
+            window,
+            events,
+            glfw: std::mem::ManuallyDrop::new(glfw),
+        }
     }
 }
 
@@ -79,10 +84,10 @@ impl WindowEngine for DummyWindowEngine {
     fn set_cursor_mode(&mut self, _mode: CursorMode) {}
     fn make_current(&mut self) {}
     fn get_glfw(&self) -> &glfw::Glfw {
-        panic!("DummyWindowEngine does not have a real GLFW instance")
+        &self.glfw
     }
     fn get_window_mut(&mut self) -> &mut glfw::PWindow {
-        panic!("DummyWindowEngine does not have a real window")
+        &mut self.window
     }
     fn get_events(&self) -> &WindowEvents {
         &self.events

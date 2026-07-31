@@ -124,6 +124,13 @@ tasks:
     cmds:
       - "./target/release/{{.APP_NAME}} --audio-stress-scene {{.CLI_ARGS | default \"128\"}}"
 
+  stress-fullscreen:
+    desc: "Stress test de bascule rapide Fullscreen ↔ Window (détection deadlocks / session logout)"
+    deps: [build]
+    cmds:
+      - "./scripts/test_stress_fullscreen_rust.sh ./target/debug/{{.APP_NAME}} {{.CLI_ARGS | default \"50 100\"}}"
+
+
   run-prime-with-hud:
     desc: "MangoHud (Compatible NVidia) Raccourci: RIGHT-SHIFT+F10"
     deps: [build-release]
@@ -181,7 +188,7 @@ tasks:
 
       Les violations de spec OpenGL (ex: DeleteBuffers sur buffer mappé, états invalides)
       sont émises sur stderr via le mécanisme GL_DEBUG_OUTPUT et capturées dans un log.
-      La cible échoue si des messages GL_INVALID_* ou API_ID_* sont détectés.
+      La cible échoule si des messages GL_INVALID_* ou API_ID_* sont détectés.
 
       Prérequis : libgl1-mesa-dri (apt install libgl1-mesa-dri)
       Voir : doc/opengl_debug_validation_guide.md
@@ -197,6 +204,20 @@ tasks:
           exit 1
         fi
         echo "✅ Aucune violation OpenGL détectée"
+
+  test-visual-full:
+    desc: "Exécute le test de non-régression visuelle complet à 120 frames sur toutes les vidéos de référence"
+    deps: [build-release]
+    cmds:
+      - echo "📹 Lancement du test de non-régression visuelle 120-frames..."
+      - "{{.XVFB}} ./scripts/run_visual_regression_full.sh"
+
+  visual-baselines-generate:
+    desc: "Génère l'ensemble du jeu de baselines vidéo & images clés candidates pour validation humaine"
+    deps: [build-release]
+    cmds:
+      - echo "🎥 Génération des candidats de baselines visuelles..."
+      - "{{.XVFB}} ./scripts/generate_golden_baselines.sh"
 
   fmt:
     desc: "Vérification du formatage"
