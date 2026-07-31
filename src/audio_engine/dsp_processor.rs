@@ -92,9 +92,19 @@ fn interpolate_mono_sample(slice: &[[f32; 2]], pos: f64) -> f32 {
         return 0.0;
     }
 
-    let sample0 = (slice[index][0] + slice[index][1]) * 0.5;
+    let s0 = &slice[index];
+    let sample0 = if s0[0] == s0[1] {
+        s0[0]
+    } else {
+        (s0[0] + s0[1]) * 0.5
+    };
     let sample1 = if index + 1 < total_len {
-        (slice[index + 1][0] + slice[index + 1][1]) * 0.5
+        let s1 = &slice[index + 1];
+        if s1[0] == s1[1] {
+            s1[0]
+        } else {
+            (s1[0] + s1[1]) * 0.5
+        }
     } else {
         0.0
     };
@@ -131,6 +141,14 @@ fn apply_iir_lowpass(current_sample: f32, prev_filtered: f32, alpha: f32) -> f32
         filtered = 0.0;
     }
     filtered
+}
+
+#[inline(always)]
+fn fast_tanh(x: f32) -> f32 {
+    let x2 = x * x;
+    let num = x * (15.0 + x2);
+    let den = 15.0 + 6.0 * x2;
+    (num / den).clamp(-1.0, 1.0)
 }
 
 impl DspProcessor {
@@ -398,10 +416,14 @@ impl DspProcessor {
             return;
         }
 
-        self.bus_w[..frames].fill(0.0);
-        self.bus_x[..frames].fill(0.0);
+        let bus_w_slice = &mut self.bus_w[..frames];
+        let bus_x_slice = &mut self.bus_x[..frames];
+
+        bus_w_slice.fill(0.0);
+        bus_x_slice.fill(0.0);
 
         let listener_pos = self.listener_pos.load();
+        let use_fade = fx_enabled(fx_mask, AudioEffect::FadeInOut);
 
         for v in self.voices.iter_mut() {
             if !v.active || v.data.is_none() {
@@ -429,33 +451,84 @@ impl DspProcessor {
             let w_weight = voice_gain * std::f32::consts::FRAC_1_SQRT_2;
             let x_weight = voice_gain * dir_x;
 
-            for i in 0..frames {
-                let current_pos = v.pos;
-                let index = current_pos as usize;
+            let fade_in = v.fade_in_samples;
+            let fade_out = v.fade_out_samples;
+            let active_fade = use_fade && (fade_in > 0 || fade_out > 0);
+            let apply_lpf = filter_a < 0.9999;
 
-                if index >= total_len {
-                    break;
+            if (rate - 1.0).abs() < 1e-6 {
+                // 🚀 Fast Path (rate == 1.0) : Pas de LERP fractionnaire
+                let start_idx = v.pos as usize;
+                let count = if start_idx >= total_len {
+                    0
+                } else {
+                    (total_len - start_idx).min(frames)
+                };
+
+                if count > 0 {
+                    let sample_slice = &slice_ref[start_idx..start_idx + count];
+                    let w_out = &mut bus_w_slice[..count];
+                    let x_out = &mut bus_x_slice[..count];
+
+                    if !active_fade && !apply_lpf {
+                        // Boucle 100% vectorisable par le compilateur (SIMD 8-wide AVX2)
+                        for ((s, w), x) in sample_slice
+                            .iter()
+                            .zip(w_out.iter_mut())
+                            .zip(x_out.iter_mut())
+                        {
+                            let sample = (s[0] + s[1]) * 0.5;
+                            *w += sample * w_weight;
+                            *x += sample * x_weight;
+                        }
+                    } else {
+                        for (i, (s, (w, x))) in sample_slice
+                            .iter()
+                            .zip(w_out.iter_mut().zip(x_out.iter_mut()))
+                            .enumerate()
+                        {
+                            let index = start_idx + i;
+                            let mut sample = (s[0] + s[1]) * 0.5;
+                            if active_fade {
+                                sample =
+                                    apply_fade_in_out(sample, index, total_len, fade_in, fade_out);
+                            }
+                            if apply_lpf {
+                                sample = apply_iir_lowpass(sample, prev_mono, filter_a);
+                                prev_mono = sample;
+                            }
+                            *w += sample * w_weight;
+                            *x += sample * x_weight;
+                        }
+                    }
+                    v.pos += count as f64;
                 }
+            } else {
+                // Path fallback : Vitesse variable (Doppler / Pitch shift avec LERP)
+                for i in 0..frames {
+                    let current_pos = v.pos;
+                    let index = current_pos as usize;
 
-                let mut sample = interpolate_mono_sample(slice_ref, current_pos);
+                    if index >= total_len {
+                        break;
+                    }
 
-                if fx_enabled(fx_mask, AudioEffect::FadeInOut) {
-                    sample = apply_fade_in_out(
-                        sample,
-                        index,
-                        total_len,
-                        v.fade_in_samples,
-                        v.fade_out_samples,
-                    );
+                    let mut sample = interpolate_mono_sample(slice_ref, current_pos);
+
+                    if active_fade {
+                        sample = apply_fade_in_out(sample, index, total_len, fade_in, fade_out);
+                    }
+
+                    if apply_lpf {
+                        sample = apply_iir_lowpass(sample, prev_mono, filter_a);
+                    }
+                    prev_mono = sample;
+
+                    bus_w_slice[i] += sample * w_weight;
+                    bus_x_slice[i] += sample * x_weight;
+
+                    v.pos += rate;
                 }
-
-                sample = apply_iir_lowpass(sample, prev_mono, filter_a);
-                prev_mono = sample;
-
-                self.bus_w[i] += sample * w_weight;
-                self.bus_x[i] += sample * x_weight;
-
-                v.pos += rate;
             }
 
             v.filter_state[0] = prev_mono;
@@ -481,19 +554,20 @@ impl DspProcessor {
         if fx_enabled(fx_mask, AudioEffect::HrtfBus) {
             let _hrtf_guard = profiler.measure("hrtf_bus_convolver");
             self.hrtf_convolver
-                .process_bus(&self.bus_w, &self.bus_x, &mut self.acc, frames);
+                .process_bus(bus_w_slice, bus_x_slice, &mut self.acc, frames);
         } else {
             // Compensation d'énergie Isopuissance (SQRT_2) :
             // - Au centre (dir_x = 0) : L = 0.7071 S, R = 0.7071 S (100% ISO avec le mode Legacy)
             // - À gauche/droite (dir_x = +-1) : L = 1.0 S, R = 0.0 S (100% ISO avec le mode Legacy)
             let frac_1_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
-            for i in 0..frames {
-                let w = self.bus_w[i];
-                let x = self.bus_x[i];
-                let l = w - frac_1_sqrt2 * x;
-                let r = w + frac_1_sqrt2 * x;
-                self.acc[i][0] = l;
-                self.acc[i][1] = r;
+            let acc_slice = &mut self.acc[..frames];
+            for ((&w, &x), acc_frame) in bus_w_slice
+                .iter()
+                .zip(bus_x_slice.iter())
+                .zip(acc_slice.iter_mut())
+            {
+                acc_frame[0] = w - frac_1_sqrt2 * x;
+                acc_frame[1] = w + frac_1_sqrt2 * x;
             }
         }
     }
@@ -633,7 +707,7 @@ impl DspProcessor {
     }
 
     /// 🎯 BOÎTE HOTSPOT 2 : Soft Clipping & Écriture CPAL
-    /// L'annotation #[inline(never)] permet de séparer le coût mathématique (.tanh()) du mixage DSP dans perf.
+    /// L'annotation #[inline(never)] permet de séparer le coût mathématique du mixage DSP dans perf.
     #[inline(never)]
     fn write_cpal_buffer(
         &mut self,
@@ -645,17 +719,20 @@ impl DspProcessor {
     ) {
         profiler.profile_block("write_cpal_buffer", || {
             crate::tracy_zone!("audio::soft_clipping", 0xFF5500);
+            let acc_slice = &self.acc[..frames];
+            let data_slice = &mut data[..frames * 2];
+
             if fx_enabled(fx_mask, AudioEffect::Normalization) {
-                // Saturation douce via tanh (limiteur doux, évite le hard clipping) et application du gain global
-                for (i, sample) in self.acc.iter_mut().take(frames).enumerate() {
-                    data[2 * i] = (sample[0] * global_gain).tanh();
-                    data[2 * i + 1] = (sample[1] * global_gain).tanh();
+                // Saturation douce via fast_tanh polynomial Padé (évite tout appel libc::tanhf)
+                for (sample, out_pair) in acc_slice.iter().zip(data_slice.chunks_exact_mut(2)) {
+                    out_pair[0] = fast_tanh(sample[0] * global_gain);
+                    out_pair[1] = fast_tanh(sample[1] * global_gain);
                 }
             } else {
                 // Bypass : pas de gain global, clampage linéaire simple [-1.0, 1.0]
-                for (i, sample) in self.acc.iter_mut().take(frames).enumerate() {
-                    data[2 * i] = sample[0].clamp(-1.0, 1.0);
-                    data[2 * i + 1] = sample[1].clamp(-1.0, 1.0);
+                for (sample, out_pair) in acc_slice.iter().zip(data_slice.chunks_exact_mut(2)) {
+                    out_pair[0] = sample[0].clamp(-1.0, 1.0);
+                    out_pair[1] = sample[1].clamp(-1.0, 1.0);
                 }
             }
         });
