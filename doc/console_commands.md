@@ -111,4 +111,12 @@ physic.explosion.stats
 ### Tone Mapping
 | Command | Usage | Description |
 | :--- | :--- | :--- |
-| `renderer.tonemapping` | `<method>` | Set tone mapping operator.<br>Methods: `reinhard`, `aces`, `filmic`, `uncharted2`. |
+| `renderer.tonemapping` | `<method>` | Set tone mapping operator.<br>Methods: `reinhard`, `reinhard_extended`, `aces`, `uncharted2`, `agx`, `khronos`. |
+
+### Graphical Elements Visibility
+| Command | Description |
+| :--- | :--- |
+| `renderer.rockets.enable` / `disable` | Toggle rendering of ascending rocket body quads. |
+| `renderer.smoke.enable` / `disable` | Toggle rendering of instanced volumetric smoke trails. |
+| `renderer.trails.enable` / `disable` | Toggle rendering of rocket spark trails (points). |
+| `renderer.explosions.enable` / `disable` | Toggle rendering of explosion particles (points). |
