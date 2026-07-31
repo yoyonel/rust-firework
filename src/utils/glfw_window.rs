@@ -47,7 +47,7 @@ impl Fullscreen for Window {
                 0,
                 mode.width,
                 mode.height,
-                Some(mode.refresh_rate),
+                None,
             );
         }
     }
