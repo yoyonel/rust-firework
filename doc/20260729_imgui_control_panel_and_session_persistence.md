@@ -179,5 +179,7 @@ scroll_y = 120.5
 | Reload Shaders | `renderer.reload_shaders` | `[RELOAD] Reload Shaders` button | ✅ Fully supported |
 | Tonemapping Curve | `renderer.tonemapping <mode>` | Combo Dropdown (6 modes) | ✅ Fully supported |
 | Grid Tonemapping Compare | `renderer.tonemapping.compare` | Checkbox `Grid Comparison Mode` | ✅ Fully supported |
+| Graphical Elements Visibility | `renderer.{rockets,smoke,trails,explosions}.{enable,disable}` | 4 Checkboxes (Rockets, Smoke, Trails, Explosions) | ✅ Fully supported with `[Reset Visibility Defaults]` |
+| Bloom Controls | `renderer.bloom.*` | 5 Sliders/Combos + Reset Defaults | ✅ Fully supported |
 | Bloom Enable/Disable | `renderer.bloom.enable` / `disable` | Checkbox `Enable Bloom` | ✅ Fully supported |
 | Bloom Parameters | `intensity`, `iterations`, `downsample`, `method` | Sliders & Combo Dropdowns | ✅ Fully supported |

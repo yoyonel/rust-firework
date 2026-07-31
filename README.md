@@ -16,8 +16,11 @@ La documentation interactive complète (profilage mémoire, analyses de performa
 
 ## 🎥 Démo
 
-<!-- Option fallback avec miniature -->
 [![Démo feu d'artifice](doc/firework-demo.gif)](doc/firework-demo.mp4)
+
+### 💨 Traînée de Fumée & Érosion Alpha (Dissolve GPU)
+
+![Démonstration Traînée de Fumée et Érosion Alpha](doc/smoke-trail-demo.gif)
 
 ## 🎯 Objectifs
 
@@ -100,11 +103,12 @@ Les paramètres modifiables incluent :
 Pressez **`F4`** pour ouvrir la fenêtre interactive ImGui regroupant l'ensemble des réglages du moteur :
 - **Onglet 1 (Audio)** : Mute/Unmute avec statut en direct, curseur & presets de réverbération spatiale (`audio.reverb_wet`), matrice interactive des 11 effets DSP, suivi F3 et scène de stress-test.
 - **Onglet 2 (Physique)** : Synchronisation & application à chaud (`physic.apply`), capacité de simulation, paramètres de spawn & forces, formes d'explosion & presets multiples (`Heart`, `Star`, `Smiley`, `Note`, `Ring`) avec réglage individuel des poids, échelles (px), temps de vol (s), réinitialisations dédiées (`[Reset W]`, `[Reset Scale]`, etc.) et suppression ciblée (`[X Delete]`).
-- **Onglet 3 (Rendu & Post-FX)** : Rechargement des shaders, sélecteur de Tone Mapping (`Reinhard`, `ACES`, `AgX`, `Khronos PBR`, `Uncharted 2`), mode grille de comparaison 2x3 et contrôle du Bloom (Intensité, Itérations, Sous-échantillonnage 1x/2x/4x, méthode Gaussian vs Kawase).
-- **Onglet 4 (Console Commands)** : Catalogue de toutes les commandes inscrites avec lecture des valeurs courantes.
-- **Persistence de Session (`assets/config/gui_session.toml`)** : Sauvegarde et restauration automatique de l'état du GUI, des filtres, des moniteurs F3 et des paramètres audio à la relance.
+- **Onglet 3 (Smoke & Erosion)** : Traînée de fumée volumétrique avec effet d'Érosion Alpha (Dissolve GPU par masque de bruit Perlin), couture incandescente (*Burn Seam*), interrupteur `smoke_erosion_enabled`, vitesse d'érosion `smoke_erosion_scale`, nuancier de couleur incandescente, presets rapides (*Fire & Ember*, *Plasma Blue*, *Volumetric Cloud*, *Toxic Plasma*) et canevas de prévisualisation ISO GPU FBO avec contrôles de Viewport 3D (Pan X/Y Clic-Milieu, Rotation Z Clic-Droit, Zoom Molette isolée).
+- **Onglet 4 (Renderer & Post-FX)** : Rechargement des shaders, sélecteur de Tone Mapping (`Reinhard`, `ACES`, `AgX`, `Khronos PBR`, `Uncharted 2`), mode grille de comparaison 2x3 et contrôle du Bloom (Intensité, Itérations, Sous-échantillonnage 1x/2x/4x, méthode Gaussian vs Kawase).
+- **Onglet 5 (Console Commands)** : Catalogue de toutes les commandes inscrites avec lecture des valeurs courantes.
+- **Persistence de Session (`assets/config/gui_session.toml`)** : Sauvegarde et restauration automatique de l'état du GUI, des filtres, du zoom/viewport, des moniteurs F3 et des paramètres physiques & audio à la relance.
 
-Pour plus de détails, consultez la **[Spécification du Panneau de Contrôle GUI ImGui & Persistence](doc/20260729_imgui_control_panel_and_session_persistence.md)**.
+Pour plus de détails, consultez la **[Spécification du Système de Fumée & Érosion Alpha](doc/20260730_instanced_smoke_trail_system_and_dynamics.md)** ainsi que la **[Spécification du Panneau de Contrôle GUI ImGui & Persistence](doc/20260729_imgui_control_panel_and_session_persistence.md)**.
 
 ### Commandes Console
 

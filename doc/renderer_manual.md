@@ -47,10 +47,18 @@ Tous les paramètres sont ajustables via la console (`F1`) ou le fichier de conf
 | **Intensité** | `renderer.bloom.intensity <float>` | Puissance de l'effet lumineux. |
 | **Itérations** | `renderer.bloom.iterations <int>` | Nombre de passes de flou (Gaussian uniquement). |
 
+### Visibilité des Éléments Graphiques
+| Paramètre | Commande Console | Description |
+|-----------|------------------|-------------|
+| **Fusées** | `renderer.rockets.enable` / `disable` | Masque ou affiche les corps texturés de fusées en ascension. |
+| **Fumées** | `renderer.smoke.enable` / `disable` | Masque ou affiche les traînées de fumée volumétriques instanciées. |
+| **Traînées** | `renderer.trails.enable` / `disable` | Masque ou affiche les étincelles de traînées de fusée (points). |
+| **Explosions** | `renderer.explosions.enable` / `disable` | Masque ou affiche les particules d'explosions (points). |
+
 ### Particules
 | Paramètre | Description |
 |-----------|-------------|
-| **Brightness** | Calculée dynamiquement : `(life / max_life)^3`. Décroissance exponentielle : les particules brillent fort à la naissance et s'éteignent rapidement. |
+| **Brightness** | Calculée dynamiquement : `(life / max_life)^4`. Décroissance exponentielle : les particules brillent fort à la naissance et s'éteignent rapidement. |
 
 ## 🚀 Optimisations
 
@@ -63,7 +71,10 @@ Le bloom peut être calculé à une résolution inférieure (1/2 ou 1/4 de l'éc
 Alternative performante au flou gaussien pour les grands rayons de flou.
 - **Gain** : Moins de passes de rendu et moins de texture fetches par pixel.
 
-### 3. SIMD (Audio)
+### 3. Dispatch de Rendu Typé (`particle_type()`)
+Les passes de rendu s'appuient sur un découplage typé via `ParticleGraphicsRenderer::particle_type()` permettant d'activer/désactiver indépendamment chaque élément visuel en $O(1)$ à chaque tick sans aucune allocation ni réinitialisation du contexte GPU.
+
+### 4. SIMD (Audio)
 Le traitement audio (FFT, filtrage) utilise les instructions SIMD (AVX/SSE) via la feature `simd` de Rust pour paralléliser les calculs sur le CPU.
 
 ### 5. RAII & Gestion du Lifecycle GPU (Persistent Mapping)
@@ -78,6 +89,10 @@ Le traitement audio (FFT, filtrage) utilise les instructions SIMD (AVX/SSE) via 
 - `renderer.bloom.downsample <1|2|4>` : Change la résolution du bloom.
 - `renderer.bloom.intensity <val>` : Règle l'intensité (ex: 2.0).
 - `renderer.bloom.iterations <val>` : Règle les itérations (Gaussian).
+- `renderer.rockets.enable` / `disable` : Bascule l'affichage des corps de fusées.
+- `renderer.smoke.enable` / `disable` : Bascule l'affichage des traînées de fumée.
+- `renderer.trails.enable` / `disable` : Bascule l'affichage des traînées d'étincelles.
+- `renderer.explosions.enable` / `disable` : Bascule l'affichage des explosions.
 - `renderer.reload_shaders` : Recharge les shaders à chaud.
 
 ### Audio

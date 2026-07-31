@@ -12,6 +12,7 @@
 - [Moteur Physique]()
   - [Gestion de la mémoire](physic_memory_management.md)
   - [Formes d'explosions](physic_explosion_shapes.md)
+  - [Système de Trainée de Fumée Instancié & Contrôles Dynamiques](20260730_instanced_smoke_trail_system_and_dynamics.md)
 
 - [Moteur Audio]()
   - [Diagnostics, Latences & Modèle d'Atténuation](audio_engine_diagnostic_and_attenuation.md)
@@ -30,6 +31,9 @@
 - [Rendu Graphique]()
   - [Persistent Mapped Buffers (AZDO)](opengl_azdo_persistent_mapped_buffers.md)
   - [Manuel du Renderer](renderer_manual.md)
+  - [Correctif Bascule Fullscreen & Stress Testing](20260731_fullscreen_toggle_fix_and_stress_testing.md)
+  - [Stratégie de Tests Visuels & Golden Videos](20260731_visual_regression_and_golden_video_testing_strategy.md)
+  - [Protection CI/CD Pre-Merge GitHub Actions](20260731_github_actions_ci_pr_merge_protection.md)
   - [Validation OpenGL avec Mesa Debug Layer](opengl_debug_validation_guide.md)
 
 - [Profilage et Performance]()
