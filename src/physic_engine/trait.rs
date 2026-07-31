@@ -15,6 +15,36 @@ pub trait PhysicEngineIterator {
 
     /// Applique une fonction sur chaque particule active d'un type spécifique.
     fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle));
+
+    /// Applique une fonction sur chaque particule de fumée active directement.
+    fn for_each_smoke_particle(
+        &self,
+        _f: &mut dyn FnMut(&crate::physic_engine::smoke_system::SmokeParticle),
+    ) {
+    }
+
+    /// Retourne l'intensité globale de la fumée pour le rendu.
+    fn get_smoke_intensity(&self) -> f32 {
+        1.0
+    }
+
+    /// Retourne la largeur et la couleur de la bordure incandescente d'érosion alpha de la fumée.
+    fn get_smoke_erosion_params(&self) -> (bool, f32, f32, [f32; 3]) {
+        (
+            crate::physic_engine::constants::DEFAULT_SMOKE_EROSION_ENABLED,
+            crate::physic_engine::constants::DEFAULT_SMOKE_EROSION_SCALE,
+            crate::physic_engine::constants::DEFAULT_SMOKE_EROSION_EDGE_WIDTH,
+            crate::physic_engine::constants::DEFAULT_SMOKE_EROSION_EDGE_COLOR,
+        )
+    }
+
+    /// Retourne la force de distortion et la vitesse d'animation de la Flow Map pour la fumée.
+    fn get_smoke_flow_params(&self) -> (f32, f32) {
+        (
+            crate::physic_engine::constants::DEFAULT_FLOW_DISTORTION_STRENGTH,
+            crate::physic_engine::constants::DEFAULT_FLOW_ANIMATION_SPEED,
+        )
+    }
 }
 
 /// 🔧 Trait `PhysicEngine`
