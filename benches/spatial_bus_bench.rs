@@ -146,7 +146,7 @@ fn print_summary_table() {
         "┌──────────────────────────────────────────────────────────────────────────────────┐"
     );
     println!(
-        "│ 📊 SYNTHÈSE COMPACTE : BUS SPATIAL 2D vs LEGACY (Audio Block = 256 samples)       │"
+        "│ 📊 SYNTHÈSE OBJECTIVE (MÉDIANE 5 PASSES) : BUS SPATIAL 2D vs LEGACY              │"
     );
     println!(
         "├──────────────┬──────────────────────┬──────────────────────┬─────────────────────┤"
@@ -159,35 +159,46 @@ fn print_summary_table() {
     );
 
     for &n_voices in &voice_counts {
+        let iterations = 2000;
+        let passes = 5;
+
         // Measure Legacy
-        let mut dsp_legacy = create_bench_dsp(n_voices, block_size, false);
-        let profiler = Profiler::new(10);
-        let mut out_buf = vec![0.0f32; block_size * 2];
-
-        // Warmup
-        for _ in 0..50 {
-            dsp_legacy.process_block(&mut out_buf, 1.0, &profiler);
+        let mut legacy_times = Vec::with_capacity(passes);
+        for _ in 0..passes {
+            let mut dsp_legacy = create_bench_dsp(n_voices, block_size, false);
+            let profiler = Profiler::new(10);
+            let mut out_buf = vec![0.0f32; block_size * 2];
+            for _ in 0..100 {
+                dsp_legacy.process_block(&mut out_buf, 1.0, &profiler);
+            }
+            let start = Instant::now();
+            for _ in 0..iterations {
+                dsp_legacy.process_block(&mut out_buf, 1.0, &profiler);
+                black_box(&out_buf);
+            }
+            legacy_times.push(start.elapsed() / iterations as u32);
         }
-
-        let iterations = 1000;
-        let start = Instant::now();
-        for _ in 0..iterations {
-            dsp_legacy.process_block(&mut out_buf, 1.0, &profiler);
-            black_box(&out_buf);
-        }
-        let dur_legacy = start.elapsed() / iterations;
+        legacy_times.sort();
+        let dur_legacy = legacy_times[passes / 2];
 
         // Measure Spatial Bus
-        let mut dsp_bus = create_bench_dsp(n_voices, block_size, true);
-        for _ in 0..50 {
-            dsp_bus.process_block(&mut out_buf, 1.0, &profiler);
+        let mut bus_times = Vec::with_capacity(passes);
+        for _ in 0..passes {
+            let mut dsp_bus = create_bench_dsp(n_voices, block_size, true);
+            let profiler = Profiler::new(10);
+            let mut out_buf = vec![0.0f32; block_size * 2];
+            for _ in 0..100 {
+                dsp_bus.process_block(&mut out_buf, 1.0, &profiler);
+            }
+            let start = Instant::now();
+            for _ in 0..iterations {
+                dsp_bus.process_block(&mut out_buf, 1.0, &profiler);
+                black_box(&out_buf);
+            }
+            bus_times.push(start.elapsed() / iterations as u32);
         }
-        let start = Instant::now();
-        for _ in 0..iterations {
-            dsp_bus.process_block(&mut out_buf, 1.0, &profiler);
-            black_box(&out_buf);
-        }
-        let dur_bus = start.elapsed() / iterations;
+        bus_times.sort();
+        let dur_bus = bus_times[passes / 2];
 
         let time_legacy_us = dur_legacy.as_nanos() as f64 / 1000.0;
         let time_bus_us = dur_bus.as_nanos() as f64 / 1000.0;
