@@ -16,7 +16,7 @@ pub enum ToneMappingMode {
     KhronosPBR = 5,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
 pub struct RendererConfig {
     pub bloom_enabled: bool,
     pub bloom_intensity: f32,
@@ -24,6 +24,20 @@ pub struct RendererConfig {
     pub bloom_downsample: u32,
     pub bloom_blur_method: BlurMethod,
     pub tone_mapping_mode: ToneMappingMode,
+
+    // Graphical Elements Visibility Toggles
+    #[serde(default = "default_true")]
+    pub render_rockets: bool,
+    #[serde(default = "default_true")]
+    pub render_smoke: bool,
+    #[serde(default = "default_true")]
+    pub render_trails: bool,
+    #[serde(default = "default_true")]
+    pub render_explosions: bool,
+}
+
+fn default_true() -> bool {
+    true
 }
 
 use crate::renderer_engine::constants;
@@ -37,6 +51,10 @@ impl Default for RendererConfig {
             bloom_downsample: constants::DEFAULT_BLOOM_DOWNSAMPLE,
             bloom_blur_method: constants::DEFAULT_BLOOM_BLUR_METHOD,
             tone_mapping_mode: constants::DEFAULT_TONE_MAPPING_MODE,
+            render_rockets: true,
+            render_smoke: true,
+            render_trails: true,
+            render_explosions: true,
         }
     }
 }
@@ -71,6 +89,10 @@ mod tests {
         assert_eq!(config.bloom_downsample, 2);
         assert_eq!(config.bloom_blur_method, BlurMethod::Gaussian);
         assert_eq!(config.tone_mapping_mode, ToneMappingMode::KhronosPBR);
+        assert!(config.render_rockets);
+        assert!(config.render_smoke);
+        assert!(config.render_trails);
+        assert!(config.render_explosions);
     }
 
     #[test]
@@ -85,6 +107,10 @@ mod tests {
             bloom_downsample: 4,
             bloom_blur_method: BlurMethod::Kawase,
             tone_mapping_mode: ToneMappingMode::ACES,
+            render_rockets: false,
+            render_smoke: true,
+            render_trails: false,
+            render_explosions: true,
         };
 
         config.save_to_file(file_path)?;
@@ -96,6 +122,10 @@ mod tests {
         assert_eq!(loaded.bloom_downsample, config.bloom_downsample);
         assert_eq!(loaded.bloom_blur_method, config.bloom_blur_method);
         assert_eq!(loaded.tone_mapping_mode, config.tone_mapping_mode);
+        assert!(!loaded.render_rockets);
+        assert!(loaded.render_smoke);
+        assert!(!loaded.render_trails);
+        assert!(loaded.render_explosions);
 
         Ok(())
     }

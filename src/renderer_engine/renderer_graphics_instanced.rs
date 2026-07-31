@@ -252,6 +252,13 @@ impl RendererGraphicsInstanced {
 
         push_debug_group!(30, "Draw Instanced Quads");
 
+        // 1. Enable Alpha Blending for soft particle dissipation
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+
+        // 2. Disable Depth Writing to prevent Z-fighting and quad intersection artifacts
+        gl::DepthMask(gl::FALSE);
+
         // Active le shader de rendu des particules (seulement s'il n'est pas déjà actif)
         if *active_shader != self.shader_program {
             gl::UseProgram(self.shader_program);
@@ -270,6 +277,9 @@ impl RendererGraphicsInstanced {
 
         // Dessiner le quad
         gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, count as i32);
+
+        // Restore depth write for depth-tested rendering passes
+        gl::DepthMask(gl::TRUE);
 
         pop_debug_group!();
 
@@ -523,6 +533,14 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
 
     fn get_tex_ratio(&self) -> f32 {
         self.tex_ratio
+    }
+
+    fn particle_type(&self) -> Option<crate::physic_engine::ParticleType> {
+        Some(self.particle_type)
+    }
+
+    fn render_order(&self) -> u32 {
+        20
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {
