@@ -225,6 +225,10 @@ where
         sim.gui_settings
             .apply_session_to_physic(&mut sim.physic_engine);
 
+        if gui_session.fullscreen {
+            sim.toggle_fullscreen();
+        }
+
         sim
     }
 
@@ -236,6 +240,7 @@ where
             self.show_audio_visual_overlay,
             self.tonemapping_comparison_mode
                 .load(std::sync::atomic::Ordering::Relaxed),
+            self.window_engine.is_fullscreen(),
         );
         let _ = self
             .physic_engine

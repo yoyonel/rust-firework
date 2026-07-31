@@ -40,7 +40,7 @@ if [ -n "$unmarked" ]; then
     exit 1
 fi
 
-GREP_CMD="grep -q -F"
+GREP_CMD="grep -rn -q -F"
 if command -v rg >/dev/null 2>&1; then
     GREP_CMD="rg -q -F"
 fi
@@ -48,5 +48,7 @@ $GREP_CMD 'save_to_file("assets/config/renderer.toml")' src/simulator.rs
 $GREP_CMD 'save_to_file("assets/config/physic.toml")' src/simulator.rs
 $GREP_CMD 'tonemapping_comparison_mode' "$SOURCE"
 $GREP_CMD 'explosion_shape' "$SOURCE"
+$GREP_CMD 'fullscreen' "$SOURCE"
+
 
 echo "GUI persistence check passed ($(printf '%s\n' "$markers" | wc -l | tr -d ' ') inventory rows)."

@@ -1,6 +1,7 @@
 pub mod audio;
 pub mod physic;
 pub mod renderer;
+pub mod smoke;
 pub mod theme;
 
 pub use audio::{default_audio_master_volume, render_audio_settings_tab};
@@ -9,6 +10,7 @@ pub use physic::{
     PersistedExplosionImage, PersistedExplosionShape, PRESET_DEFINITIONS,
 };
 pub use renderer::{render_commands_overview_tab, render_renderer_settings_tab};
+pub use smoke::render_smoke_settings_tab;
 pub use theme::{apply_theme_to_context, GuiTheme};
 
 use crate::audio_engine::effect_flags::AudioEffect;
@@ -24,12 +26,17 @@ use std::sync::{Arc, RwLock};
 pub const GUI_SESSION_PATH: &str = "assets/config/gui_session.toml";
 
 // GUI_PERSIST: gui.layout
+// GUI_PERSIST: gui.scale
 // GUI_PERSIST: gui.theme
 // GUI_PERSIST: audio.output
 // GUI_PERSIST: audio.diagnostics
 // GUI_PERSIST: physics.preset_weights
 // GUI_PERSIST: physics.explosion_shape
 // GUI_PERSIST: renderer.comparison
+
+fn default_gui_scale() -> f32 {
+    0.85
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GuiSessionState {
@@ -57,8 +64,13 @@ pub struct GuiSessionState {
     pub window_size: Option<[f32; 2]>,
     #[serde(default)]
     pub scroll_y: Option<f32>,
+    // GUI_PERSIST: gui.fullscreen
+    #[serde(default)]
+    pub fullscreen: bool,
     #[serde(default)]
     pub theme: GuiTheme,
+    #[serde(default = "default_gui_scale")]
+    pub gui_scale: f32,
 }
 
 impl Default for GuiSessionState {
@@ -80,7 +92,9 @@ impl Default for GuiSessionState {
             window_pos: None,
             window_size: None,
             scroll_y: None,
+            fullscreen: false,
             theme: GuiTheme::default(),
+            gui_scale: 0.85,
         }
     }
 }
@@ -142,6 +156,7 @@ pub struct GuiSettings {
     pub restore_scroll: Option<f32>,
     pub theme: GuiTheme,
     pub pending_theme_change: Option<GuiTheme>,
+    pub gui_scale: f32,
 }
 
 impl Default for GuiSettings {
@@ -166,6 +181,7 @@ impl GuiSettings {
             restore_scroll: session.scroll_y,
             theme: session.theme,
             pending_theme_change: None,
+            gui_scale: session.gui_scale,
         }
     }
 
@@ -183,19 +199,16 @@ impl GuiSettings {
         *show_audio_diagnostic = session.show_audio_diagnostic;
         *show_audio_visual_overlay = session.show_audio_visual_overlay;
 
-        audio_engine.set_master_volume(session.audio_master_volume);
-
-        if session.audio_muted {
-            audio_engine.mute();
-        } else {
-            audio_engine.unmute();
-        }
-
         audio_engine.set_reverb_wet(session.audio_reverb_wet);
 
         for (_, fx) in AudioEffect::all_names() {
             let enabled = (session.audio_dsp_mask & (*fx as u32)) != 0;
             audio_engine.set_effect_enabled(*fx, enabled);
+        }
+
+        audio_engine.set_master_volume(session.audio_master_volume);
+        if session.audio_muted {
+            audio_engine.mute();
         }
     }
 
@@ -216,6 +229,7 @@ impl GuiSettings {
         show_audio_diagnostic: bool,
         show_audio_visual_overlay: bool,
         tonemapping_comparison_mode: bool,
+        fullscreen: bool,
     ) {
         let mut dsp_mask = 0u32;
         for (_, fx) in AudioEffect::all_names() {
@@ -224,6 +238,12 @@ impl GuiSettings {
             }
         }
 
+        let master_volume = if audio_engine.is_muted() {
+            audio_engine.get_saved_master_volume()
+        } else {
+            audio_engine.get_master_volume()
+        };
+
         let session = GuiSessionState {
             gui_open: self.open,
             active_tab: self.active_tab,
@@ -231,7 +251,7 @@ impl GuiSettings {
             show_audio_diagnostic,
             show_audio_visual_overlay,
             audio_muted: audio_engine.is_muted(),
-            audio_master_volume: audio_engine.get_master_volume(),
+            audio_master_volume: master_volume,
             audio_reverb_wet: audio_engine.get_reverb_wet(),
             audio_dsp_mask: dsp_mask,
             preset_weights: self.preset_weights,
@@ -243,7 +263,9 @@ impl GuiSettings {
             window_pos: self.window_pos,
             window_size: self.window_size,
             scroll_y: self.scroll_y,
+            fullscreen,
             theme: self.theme,
+            gui_scale: self.gui_scale,
         };
 
         let _ = session.save_to_file(GUI_SESSION_PATH);
@@ -268,6 +290,7 @@ impl GuiSettings {
         show_audio_visual_overlay: &mut bool,
         audio_stress_scene: &mut AudioStressScene,
         window_size_f32: (f32, f32),
+        fullscreen: bool,
     ) where
         A: AudioEngine,
         P: PhysicEngineFull,
@@ -320,6 +343,7 @@ impl GuiSettings {
                         *show_audio_diagnostic,
                         *show_audio_visual_overlay,
                         tonemapping_comparison_mode.load(Ordering::Relaxed),
+                        fullscreen,
                     );
                     if let Ok(c) = renderer_config.read() {
                         let _ = c.save_to_file("assets/config/renderer.toml");
@@ -346,6 +370,7 @@ impl GuiSettings {
                     self.restore_scroll = session.scroll_y;
                     self.theme = session.theme;
                     self.pending_theme_change = Some(session.theme);
+                    self.gui_scale = session.gui_scale;
                     tonemapping_comparison_mode
                         .store(session.tonemapping_comparison_mode, Ordering::Relaxed);
                     self.apply_session_to_physic(physic_engine);
@@ -367,6 +392,38 @@ impl GuiSettings {
                 }
 
                 ui.same_line();
+                // Discrete Zoom Preset Selector & Step Buttons
+                let zoom_presets = [
+                    (0.65, "65% (Tiny)"),
+                    (0.75, "75% (Compact)"),
+                    (0.85, "85% (Optimal)"),
+                    (1.00, "100% (Standard)"),
+                    (1.15, "115% (Large)"),
+                    (1.30, "130% (Huge)"),
+                ];
+
+                let current_zoom_label =
+                    format!("Zoom: {}%", (self.gui_scale * 100.0).round() as i32);
+                ui.set_next_item_width(115.0);
+                if let Some(_combo) = ui.begin_combo("##ZoomCombo", &current_zoom_label) {
+                    for (scale, name) in zoom_presets {
+                        let selected = (self.gui_scale - scale).abs() < 0.02;
+                        if ui.selectable_config(name).selected(selected).build() {
+                            self.gui_scale = scale;
+                        }
+                    }
+                }
+
+                ui.same_line();
+                if ui.small_button("-") {
+                    self.gui_scale = (self.gui_scale - 0.05).clamp(0.60, 1.50);
+                }
+                ui.same_line();
+                if ui.small_button("+") {
+                    self.gui_scale = (self.gui_scale + 0.05).clamp(0.60, 1.50);
+                }
+
+                ui.same_line();
                 // Theme Combo Selector
                 let themes = GuiTheme::all_themes();
                 let current_theme_idx = themes
@@ -374,7 +431,7 @@ impl GuiSettings {
                     .position(|(t, _)| *t == self.theme)
                     .unwrap_or(0);
 
-                ui.set_next_item_width(210.0);
+                ui.set_next_item_width(160.0);
                 if let Some(_combo) = ui.begin_combo("##ThemeCombo", themes[current_theme_idx].1) {
                     for (t, name) in themes {
                         let selected = *t == self.theme;
@@ -386,9 +443,10 @@ impl GuiSettings {
                 }
 
                 ui.same_line();
-                // Filter Search Bar
+                // Compact Filter Search Bar
+                ui.set_next_item_width(220.0);
                 ui.input_text("Filter", &mut self.search_filter)
-                    .hint("Filter settings across all tabs...")
+                    .hint("Filter settings...")
                     .build();
 
                 // Status Message Toast
@@ -406,6 +464,7 @@ impl GuiSettings {
                     let select_1 = self.set_selected_tab == Some(1);
                     let select_2 = self.set_selected_tab == Some(2);
                     let select_3 = self.set_selected_tab == Some(3);
+                    let select_4 = self.set_selected_tab == Some(4);
 
                     // TAB 0: AUDIO
                     if self.should_show_tab("audio", &filter, commands_registry) {
@@ -445,14 +504,28 @@ impl GuiSettings {
                         });
                     }
 
-                    // TAB 2: RENDERER
-                    if self.should_show_tab("renderer", &filter, commands_registry) {
-                        let mut tab = imgui::TabItem::new("Renderer & Post-FX");
+                    // TAB 2: SMOKE & EROSION
+                    if filter.is_empty()
+                        || "smoke trail erosion dissolve noise edge color".contains(&filter)
+                    {
+                        let mut tab = imgui::TabItem::new("Smoke & Erosion");
                         if select_2 {
                             tab = tab.flags(imgui::TabItemFlags::SET_SELECTED);
                         }
                         tab.build(ui, || {
                             self.active_tab = 2;
+                            render_smoke_settings_tab(ui, physic_engine);
+                        });
+                    }
+
+                    // TAB 3: RENDERER
+                    if self.should_show_tab("renderer", &filter, commands_registry) {
+                        let mut tab = imgui::TabItem::new("Renderer & Post-FX");
+                        if select_3 {
+                            tab = tab.flags(imgui::TabItemFlags::SET_SELECTED);
+                        }
+                        tab.build(ui, || {
+                            self.active_tab = 3;
                             render_renderer_settings_tab(
                                 ui,
                                 &filter,
@@ -463,13 +536,13 @@ impl GuiSettings {
                         });
                     }
 
-                    // TAB 3: COMMANDS OVERVIEW
+                    // TAB 4: COMMANDS OVERVIEW
                     let mut tab = imgui::TabItem::new("Console Commands");
-                    if select_3 {
+                    if select_4 {
                         tab = tab.flags(imgui::TabItemFlags::SET_SELECTED);
                     }
                     tab.build(ui, || {
-                        self.active_tab = 3;
+                        self.active_tab = 4;
                         render_commands_overview_tab(
                             ui,
                             &filter,
@@ -489,6 +562,7 @@ impl GuiSettings {
                     *show_audio_diagnostic,
                     *show_audio_visual_overlay,
                     tonemapping_comparison_mode.load(Ordering::Relaxed),
+                    fullscreen,
                 );
             });
 
@@ -527,12 +601,14 @@ mod tests {
         let file_path = temp_dir.path().join("gui_session.toml");
         let path_str = file_path.to_str().unwrap();
 
-        let mut state = GuiSessionState::default();
-        state.gui_open = true;
-        state.active_tab = 2;
-        state.audio_master_volume = 0.5;
-        state.theme = GuiTheme::DeepSapphire;
-        state.explosion_shape = PersistedExplosionShape::Images { images: vec![] };
+        let state = GuiSessionState {
+            gui_open: true,
+            active_tab: 2,
+            audio_master_volume: 0.5,
+            theme: GuiTheme::DeepSapphire,
+            explosion_shape: PersistedExplosionShape::Images { images: vec![] },
+            ..GuiSessionState::default()
+        };
 
         state.save_to_file(path_str)?;
 

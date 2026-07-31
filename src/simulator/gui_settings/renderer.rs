@@ -47,6 +47,46 @@ pub fn render_renderer_settings_tab(
     ui.separator();
     ui.text_colored(
         [0.4, 0.8, 1.0, 1.0],
+        "=== GRAPHICAL ELEMENTS VISIBILITY ===",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Visibility Defaults") {
+        if let Ok(mut c) = renderer_config.write() {
+            c.render_rockets = true;
+            c.render_smoke = true;
+            c.render_trails = true;
+            c.render_explosions = true;
+        }
+    }
+
+    if let Ok(mut cfg) = renderer_config.write() {
+        ui.checkbox(
+            "Render Rockets (`renderer.rockets.enable`)",
+            &mut cfg.render_rockets,
+        );
+        ui.checkbox(
+            "Render Smoke Trails (`renderer.smoke.enable`)",
+            &mut cfg.render_smoke,
+        );
+        ui.checkbox(
+            "Render Rocket Trails (`renderer.trails.enable`)",
+            &mut cfg.render_trails,
+        );
+        ui.checkbox(
+            "Render Explosions (`renderer.explosions.enable`)",
+            &mut cfg.render_explosions,
+        );
+    }
+
+    ui.spacing();
+    ui.separator();
+
+    // Use a responsive item width (45% of content region, capped 200px..360px) so labels have plenty of space on the right
+    let item_width = (ui.content_region_avail()[0] * 0.45).clamp(200.0, 360.0);
+    let _item_w_token = ui.push_item_width(item_width);
+
+    ui.text_colored(
+        [0.4, 0.8, 1.0, 1.0],
         "=== TONEMAPPING (`renderer.tonemapping`) ===",
     );
     ui.same_line();

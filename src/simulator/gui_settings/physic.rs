@@ -196,6 +196,10 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
 
     ui.separator();
 
+    // Use a responsive item width (45% of content region, capped 200px..360px) so labels have plenty of space on the right
+    let item_width = (ui.content_region_avail()[0] * 0.45).clamp(200.0, 360.0);
+    let _item_w_token = ui.push_item_width(item_width);
+
     // 1. Simulation Capacity
     if filter.is_empty() || "capacity max_rockets particles".contains(filter) {
         ui.text_colored(
@@ -242,6 +246,51 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         ) {
             cfg_mut.particles_per_trail = p_trail.max(0) as usize;
         }
+
+        let mut max_smoke = cfg_mut.max_smoke_particles as i32;
+        if ui.slider(
+            "Max Smoke Particles (`physic.max_smoke_particles`)",
+            100,
+            16384,
+            &mut max_smoke,
+        ) {
+            cfg_mut.max_smoke_particles = max_smoke.max(100) as usize;
+        }
+    }
+
+    // 2. Smoke Trail Dynamics & Alpha Erosion
+    if filter.is_empty()
+        || "smoke trail rate size growth fade erosion edge dissolve color".contains(filter)
+    {
+        ui.spacing();
+        ui.separator();
+        ui.text_colored(
+            [0.4, 0.8, 1.0, 1.0],
+            "=== SMOKE TRAIL DYNAMICS & ALPHA EROSION ===",
+        );
+        ui.same_line();
+        if ui.small_button("Reset Smoke Defaults") {
+            let default_cfg = crate::physic_engine::config::PhysicConfig::default();
+            let cfg_mut = physic_engine.get_config_mut();
+            cfg_mut.smoke_spawn_rate = default_cfg.smoke_spawn_rate;
+            cfg_mut.smoke_initial_size = default_cfg.smoke_initial_size;
+            cfg_mut.smoke_growth_rate_multiplier = default_cfg.smoke_growth_rate_multiplier;
+            cfg_mut.smoke_fade_duration = default_cfg.smoke_fade_duration;
+            cfg_mut.max_smoke_particles = default_cfg.max_smoke_particles;
+            cfg_mut.smoke_intensity = default_cfg.smoke_intensity;
+            cfg_mut.smoke_color_mode = default_cfg.smoke_color_mode;
+            cfg_mut.smoke_custom_color = default_cfg.smoke_custom_color;
+            cfg_mut.smoke_inherited_color_intensity = default_cfg.smoke_inherited_color_intensity;
+            cfg_mut.smoke_erosion_enabled = default_cfg.smoke_erosion_enabled;
+            cfg_mut.smoke_erosion_scale = default_cfg.smoke_erosion_scale;
+            cfg_mut.smoke_erosion_edge_width = default_cfg.smoke_erosion_edge_width;
+            cfg_mut.smoke_erosion_edge_color = default_cfg.smoke_erosion_edge_color;
+            cfg_mut.flow_distortion_strength = default_cfg.flow_distortion_strength;
+            cfg_mut.flow_animation_speed = default_cfg.flow_animation_speed;
+        }
+
+        let cfg_mut = physic_engine.get_config_mut();
+        let _ = super::smoke::render_smoke_controls(ui, cfg_mut);
     }
 
     // 2. Launch & Spawn Dynamics

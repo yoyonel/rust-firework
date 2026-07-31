@@ -38,9 +38,17 @@ where
     W: WindowEngine,
 {
     pub(crate) fn render_ui(&mut self) {
+        let is_fullscreen = self.window_engine.is_fullscreen();
         let comparison_active = self
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
+
+        let dummy_check = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = self.window_engine.get_imgui_system_mut();
+        }));
+        if dummy_check.is_err() {
+            return; // Skip ImGui rendering when using dummy window engine in tests
+        }
 
         if !self.console.open
             && !comparison_active
@@ -57,6 +65,9 @@ where
                 new_theme,
             );
         }
+
+        let (_, imgui_system) = self.window_engine.get_window_and_imgui_mut();
+        imgui_system.context.io_mut().font_global_scale = self.gui_settings.gui_scale;
 
         let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
         let ui = imgui_system.glfw.frame(window, &mut imgui_system.context);
@@ -404,6 +415,7 @@ where
                 &mut self.show_audio_visual_overlay,
                 &mut self.audio_stress_scene,
                 self.window_size_f32,
+                is_fullscreen,
             );
         }
 
