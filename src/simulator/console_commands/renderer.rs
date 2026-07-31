@@ -264,6 +264,94 @@ where
                 }
             },
         );
+
+        // Rockets visibility
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.rockets.enable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_rockets = true;
+                    "-> Rockets rendering enabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.rockets.disable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_rockets = false;
+                    "-> Rockets rendering disabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+
+        // Smoke visibility
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.smoke.enable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_smoke = true;
+                    "-> Smoke rendering enabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.smoke.disable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_smoke = false;
+                    "-> Smoke rendering disabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+
+        // Trails visibility
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.trails.enable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_trails = true;
+                    "-> Rocket trails rendering enabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.trails.disable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_trails = false;
+                    "-> Rocket trails rendering disabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+
+        // Explosions visibility
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.explosions.enable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_explosions = true;
+                    "-> Explosions rendering enabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_for_renderer("renderer.explosions.disable", move |_| {
+                if let Ok(mut c) = cfg.write() {
+                    c.render_explosions = false;
+                    "-> Explosions rendering disabled".into()
+                } else {
+                    "x Lock fail".into()
+                }
+            });
     }
 
     // Helper pur pour le parsing (peut être statique ou hors de la classe)

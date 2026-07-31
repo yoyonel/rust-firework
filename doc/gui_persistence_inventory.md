@@ -7,13 +7,15 @@ restored on startup and through **Reload Session**, and be listed here.
 | ID | UI control(s) | Canonical persistence target | Restore path |
 | --- | --- | --- | --- |
 | `gui.layout` | Panel visibility, selected tab, search, position, size, scroll | `GuiSessionState` / `gui_session.toml` | `GuiSettings::new` and Reload Session |
+| `gui.fullscreen` | Fullscreen toggle (F11) | `GuiSessionState.fullscreen` / `gui_session.toml` | `Simulator::new` startup restoration |
+| `gui.scale` | Global UI Zoom / Font Scale Slider | `GuiSessionState.gui_scale` / `gui_session.toml` | `Simulator::render_ui` frame scaling |
 | `gui.theme` | Theme selector | `GuiSessionState` / `gui_session.toml` | `GuiSettings::new` and pending theme application |
 | `audio.output` | Master volume, mute, reverb wet mix, DSP matrix | `GuiSessionState` / `gui_session.toml` | `apply_session_to_audio` |
 | `audio.diagnostics` | Diagnostic monitor and visual overlay | `GuiSessionState` / `gui_session.toml` | `apply_session_to_audio` |
-| `physics.config` | Capacity, spawn, forces | `PhysicConfig` / `physic.toml` | simulator startup and Reload Session |
+| `physics.config` | Capacity, spawn, forces, smoke emission (rate, size, growth, fade, max particles, intensity, color mode, custom color, inherited color intensity), alpha erosion (enabled, scale, edge width, edge color), flow map UV distortion (strength, speed) | `PhysicConfig` / `physic.toml` | simulator startup and Reload Session |
 | `physics.explosion_shape` | Spherical/image/multi-image selection, active image parameters and weights | `GuiSessionState.explosion_shape` / `gui_session.toml` | `apply_session_to_physic` |
 | `physics.preset_weights` | Preset weight controls used before adding a shape | `GuiSessionState.preset_weights` / `gui_session.toml` | `GuiSettings::new` and Reload Session |
-| `renderer.config` | Tone mapping and all Bloom controls (enabled, intensity, iterations, downsample, blur method) | `RendererConfig` / `renderer.toml` | simulator startup and Reload Session |
+| `renderer.config` | Tone mapping, all Bloom controls, and graphical elements visibility toggles (rockets, smoke, trails, explosions) | `RendererConfig` / `renderer.toml` | simulator startup and Reload Session |
 | `renderer.comparison` | Tone-mapping grid comparison | `GuiSessionState` / `gui_session.toml` | `Simulator::new` and Reload Session |
 
 Buttons that perform an immediate action rather than retain a setting (save,
