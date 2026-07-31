@@ -27,7 +27,7 @@ fn test_gui_settings_session_sync() {
     let (msg, _) = settings.status_message.as_ref().unwrap();
     assert_eq!(msg, "Test status message");
 
-    settings.save_session_state(&audio, &physic, diag, overlay, false);
+    settings.save_session_state(&audio, &physic, diag, overlay, false, false);
 }
 
 #[test]
