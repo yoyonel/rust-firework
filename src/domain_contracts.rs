@@ -5,6 +5,9 @@
 
 use crate::audio_engine::effect_flags::AudioEffect;
 use crate::audio_engine::AudioEngine;
+use crate::physic_engine::config::{PhysicConfig, SmokeColorMode};
+use crate::physic_engine::PhysicEngine;
+use crate::renderer_engine::config::{BlurMethod, RendererConfig, ToneMappingMode};
 use glam::Vec2;
 
 /// Commands sent from UI to Audio engine without dynamic allocations.
@@ -27,6 +30,43 @@ pub enum PhysicCommand {
     SetDrag(f32),
     SetMaxParticles(u32),
     SetExplosionForce(f32),
+    ApplyPendingConfig,
+    SaveConfig,
+    ReloadConfig,
+    ResetDefaults,
+    ResetCapacityDefaults,
+    SetMaxRockets(u32),
+    SetParticlesPerExplosion(u32),
+    SetParticlesPerTrail(u32),
+    SetMaxSmokeParticles(u32),
+    ResetSpawnDefaults,
+    SetRocketIntervalMean(f32),
+    SetRocketIntervalVariation(f32),
+    SetRocketMaxNextInterval(f32),
+    SetSpawnRocketMargin(f32),
+    SetSpawnRocketVerticalAngle(f32),
+    SetSpawnRocketAngleVariation(f32),
+    SetSpawnRocketMinSpeed(f32),
+    SetSpawnRocketMaxSpeed(f32),
+    SetInitialRocketSpeed(f32),
+    ResetForcesDefaults,
+    SetExplosionThreshold(f32),
+    SetExplosionMinVel(f32),
+    SetExplosionMaxVel(f32),
+    SetExplosionShapeSpherical,
+    ResetAllPresetWeights,
+    SetPresetWeight { index: u32, weight: f32 },
+    SetPresetSingleShape { index: u32 },
+    AddPresetShapeWeighted { index: u32, weight: f32 },
+    DeleteSingleShape,
+    ResetSingleShapeDefaults,
+    SetSingleShapeScale(f32),
+    SetSingleShapeFlightTime(f32),
+    DeleteMultiShapeItem(u32),
+    ResetMultiShapeItemDefaults(u32),
+    SetMultiShapeItemWeight { index: u32, weight: f32 },
+    SetMultiShapeItemScale { index: u32, scale: f32 },
+    SetMultiShapeItemFlightTime { index: u32, flight_time: f32 },
 }
 
 /// Commands sent from UI to Renderer engine without dynamic allocations.
@@ -36,6 +76,23 @@ pub enum RendererCommand {
     SetExposure(f32),
     SetWireframe(bool),
     SetVsync(bool),
+    ReloadShaders,
+    SaveConfig,
+    ReloadConfig,
+    ResetDefaults,
+    ResetVisibilityDefaults,
+    SetRenderRockets(bool),
+    SetRenderSmoke(bool),
+    SetRenderTrails(bool),
+    SetRenderExplosions(bool),
+    ResetTonemapping,
+    SetToneMappingMode(ToneMappingMode),
+    SetTonemappingComparisonMode(bool),
+    ResetBloomDefaults,
+    SetBloomEnabled(bool),
+    SetBloomIterations(u32),
+    SetBloomDownsample(u32),
+    SetBloomBlurMethod(BlurMethod),
 }
 
 /// Commands sent from UI to Smoke simulation engine without dynamic allocations.
@@ -44,6 +101,23 @@ pub enum SmokeCommand {
     SetDensity(f32),
     SetDissipation(f32),
     SetWind([f32; 2]),
+    SetErosionEnabled(bool),
+    SetErosionScale(f32),
+    SetErosionEdgeWidth(f32),
+    SetErosionEdgeColor([u8; 3]),
+    SetFlowDistortionStrength(f32),
+    SetFlowAnimationSpeed(f32),
+    SetColorMode(SmokeColorMode),
+    SetInheritedColorIntensity(f32),
+    SetCustomColor([u8; 3]),
+    SetSpawnRate(f32),
+    SetInitialSize(f32),
+    SetGrowthRateMultiplier(f32),
+    SetFadeDuration(f32),
+    SetIntensity(f32),
+    SetMaxSmokeParticles(u32),
+    ResetDefaults,
+    ApplyPreset(u8),
 }
 
 /// Unified domain command enum decoupling UI from core engines.
@@ -90,11 +164,35 @@ impl<T: AudioEngine> AudioStateReader for T {
 }
 
 /// Read-only interface exposing Physic engine state to UI.
-pub trait PhysicStateReader {
+pub trait PhysicStateReader: SmokeStateReader {
     fn gravity(&self) -> f32;
     fn drag(&self) -> f32;
     fn max_particles(&self) -> u32;
     fn explosion_force(&self) -> f32;
+    fn explosion_shape(&self) -> &crate::physic_engine::ExplosionShape;
+}
+
+impl<T: PhysicEngine> PhysicStateReader for T {
+    #[inline(always)]
+    fn gravity(&self) -> f32 {
+        self.get_config().gravity
+    }
+    #[inline(always)]
+    fn drag(&self) -> f32 {
+        0.0
+    }
+    #[inline(always)]
+    fn max_particles(&self) -> u32 {
+        self.get_config().max_rockets as u32
+    }
+    #[inline(always)]
+    fn explosion_force(&self) -> f32 {
+        self.get_config().explosion_max_vel
+    }
+    #[inline(always)]
+    fn explosion_shape(&self) -> &crate::physic_engine::ExplosionShape {
+        self.get_explosion_shape()
+    }
 }
 
 /// Read-only interface exposing Renderer engine state to UI.
@@ -103,6 +201,30 @@ pub trait RendererStateReader {
     fn exposure(&self) -> f32;
     fn is_wireframe(&self) -> bool;
     fn vsync_enabled(&self) -> bool;
+    fn config(&self) -> &RendererConfig;
+}
+
+impl RendererStateReader for RendererConfig {
+    #[inline(always)]
+    fn bloom_intensity(&self) -> f32 {
+        self.bloom_intensity
+    }
+    #[inline(always)]
+    fn exposure(&self) -> f32 {
+        1.0
+    }
+    #[inline(always)]
+    fn is_wireframe(&self) -> bool {
+        false
+    }
+    #[inline(always)]
+    fn vsync_enabled(&self) -> bool {
+        true
+    }
+    #[inline(always)]
+    fn config(&self) -> &RendererConfig {
+        self
+    }
 }
 
 /// Read-only interface exposing Smoke engine state to UI.
@@ -110,6 +232,45 @@ pub trait SmokeStateReader {
     fn density(&self) -> f32;
     fn dissipation(&self) -> f32;
     fn wind(&self) -> [f32; 2];
+    fn config(&self) -> &PhysicConfig;
+}
+
+impl<T: PhysicEngine> SmokeStateReader for T {
+    #[inline(always)]
+    fn density(&self) -> f32 {
+        self.get_config().smoke_intensity
+    }
+    #[inline(always)]
+    fn dissipation(&self) -> f32 {
+        self.get_config().smoke_fade_duration
+    }
+    #[inline(always)]
+    fn wind(&self) -> [f32; 2] {
+        [0.0, 0.0]
+    }
+    #[inline(always)]
+    fn config(&self) -> &PhysicConfig {
+        self.get_config()
+    }
+}
+
+impl SmokeStateReader for PhysicConfig {
+    #[inline(always)]
+    fn density(&self) -> f32 {
+        self.smoke_intensity
+    }
+    #[inline(always)]
+    fn dissipation(&self) -> f32 {
+        self.smoke_fade_duration
+    }
+    #[inline(always)]
+    fn wind(&self) -> [f32; 2] {
+        [0.0, 0.0]
+    }
+    #[inline(always)]
+    fn config(&self) -> &PhysicConfig {
+        self
+    }
 }
 
 #[cfg(test)]
@@ -168,6 +329,9 @@ mod tests {
         smoke_density: f32,
         smoke_dissipation: f32,
         smoke_wind: [f32; 2],
+        physic_config: PhysicConfig,
+        renderer_config: RendererConfig,
+        explosion_shape: crate::physic_engine::ExplosionShape,
     }
 
     impl AudioStateReader for MockState {
@@ -210,6 +374,10 @@ mod tests {
         fn explosion_force(&self) -> f32 {
             self.explosion
         }
+        #[inline(always)]
+        fn explosion_shape(&self) -> &crate::physic_engine::ExplosionShape {
+            &self.explosion_shape
+        }
     }
 
     impl RendererStateReader for MockState {
@@ -229,6 +397,10 @@ mod tests {
         fn vsync_enabled(&self) -> bool {
             self.vsync
         }
+        #[inline(always)]
+        fn config(&self) -> &RendererConfig {
+            &self.renderer_config
+        }
     }
 
     impl SmokeStateReader for MockState {
@@ -243,6 +415,10 @@ mod tests {
         #[inline(always)]
         fn wind(&self) -> [f32; 2] {
             self.smoke_wind
+        }
+        #[inline(always)]
+        fn config(&self) -> &PhysicConfig {
+            &self.physic_config
         }
     }
 
@@ -264,6 +440,9 @@ mod tests {
             smoke_density: 0.5,
             smoke_dissipation: 0.05,
             smoke_wind: [0.2, -0.1],
+            physic_config: PhysicConfig::default(),
+            renderer_config: RendererConfig::default(),
+            explosion_shape: crate::physic_engine::ExplosionShape::Spherical,
         };
 
         assert_eq!(state.master_volume(), 0.75);

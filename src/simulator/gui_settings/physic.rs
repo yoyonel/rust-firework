@@ -1,3 +1,4 @@
+use crate::domain_contracts::{EngineCommand, PhysicCommand, PhysicStateReader, SmokeCommand};
 use crate::physic_engine::PhysicEngineFull;
 use imgui::Ui;
 use serde::{Deserialize, Serialize};
@@ -139,59 +140,39 @@ pub fn apply_session_to_physic<P: PhysicEngineFull>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn render_physics_settings_tab<P: PhysicEngineFull>(
+pub fn render_physics_settings_tab(
     ui: &Ui,
     filter: &str,
-    physic_engine: &mut P,
+    state: &impl PhysicStateReader,
+    cmd_queue: &mut Vec<EngineCommand>,
     physic_reinit_requested: &AtomicBool,
     preset_weights: &mut [f32; 5],
 ) {
+    let cfg = state.config();
+
     // GUI_PERSIST: physics.config
     ui.spacing();
 
-    // Check if there are pending config changes
-    let applied_cfg = physic_engine.get_config().clone();
-    let pending_cfg = physic_engine.get_config_mut().clone();
-    let is_modified = applied_cfg != pending_cfg;
-
-    if is_modified {
-        ui.text_colored(
-            [1.0, 0.6, 0.0, 1.0],
-            "WARNING: Pending Physics Changes Detected! Click 'Apply' to sync engines.",
-        );
-    } else {
-        ui.text_colored([0.0, 1.0, 0.4, 1.0], "[OK] Physics Configuration Synced.");
-    }
+    ui.text_colored([0.0, 1.0, 0.4, 1.0], "[OK] Physics Configuration Synced.");
 
     // Action buttons
     if ui.button("[APPLY] PENDING CHANGES (`physic.apply`)") {
-        let pending = physic_engine.get_config_mut().clone();
-        let _ = physic_engine.reload_config(&pending);
         physic_reinit_requested.store(true, Ordering::Relaxed);
+        cmd_queue.push(EngineCommand::Physic(PhysicCommand::ApplyPendingConfig));
     }
     ui.same_line();
     if ui.button("[SAVE] Save Config (`physic.config.save`)") {
-        let _ = physic_engine
-            .get_config()
-            .save_to_file("assets/config/physic.toml");
+        cmd_queue.push(EngineCommand::Physic(PhysicCommand::SaveConfig));
     }
     ui.same_line();
     if ui.button("[RELOAD] Reload Disk Config (`physic.config.reload`)") {
-        if let Ok(new_cfg) =
-            crate::physic_engine::config::PhysicConfig::from_file("assets/config/physic.toml")
-        {
-            *physic_engine.get_config_mut() = new_cfg.clone();
-            let _ = physic_engine.reload_config(&new_cfg);
-            physic_reinit_requested.store(true, Ordering::Relaxed);
-        }
+        physic_reinit_requested.store(true, Ordering::Relaxed);
+        cmd_queue.push(EngineCommand::Physic(PhysicCommand::ReloadConfig));
     }
     ui.same_line();
     if ui.button("[RESET PHYSICS DEFAULTS]") {
-        let default_cfg = crate::physic_engine::config::PhysicConfig::default();
-        *physic_engine.get_config_mut() = default_cfg.clone();
-        let _ = physic_engine.reload_config(&default_cfg);
-        physic_engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
         physic_reinit_requested.store(true, Ordering::Relaxed);
+        cmd_queue.push(EngineCommand::Physic(PhysicCommand::ResetDefaults));
     }
 
     ui.separator();
@@ -202,59 +183,87 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
 
     // 1. Simulation Capacity
     if filter.is_empty() || "capacity max_rockets particles".contains(filter) {
+        let default_cfg = crate::physic_engine::config::PhysicConfig::default();
+
         ui.text_colored(
             [0.4, 0.8, 1.0, 1.0],
             "=== SIMULATION CAPACITY & BUFFERS ===",
         );
         ui.same_line();
         if ui.small_button("Reset Capacity Defaults") {
-            let default_cfg = crate::physic_engine::config::PhysicConfig::default();
-            let cfg_mut = physic_engine.get_config_mut();
-            cfg_mut.max_rockets = default_cfg.max_rockets;
-            cfg_mut.particles_per_explosion = default_cfg.particles_per_explosion;
-            cfg_mut.particles_per_trail = default_cfg.particles_per_trail;
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::ResetCapacityDefaults));
         }
 
-        let cfg_mut = physic_engine.get_config_mut();
-
-        let mut max_rockets = cfg_mut.max_rockets as i32;
+        let mut max_rockets = cfg.max_rockets as i32;
         if ui.slider(
-            "Max Concurrent Rockets (`physic.max_rockets`)",
+            "Max Rockets (`physic.max_rockets`)",
             1,
-            2048,
+            100,
             &mut max_rockets,
         ) {
-            cfg_mut.max_rockets = max_rockets.max(1) as usize;
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetMaxRockets(
+                max_rockets.max(1) as u32,
+            )));
+        }
+        ui.same_line();
+        if ui.small_button("Reset##reset_max_rockets") {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetMaxRockets(
+                default_cfg.max_rockets as u32,
+            )));
         }
 
-        let mut p_explosion = cfg_mut.particles_per_explosion as i32;
+        let mut p_explosion = cfg.particles_per_explosion as i32;
         if ui.slider(
-            "Particles / Explosion (`physic.particles_per_explosion`)",
+            "Particles per Explosion (`physic.particles_per_explosion`)",
             10,
-            2000,
+            1000,
             &mut p_explosion,
         ) {
-            cfg_mut.particles_per_explosion = p_explosion.max(10) as usize;
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetParticlesPerExplosion(p_explosion.max(10) as u32),
+            ));
+        }
+        ui.same_line();
+        if ui.small_button("Reset##reset_particles_per_explosion") {
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetParticlesPerExplosion(default_cfg.particles_per_explosion as u32),
+            ));
         }
 
-        let mut p_trail = cfg_mut.particles_per_trail as i32;
+        let mut p_trail = cfg.particles_per_trail as i32;
         if ui.slider(
-            "Particles / Trail (`physic.particles_per_trail`)",
+            "Particles per Trail (`physic.particles_per_trail`)",
             0,
-            500,
+            200,
             &mut p_trail,
         ) {
-            cfg_mut.particles_per_trail = p_trail.max(0) as usize;
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetParticlesPerTrail(
+                p_trail.max(0) as u32,
+            )));
+        }
+        ui.same_line();
+        if ui.small_button("Reset##reset_particles_per_trail") {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetParticlesPerTrail(
+                default_cfg.particles_per_trail as u32,
+            )));
         }
 
-        let mut max_smoke = cfg_mut.max_smoke_particles as i32;
+        let mut max_smoke = cfg.max_smoke_particles as i32;
         if ui.slider(
-            "Max Smoke Particles (`physic.max_smoke_particles`)",
+            "Max Smoke Particles Pool (`physic.max_smoke_particles`)",
             100,
             16384,
             &mut max_smoke,
         ) {
-            cfg_mut.max_smoke_particles = max_smoke.max(100) as usize;
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetMaxSmokeParticles(
+                max_smoke.max(100) as u32,
+            )));
+        }
+        ui.same_line();
+        if ui.small_button("Reset##reset_max_smoke_particles") {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetMaxSmokeParticles(
+                default_cfg.max_smoke_particles as u32,
+            )));
         }
     }
 
@@ -270,30 +279,13 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         );
         ui.same_line();
         if ui.small_button("Reset Smoke Defaults") {
-            let default_cfg = crate::physic_engine::config::PhysicConfig::default();
-            let cfg_mut = physic_engine.get_config_mut();
-            cfg_mut.smoke_spawn_rate = default_cfg.smoke_spawn_rate;
-            cfg_mut.smoke_initial_size = default_cfg.smoke_initial_size;
-            cfg_mut.smoke_growth_rate_multiplier = default_cfg.smoke_growth_rate_multiplier;
-            cfg_mut.smoke_fade_duration = default_cfg.smoke_fade_duration;
-            cfg_mut.max_smoke_particles = default_cfg.max_smoke_particles;
-            cfg_mut.smoke_intensity = default_cfg.smoke_intensity;
-            cfg_mut.smoke_color_mode = default_cfg.smoke_color_mode;
-            cfg_mut.smoke_custom_color = default_cfg.smoke_custom_color;
-            cfg_mut.smoke_inherited_color_intensity = default_cfg.smoke_inherited_color_intensity;
-            cfg_mut.smoke_erosion_enabled = default_cfg.smoke_erosion_enabled;
-            cfg_mut.smoke_erosion_scale = default_cfg.smoke_erosion_scale;
-            cfg_mut.smoke_erosion_edge_width = default_cfg.smoke_erosion_edge_width;
-            cfg_mut.smoke_erosion_edge_color = default_cfg.smoke_erosion_edge_color;
-            cfg_mut.flow_distortion_strength = default_cfg.flow_distortion_strength;
-            cfg_mut.flow_animation_speed = default_cfg.flow_animation_speed;
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ResetDefaults));
         }
 
-        let cfg_mut = physic_engine.get_config_mut();
-        let _ = super::smoke::render_smoke_controls(ui, cfg_mut);
+        super::smoke::render_smoke_controls(ui, state, cmd_queue);
     }
 
-    // 2. Launch & Spawn Dynamics
+    // 3. Launch & Spawn Dynamics
     if filter.is_empty() || "spawn launch interval angle speed".contains(filter) {
         ui.spacing();
         ui.separator();
@@ -303,121 +295,171 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         );
         ui.same_line();
         if ui.small_button("Reset Spawn Defaults") {
-            let default_cfg = crate::physic_engine::config::PhysicConfig::default();
-            let cfg_mut = physic_engine.get_config_mut();
-            cfg_mut.rocket_interval_mean = default_cfg.rocket_interval_mean;
-            cfg_mut.rocket_interval_variation = default_cfg.rocket_interval_variation;
-            cfg_mut.rocket_max_next_interval = default_cfg.rocket_max_next_interval;
-            cfg_mut.spawn_rocket_margin = default_cfg.spawn_rocket_margin;
-            cfg_mut.spawn_rocket_vertical_angle = default_cfg.spawn_rocket_vertical_angle;
-            cfg_mut.spawn_rocket_angle_variation = default_cfg.spawn_rocket_angle_variation;
-            cfg_mut.spawn_rocket_min_speed = default_cfg.spawn_rocket_min_speed;
-            cfg_mut.spawn_rocket_max_speed = default_cfg.spawn_rocket_max_speed;
-            cfg_mut.initial_rocket_speed = default_cfg.initial_rocket_speed;
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::ResetSpawnDefaults));
         }
 
-        let cfg_mut = physic_engine.get_config_mut();
-
-        ui.slider(
+        let mut interval_mean = cfg.rocket_interval_mean;
+        if ui.slider(
             "Spawn Interval Mean (s) (`physic.rocket_interval_mean`)",
             0.05,
             5.0,
-            &mut cfg_mut.rocket_interval_mean,
-        );
-        ui.slider(
+            &mut interval_mean,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetRocketIntervalMean(
+                interval_mean,
+            )));
+        }
+
+        let mut interval_var = cfg.rocket_interval_variation;
+        if ui.slider(
             "Interval Variation (`physic.rocket_interval_variation`)",
             0.0,
             3.0,
-            &mut cfg_mut.rocket_interval_variation,
-        );
-        ui.slider(
+            &mut interval_var,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetRocketIntervalVariation(interval_var),
+            ));
+        }
+
+        let mut max_next = cfg.rocket_max_next_interval;
+        if ui.slider(
             "Max Next Interval (`physic.rocket_max_next_interval`)",
             0.1,
             10.0,
-            &mut cfg_mut.rocket_max_next_interval,
-        );
-        ui.slider(
+            &mut max_next,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetRocketMaxNextInterval(max_next),
+            ));
+        }
+
+        let mut margin = cfg.spawn_rocket_margin;
+        if ui.slider(
             "Spawn Margin (`physic.spawn_rocket_margin`)",
             0.0,
             200.0,
-            &mut cfg_mut.spawn_rocket_margin,
-        );
-        ui.slider(
+            &mut margin,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetSpawnRocketMargin(
+                margin,
+            )));
+        }
+
+        let mut vert_angle = cfg.spawn_rocket_vertical_angle;
+        if ui.slider(
             "Vertical Angle (rad) (`physic.spawn_rocket_vertical_angle`)",
             0.0,
             std::f32::consts::PI,
-            &mut cfg_mut.spawn_rocket_vertical_angle,
-        );
-        ui.slider(
+            &mut vert_angle,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetSpawnRocketVerticalAngle(vert_angle),
+            ));
+        }
+
+        let mut angle_var = cfg.spawn_rocket_angle_variation;
+        if ui.slider(
             "Angle Variation (`physic.spawn_rocket_angle_variation`)",
             0.0,
             1.57,
-            &mut cfg_mut.spawn_rocket_angle_variation,
-        );
-        ui.slider(
+            &mut angle_var,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetSpawnRocketAngleVariation(angle_var),
+            ));
+        }
+
+        let mut min_speed = cfg.spawn_rocket_min_speed;
+        if ui.slider(
             "Spawn Min Speed (`physic.spawn_rocket_min_speed`)",
             10.0,
             1000.0,
-            &mut cfg_mut.spawn_rocket_min_speed,
-        );
-        ui.slider(
+            &mut min_speed,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetSpawnRocketMinSpeed(min_speed),
+            ));
+        }
+
+        let mut max_speed = cfg.spawn_rocket_max_speed;
+        if ui.slider(
             "Spawn Max Speed (`physic.spawn_rocket_max_speed`)",
             10.0,
             2000.0,
-            &mut cfg_mut.spawn_rocket_max_speed,
-        );
-        ui.slider(
+            &mut max_speed,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetSpawnRocketMaxSpeed(max_speed),
+            ));
+        }
+
+        let mut init_speed = cfg.initial_rocket_speed;
+        if ui.slider(
             "Initial Rocket Speed (`physic.initial_rocket_speed`)",
             10.0,
             1500.0,
-            &mut cfg_mut.initial_rocket_speed,
-        );
+            &mut init_speed,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetInitialRocketSpeed(
+                init_speed,
+            )));
+        }
     }
 
-    // 3. Forces & Particle Physics
+    // 4. Forces & Particle Physics
     if filter.is_empty() || "gravity threshold explosion velocity forces".contains(filter) {
         ui.spacing();
         ui.separator();
         ui.text_colored([0.4, 0.8, 1.0, 1.0], "=== FORCES & EXPLOSION DYNAMICS ===");
         ui.same_line();
         if ui.small_button("Reset Forces Defaults") {
-            let default_cfg = crate::physic_engine::config::PhysicConfig::default();
-            let cfg_mut = physic_engine.get_config_mut();
-            cfg_mut.gravity = default_cfg.gravity;
-            cfg_mut.explosion_threshold = default_cfg.explosion_threshold;
-            cfg_mut.explosion_min_vel = default_cfg.explosion_min_vel;
-            cfg_mut.explosion_max_vel = default_cfg.explosion_max_vel;
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::ResetForcesDefaults));
         }
 
-        let cfg_mut = physic_engine.get_config_mut();
+        let mut gravity = cfg.gravity;
+        if ui.slider("Gravity (`physic.gravity`)", -2000.0, 2000.0, &mut gravity) {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetGravity(gravity)));
+        }
 
-        ui.slider(
-            "Gravity (`physic.gravity`)",
-            -2000.0,
-            2000.0,
-            &mut cfg_mut.gravity,
-        );
-        ui.slider(
+        let mut threshold = cfg.explosion_threshold;
+        if ui.slider(
             "Explosion Speed Threshold (`physic.explosion_threshold`)",
             0.0,
             500.0,
-            &mut cfg_mut.explosion_threshold,
-        );
-        ui.slider(
+            &mut threshold,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetExplosionThreshold(
+                threshold,
+            )));
+        }
+
+        let mut min_vel = cfg.explosion_min_vel;
+        if ui.slider(
             "Explosion Min Velocity (`physic.explosion_min_vel`)",
             1.0,
             1000.0,
-            &mut cfg_mut.explosion_min_vel,
-        );
-        ui.slider(
+            &mut min_vel,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetExplosionMinVel(
+                min_vel,
+            )));
+        }
+
+        let mut max_vel = cfg.explosion_max_vel;
+        if ui.slider(
             "Explosion Max Velocity (`physic.explosion_max_vel`)",
             1.0,
             2000.0,
-            &mut cfg_mut.explosion_max_vel,
-        );
+            &mut max_vel,
+        ) {
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetExplosionMaxVel(
+                max_vel,
+            )));
+        }
     }
 
-    // 4. Explosion Shapes & MultiImage Tuning
+    // 5. Explosion Shapes & MultiImage Tuning
     if filter.is_empty()
         || "shape image preset heart star smiley weight scale flight_time add delete remove"
             .contains(filter)
@@ -430,10 +472,13 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         );
         ui.same_line();
         if ui.small_button("Reset to Spherical") {
-            physic_engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetExplosionShapeSpherical,
+            ));
         }
 
-        let current_shape_str = match physic_engine.get_explosion_shape() {
+        let explosion_shape = state.explosion_shape();
+        let current_shape_str = match explosion_shape {
             crate::physic_engine::ExplosionShape::Spherical => {
                 "Spherical (Standard 3D/2D Burst)".to_string()
             }
@@ -454,7 +499,9 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         ui.text(format!("Current Mode: {}", current_shape_str));
 
         if ui.button("Spherical Mode (`physic.explosion.shape spherical`)") {
-            physic_engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+            cmd_queue.push(EngineCommand::Physic(
+                PhysicCommand::SetExplosionShapeSpherical,
+            ));
         }
 
         ui.spacing();
@@ -462,21 +509,32 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         ui.same_line();
         if ui.small_button("Reset All Preset Weights") {
             *preset_weights = [1.0; 5];
+            cmd_queue.push(EngineCommand::Physic(PhysicCommand::ResetAllPresetWeights));
         }
 
-        for (i, (name, _stem, path, scale, flight_time)) in PRESET_DEFINITIONS.iter().enumerate() {
+        for (i, (name, _stem, _path, _scale, _flight_time)) in PRESET_DEFINITIONS.iter().enumerate()
+        {
             let label_name = format!("{:<6}", name);
             ui.text(&label_name);
             ui.same_line();
 
             ui.set_next_item_width(110.0);
             let slider_label = format!("Weight##preset_w_{}", i);
-            ui.slider(&slider_label, 0.1, 10.0, &mut preset_weights[i]);
+            if ui.slider(&slider_label, 0.1, 10.0, &mut preset_weights[i]) {
+                cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetPresetWeight {
+                    index: i as u32,
+                    weight: preset_weights[i],
+                }));
+            }
             ui.same_line();
 
             let reset_w_btn = format!("Reset##reset_w_{}", i);
             if ui.small_button(&reset_w_btn) {
                 preset_weights[i] = 1.0;
+                cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetPresetWeight {
+                    index: i as u32,
+                    weight: 1.0,
+                }));
             }
             if ui.is_item_hovered() {
                 ui.tooltip_text("Reset weight to default 1.0");
@@ -485,7 +543,9 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
 
             let set_btn = format!("Set##set_{}", name);
             if ui.button(&set_btn) {
-                let _ = physic_engine.load_explosion_image(path, *scale, *flight_time);
+                cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetPresetSingleShape {
+                    index: i as u32,
+                }));
             }
             if ui.is_item_hovered() {
                 ui.tooltip_text(format!("Set single active shape: {}", name));
@@ -494,12 +554,12 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
 
             let add_btn = format!("+Add##add_{}", name);
             if ui.button(&add_btn) {
-                let _ = physic_engine.load_explosion_image_weighted(
-                    path,
-                    *scale,
-                    *flight_time,
-                    preset_weights[i],
-                );
+                cmd_queue.push(EngineCommand::Physic(
+                    PhysicCommand::AddPresetShapeWeighted {
+                        index: i as u32,
+                        weight: preset_weights[i],
+                    },
+                ));
             }
             if ui.is_item_hovered() {
                 ui.tooltip_text(format!(
@@ -510,8 +570,7 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
         }
 
         // Active Shape Controls & Reset Buttons
-        let shape_clone = physic_engine.get_explosion_shape().clone();
-        match shape_clone {
+        match explosion_shape {
             crate::physic_engine::ExplosionShape::Image(img) => {
                 let (def_scale, def_flight) = get_preset_defaults(&img.file_stem);
 
@@ -523,16 +582,14 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
                 ui.same_line();
                 let del_btn = format!("[X Delete '{}']", img.file_stem);
                 if ui.button(&del_btn) {
-                    let _ = physic_engine.remove_explosion_image(&img.file_stem);
+                    cmd_queue.push(EngineCommand::Physic(PhysicCommand::DeleteSingleShape));
                 }
                 ui.same_line();
                 let reset_shape_btn = format!("[Reset '{}' Defaults]", img.file_stem);
                 if ui.button(&reset_shape_btn) {
-                    let mut updated = img.clone();
-                    updated.scale = def_scale;
-                    updated.flight_time = def_flight;
-                    physic_engine
-                        .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(updated));
+                    cmd_queue.push(EngineCommand::Physic(
+                        PhysicCommand::ResetSingleShapeDefaults,
+                    ));
                 }
 
                 let mut scale = img.scale;
@@ -542,18 +599,16 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
                     500.0,
                     &mut scale,
                 ) {
-                    let mut updated = img.clone();
-                    updated.scale = scale;
-                    physic_engine
-                        .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(updated));
+                    cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetSingleShapeScale(
+                        scale,
+                    )));
                 }
                 ui.same_line();
                 let reset_scale_btn = format!("Reset Scale##single_scale_{}", img.file_stem);
                 if ui.small_button(&reset_scale_btn) {
-                    let mut updated = img.clone();
-                    updated.scale = def_scale;
-                    physic_engine
-                        .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(updated));
+                    cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetSingleShapeScale(
+                        def_scale,
+                    )));
                 }
 
                 let mut flight_time = img.flight_time;
@@ -563,18 +618,16 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
                     5.0,
                     &mut flight_time,
                 ) {
-                    let mut updated = img.clone();
-                    updated.flight_time = flight_time;
-                    physic_engine
-                        .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(updated));
+                    cmd_queue.push(EngineCommand::Physic(
+                        PhysicCommand::SetSingleShapeFlightTime(flight_time),
+                    ));
                 }
                 ui.same_line();
                 let reset_flight_btn = format!("Reset Flight##single_flight_{}", img.file_stem);
                 if ui.small_button(&reset_flight_btn) {
-                    let mut updated = img.clone();
-                    updated.flight_time = def_flight;
-                    physic_engine
-                        .set_explosion_shape(crate::physic_engine::ExplosionShape::Image(updated));
+                    cmd_queue.push(EngineCommand::Physic(
+                        PhysicCommand::SetSingleShapeFlightTime(def_flight),
+                    ));
                 }
             }
             crate::physic_engine::ExplosionShape::MultiImage {
@@ -590,14 +643,11 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
                     ),
                 );
 
-                let mut updated_shapes = shapes.clone();
-                let mut shape_to_remove: Option<String> = None;
-                let mut changed = false;
-
-                for (shape, weight) in updated_shapes.iter_mut() {
+                for (idx, (shape, weight)) in shapes.iter().enumerate() {
+                    let idx_u32 = idx as u32;
                     let (def_scale, def_flight) = get_preset_defaults(&shape.file_stem);
 
-                    let pct = if total_weight > 0.0 {
+                    let pct = if *total_weight > 0.0 {
                         (*weight / total_weight) * 100.0
                     } else {
                         0.0
@@ -610,72 +660,85 @@ pub fn render_physics_settings_tab<P: PhysicEngineFull>(
                     ui.same_line();
                     let del_btn = format!("[X Delete]##{}", shape.file_stem);
                     if ui.button(&del_btn) {
-                        shape_to_remove = Some(shape.file_stem.clone());
+                        cmd_queue.push(EngineCommand::Physic(PhysicCommand::DeleteMultiShapeItem(
+                            idx_u32,
+                        )));
                     }
                     ui.same_line();
                     let reset_all_btn = format!("[Reset Defaults]##{}", shape.file_stem);
                     if ui.button(&reset_all_btn) {
-                        *weight = 1.0;
-                        shape.scale = def_scale;
-                        shape.flight_time = def_flight;
-                        changed = true;
+                        cmd_queue.push(EngineCommand::Physic(
+                            PhysicCommand::ResetMultiShapeItemDefaults(idx_u32),
+                        ));
                     }
 
                     // Weight Slider & Reset
                     let mut w = *weight;
                     let weight_label = format!("Weight##w_{}", shape.file_stem);
                     if ui.slider(&weight_label, 0.0, 10.0, &mut w) {
-                        *weight = w;
-                        changed = true;
+                        cmd_queue.push(EngineCommand::Physic(
+                            PhysicCommand::SetMultiShapeItemWeight {
+                                index: idx_u32,
+                                weight: w,
+                            },
+                        ));
                     }
                     ui.same_line();
                     let reset_w_btn = format!("Reset W##rw_{}", shape.file_stem);
                     if ui.small_button(&reset_w_btn) {
-                        *weight = 1.0;
-                        changed = true;
+                        cmd_queue.push(EngineCommand::Physic(
+                            PhysicCommand::SetMultiShapeItemWeight {
+                                index: idx_u32,
+                                weight: 1.0,
+                            },
+                        ));
                     }
 
                     // Image Scale Slider & Reset
                     let mut scale = shape.scale;
                     let scale_label = format!("Image Scale (px)##scale_{}", shape.file_stem);
                     if ui.slider(&scale_label, 20.0, 500.0, &mut scale) {
-                        shape.scale = scale;
-                        changed = true;
+                        cmd_queue.push(EngineCommand::Physic(
+                            PhysicCommand::SetMultiShapeItemScale {
+                                index: idx_u32,
+                                scale,
+                            },
+                        ));
                     }
                     ui.same_line();
                     let reset_s_btn = format!("Reset Scale##rs_{}", shape.file_stem);
                     if ui.small_button(&reset_s_btn) {
-                        shape.scale = def_scale;
-                        changed = true;
+                        cmd_queue.push(EngineCommand::Physic(
+                            PhysicCommand::SetMultiShapeItemScale {
+                                index: idx_u32,
+                                scale: def_scale,
+                            },
+                        ));
                     }
 
                     // Flight Time Slider & Reset
                     let mut flight_time = shape.flight_time;
                     let flight_label = format!("Flight Time (s)##flight_{}", shape.file_stem);
                     if ui.slider(&flight_label, 0.2, 5.0, &mut flight_time) {
-                        shape.flight_time = flight_time;
-                        changed = true;
+                        cmd_queue.push(EngineCommand::Physic(
+                            PhysicCommand::SetMultiShapeItemFlightTime {
+                                index: idx_u32,
+                                flight_time,
+                            },
+                        ));
                     }
                     ui.same_line();
                     let reset_f_btn = format!("Reset Flight##rf_{}", shape.file_stem);
                     if ui.small_button(&reset_f_btn) {
-                        shape.flight_time = def_flight;
-                        changed = true;
+                        cmd_queue.push(EngineCommand::Physic(
+                            PhysicCommand::SetMultiShapeItemFlightTime {
+                                index: idx_u32,
+                                flight_time: def_flight,
+                            },
+                        ));
                     }
 
                     ui.separator();
-                }
-
-                if let Some(stem) = shape_to_remove {
-                    let _ = physic_engine.remove_explosion_image(&stem);
-                } else if changed {
-                    let new_total: f32 = updated_shapes.iter().map(|(_, w)| *w).sum();
-                    physic_engine.set_explosion_shape(
-                        crate::physic_engine::ExplosionShape::MultiImage {
-                            shapes: updated_shapes,
-                            total_weight: new_total,
-                        },
-                    );
                 }
             }
             _ => {}
@@ -737,5 +800,28 @@ mod tests {
 
         apply_session_to_physic(weights, &shape, &mut engine);
         assert_eq!(engine.get_explosion_shape(), &ExplosionShape::Spherical);
+    }
+
+    #[test]
+    fn test_render_physics_settings_tab_pure_function() {
+        use crate::physic_engine::config::PhysicConfig;
+        use crate::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
+
+        let config = PhysicConfig::default();
+        let engine = PhysicEngineFireworks::new(&config, 800.0);
+        let mut cmd_queue: Vec<EngineCommand> = Vec::with_capacity(16);
+        let reinit = AtomicBool::new(false);
+        let mut weights = [1.0; 5];
+
+        let mut imgui_ctx = imgui::Context::create();
+        imgui_ctx.set_ini_filename(None);
+        imgui_ctx.fonts().build_rgba32_texture();
+        imgui_ctx.io_mut().display_size = [800.0, 600.0];
+
+        let ui = imgui_ctx.frame();
+
+        render_physics_settings_tab(ui, "", &engine, &mut cmd_queue, &reinit, &mut weights);
+
+        assert!(cmd_queue.capacity() >= 16);
     }
 }

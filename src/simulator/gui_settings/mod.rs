@@ -528,13 +528,16 @@ impl GuiSettings {
                         }
                         tab.build(ui, || {
                             self.active_tab = 1;
+                            let mut cmd_queue = Vec::with_capacity(16);
                             render_physics_settings_tab(
                                 ui,
                                 &filter,
                                 physic_engine,
+                                &mut cmd_queue,
                                 physic_reinit_requested,
                                 &mut self.preset_weights,
                             );
+                            Self::process_physic_commands(&mut cmd_queue, physic_engine, physic_reinit_requested, &mut self.preset_weights);
                         });
                     }
 
@@ -548,7 +551,9 @@ impl GuiSettings {
                         }
                         tab.build(ui, || {
                             self.active_tab = 2;
-                            render_smoke_settings_tab(ui, physic_engine);
+                            let mut cmd_queue = Vec::with_capacity(16);
+                            render_smoke_settings_tab(ui, physic_engine, &mut cmd_queue);
+                            Self::process_physic_commands(&mut cmd_queue, physic_engine, physic_reinit_requested, &mut self.preset_weights);
                         });
                     }
 
@@ -560,13 +565,69 @@ impl GuiSettings {
                         }
                         tab.build(ui, || {
                             self.active_tab = 3;
-                            render_renderer_settings_tab(
-                                ui,
-                                &filter,
-                                renderer_config,
-                                reload_shaders_requested,
-                                tonemapping_comparison_mode,
-                            );
+                            let mut cmd_queue = Vec::with_capacity(16);
+                            if let Ok(config) = renderer_config.read() {
+                                render_renderer_settings_tab(
+                                    ui,
+                                    &filter,
+                                    &*config,
+                                    &mut cmd_queue,
+                                    reload_shaders_requested,
+                                    tonemapping_comparison_mode,
+                                );
+                            }
+                            for cmd in cmd_queue.drain(..) {
+                                if let crate::domain_contracts::EngineCommand::Renderer(renderer_cmd) = cmd {
+                                    if let Ok(mut c) = renderer_config.write() {
+                                        match renderer_cmd {
+                                            crate::domain_contracts::RendererCommand::SetBloomIntensity(i) => c.bloom_intensity = i,
+                                            crate::domain_contracts::RendererCommand::SetExposure(_) => {}
+                                            crate::domain_contracts::RendererCommand::SetWireframe(_) => {}
+                                            crate::domain_contracts::RendererCommand::SetVsync(_) => {}
+                                            crate::domain_contracts::RendererCommand::ReloadShaders => {}
+                                            crate::domain_contracts::RendererCommand::SaveConfig => {
+                                                let _ = c.save_to_file("assets/config/renderer.toml");
+                                            }
+                                            crate::domain_contracts::RendererCommand::ReloadConfig => {
+                                                if let Ok(new_c) = crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml") {
+                                                    *c = new_c;
+                                                }
+                                            }
+                                            crate::domain_contracts::RendererCommand::ResetDefaults => {
+                                                *c = crate::renderer_engine::RendererConfig::default();
+                                            }
+                                            crate::domain_contracts::RendererCommand::ResetVisibilityDefaults => {
+                                                c.render_rockets = true;
+                                                c.render_smoke = true;
+                                                c.render_trails = true;
+                                                c.render_explosions = true;
+                                            }
+                                            crate::domain_contracts::RendererCommand::SetRenderRockets(r) => c.render_rockets = r,
+                                            crate::domain_contracts::RendererCommand::SetRenderSmoke(s) => c.render_smoke = s,
+                                            crate::domain_contracts::RendererCommand::SetRenderTrails(t) => c.render_trails = t,
+                                            crate::domain_contracts::RendererCommand::SetRenderExplosions(e) => c.render_explosions = e,
+                                            crate::domain_contracts::RendererCommand::ResetTonemapping => {
+                                                c.tone_mapping_mode = crate::renderer_engine::config::ToneMappingMode::KhronosPBR;
+                                            }
+                                            crate::domain_contracts::RendererCommand::SetToneMappingMode(m) => c.tone_mapping_mode = m,
+                                            crate::domain_contracts::RendererCommand::SetTonemappingComparisonMode(comp) => {
+                                                tonemapping_comparison_mode.store(comp, Ordering::Relaxed);
+                                            }
+                                            crate::domain_contracts::RendererCommand::ResetBloomDefaults => {
+                                                c.bloom_enabled = true;
+                                                c.bloom_intensity = 1.5;
+                                                c.bloom_iterations = 3;
+                                                c.bloom_downsample = 2;
+                                                c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Gaussian;
+                                            }
+                                            crate::domain_contracts::RendererCommand::SetBloomEnabled(e) => c.bloom_enabled = e,
+                                            crate::domain_contracts::RendererCommand::SetBloomIterations(iter) => c.bloom_iterations = iter,
+                                            crate::domain_contracts::RendererCommand::SetBloomDownsample(d) => c.bloom_downsample = d,
+                                            crate::domain_contracts::RendererCommand::SetBloomBlurMethod(m) => c.bloom_blur_method = m,
+                                        }
+                                    }
+                                }
+                            }
                         });
                     }
 
@@ -613,11 +674,448 @@ impl GuiSettings {
                 .iter()
                 .any(|c| c.contains(filter) && c.starts_with(tab_key))
     }
+
+    fn process_physic_commands<P: PhysicEngineFull>(
+        cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
+        physic_engine: &mut P,
+        physic_reinit_requested: &AtomicBool,
+        preset_weights: &mut [f32; 5],
+    ) {
+        let mut smoke_modified = false;
+
+        for cmd in cmd_queue.drain(..) {
+            match cmd {
+                crate::domain_contracts::EngineCommand::Physic(physic_cmd) => match physic_cmd {
+                    crate::domain_contracts::PhysicCommand::SetGravity(g) => {
+                        physic_engine.get_config_mut().gravity = g;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetDrag(_d) => {}
+                    crate::domain_contracts::PhysicCommand::SetMaxParticles(m) => {
+                        physic_engine.get_config_mut().max_rockets = m as usize;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetExplosionForce(f) => {
+                        physic_engine.get_config_mut().explosion_max_vel = f;
+                    }
+                    crate::domain_contracts::PhysicCommand::ApplyPendingConfig => {
+                        let pending = physic_engine.get_config_mut().clone();
+                        let _ = physic_engine.reload_config(&pending);
+                        physic_reinit_requested.store(true, Ordering::Relaxed);
+                    }
+                    crate::domain_contracts::PhysicCommand::SaveConfig => {
+                        let _ = physic_engine
+                            .get_config()
+                            .save_to_file("assets/config/physic.toml");
+                    }
+                    crate::domain_contracts::PhysicCommand::ReloadConfig => {
+                        if let Ok(new_cfg) = crate::physic_engine::config::PhysicConfig::from_file(
+                            "assets/config/physic.toml",
+                        ) {
+                            *physic_engine.get_config_mut() = new_cfg.clone();
+                            let _ = physic_engine.reload_config(&new_cfg);
+                            physic_reinit_requested.store(true, Ordering::Relaxed);
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::ResetDefaults => {
+                        let default_cfg = crate::physic_engine::config::PhysicConfig::default();
+                        *physic_engine.get_config_mut() = default_cfg.clone();
+                        let _ = physic_engine.reload_config(&default_cfg);
+                        physic_engine
+                            .set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+                        physic_reinit_requested.store(true, Ordering::Relaxed);
+                    }
+                    crate::domain_contracts::PhysicCommand::ResetCapacityDefaults => {
+                        let default_cfg = crate::physic_engine::config::PhysicConfig::default();
+                        let cfg_mut = physic_engine.get_config_mut();
+                        cfg_mut.max_rockets = default_cfg.max_rockets;
+                        cfg_mut.particles_per_explosion = default_cfg.particles_per_explosion;
+                        cfg_mut.particles_per_trail = default_cfg.particles_per_trail;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetMaxRockets(r) => {
+                        physic_engine.get_config_mut().max_rockets = r as usize;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetParticlesPerExplosion(p) => {
+                        physic_engine.get_config_mut().particles_per_explosion = p as usize;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetParticlesPerTrail(p) => {
+                        physic_engine.get_config_mut().particles_per_trail = p as usize;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetMaxSmokeParticles(m) => {
+                        physic_engine.get_config_mut().max_smoke_particles = m as usize;
+                    }
+                    crate::domain_contracts::PhysicCommand::ResetSpawnDefaults => {
+                        let default_cfg = crate::physic_engine::config::PhysicConfig::default();
+                        let cfg_mut = physic_engine.get_config_mut();
+                        cfg_mut.rocket_interval_mean = default_cfg.rocket_interval_mean;
+                        cfg_mut.rocket_interval_variation = default_cfg.rocket_interval_variation;
+                        cfg_mut.rocket_max_next_interval = default_cfg.rocket_max_next_interval;
+                        cfg_mut.spawn_rocket_margin = default_cfg.spawn_rocket_margin;
+                        cfg_mut.spawn_rocket_vertical_angle =
+                            default_cfg.spawn_rocket_vertical_angle;
+                        cfg_mut.spawn_rocket_angle_variation =
+                            default_cfg.spawn_rocket_angle_variation;
+                        cfg_mut.spawn_rocket_min_speed = default_cfg.spawn_rocket_min_speed;
+                        cfg_mut.spawn_rocket_max_speed = default_cfg.spawn_rocket_max_speed;
+                        cfg_mut.initial_rocket_speed = default_cfg.initial_rocket_speed;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetRocketIntervalMean(v) => {
+                        physic_engine.get_config_mut().rocket_interval_mean = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetRocketIntervalVariation(v) => {
+                        physic_engine.get_config_mut().rocket_interval_variation = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetRocketMaxNextInterval(v) => {
+                        physic_engine.get_config_mut().rocket_max_next_interval = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetSpawnRocketMargin(v) => {
+                        physic_engine.get_config_mut().spawn_rocket_margin = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetSpawnRocketVerticalAngle(v) => {
+                        physic_engine.get_config_mut().spawn_rocket_vertical_angle = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetSpawnRocketAngleVariation(v) => {
+                        physic_engine.get_config_mut().spawn_rocket_angle_variation = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetSpawnRocketMinSpeed(v) => {
+                        physic_engine.get_config_mut().spawn_rocket_min_speed = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetSpawnRocketMaxSpeed(v) => {
+                        physic_engine.get_config_mut().spawn_rocket_max_speed = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetInitialRocketSpeed(v) => {
+                        physic_engine.get_config_mut().initial_rocket_speed = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::ResetForcesDefaults => {
+                        let default_cfg = crate::physic_engine::config::PhysicConfig::default();
+                        let cfg_mut = physic_engine.get_config_mut();
+                        cfg_mut.gravity = default_cfg.gravity;
+                        cfg_mut.explosion_threshold = default_cfg.explosion_threshold;
+                        cfg_mut.explosion_min_vel = default_cfg.explosion_min_vel;
+                        cfg_mut.explosion_max_vel = default_cfg.explosion_max_vel;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetExplosionThreshold(v) => {
+                        physic_engine.get_config_mut().explosion_threshold = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetExplosionMinVel(v) => {
+                        physic_engine.get_config_mut().explosion_min_vel = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetExplosionMaxVel(v) => {
+                        physic_engine.get_config_mut().explosion_max_vel = v;
+                    }
+                    crate::domain_contracts::PhysicCommand::SetExplosionShapeSpherical => {
+                        physic_engine
+                            .set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
+                    }
+                    crate::domain_contracts::PhysicCommand::ResetAllPresetWeights => {
+                        *preset_weights = [1.0; 5];
+                    }
+                    crate::domain_contracts::PhysicCommand::SetPresetWeight { index, weight } => {
+                        let idx = index as usize;
+                        if idx < 5 {
+                            preset_weights[idx] = weight;
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::SetPresetSingleShape { index } => {
+                        let idx = index as usize;
+                        if idx < PRESET_DEFINITIONS.len() {
+                            let (_, _, path, scale, flight) = PRESET_DEFINITIONS[idx];
+                            let _ = physic_engine.load_explosion_image(path, scale, flight);
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::AddPresetShapeWeighted {
+                        index,
+                        weight,
+                    } => {
+                        let idx = index as usize;
+                        if idx < PRESET_DEFINITIONS.len() {
+                            let (_, _, path, scale, flight) = PRESET_DEFINITIONS[idx];
+                            let _ = physic_engine
+                                .load_explosion_image_weighted(path, scale, flight, weight);
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::DeleteSingleShape => {
+                        if let crate::physic_engine::ExplosionShape::Image(img) =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            let _ = physic_engine.remove_explosion_image(&img.file_stem);
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::ResetSingleShapeDefaults => {
+                        if let crate::physic_engine::ExplosionShape::Image(img) =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            let (def_scale, def_flight) =
+                                physic::get_preset_defaults(&img.file_stem);
+                            let mut updated = img.clone();
+                            updated.scale = def_scale;
+                            updated.flight_time = def_flight;
+                            physic_engine.set_explosion_shape(
+                                crate::physic_engine::ExplosionShape::Image(updated),
+                            );
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::SetSingleShapeScale(scale) => {
+                        if let crate::physic_engine::ExplosionShape::Image(img) =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            let mut updated = img.clone();
+                            updated.scale = scale;
+                            physic_engine.set_explosion_shape(
+                                crate::physic_engine::ExplosionShape::Image(updated),
+                            );
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::SetSingleShapeFlightTime(flight) => {
+                        if let crate::physic_engine::ExplosionShape::Image(img) =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            let mut updated = img.clone();
+                            updated.flight_time = flight;
+                            physic_engine.set_explosion_shape(
+                                crate::physic_engine::ExplosionShape::Image(updated),
+                            );
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::DeleteMultiShapeItem(idx) => {
+                        let idx = idx as usize;
+                        if let crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            if idx < shapes.len() {
+                                let stem = shapes[idx].0.file_stem.clone();
+                                let _ = physic_engine.remove_explosion_image(&stem);
+                            }
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::ResetMultiShapeItemDefaults(idx) => {
+                        let idx = idx as usize;
+                        if let crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            if idx < shapes.len() {
+                                let mut updated = shapes.clone();
+                                let (def_scale, def_flight) =
+                                    physic::get_preset_defaults(&updated[idx].0.file_stem);
+                                updated[idx].1 = 1.0;
+                                updated[idx].0.scale = def_scale;
+                                updated[idx].0.flight_time = def_flight;
+                                let new_total: f32 = updated.iter().map(|(_, w)| *w).sum();
+                                physic_engine.set_explosion_shape(
+                                    crate::physic_engine::ExplosionShape::MultiImage {
+                                        shapes: updated,
+                                        total_weight: new_total,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::SetMultiShapeItemWeight {
+                        index,
+                        weight,
+                    } => {
+                        let index = index as usize;
+                        if let crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            if index < shapes.len() {
+                                let mut updated = shapes.clone();
+                                updated[index].1 = weight;
+                                let new_total: f32 = updated.iter().map(|(_, w)| *w).sum();
+                                physic_engine.set_explosion_shape(
+                                    crate::physic_engine::ExplosionShape::MultiImage {
+                                        shapes: updated,
+                                        total_weight: new_total,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::SetMultiShapeItemScale {
+                        index,
+                        scale,
+                    } => {
+                        let index = index as usize;
+                        if let crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            if index < shapes.len() {
+                                let mut updated = shapes.clone();
+                                updated[index].0.scale = scale;
+                                let new_total: f32 = updated.iter().map(|(_, w)| *w).sum();
+                                physic_engine.set_explosion_shape(
+                                    crate::physic_engine::ExplosionShape::MultiImage {
+                                        shapes: updated,
+                                        total_weight: new_total,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                    crate::domain_contracts::PhysicCommand::SetMultiShapeItemFlightTime {
+                        index,
+                        flight_time,
+                    } => {
+                        let index = index as usize;
+                        if let crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } =
+                            physic_engine.get_explosion_shape().clone()
+                        {
+                            if index < shapes.len() {
+                                let mut updated = shapes.clone();
+                                updated[index].0.flight_time = flight_time;
+                                let new_total: f32 = updated.iter().map(|(_, w)| *w).sum();
+                                physic_engine.set_explosion_shape(
+                                    crate::physic_engine::ExplosionShape::MultiImage {
+                                        shapes: updated,
+                                        total_weight: new_total,
+                                    },
+                                );
+                            }
+                        }
+                    }
+                },
+                crate::domain_contracts::EngineCommand::Smoke(smoke_cmd) => {
+                    smoke_modified = true;
+                    match smoke_cmd {
+                        crate::domain_contracts::SmokeCommand::SetDensity(d) => {
+                            physic_engine.get_config_mut().smoke_intensity = d;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetDissipation(d) => {
+                            physic_engine.get_config_mut().smoke_fade_duration = d;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetWind(_) => {}
+                        crate::domain_contracts::SmokeCommand::SetErosionEnabled(e) => {
+                            physic_engine.get_config_mut().smoke_erosion_enabled = e;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetErosionScale(s) => {
+                            physic_engine.get_config_mut().smoke_erosion_scale = s;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetErosionEdgeWidth(w) => {
+                            physic_engine.get_config_mut().smoke_erosion_edge_width = w;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetErosionEdgeColor(c) => {
+                            let f32_color = [
+                                c[0] as f32 / 255.0,
+                                c[1] as f32 / 255.0,
+                                c[2] as f32 / 255.0,
+                            ];
+                            physic_engine.get_config_mut().smoke_erosion_edge_color = f32_color;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetFlowDistortionStrength(s) => {
+                            physic_engine.get_config_mut().flow_distortion_strength = s;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetFlowAnimationSpeed(s) => {
+                            physic_engine.get_config_mut().flow_animation_speed = s;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetColorMode(m) => {
+                            physic_engine.get_config_mut().smoke_color_mode = m;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetInheritedColorIntensity(i) => {
+                            physic_engine
+                                .get_config_mut()
+                                .smoke_inherited_color_intensity = i;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetCustomColor(c) => {
+                            let f32_color = [
+                                c[0] as f32 / 255.0,
+                                c[1] as f32 / 255.0,
+                                c[2] as f32 / 255.0,
+                            ];
+                            physic_engine.get_config_mut().smoke_custom_color = f32_color;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetSpawnRate(r) => {
+                            physic_engine.get_config_mut().smoke_spawn_rate = r;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetInitialSize(s) => {
+                            physic_engine.get_config_mut().smoke_initial_size = s;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetGrowthRateMultiplier(g) => {
+                            physic_engine.get_config_mut().smoke_growth_rate_multiplier = g;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetFadeDuration(f) => {
+                            physic_engine.get_config_mut().smoke_fade_duration = f;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetIntensity(i) => {
+                            physic_engine.get_config_mut().smoke_intensity = i;
+                        }
+                        crate::domain_contracts::SmokeCommand::SetMaxSmokeParticles(m) => {
+                            physic_engine.get_config_mut().max_smoke_particles = m as usize;
+                        }
+                        crate::domain_contracts::SmokeCommand::ResetDefaults => {
+                            let default_cfg = crate::physic_engine::config::PhysicConfig::default();
+                            let cfg_mut = physic_engine.get_config_mut();
+                            cfg_mut.smoke_spawn_rate = default_cfg.smoke_spawn_rate;
+                            cfg_mut.smoke_initial_size = default_cfg.smoke_initial_size;
+                            cfg_mut.smoke_growth_rate_multiplier =
+                                default_cfg.smoke_growth_rate_multiplier;
+                            cfg_mut.smoke_fade_duration = default_cfg.smoke_fade_duration;
+                            cfg_mut.max_smoke_particles = default_cfg.max_smoke_particles;
+                            cfg_mut.smoke_intensity = default_cfg.smoke_intensity;
+                            cfg_mut.smoke_color_mode = default_cfg.smoke_color_mode;
+                            cfg_mut.smoke_custom_color = default_cfg.smoke_custom_color;
+                            cfg_mut.smoke_erosion_enabled = default_cfg.smoke_erosion_enabled;
+                            cfg_mut.smoke_erosion_scale = default_cfg.smoke_erosion_scale;
+                            cfg_mut.smoke_erosion_edge_width = default_cfg.smoke_erosion_edge_width;
+                            cfg_mut.smoke_erosion_edge_color = default_cfg.smoke_erosion_edge_color;
+                        }
+                        crate::domain_contracts::SmokeCommand::ApplyPreset(preset_id) => {
+                            let cfg_mut = physic_engine.get_config_mut();
+                            match preset_id {
+                                0 => {
+                                    // Fire & Ember
+                                    cfg_mut.smoke_erosion_edge_width = 0.12;
+                                    cfg_mut.smoke_erosion_edge_color = [1.0, 0.4, 0.05];
+                                    cfg_mut.smoke_color_mode =
+                                        crate::physic_engine::config::SmokeColorMode::Custom;
+                                    cfg_mut.smoke_custom_color = [0.15, 0.15, 0.15];
+                                    cfg_mut.smoke_intensity = 0.85;
+                                }
+                                1 => {
+                                    // Plasma Blue
+                                    cfg_mut.smoke_erosion_edge_width = 0.15;
+                                    cfg_mut.smoke_erosion_edge_color = [0.1, 0.8, 1.0];
+                                    cfg_mut.smoke_color_mode =
+                                        crate::physic_engine::config::SmokeColorMode::Custom;
+                                    cfg_mut.smoke_custom_color = [0.8, 0.9, 1.0];
+                                    cfg_mut.smoke_intensity = 1.0;
+                                }
+                                2 => {
+                                    // Volumetric Cloud
+                                    cfg_mut.smoke_erosion_edge_width = 0.05;
+                                    cfg_mut.smoke_erosion_edge_color = [0.75, 0.75, 0.75];
+                                    cfg_mut.smoke_color_mode =
+                                        crate::physic_engine::config::SmokeColorMode::Custom;
+                                    cfg_mut.smoke_custom_color = [0.85, 0.85, 0.85];
+                                    cfg_mut.smoke_intensity = 0.5;
+                                }
+                                3 => {
+                                    // Toxic Plasma
+                                    cfg_mut.smoke_erosion_edge_width = 0.18;
+                                    cfg_mut.smoke_erosion_edge_color = [0.2, 1.0, 0.3];
+                                    cfg_mut.smoke_color_mode =
+                                        crate::physic_engine::config::SmokeColorMode::Custom;
+                                    cfg_mut.smoke_custom_color = [0.1, 0.25, 0.1];
+                                    cfg_mut.smoke_intensity = 0.9;
+                                }
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                crate::domain_contracts::EngineCommand::Audio(_) => {}
+                crate::domain_contracts::EngineCommand::Renderer(_) => {}
+            }
+        }
+
+        if smoke_modified {
+            let pending = physic_engine.get_config_mut().clone();
+            let _ = physic_engine.reload_config(&pending);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::physic_engine::PhysicEngine;
 
     #[test]
     fn test_gui_session_state_defaults() {
@@ -666,5 +1164,236 @@ mod tests {
         assert!(settings.should_show_tab("audio", "audio", &registry));
         assert!(settings.should_show_tab("audio", "volume", &registry));
         assert!(!settings.should_show_tab("audio", "render", &registry));
+    }
+
+    struct SpyPhysicEngine {
+        inner: crate::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks,
+        reload_count: usize,
+    }
+
+    impl SpyPhysicEngine {
+        fn new() -> Self {
+            let config = crate::physic_engine::config::PhysicConfig::default();
+            Self {
+                inner: crate::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks::new(
+                    &config, 800.0,
+                ),
+                reload_count: 0,
+            }
+        }
+    }
+
+    impl crate::physic_engine::PhysicEngineIterator for SpyPhysicEngine {
+        fn for_each_active_particle(
+            &self,
+            f: &mut dyn FnMut(&crate::physic_engine::particle::Particle),
+        ) {
+            self.inner.for_each_active_particle(f);
+        }
+        fn for_each_active_head_not_exploded(
+            &self,
+            f: &mut dyn FnMut(&crate::physic_engine::particle::Particle),
+        ) {
+            self.inner.for_each_active_head_not_exploded(f);
+        }
+        fn for_each_particle_of_type(
+            &self,
+            particle_type: crate::physic_engine::ParticleType,
+            f: &mut dyn FnMut(&crate::physic_engine::particle::Particle),
+        ) {
+            self.inner.for_each_particle_of_type(particle_type, f);
+        }
+        fn for_each_smoke_particle(
+            &self,
+            f: &mut dyn FnMut(&crate::physic_engine::smoke_system::SmokeParticle),
+        ) {
+            self.inner.for_each_smoke_particle(f);
+        }
+        fn get_smoke_intensity(&self) -> f32 {
+            self.inner.get_smoke_intensity()
+        }
+        fn get_smoke_erosion_params(&self) -> (bool, f32, f32, [f32; 3]) {
+            self.inner.get_smoke_erosion_params()
+        }
+        fn get_smoke_flow_params(&self) -> (f32, f32) {
+            self.inner.get_smoke_flow_params()
+        }
+    }
+
+    impl crate::physic_engine::PhysicEngine for SpyPhysicEngine {
+        fn set_window_width(&mut self, width: f32) {
+            self.inner.set_window_width(width);
+        }
+        fn update(&mut self, dt: f32) -> crate::physic_engine::types::UpdateResult<'_> {
+            self.inner.update(dt)
+        }
+        fn reload_config(&mut self, config: &crate::physic_engine::config::PhysicConfig) -> bool {
+            self.reload_count += 1;
+            self.inner.reload_config(config)
+        }
+        fn get_config(&self) -> &crate::physic_engine::config::PhysicConfig {
+            self.inner.get_config()
+        }
+        fn get_config_mut(&mut self) -> &mut crate::physic_engine::config::PhysicConfig {
+            self.inner.get_config_mut()
+        }
+        fn set_explosion_shape(&mut self, shape: crate::physic_engine::ExplosionShape) {
+            self.inner.set_explosion_shape(shape);
+        }
+        fn get_explosion_shape(&self) -> &crate::physic_engine::ExplosionShape {
+            self.inner.get_explosion_shape()
+        }
+        fn load_explosion_image(
+            &mut self,
+            path: &str,
+            scale: f32,
+            flight_time: f32,
+        ) -> Result<(), String> {
+            self.inner.load_explosion_image(path, scale, flight_time)
+        }
+        fn load_explosion_image_weighted(
+            &mut self,
+            path: &str,
+            scale: f32,
+            flight_time: f32,
+            weight: f32,
+        ) -> Result<(), String> {
+            self.inner
+                .load_explosion_image_weighted(path, scale, flight_time, weight)
+        }
+        fn set_explosion_image_weight(&mut self, name: &str, weight: f32) -> Result<(), String> {
+            self.inner.set_explosion_image_weight(name, weight)
+        }
+        fn remove_explosion_image(&mut self, name: &str) -> Result<(), String> {
+            self.inner.remove_explosion_image(name)
+        }
+        fn as_physic_engine(&self) -> &dyn crate::physic_engine::PhysicEngine {
+            self
+        }
+    }
+
+    impl crate::physic_engine::PhysicEngineFull for SpyPhysicEngine {}
+
+    #[test]
+    fn test_smoke_commands_batched_single_reload() {
+        let mut spy_engine = SpyPhysicEngine::new();
+        let reinit_requested = AtomicBool::new(false);
+        let mut weights = [1.0; 5];
+        let mut cmd_queue = vec![
+            crate::domain_contracts::EngineCommand::Smoke(
+                crate::domain_contracts::SmokeCommand::SetDensity(0.95),
+            ),
+            crate::domain_contracts::EngineCommand::Smoke(
+                crate::domain_contracts::SmokeCommand::SetErosionEnabled(true),
+            ),
+            crate::domain_contracts::EngineCommand::Smoke(
+                crate::domain_contracts::SmokeCommand::SetFlowDistortionStrength(0.45),
+            ),
+            crate::domain_contracts::EngineCommand::Smoke(
+                crate::domain_contracts::SmokeCommand::SetSpawnRate(45.0),
+            ),
+        ];
+
+        GuiSettings::process_physic_commands(
+            &mut cmd_queue,
+            &mut spy_engine,
+            &reinit_requested,
+            &mut weights,
+        );
+
+        // Verify single batched reload call
+        assert_eq!(
+            spy_engine.reload_count, 1,
+            "Smoke command batch should trigger reload_config exactly ONCE"
+        );
+        // Verify no premature physical reinitialization requested
+        assert!(
+            !reinit_requested.load(Ordering::Relaxed),
+            "Smoke commands must NOT request full physical reinitialization"
+        );
+        // Verify config fields updated properly
+        let cfg = spy_engine.get_config();
+        assert_eq!(cfg.smoke_intensity, 0.95);
+        assert!(cfg.smoke_erosion_enabled);
+        assert_eq!(cfg.flow_distortion_strength, 0.45);
+        assert_eq!(cfg.smoke_spawn_rate, 45.0);
+    }
+
+    #[test]
+    fn test_physic_command_set_gravity_pending_no_immediate_reload() {
+        let mut spy_engine = SpyPhysicEngine::new();
+        let reinit_requested = AtomicBool::new(false);
+        let mut weights = [1.0; 5];
+        let mut cmd_queue = vec![crate::domain_contracts::EngineCommand::Physic(
+            crate::domain_contracts::PhysicCommand::SetGravity(-15.0),
+        )];
+
+        GuiSettings::process_physic_commands(
+            &mut cmd_queue,
+            &mut spy_engine,
+            &reinit_requested,
+            &mut weights,
+        );
+
+        // Verify NO engine reload triggered on pending physics setting mutation
+        assert_eq!(
+            spy_engine.reload_count, 0,
+            "SetGravity should NOT trigger immediate reload_config"
+        );
+        // Verify reinit flag is NOT set until ApplyPendingConfig
+        assert!(
+            !reinit_requested.load(Ordering::Relaxed),
+            "SetGravity should NOT set reinit_requested"
+        );
+        // Verify pending config was mutated while active config remains unchanged
+        assert_eq!(spy_engine.get_config_mut().gravity, -15.0);
+        assert_ne!(spy_engine.get_config().gravity, -15.0);
+
+        // Now push ApplyPendingConfig and verify reload, reinit flag, and active config update
+        let mut apply_queue = vec![crate::domain_contracts::EngineCommand::Physic(
+            crate::domain_contracts::PhysicCommand::ApplyPendingConfig,
+        )];
+        GuiSettings::process_physic_commands(
+            &mut apply_queue,
+            &mut spy_engine,
+            &reinit_requested,
+            &mut weights,
+        );
+
+        assert_eq!(
+            spy_engine.reload_count, 1,
+            "ApplyPendingConfig MUST trigger reload_config"
+        );
+        assert!(
+            reinit_requested.load(Ordering::Relaxed),
+            "ApplyPendingConfig MUST set reinit_requested"
+        );
+        assert_eq!(spy_engine.get_config().gravity, -15.0);
+    }
+
+    #[test]
+    fn test_exhaustive_engine_command_dispatcher_match() {
+        // Compile-time check verifying all variants of EngineCommand are covered without wildcard _
+        let audio_cmd = crate::domain_contracts::EngineCommand::Audio(
+            crate::domain_contracts::AudioCommand::SetMasterVolume(0.5),
+        );
+        let physic_cmd = crate::domain_contracts::EngineCommand::Physic(
+            crate::domain_contracts::PhysicCommand::SetGravity(-9.8),
+        );
+        let renderer_cmd = crate::domain_contracts::EngineCommand::Renderer(
+            crate::domain_contracts::RendererCommand::SetBloomIntensity(1.2),
+        );
+        let smoke_cmd = crate::domain_contracts::EngineCommand::Smoke(
+            crate::domain_contracts::SmokeCommand::SetDensity(0.8),
+        );
+
+        for cmd in [audio_cmd, physic_cmd, renderer_cmd, smoke_cmd] {
+            match cmd {
+                crate::domain_contracts::EngineCommand::Audio(_) => {}
+                crate::domain_contracts::EngineCommand::Physic(_) => {}
+                crate::domain_contracts::EngineCommand::Renderer(_) => {}
+                crate::domain_contracts::EngineCommand::Smoke(_) => {}
+            }
+        }
     }
 }

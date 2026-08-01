@@ -1,8 +1,8 @@
 bloom_enabled = true
-bloom_intensity = 2.023
+bloom_intensity = 1.5
 bloom_iterations = 3
 bloom_downsample = 2
-bloom_blur_method = "Kawase"
+bloom_blur_method = "Gaussian"
 tone_mapping_mode = "KhronosPBR"
 render_rockets = true
 render_smoke = true
