@@ -108,6 +108,7 @@ impl WindowEngine for GlfwWindowEngine {
     }
 
     fn swap_buffers(&mut self) {
+        self.glfw.set_swap_interval(glfw::SwapInterval::None);
         self.window.swap_buffers();
     }
 
