@@ -175,7 +175,7 @@ pub trait PhysicStateReader: SmokeStateReader {
 impl<T: PhysicEngine> PhysicStateReader for T {
     #[inline(always)]
     fn gravity(&self) -> f32 {
-        self.get_config().gravity
+        self.get_pending_config().gravity
     }
     #[inline(always)]
     fn drag(&self) -> f32 {
@@ -183,11 +183,11 @@ impl<T: PhysicEngine> PhysicStateReader for T {
     }
     #[inline(always)]
     fn max_particles(&self) -> u32 {
-        self.get_config().max_rockets as u32
+        self.get_pending_config().max_rockets as u32
     }
     #[inline(always)]
     fn explosion_force(&self) -> f32 {
-        self.get_config().explosion_max_vel
+        self.get_pending_config().explosion_max_vel
     }
     #[inline(always)]
     fn explosion_shape(&self) -> &crate::physic_engine::ExplosionShape {
@@ -238,11 +238,11 @@ pub trait SmokeStateReader {
 impl<T: PhysicEngine> SmokeStateReader for T {
     #[inline(always)]
     fn density(&self) -> f32 {
-        self.get_config().smoke_intensity
+        self.get_pending_config().smoke_intensity
     }
     #[inline(always)]
     fn dissipation(&self) -> f32 {
-        self.get_config().smoke_fade_duration
+        self.get_pending_config().smoke_fade_duration
     }
     #[inline(always)]
     fn wind(&self) -> [f32; 2] {
@@ -250,7 +250,7 @@ impl<T: PhysicEngine> SmokeStateReader for T {
     }
     #[inline(always)]
     fn config(&self) -> &PhysicConfig {
-        self.get_config()
+        self.get_pending_config()
     }
 }
 

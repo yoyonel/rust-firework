@@ -469,6 +469,10 @@ impl PhysicEngine for PhysicEngineFireworks {
         &mut self.pending_config
     }
 
+    fn get_pending_config(&self) -> &PhysicConfig {
+        &self.pending_config
+    }
+
     fn update_anticipation_times(&mut self, launch_ms: f32, explosion_ms: f32) {
         self.config.audio_launch_anticipation_ms = launch_ms;
         self.config.audio_explosion_anticipation_ms = explosion_ms;
