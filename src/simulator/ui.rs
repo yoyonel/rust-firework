@@ -402,8 +402,10 @@ where
 
         // NOUVEAU: Control Panel ImGui GUI (Settings audio, physic, renderer) - toggle via F4
         if self.gui_settings.open {
+            let mut commands = std::mem::take(&mut self.engine_commands);
             self.gui_settings.draw(
                 ui,
+                &mut commands,
                 &mut self.audio_engine,
                 &mut self.physic_engine,
                 &self.commands_registry,
@@ -417,6 +419,7 @@ where
                 self.window_size_f32,
                 is_fullscreen,
             );
+            self.engine_commands = commands;
         }
 
         // Finalize ImGui Draw
