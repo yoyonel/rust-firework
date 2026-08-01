@@ -148,7 +148,6 @@ pub struct GuiSettings {
     pub active_tab: usize,
     pub set_selected_tab: Option<usize>,
     pub search_filter: String,
-    pub preset_weights: [f32; 5],
     pub status_message: Option<(String, std::time::Instant)>,
     pub window_pos: Option<[f32; 2]>,
     pub window_size: Option<[f32; 2]>,
@@ -173,7 +172,6 @@ impl GuiSettings {
             active_tab: session.active_tab,
             set_selected_tab: Some(session.active_tab),
             search_filter: session.search_filter,
-            preset_weights: session.preset_weights,
             status_message: None,
             window_pos: session.window_pos,
             window_size: session.window_size,
@@ -212,9 +210,8 @@ impl GuiSettings {
         }
     }
 
-    pub fn apply_session_to_physic<P: PhysicEngineFull>(&mut self, physic_engine: &mut P) {
+    pub fn apply_session_to_physic<P: PhysicEngineFull>(&self, physic_engine: &mut P) {
         let session = GuiSessionState::load_from_file(GUI_SESSION_PATH);
-        self.preset_weights = session.preset_weights;
         apply_session_to_physic(
             session.preset_weights,
             &session.explosion_shape,
@@ -254,7 +251,7 @@ impl GuiSettings {
             audio_master_volume: master_volume,
             audio_reverb_wet: audio_engine.get_reverb_wet(),
             audio_dsp_mask: dsp_mask,
-            preset_weights: self.preset_weights,
+            preset_weights: physic::preset_weights_from_shape(physic_engine.get_explosion_shape()),
             explosion_shape: PersistedExplosionShape::from_engine(
                 physic_engine.get_explosion_shape(),
             ),
@@ -280,8 +277,8 @@ impl GuiSettings {
         &mut self,
         ui: &Ui,
         cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
-        audio_engine: &mut A,
-        physic_engine: &mut P,
+        audio_engine: &A,
+        physic_engine: &P,
         commands_registry: &CommandRegistry,
         renderer_config: &Arc<RwLock<crate::renderer_engine::RendererConfig>>,
         reload_shaders_requested: &AtomicBool,
@@ -291,7 +288,7 @@ impl GuiSettings {
         show_audio_visual_overlay: &mut bool,
         audio_stress_scene: &mut AudioStressScene,
         window_size_f32: (f32, f32),
-        fullscreen: bool,
+        _fullscreen: bool,
     ) where
         A: AudioEngine,
         P: PhysicEngineFull,
@@ -338,58 +335,29 @@ impl GuiSettings {
 
                 // Top Action Toolbar (Session Save / Reload / Quick Resets)
                 if ui.button("[SAVE SESSION]") {
-                    self.save_session_state(
-                        audio_engine,
-                        physic_engine,
-                        *show_audio_diagnostic,
-                        *show_audio_visual_overlay,
-                        tonemapping_comparison_mode.load(Ordering::Relaxed),
-                        fullscreen,
-                    );
-                    if let Ok(c) = renderer_config.read() {
-                        let _ = c.save_to_file("assets/config/renderer.toml");
-                    }
-                    let _ = physic_engine
-                        .get_config()
-                        .save_to_file("assets/config/physic.toml");
-                    self.set_status("All GUI & Engine Sessions Saved to Disk!");
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Gui(
+                        crate::domain_contracts::GuiCommand::SaveSession,
+                    ));
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Physic(
+                        crate::domain_contracts::PhysicCommand::SaveConfig,
+                    ));
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                        crate::domain_contracts::RendererCommand::SaveConfig,
+                    ));
+                    self.set_status("Save Session Requested!");
                 }
                 ui.same_line();
                 if ui.button("[RELOAD SESSION]") {
-                    self.apply_session_to_audio(
-                        audio_engine,
-                        show_audio_diagnostic,
-                        show_audio_visual_overlay,
-                    );
-                    let session = GuiSessionState::load_from_file(GUI_SESSION_PATH);
-                    self.search_filter = session.search_filter;
-                    self.preset_weights = session.preset_weights;
-                    self.set_selected_tab = Some(session.active_tab);
-                    self.window_pos = session.window_pos;
-                    self.window_size = session.window_size;
-                    self.scroll_y = session.scroll_y;
-                    self.restore_scroll = session.scroll_y;
-                    self.theme = session.theme;
-                    self.pending_theme_change = Some(session.theme);
-                    self.gui_scale = session.gui_scale;
-                    tonemapping_comparison_mode
-                        .store(session.tonemapping_comparison_mode, Ordering::Relaxed);
-                    self.apply_session_to_physic(physic_engine);
-                    if let Ok(config) = crate::physic_engine::config::PhysicConfig::from_file(
-                        "assets/config/physic.toml",
-                    ) {
-                        *physic_engine.get_config_mut() = config.clone();
-                        let _ = physic_engine.reload_config(&config);
-                        physic_reinit_requested.store(true, Ordering::Relaxed);
-                    }
-                    if let Ok(config) = crate::renderer_engine::RendererConfig::from_file(
-                        "assets/config/renderer.toml",
-                    ) {
-                        if let Ok(mut renderer) = renderer_config.write() {
-                            *renderer = config;
-                        }
-                    }
-                    self.set_status("Session Reloaded from Disk!");
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Gui(
+                        crate::domain_contracts::GuiCommand::ReloadSession,
+                    ));
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Physic(
+                        crate::domain_contracts::PhysicCommand::ReloadConfig,
+                    ));
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                        crate::domain_contracts::RendererCommand::ReloadConfig,
+                    ));
+                    self.set_status("Reload Session Requested!");
                 }
 
                 ui.same_line();
@@ -502,7 +470,6 @@ impl GuiSettings {
                                 physic_engine,
                                 cmd_queue,
                                 physic_reinit_requested,
-                                &mut self.preset_weights,
                             );
                         });
                     }
@@ -560,31 +527,9 @@ impl GuiSettings {
 
                     self.set_selected_tab = None;
                 }
-
-                // Automatically persist current active tab and session state every frame GUI is open
-                self.save_session_state(
-                    audio_engine,
-                    physic_engine,
-                    *show_audio_diagnostic,
-                    *show_audio_visual_overlay,
-                    tonemapping_comparison_mode.load(Ordering::Relaxed),
-                    fullscreen,
-                );
             });
 
         self.open = is_open;
-
-        Self::dispatch_command_queue(
-            cmd_queue,
-            audio_engine,
-            physic_engine,
-            renderer_config,
-            physic_reinit_requested,
-            &mut self.preset_weights,
-            tonemapping_comparison_mode,
-            audio_stress_scene,
-            window_size_f32,
-        );
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -594,7 +539,6 @@ impl GuiSettings {
         physic_engine: &mut P,
         renderer_config: &Arc<RwLock<crate::renderer_engine::RendererConfig>>,
         physic_reinit_requested: &AtomicBool,
-        preset_weights: &mut [f32; 5],
         tonemapping_comparison_mode: &AtomicBool,
         audio_stress_scene: &mut AudioStressScene,
         window_size_f32: (f32, f32),
@@ -715,13 +659,13 @@ impl GuiSettings {
                         physic_cmd,
                         physic_engine,
                         physic_reinit_requested,
-                        preset_weights,
                     );
                 }
                 crate::domain_contracts::EngineCommand::Smoke(smoke_cmd) => {
                     smoke_modified = true;
                     Self::dispatch_smoke_command(smoke_cmd, physic_engine);
                 }
+                crate::domain_contracts::EngineCommand::Gui(_) => {}
             }
         }
 
@@ -746,7 +690,6 @@ impl GuiSettings {
         cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
         physic_engine: &mut P,
         physic_reinit_requested: &AtomicBool,
-        preset_weights: &mut [f32; 5],
     ) {
         let mut smoke_modified = false;
 
@@ -757,7 +700,6 @@ impl GuiSettings {
                         physic_cmd,
                         physic_engine,
                         physic_reinit_requested,
-                        preset_weights,
                     );
                 }
                 crate::domain_contracts::EngineCommand::Smoke(smoke_cmd) => {
@@ -778,7 +720,6 @@ impl GuiSettings {
         physic_cmd: crate::domain_contracts::PhysicCommand,
         physic_engine: &mut P,
         physic_reinit_requested: &AtomicBool,
-        preset_weights: &mut [f32; 5],
     ) {
         match physic_cmd {
             crate::domain_contracts::PhysicCommand::SetGravity(g) => {
@@ -896,13 +837,13 @@ impl GuiSettings {
             crate::domain_contracts::PhysicCommand::SetExplosionShapeSpherical => {
                 physic_engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
             }
-            crate::domain_contracts::PhysicCommand::ResetAllPresetWeights => {
-                *preset_weights = [1.0; 5];
-            }
+            crate::domain_contracts::PhysicCommand::ResetAllPresetWeights => {}
             crate::domain_contracts::PhysicCommand::SetPresetWeight { index, weight } => {
                 let idx = index as usize;
-                if idx < 5 {
-                    preset_weights[idx] = weight;
+                if idx < PRESET_DEFINITIONS.len() {
+                    let (_, _, path, scale, flight) = PRESET_DEFINITIONS[idx];
+                    let _ =
+                        physic_engine.load_explosion_image_weighted(path, scale, flight, weight);
                 }
             }
             crate::domain_contracts::PhysicCommand::SetPresetSingleShape { index } => {
@@ -1352,7 +1293,6 @@ mod tests {
     fn test_smoke_commands_batched_single_reload() {
         let mut spy_engine = SpyPhysicEngine::new();
         let reinit_requested = AtomicBool::new(false);
-        let mut weights = [1.0; 5];
         let mut cmd_queue = vec![
             crate::domain_contracts::EngineCommand::Smoke(
                 crate::domain_contracts::SmokeCommand::SetDensity(0.95),
@@ -1368,12 +1308,7 @@ mod tests {
             ),
         ];
 
-        GuiSettings::process_physic_commands(
-            &mut cmd_queue,
-            &mut spy_engine,
-            &reinit_requested,
-            &mut weights,
-        );
+        GuiSettings::process_physic_commands(&mut cmd_queue, &mut spy_engine, &reinit_requested);
 
         // Verify single batched reload call
         assert_eq!(
@@ -1397,17 +1332,11 @@ mod tests {
     fn test_physic_command_set_gravity_pending_no_immediate_reload() {
         let mut spy_engine = SpyPhysicEngine::new();
         let reinit_requested = AtomicBool::new(false);
-        let mut weights = [1.0; 5];
         let mut cmd_queue = vec![crate::domain_contracts::EngineCommand::Physic(
             crate::domain_contracts::PhysicCommand::SetGravity(-15.0),
         )];
 
-        GuiSettings::process_physic_commands(
-            &mut cmd_queue,
-            &mut spy_engine,
-            &reinit_requested,
-            &mut weights,
-        );
+        GuiSettings::process_physic_commands(&mut cmd_queue, &mut spy_engine, &reinit_requested);
 
         // Verify NO engine reload triggered on pending physics setting mutation
         assert_eq!(
@@ -1427,12 +1356,7 @@ mod tests {
         let mut apply_queue = vec![crate::domain_contracts::EngineCommand::Physic(
             crate::domain_contracts::PhysicCommand::ApplyPendingConfig,
         )];
-        GuiSettings::process_physic_commands(
-            &mut apply_queue,
-            &mut spy_engine,
-            &reinit_requested,
-            &mut weights,
-        );
+        GuiSettings::process_physic_commands(&mut apply_queue, &mut spy_engine, &reinit_requested);
 
         assert_eq!(
             spy_engine.reload_count, 1,
@@ -1467,6 +1391,7 @@ mod tests {
                 crate::domain_contracts::EngineCommand::Physic(_) => {}
                 crate::domain_contracts::EngineCommand::Renderer(_) => {}
                 crate::domain_contracts::EngineCommand::Smoke(_) => {}
+                crate::domain_contracts::EngineCommand::Gui(_) => {}
             }
         }
     }
@@ -1555,7 +1480,7 @@ mod tests {
     }
 
     macro_rules! assert_state_reflection {
-        ($cmd_queue:expr, $audio:expr, $physic:expr, $renderer:expr, $reinit:expr, $weights:expr, $tonemap:expr, $stress:expr, $command:expr, $reader:expr, $getter_eval:expr, $expected:expr, $desc:expr) => {{
+        ($cmd_queue:expr, $audio:expr, $physic:expr, $renderer:expr, $reinit:expr, $tonemap:expr, $stress:expr, $command:expr, $reader:expr, $getter_eval:expr, $expected:expr, $desc:expr) => {{
             $cmd_queue.push($command);
             GuiSettings::dispatch_command_queue(
                 &mut $cmd_queue,
@@ -1563,7 +1488,6 @@ mod tests {
                 &mut $physic,
                 &$renderer,
                 &$reinit,
-                &mut $weights,
                 &$tonemap,
                 &mut $stress,
                 (800.0, 600.0),
@@ -1587,7 +1511,6 @@ mod tests {
             crate::renderer_engine::RendererConfig::default(),
         ));
         let reinit_req = AtomicBool::new(false);
-        let mut preset_weights = [1.0; 5];
         let tonemap_comp = AtomicBool::new(false);
         let mut stress_scene = AudioStressScene::new();
         let mut cmd_queue = Vec::with_capacity(16);
@@ -1598,7 +1521,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Audio(AudioCommand::SetMasterVolume(0.42)),
@@ -1614,7 +1536,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Audio(AudioCommand::SetMuted(true)),
@@ -1630,7 +1551,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Audio(AudioCommand::SetMuted(false)),
@@ -1646,7 +1566,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Audio(AudioCommand::SetSpatialReverb(0.35)),
@@ -1662,7 +1581,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Audio(AudioCommand::SetEffectEnabled {
@@ -1681,7 +1599,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Audio(AudioCommand::SetEffectEnabled {
@@ -1700,7 +1617,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Audio(AudioCommand::SetAllEffectsEnabled(false)),
@@ -1721,7 +1637,6 @@ mod tests {
             crate::renderer_engine::RendererConfig::default(),
         ));
         let reinit_req = AtomicBool::new(false);
-        let mut preset_weights = [1.0; 5];
         let tonemap_comp = AtomicBool::new(false);
         let mut stress_scene = AudioStressScene::new();
         let mut cmd_queue = Vec::with_capacity(16);
@@ -1732,7 +1647,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Physic(PhysicCommand::SetGravity(-15.5)),
@@ -1748,7 +1662,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Physic(PhysicCommand::SetMaxRockets(250)),
@@ -1764,7 +1677,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Physic(PhysicCommand::SetExplosionMaxVel(120.0)),
@@ -1780,7 +1692,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Physic(PhysicCommand::SetExplosionShapeSpherical),
@@ -1802,7 +1713,6 @@ mod tests {
             crate::renderer_engine::RendererConfig::default(),
         ));
         let reinit_req = AtomicBool::new(false);
-        let mut preset_weights = [1.0; 5];
         let tonemap_comp = AtomicBool::new(false);
         let mut stress_scene = AudioStressScene::new();
         let mut cmd_queue = Vec::with_capacity(16);
@@ -1813,7 +1723,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetBloomIntensity(3.2)),
@@ -1832,7 +1741,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetRenderRockets(false)),
@@ -1852,7 +1760,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetRenderSmoke(false)),
@@ -1872,7 +1779,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetRenderTrails(false)),
@@ -1892,7 +1798,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetRenderExplosions(false)),
@@ -1912,7 +1817,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetToneMappingMode(
@@ -1934,7 +1838,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetBloomEnabled(false)),
@@ -1954,7 +1857,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetBloomIterations(5)),
@@ -1974,7 +1876,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetBloomDownsample(4)),
@@ -1994,7 +1895,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Renderer(RendererCommand::SetBloomBlurMethod(
@@ -2021,7 +1921,6 @@ mod tests {
             crate::renderer_engine::RendererConfig::default(),
         ));
         let reinit_req = AtomicBool::new(false);
-        let mut preset_weights = [1.0; 5];
         let tonemap_comp = AtomicBool::new(false);
         let mut stress_scene = AudioStressScene::new();
         let mut cmd_queue = Vec::with_capacity(16);
@@ -2032,7 +1931,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetDensity(0.92)),
@@ -2048,7 +1946,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetDissipation(4.2)),
@@ -2064,7 +1961,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetErosionEnabled(true)),
@@ -2080,7 +1976,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetErosionScale(2.8)),
@@ -2096,7 +1991,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetErosionEdgeWidth(0.35)),
@@ -2112,7 +2006,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetErosionEdgeColor([255, 128, 64])),
@@ -2128,7 +2021,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetFlowDistortionStrength(0.75)),
@@ -2144,7 +2036,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetFlowAnimationSpeed(1.4)),
@@ -2160,7 +2051,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetColorMode(
@@ -2178,7 +2068,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetCustomColor([50, 100, 150])),
@@ -2194,7 +2083,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetSpawnRate(55.0)),
@@ -2210,7 +2098,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetInitialSize(18.0)),
@@ -2226,7 +2113,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetGrowthRateMultiplier(2.2)),
@@ -2242,7 +2128,6 @@ mod tests {
             spy_physic,
             renderer_config,
             reinit_req,
-            preset_weights,
             tonemap_comp,
             stress_scene,
             EngineCommand::Smoke(SmokeCommand::SetMaxSmokeParticles(3500)),
