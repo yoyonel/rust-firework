@@ -110,11 +110,12 @@ impl Console {
 }
 
 impl Console {
-    pub fn draw<P: PhysicEngine, A: AudioEngine>(
+    pub fn draw<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
         &mut self,
         ui: &mut imgui::Ui,
-        audio: &mut A,
-        physic: &mut P,
+        cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
+        audio: &A,
+        physic: &P,
         registry: &CommandRegistry,
     ) {
         if self.input.capacity() < INPUT_BUFFER_GROWTH {
@@ -162,7 +163,7 @@ impl Console {
                 ui.separator();
 
                 // 4. Input Bar & Interaction
-                self.draw_input_bar(ui, audio, physic, registry);
+                self.draw_input_bar(ui, cmd_queue, audio, physic, registry);
             });
     }
 
@@ -220,7 +221,7 @@ impl Console {
             });
     }
 
-    fn draw_suggestions_region<P: PhysicEngine, A: AudioEngine>(
+    fn draw_suggestions_region<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
         &self,
         ui: &imgui::Ui,
         registry: &CommandRegistry,
@@ -249,7 +250,11 @@ impl Console {
                                 ui.text_colored([0.6, 0.6, 0.6, 1.0], hint);
                             }
 
-                            if let Some(val) = registry.get_current_value(cmd_name, audio, physic) {
+                            if let Some(val) = registry.get_current_value(
+                                cmd_name,
+                                audio.as_audio_engine(),
+                                physic.as_physic_engine(),
+                            ) {
                                 ui.same_line();
                                 ui.text_colored(
                                     [0.4, 0.8, 1.0, 1.0],
@@ -264,11 +269,12 @@ impl Console {
             });
     }
 
-    fn draw_input_bar<P: PhysicEngine, A: AudioEngine>(
+    fn draw_input_bar<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
         &mut self,
         ui: &imgui::Ui,
-        audio: &mut A,
-        physic: &mut P,
+        cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
+        audio: &A,
+        physic: &P,
         registry: &CommandRegistry,
     ) {
         // Instantiate combined handler
@@ -304,14 +310,15 @@ impl Console {
 
         // Command Submission
         if ui.is_key_pressed(imgui::Key::Enter) && input_focused {
-            self.handle_command_submission(audio, physic, registry);
+            self.handle_command_submission(cmd_queue, audio, physic, registry);
         }
     }
 
-    fn handle_command_submission<P: PhysicEngine, A: AudioEngine>(
+    fn handle_command_submission<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
         &mut self,
-        audio: &mut A,
-        physic: &mut P,
+        cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
+        audio: &A,
+        physic: &P,
         registry: &CommandRegistry,
     ) {
         self.new_text_entered = true;
@@ -331,7 +338,7 @@ impl Console {
             return;
         }
 
-        let result = self.execute_command_internal(&command, audio, physic, registry);
+        let result = self.execute_command_internal(&command, cmd_queue, audio, physic, registry);
 
         // Display and cleanup
         self.output.push(format!("> {}", command));
@@ -347,22 +354,24 @@ impl Console {
 
     /// Executes a command and returns the result
     #[cfg(feature = "interactive_tests")]
-    pub fn execute_command<P: PhysicEngine, A: AudioEngine>(
+    pub fn execute_command<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
         &mut self,
         input: &str,
-        audio: &mut A,
-        physic: &mut P,
+        cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
+        audio: &A,
+        physic: &P,
         registry: &CommandRegistry,
     ) -> String {
-        self.execute_command_internal(input, audio, physic, registry)
+        self.execute_command_internal(input, cmd_queue, audio, physic, registry)
     }
 
     /// Internal implementation of execute_command
-    fn execute_command_internal<P: PhysicEngine, A: AudioEngine>(
+    fn execute_command_internal<P: PhysicEngine + ?Sized, A: AudioEngine + ?Sized>(
         &mut self,
         input: &str,
-        audio: &mut A,
-        physic: &mut P,
+        cmd_queue: &mut Vec<crate::domain_contracts::EngineCommand>,
+        audio: &A,
+        physic: &P,
         registry: &CommandRegistry,
     ) -> String {
         let trimmed_input = input.trim();
@@ -391,7 +400,12 @@ impl Console {
         }
 
         // 2. Delegate to Registry
-        registry.execute(audio, physic, trimmed_input)
+        registry.execute(
+            audio.as_audio_engine(),
+            physic.as_physic_engine(),
+            cmd_queue,
+            trimmed_input,
+        )
     }
 }
 

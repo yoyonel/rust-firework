@@ -80,7 +80,7 @@ impl Default for GuiSessionState {
             active_tab: 0,
             search_filter: String::new(),
             show_audio_diagnostic: false,
-            show_audio_visual_overlay: true,
+            show_audio_visual_overlay: false,
             audio_muted: false,
             audio_master_volume: 0.80,
             audio_reverb_wet: 0.08,
@@ -219,6 +219,7 @@ impl GuiSettings {
         );
     }
 
+    #[cfg_attr(test, allow(unused))]
     pub fn save_session_state<A: AudioEngine, P: PhysicEngineFull>(
         &self,
         audio_engine: &A,
@@ -241,31 +242,36 @@ impl GuiSettings {
             audio_engine.get_master_volume()
         };
 
-        let session = GuiSessionState {
-            gui_open: self.open,
-            active_tab: self.active_tab,
-            search_filter: self.search_filter.clone(),
-            show_audio_diagnostic,
-            show_audio_visual_overlay,
-            audio_muted: audio_engine.is_muted(),
-            audio_master_volume: master_volume,
-            audio_reverb_wet: audio_engine.get_reverb_wet(),
-            audio_dsp_mask: dsp_mask,
-            preset_weights: physic::preset_weights_from_shape(physic_engine.get_explosion_shape()),
-            explosion_shape: PersistedExplosionShape::from_engine(
-                physic_engine.get_explosion_shape(),
-            ),
-            legacy_active_shape_name: String::new(),
-            tonemapping_comparison_mode,
-            window_pos: self.window_pos,
-            window_size: self.window_size,
-            scroll_y: self.scroll_y,
-            fullscreen,
-            theme: self.theme,
-            gui_scale: self.gui_scale,
-        };
+        #[cfg(not(test))]
+        {
+            let session = GuiSessionState {
+                gui_open: self.open,
+                active_tab: self.active_tab,
+                search_filter: self.search_filter.clone(),
+                show_audio_diagnostic,
+                show_audio_visual_overlay,
+                audio_muted: audio_engine.is_muted(),
+                audio_master_volume: master_volume,
+                audio_reverb_wet: audio_engine.get_reverb_wet(),
+                audio_dsp_mask: dsp_mask,
+                preset_weights: physic::preset_weights_from_shape(
+                    physic_engine.get_explosion_shape(),
+                ),
+                explosion_shape: PersistedExplosionShape::from_engine(
+                    physic_engine.get_explosion_shape(),
+                ),
+                legacy_active_shape_name: String::new(),
+                tonemapping_comparison_mode,
+                window_pos: self.window_pos,
+                window_size: self.window_size,
+                scroll_y: self.scroll_y,
+                fullscreen,
+                theme: self.theme,
+                gui_scale: self.gui_scale,
+            };
 
-        let _ = session.save_to_file(GUI_SESSION_PATH);
+            let _ = session.save_to_file(GUI_SESSION_PATH);
+        }
     }
 
     pub fn set_status(&mut self, msg: impl Into<String>) {
@@ -538,6 +544,7 @@ impl GuiSettings {
         audio_engine: &mut A,
         physic_engine: &mut P,
         renderer_config: &Arc<RwLock<crate::renderer_engine::RendererConfig>>,
+        reload_shaders_requested: &AtomicBool,
         physic_reinit_requested: &AtomicBool,
         tonemapping_comparison_mode: &AtomicBool,
         audio_stress_scene: &mut AudioStressScene,
@@ -587,9 +594,14 @@ impl GuiSettings {
                             crate::domain_contracts::RendererCommand::SetExposure(_) => {}
                             crate::domain_contracts::RendererCommand::SetWireframe(_) => {}
                             crate::domain_contracts::RendererCommand::SetVsync(_) => {}
-                            crate::domain_contracts::RendererCommand::ReloadShaders => {}
+                            crate::domain_contracts::RendererCommand::ReloadShaders => {
+                                reload_shaders_requested.store(true, Ordering::Relaxed);
+                            }
                             crate::domain_contracts::RendererCommand::SaveConfig => {
-                                let _ = c.save_to_file("assets/config/renderer.toml");
+                                #[cfg(not(test))]
+                                {
+                                    let _ = c.save_to_file("assets/config/renderer.toml");
+                                }
                             }
                             crate::domain_contracts::RendererCommand::ReloadConfig => {
                                 if let Ok(new_c) = crate::renderer_engine::RendererConfig::from_file(
@@ -738,9 +750,12 @@ impl GuiSettings {
                 physic_reinit_requested.store(true, Ordering::Relaxed);
             }
             crate::domain_contracts::PhysicCommand::SaveConfig => {
-                let _ = physic_engine
-                    .get_config()
-                    .save_to_file("assets/config/physic.toml");
+                #[cfg(not(test))]
+                {
+                    let _ = physic_engine
+                        .get_config()
+                        .save_to_file("assets/config/physic.toml");
+                }
             }
             crate::domain_contracts::PhysicCommand::ReloadConfig => {
                 if let Ok(new_cfg) = crate::physic_engine::config::PhysicConfig::from_file(
@@ -1169,8 +1184,8 @@ mod tests {
     fn test_should_show_tab_filtering() {
         let settings = GuiSettings::new();
         let mut registry = CommandRegistry::new();
-        registry.register_for_audio("audio.volume", |_, _| String::new());
-        registry.register_for_physic("physic.gravity", |_, _| String::new());
+        registry.register_for_audio("audio.volume", |_, _, _| String::new());
+        registry.register_for_physic("physic.gravity", |_, _, _| String::new());
 
         assert!(settings.should_show_tab("audio", "", &registry));
         assert!(settings.should_show_tab("audio", "audio", &registry));
@@ -1482,11 +1497,13 @@ mod tests {
     macro_rules! assert_state_reflection {
         ($cmd_queue:expr, $audio:expr, $physic:expr, $renderer:expr, $reinit:expr, $tonemap:expr, $stress:expr, $command:expr, $reader:expr, $getter_eval:expr, $expected:expr, $desc:expr) => {{
             $cmd_queue.push($command);
+            let reload_shaders_dummy = std::sync::atomic::AtomicBool::new(false);
             GuiSettings::dispatch_command_queue(
                 &mut $cmd_queue,
                 &mut $audio,
                 &mut $physic,
                 &$renderer,
+                &reload_shaders_dummy,
                 &$reinit,
                 &$tonemap,
                 &mut $stress,

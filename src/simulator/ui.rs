@@ -104,12 +104,15 @@ where
             }
         }
 
+        let mut commands = std::mem::take(&mut self.engine_commands);
+
         // Draw console (foreground)
         if self.console.open {
             self.console.draw(
                 ui,
-                &mut self.audio_engine,
-                &mut self.physic_engine,
+                &mut commands,
+                &self.audio_engine,
+                &self.physic_engine,
                 &self.commands_registry,
             );
         }
@@ -405,7 +408,6 @@ where
 
         // NOUVEAU: Control Panel ImGui GUI (Settings audio, physic, renderer) - toggle via F4
         if self.gui_settings.open {
-            let mut commands = std::mem::take(&mut self.engine_commands);
             self.gui_settings.draw(
                 ui,
                 &mut commands,
@@ -422,8 +424,9 @@ where
                 self.window_size_f32,
                 is_fullscreen,
             );
-            self.engine_commands = commands;
         }
+
+        self.engine_commands = commands;
 
         self.dispatch_ui_commands();
 
@@ -515,6 +518,7 @@ where
             &mut self.audio_engine,
             &mut self.physic_engine,
             &self.renderer_config,
+            &self.reload_shaders_requested,
             &self.physic_reinit_requested,
             &self.tonemapping_comparison_mode,
             &mut self.audio_stress_scene,
