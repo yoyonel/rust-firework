@@ -3,6 +3,10 @@
 //! Designed for Data-Oriented, continuous-flow architecture with strict zero-allocation constraints
 //! and optimized memory layout for cache-friendly command queue iteration.
 
+use crate::audio_engine::effect_flags::AudioEffect;
+use crate::audio_engine::AudioEngine;
+use glam::Vec2;
+
 /// Commands sent from UI to Audio engine without dynamic allocations.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AudioCommand {
@@ -10,6 +14,10 @@ pub enum AudioCommand {
     SetMuted(bool),
     SetSpatialReverb(f32),
     SetHrtfEnabled(bool),
+    SetAllEffectsEnabled(bool),
+    SetEffectEnabled { effect: AudioEffect, enabled: bool },
+    SetListenerPosition(Vec2),
+    StartStressTest,
 }
 
 /// Commands sent from UI to Physic engine without dynamic allocations.
@@ -55,6 +63,30 @@ pub trait AudioStateReader {
     fn is_muted(&self) -> bool;
     fn spatial_reverb(&self) -> f32;
     fn hrtf_enabled(&self) -> bool;
+    fn effect_enabled(&self, effect: AudioEffect) -> bool;
+}
+
+impl<T: AudioEngine> AudioStateReader for T {
+    #[inline(always)]
+    fn master_volume(&self) -> f32 {
+        self.get_master_volume()
+    }
+    #[inline(always)]
+    fn is_muted(&self) -> bool {
+        self.is_muted()
+    }
+    #[inline(always)]
+    fn spatial_reverb(&self) -> f32 {
+        self.get_reverb_wet()
+    }
+    #[inline(always)]
+    fn hrtf_enabled(&self) -> bool {
+        self.get_effect_enabled(AudioEffect::HrtfBus)
+    }
+    #[inline(always)]
+    fn effect_enabled(&self, effect: AudioEffect) -> bool {
+        self.get_effect_enabled(effect)
+    }
 }
 
 /// Read-only interface exposing Physic engine state to UI.
@@ -154,6 +186,10 @@ mod tests {
         #[inline(always)]
         fn hrtf_enabled(&self) -> bool {
             self.hrtf
+        }
+        #[inline(always)]
+        fn effect_enabled(&self, _effect: AudioEffect) -> bool {
+            true
         }
     }
 

@@ -474,15 +474,49 @@ impl GuiSettings {
                         }
                         tab.build(ui, || {
                             self.active_tab = 0;
+                            let mut cmd_queue = Vec::with_capacity(8);
                             render_audio_settings_tab(
                                 ui,
                                 &filter,
                                 audio_engine,
+                                &mut cmd_queue,
                                 show_audio_diagnostic,
                                 show_audio_visual_overlay,
                                 audio_stress_scene,
                                 window_size_f32,
                             );
+                            for cmd in cmd_queue.drain(..) {
+                                if let crate::domain_contracts::EngineCommand::Audio(audio_cmd) = cmd {
+                                    match audio_cmd {
+                                        crate::domain_contracts::AudioCommand::SetMasterVolume(v) => {
+                                            audio_engine.set_master_volume(v);
+                                        }
+                                        crate::domain_contracts::AudioCommand::SetMuted(m) => {
+                                            if m {
+                                                audio_engine.mute();
+                                            } else {
+                                                audio_engine.unmute();
+                                            }
+                                        }
+                                        crate::domain_contracts::AudioCommand::SetSpatialReverb(r) => {
+                                            audio_engine.set_reverb_wet(r);
+                                        }
+                                        crate::domain_contracts::AudioCommand::SetHrtfEnabled(_) => {}
+                                        crate::domain_contracts::AudioCommand::SetAllEffectsEnabled(e) => {
+                                            audio_engine.set_all_effects_enabled(e);
+                                        }
+                                        crate::domain_contracts::AudioCommand::SetEffectEnabled { effect, enabled } => {
+                                            audio_engine.set_effect_enabled(effect, enabled);
+                                        }
+                                        crate::domain_contracts::AudioCommand::SetListenerPosition(pos) => {
+                                            audio_engine.set_listener_position(pos);
+                                        }
+                                        crate::domain_contracts::AudioCommand::StartStressTest => {
+                                            audio_stress_scene.enable(32, true, window_size_f32, audio_engine);
+                                        }
+                                    }
+                                }
+                            }
                         });
                     }
 
