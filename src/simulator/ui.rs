@@ -67,10 +67,13 @@ where
         }
 
         let (_, imgui_system) = self.window_engine.get_window_and_imgui_mut();
-        imgui_system.context.io_mut().font_global_scale = self.gui_settings.gui_scale;
-
-        let (window, imgui_system) = self.window_engine.get_window_and_imgui_mut();
-        let ui = imgui_system.glfw.frame(window, &mut imgui_system.context);
+        let io = imgui_system.context.io_mut();
+        io.font_global_scale = self.gui_settings.gui_scale;
+        io.display_size = [self.window_size_f32.0, self.window_size_f32.1];
+        io.display_framebuffer_scale = [1.0, 1.0];
+        let dt = self.last_time.elapsed().as_secs_f32();
+        io.delta_time = dt.max(0.0001);
+        let ui = imgui_system.context.frame();
 
         // Draw comparison labels (background)
         if comparison_active {
@@ -406,8 +409,8 @@ where
             self.gui_settings.draw(
                 ui,
                 &mut commands,
-                &mut self.audio_engine,
-                &mut self.physic_engine,
+                &self.audio_engine,
+                &self.physic_engine,
                 &self.commands_registry,
                 &self.renderer_config,
                 &self.reload_shaders_requested,
@@ -422,8 +425,100 @@ where
             self.engine_commands = commands;
         }
 
+        self.dispatch_ui_commands();
+
         // Finalize ImGui Draw
         let (win, sys) = self.window_engine.get_window_and_imgui_mut();
         sys.glfw.draw(&mut sys.context, win);
+    }
+
+    pub(crate) fn dispatch_ui_commands(&mut self) {
+        let mut gui_save = false;
+        let mut gui_reload = false;
+
+        self.engine_commands.retain(|cmd| match cmd {
+            crate::domain_contracts::EngineCommand::Gui(gui_cmd) => {
+                match gui_cmd {
+                    crate::domain_contracts::GuiCommand::SaveSession => gui_save = true,
+                    crate::domain_contracts::GuiCommand::ReloadSession => gui_reload = true,
+                }
+                false
+            }
+            _ => true,
+        });
+
+        if gui_save {
+            self.gui_settings.save_session_state(
+                &self.audio_engine,
+                &self.physic_engine,
+                self.show_audio_diagnostic,
+                self.show_audio_visual_overlay,
+                self.tonemapping_comparison_mode
+                    .load(std::sync::atomic::Ordering::Relaxed),
+                self.window_engine.is_fullscreen(),
+            );
+            if let Ok(c) = self.renderer_config.read() {
+                let _ = c.save_to_file("assets/config/renderer.toml");
+            }
+            let _ = self
+                .physic_engine
+                .get_config()
+                .save_to_file("assets/config/physic.toml");
+            self.gui_settings
+                .set_status("All GUI & Engine Sessions Saved to Disk!");
+        }
+
+        if gui_reload {
+            self.gui_settings.apply_session_to_audio(
+                &mut self.audio_engine,
+                &mut self.show_audio_diagnostic,
+                &mut self.show_audio_visual_overlay,
+            );
+            let session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
+                crate::simulator::gui_settings::GUI_SESSION_PATH,
+            );
+            self.gui_settings.search_filter = session.search_filter;
+            self.gui_settings.set_selected_tab = Some(session.active_tab);
+            self.gui_settings.window_pos = session.window_pos;
+            self.gui_settings.window_size = session.window_size;
+            self.gui_settings.scroll_y = session.scroll_y;
+            self.gui_settings.restore_scroll = session.scroll_y;
+            self.gui_settings.theme = session.theme;
+            self.gui_settings.pending_theme_change = Some(session.theme);
+            self.gui_settings.gui_scale = session.gui_scale;
+            self.tonemapping_comparison_mode.store(
+                session.tonemapping_comparison_mode,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            self.gui_settings
+                .apply_session_to_physic(&mut self.physic_engine);
+            if let Ok(config) =
+                crate::physic_engine::config::PhysicConfig::from_file("assets/config/physic.toml")
+            {
+                *self.physic_engine.get_config_mut() = config.clone();
+                let _ = self.physic_engine.reload_config(&config);
+                self.physic_reinit_requested
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
+            if let Ok(config) =
+                crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
+            {
+                if let Ok(mut renderer) = self.renderer_config.write() {
+                    *renderer = config;
+                }
+            }
+            self.gui_settings.set_status("Session Reloaded from Disk!");
+        }
+
+        crate::simulator::gui_settings::GuiSettings::dispatch_command_queue(
+            &mut self.engine_commands,
+            &mut self.audio_engine,
+            &mut self.physic_engine,
+            &self.renderer_config,
+            &self.physic_reinit_requested,
+            &self.tonemapping_comparison_mode,
+            &mut self.audio_stress_scene,
+            self.window_size_f32,
+        );
     }
 }
