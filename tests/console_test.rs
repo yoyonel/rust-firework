@@ -1,5 +1,5 @@
+use fireworks_sim::domain_contracts::EngineCommand;
 use fireworks_sim::utils::command_console::{CommandRegistry, HistoryCursor, SelectionCycler};
-use fireworks_sim::PhysicEngine;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -157,55 +157,48 @@ fn test_selection_cycler_many_cycles() {
 #[test]
 fn test_command_registry_execution() {
     let log = Rc::new(RefCell::new(vec![]));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log.clone());
+    let audio = TestAudio::new(log.clone());
+    let physic = TestPhysic::new(log.clone());
 
     let mut registry = CommandRegistry::new();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
     // Register audio command
-    registry.register_for_audio("audio.test", |engine, _args| {
-        engine.mute(); // Should log "mute called"
-        "Muted".to_string()
-    });
+    registry.register_for_audio("audio.test", |_, _args, _| "Muted".to_string());
 
     // Register physic command
-    registry.register_for_physic("physic.test", |engine, _args| {
-        engine.set_window_width(100.0); // Should log "physic.set_width"
-        "Width set".to_string()
-    });
+    registry.register_for_physic("physic.test", |_, _args, _| "Width set".to_string());
 
     // Execute audio command
-    let res1 = registry.execute(&mut audio, &mut physic, "audio.test");
+    let res1 = registry.execute(&audio, &physic, &mut cmd_queue, "audio.test");
     assert_eq!(res1, "Muted");
-    assert!(log.borrow().contains(&"mute called".into()));
 
     // Execute physic command
-    let res2 = registry.execute(&mut audio, &mut physic, "physic.test");
+    let res2 = registry.execute(&audio, &physic, &mut cmd_queue, "physic.test");
     assert_eq!(res2, "Width set");
-    assert!(log.borrow().contains(&"physic.set_width".into()));
 
     // Execute unknown command
-    let res3 = registry.execute(&mut audio, &mut physic, "unknown.cmd");
+    let res3 = registry.execute(&audio, &physic, &mut cmd_queue, "unknown.cmd");
     assert!(res3.contains("Unknown engine prefix")); // "unknown" is not audio/physic
 
-    let res4 = registry.execute(&mut audio, &mut physic, "audio.unknown");
+    let res4 = registry.execute(&audio, &physic, &mut cmd_queue, "audio.unknown");
     assert!(res4.contains("Unknown command"));
 }
 
 #[test]
 fn test_command_registry_renderer_commands() {
-    let log = Rc::new(RefCell::new(vec![]));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log.clone());
+    let audio = TestAudio::new(Rc::new(RefCell::new(vec![])));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(vec![])));
 
     let mut registry = CommandRegistry::new();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
     // Register renderer command (stateless, doesn't use engine reference)
-    registry.register_for_renderer("renderer.test", |args| {
+    registry.register_for_renderer("renderer.test", |args, _| {
         format!("Renderer received: {}", args)
     });
 
-    let result = registry.execute(&mut audio, &mut physic, "renderer.test some_arg");
+    let result = registry.execute(&audio, &physic, &mut cmd_queue, "renderer.test some_arg");
     assert_eq!(result, "Renderer received: renderer.test some_arg");
 }
 
@@ -213,9 +206,9 @@ fn test_command_registry_renderer_commands() {
 fn test_command_registry_get_commands() {
     let mut registry = CommandRegistry::new();
 
-    registry.register_for_audio("audio.mute", |_, _| "".to_string());
-    registry.register_for_physic("physic.pause", |_, _| "".to_string());
-    registry.register_for_renderer("renderer.bloom", |_| "".to_string());
+    registry.register_for_audio("audio.mute", |_, _, _| "".to_string());
+    registry.register_for_physic("physic.pause", |_, _, _| "".to_string());
+    registry.register_for_renderer("renderer.bloom", |_, _| "".to_string());
 
     let commands = registry.get_commands();
 
@@ -230,7 +223,7 @@ fn test_command_registry_arg_suggestions() {
     let mut registry = CommandRegistry::new();
 
     // Register command with argument suggestions
-    registry.register_for_renderer("renderer.bloom.method", |_| "".to_string());
+    registry.register_for_renderer("renderer.bloom.method", |_, _| "".to_string());
     registry.register_args("renderer.bloom.method", vec!["gaussian", "kawase"]);
 
     let suggestions = registry.get_arg_suggestions("renderer.bloom.method");
@@ -263,45 +256,44 @@ fn test_command_registry_hints() {
 
 #[test]
 fn test_command_registry_empty_input() {
-    let log = Rc::new(RefCell::new(vec![]));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log);
+    let audio = TestAudio::new(Rc::new(RefCell::new(vec![])));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(vec![])));
 
     let registry = CommandRegistry::new();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
     // Empty input should return empty string
-    let result = registry.execute(&mut audio, &mut physic, "");
+    let result = registry.execute(&audio, &physic, &mut cmd_queue, "");
     assert_eq!(result, "");
 
     // Whitespace-only input should also return empty string
-    let result2 = registry.execute(&mut audio, &mut physic, "   ");
+    let result2 = registry.execute(&audio, &physic, &mut cmd_queue, "   ");
     assert_eq!(result2, "");
 }
 
 #[test]
 fn test_command_registry_no_dot_in_command() {
-    let log = Rc::new(RefCell::new(vec![]));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log);
+    let audio = TestAudio::new(Rc::new(RefCell::new(vec![])));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(vec![])));
 
     let registry = CommandRegistry::new();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
     // Command without dot should report missing prefix
-    let result = registry.execute(&mut audio, &mut physic, "nodotcommand");
+    let result = registry.execute(&audio, &physic, &mut cmd_queue, "nodotcommand");
     assert!(result.contains("Missing engine prefix"));
 }
 
 #[test]
 fn test_command_registry_with_arguments() {
-    let log = Rc::new(RefCell::new(vec![]));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log);
+    let audio = TestAudio::new(Rc::new(RefCell::new(vec![])));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(vec![])));
 
     let mut registry = CommandRegistry::new();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
     // Register command that parses arguments
-    registry.register_for_audio("audio.volume", |_engine, args| {
-        // args contains the full input string "audio.volume 50"
+    registry.register_for_audio("audio.volume", |_engine, args, _| {
         let parts: Vec<&str> = args.split_whitespace().collect();
         if parts.len() >= 2 {
             format!("Volume set to {}", parts[1])
@@ -310,10 +302,10 @@ fn test_command_registry_with_arguments() {
         }
     });
 
-    let result = registry.execute(&mut audio, &mut physic, "audio.volume 75");
+    let result = registry.execute(&audio, &physic, &mut cmd_queue, "audio.volume 75");
     assert_eq!(result, "Volume set to 75");
 
-    let result_no_arg = registry.execute(&mut audio, &mut physic, "audio.volume");
+    let result_no_arg = registry.execute(&audio, &physic, &mut cmd_queue, "audio.volume");
     assert_eq!(result_no_arg, "No volume specified");
 }
 
@@ -326,16 +318,19 @@ fn test_command_registry_default_trait() {
 
 #[test]
 fn test_console_audio_fx_all() {
-    let mut audio = TestAudio::new(Rc::new(RefCell::new(Vec::new())));
-    let mut physic = TestPhysic::new(Rc::new(RefCell::new(Vec::new())));
+    let audio = TestAudio::new(Rc::new(RefCell::new(Vec::new())));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(Vec::new())));
     let mut registry = CommandRegistry::default();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
-    registry.register_for_audio("audio.fx_all", |engine, input| {
+    registry.register_for_audio("audio.fx_all", |_, input, queue| {
         let parts: Vec<&str> = input.split_whitespace().collect();
         match parts.as_slice() {
             [_, state] => {
                 let enabled = matches!(*state, "on" | "1" | "true");
-                engine.set_all_effects_enabled(enabled);
+                queue.push(EngineCommand::Audio(
+                    fireworks_sim::domain_contracts::AudioCommand::SetAllEffectsEnabled(enabled),
+                ));
                 format!(
                     "All DSP effects -> {}",
                     if enabled { "ON ✓" } else { "OFF ✗" }
@@ -346,48 +341,50 @@ fn test_console_audio_fx_all() {
     });
 
     // Execute with "on"
-    let res = registry.execute(&mut audio, &mut physic, "audio.fx_all on");
+    let res = registry.execute(&audio, &physic, &mut cmd_queue, "audio.fx_all on");
     assert_eq!(res, "All DSP effects -> ON ✓");
-    assert!(audio
-        .log
-        .borrow()
-        .contains(&"set_all_effects_enabled called: true".to_string()));
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Audio(
+            fireworks_sim::domain_contracts::AudioCommand::SetAllEffectsEnabled(true)
+        )]
+    );
 
     // Execute with "off"
-    let res2 = registry.execute(&mut audio, &mut physic, "audio.fx_all off");
+    cmd_queue.clear();
+    let res2 = registry.execute(&audio, &physic, &mut cmd_queue, "audio.fx_all off");
     assert_eq!(res2, "All DSP effects -> OFF ✗");
-    assert!(audio
-        .log
-        .borrow()
-        .contains(&"set_all_effects_enabled called: false".to_string()));
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Audio(
+            fireworks_sim::domain_contracts::AudioCommand::SetAllEffectsEnabled(false)
+        )]
+    );
 }
 
 #[test]
 fn test_physic_config_setters_and_apply() {
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log.clone());
+    let audio = TestAudio::new(Rc::new(RefCell::new(Vec::new())));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(Vec::new())));
     let mut registry = CommandRegistry::default();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
     macro_rules! reg_usize_param {
         ($registry:expr, $name:expr, $field:ident) => {
-            $registry.register_for_physic($name, |engine, args| {
+            $registry.register_for_physic($name, |engine, args, queue| {
                 let val_str = args.split_whitespace().nth(1).unwrap_or("");
                 if val_str.is_empty() {
                     let applied = engine.get_config().$field;
-                    let pending = engine.get_config_mut().$field;
-                    return format!(
-                        "Usage: {} <value> (applied: {}, pending: {})",
-                        $name, applied, pending
-                    );
+                    return format!("Usage: {} <value> (applied: {})", $name, applied);
                 }
                 match val_str.parse::<usize>() {
                     Ok(val) => {
-                        engine.get_config_mut().$field = val;
-                        format!(
-                            "-> Set {} = {} (pending, run 'physic.apply' to apply)",
-                            $name, val
-                        )
+                        queue.push(EngineCommand::Physic(
+                            fireworks_sim::domain_contracts::PhysicCommand::SetMaxRockets(
+                                val as u32,
+                            ),
+                        ));
+                        format!("-> Set {} = {} (pending)", $name, val)
                     }
                     Err(_) => "x Invalid unsigned integer value".to_string(),
                 }
@@ -398,59 +395,54 @@ fn test_physic_config_setters_and_apply() {
     reg_usize_param!(registry, "physic.max_rockets", max_rockets);
 
     // Initial check (no args)
-    let res = registry.execute(&mut audio, &mut physic, "physic.max_rockets");
+    let res = registry.execute(&audio, &physic, &mut cmd_queue, "physic.max_rockets");
     assert!(res.contains("Usage:"));
-    assert!(res.contains("applied:"));
 
     // Set value (pending)
-    let res2 = registry.execute(&mut audio, &mut physic, "physic.max_rockets 2048");
+    cmd_queue.clear();
+    let res2 = registry.execute(&audio, &physic, &mut cmd_queue, "physic.max_rockets 2048");
     assert!(res2.contains("-> Set"));
-    assert!(res2.contains("pending"));
-    assert_eq!(physic.get_config_mut().max_rockets, 2048);
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::SetMaxRockets(2048)
+        )]
+    );
 }
 
 #[test]
 fn test_physic_config_all_commands_behavior() {
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log.clone());
+    let audio = TestAudio::new(Rc::new(RefCell::new(Vec::new())));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(Vec::new())));
     let mut registry = CommandRegistry::default();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
-    let reinit_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-
-    let reinit_requested_clone = reinit_requested.clone();
-    registry.register_for_physic("physic.apply", move |engine, _| {
-        let pending = engine.get_config_mut().clone();
-        let _updated = engine.reload_config(&pending);
-        reinit_requested_clone.store(true, std::sync::atomic::Ordering::Relaxed);
+    registry.register_for_physic("physic.apply", move |_, _, queue| {
+        queue.push(EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::ApplyPendingConfig,
+        ));
         "applied".to_string()
     });
 
-    registry.register_for_physic("physic.config", |engine, _| {
+    registry.register_for_physic("physic.config", |engine, _, _| {
         let current = engine.get_config().clone();
-        let pending = engine.get_config_mut().clone();
-        if current == pending {
-            format!("applied: {:#?}", current)
-        } else {
-            format!("applied: {:#?}, pending: {:#?}", current, pending)
-        }
+        format!("applied: {:#?}", current)
     });
 
     macro_rules! reg_usize_param_test {
         ($registry:expr, $name:expr, $field:ident) => {
-            $registry.register_for_physic($name, |engine, args| {
+            $registry.register_for_physic($name, |_, args, queue| {
                 let val_str = args.split_whitespace().nth(1).unwrap_or("");
                 if val_str.is_empty() {
-                    let applied = engine.get_config().$field;
-                    let pending = engine.get_config_mut().$field;
-                    return format!(
-                        "Usage: {} (applied: {}, pending: {})",
-                        $name, applied, pending
-                    );
+                    return format!("Usage: {}", $name);
                 }
                 match val_str.parse::<usize>() {
                     Ok(val) => {
-                        engine.get_config_mut().$field = val;
+                        queue.push(EngineCommand::Physic(
+                            fireworks_sim::domain_contracts::PhysicCommand::SetMaxRockets(
+                                val as u32,
+                            ),
+                        ));
                         format!("set pending")
                     }
                     Err(_) => "error".to_string(),
@@ -461,19 +453,16 @@ fn test_physic_config_all_commands_behavior() {
 
     macro_rules! reg_f32_param_test {
         ($registry:expr, $name:expr, $field:ident) => {
-            $registry.register_for_physic($name, |engine, args| {
+            $registry.register_for_physic($name, |_, args, queue| {
                 let val_str = args.split_whitespace().nth(1).unwrap_or("");
                 if val_str.is_empty() {
-                    let applied = engine.get_config().$field;
-                    let pending = engine.get_config_mut().$field;
-                    return format!(
-                        "Usage: {} (applied: {}, pending: {})",
-                        $name, applied, pending
-                    );
+                    return format!("Usage: {}", $name);
                 }
                 match val_str.parse::<f32>() {
                     Ok(val) => {
-                        engine.get_config_mut().$field = val;
+                        queue.push(EngineCommand::Physic(
+                            fireworks_sim::domain_contracts::PhysicCommand::SetGravity(val),
+                        ));
                         format!("set pending")
                     }
                     Err(_) => "error".to_string(),
@@ -486,94 +475,84 @@ fn test_physic_config_all_commands_behavior() {
     reg_f32_param_test!(registry, "physic.gravity", gravity);
 
     // 1. Initial State
-    let conf_out = registry.execute(&mut audio, &mut physic, "physic.config");
+    let conf_out = registry.execute(&audio, &physic, &mut cmd_queue, "physic.config");
     assert!(conf_out.contains("applied:"));
-    assert!(!conf_out.contains("pending:"));
 
     // 2. Set Usize Pending
-    let res = registry.execute(&mut audio, &mut physic, "physic.max_rockets 256");
+    cmd_queue.clear();
+    let res = registry.execute(&audio, &physic, &mut cmd_queue, "physic.max_rockets 256");
     assert_eq!(res, "set pending");
-    assert_eq!(physic.get_config_mut().max_rockets, 256);
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::SetMaxRockets(256)
+        )]
+    );
 
     // 3. Set F32 Pending
-    let res = registry.execute(&mut audio, &mut physic, "physic.gravity -9.81");
+    cmd_queue.clear();
+    let res = registry.execute(&audio, &physic, &mut cmd_queue, "physic.gravity -9.81");
     assert_eq!(res, "set pending");
-    assert_eq!(physic.get_config_mut().gravity, -9.81);
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::SetGravity(-9.81)
+        )]
+    );
 
-    // 4. Check Config Show Differences
-    let conf_out2 = registry.execute(&mut audio, &mut physic, "physic.config");
-    assert!(conf_out2.contains("applied:"));
-    assert!(conf_out2.contains("pending:"));
-
-    // 5. Check Invalid Usize
-    let res_err = registry.execute(&mut audio, &mut physic, "physic.max_rockets abc");
-    assert_eq!(res_err, "error");
-
-    // 6. Check Invalid Float
-    let res_err2 = registry.execute(&mut audio, &mut physic, "physic.gravity abc");
-    assert_eq!(res_err2, "error");
-
-    // 7. Apply Changes
-    let res_apply = registry.execute(&mut audio, &mut physic, "physic.apply");
+    // 4. Apply Changes
+    cmd_queue.clear();
+    let res_apply = registry.execute(&audio, &physic, &mut cmd_queue, "physic.apply");
     assert_eq!(res_apply, "applied");
-    assert!(reinit_requested.load(std::sync::atomic::Ordering::Relaxed));
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::ApplyPendingConfig
+        )]
+    );
 }
 
 #[test]
 fn test_physic_config_save_and_reload_commands() {
-    let log = Rc::new(RefCell::new(Vec::new()));
-    let mut audio = TestAudio::new(log.clone());
-    let mut physic = TestPhysic::new(log.clone());
+    let audio = TestAudio::new(Rc::new(RefCell::new(Vec::new())));
+    let physic = TestPhysic::new(Rc::new(RefCell::new(Vec::new())));
     let mut registry = CommandRegistry::default();
+    let mut cmd_queue = Vec::<EngineCommand>::new();
 
-    let reinit_requested = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
-
-    let reinit_flag_reload = reinit_requested.clone();
-    registry.register_for_physic("physic.config.save", |engine, _| {
-        let current = engine.get_config();
-        match current.save_to_file("/tmp/test_physic_save.toml") {
-            Ok(_) => "saved".to_string(),
-            Err(e) => format!("error: {}", e),
-        }
+    registry.register_for_physic("physic.config.save", |_, _, queue| {
+        queue.push(EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::SaveConfig,
+        ));
+        "saved".to_string()
     });
 
-    registry.register_for_physic("physic.config.reload", move |engine, _| {
-        match fireworks_sim::physic_engine::PhysicConfig::from_file("/tmp/test_physic_save.toml") {
-            Ok(new_cfg) => {
-                *engine.get_config_mut() = new_cfg.clone();
-                engine.reload_config(&new_cfg);
-                reinit_flag_reload.store(true, std::sync::atomic::Ordering::Relaxed);
-                "reloaded".to_string()
-            }
-            Err(e) => format!("error: {}", e),
-        }
+    registry.register_for_physic("physic.config.reload", move |_, _, queue| {
+        queue.push(EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::ReloadConfig,
+        ));
+        "reloaded".to_string()
     });
-
-    // Set applied config to test values
-    physic.config.max_rockets = 1024;
-    physic.config.explosion_min_vel = 75.0;
-    physic.pending_config = physic.config.clone();
 
     // Save config
-    let res_save = registry.execute(&mut audio, &mut physic, "physic.config.save");
+    let res_save = registry.execute(&audio, &physic, &mut cmd_queue, "physic.config.save");
     assert_eq!(res_save, "saved");
-
-    // Reset memory config to defaults
-    physic.config.max_rockets = 64;
-    physic.config.explosion_min_vel = 10.0;
-    physic.pending_config = physic.config.clone();
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::SaveConfig
+        )]
+    );
 
     // Reload config from file
-    let res_reload = registry.execute(&mut audio, &mut physic, "physic.config.reload");
+    cmd_queue.clear();
+    let res_reload = registry.execute(&audio, &physic, &mut cmd_queue, "physic.config.reload");
     assert_eq!(res_reload, "reloaded");
-
-    // Verify restored values
-    assert_eq!(physic.get_config().max_rockets, 1024);
-    assert_eq!(physic.get_config().explosion_min_vel, 75.0);
-    assert!(reinit_requested.load(std::sync::atomic::Ordering::Relaxed));
-
-    // Cleanup temp file
-    let _ = std::fs::remove_file("/tmp/test_physic_save.toml");
+    assert_eq!(
+        cmd_queue,
+        vec![EngineCommand::Physic(
+            fireworks_sim::domain_contracts::PhysicCommand::ReloadConfig
+        )]
+    );
 }
 
 // ============================================================================
@@ -662,9 +641,9 @@ mod console_integration_tests {
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
-        registry.register_for_audio("audio.mute", |_, _| "".to_string());
-        registry.register_for_audio("audio.unmute", |_, _| "".to_string());
-        registry.register_for_renderer("renderer.bloom", |_| "".to_string());
+        registry.register_for_audio("audio.mute", |_, _, _| "".to_string());
+        registry.register_for_audio("audio.unmute", |_, _, _| "".to_string());
+        registry.register_for_renderer("renderer.bloom", |_, _| "".to_string());
 
         let log = Rc::new(RefCell::new(vec![]));
         let audio = TestAudio::new(log.clone());
@@ -685,8 +664,8 @@ mod console_integration_tests {
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
-        registry.register_for_renderer("renderer.bloom.intensity", |_| "".to_string());
-        registry.register_for_renderer("renderer.bloom.threshold", |_| "".to_string());
+        registry.register_for_renderer("renderer.bloom.intensity", |_, _| "".to_string());
+        registry.register_for_renderer("renderer.bloom.threshold", |_, _| "".to_string());
 
         let log = Rc::new(RefCell::new(vec![]));
         let audio = TestAudio::new(log.clone());
@@ -724,7 +703,7 @@ mod console_integration_tests {
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
-        registry.register_for_renderer("renderer.bloom.method", |_| "".to_string());
+        registry.register_for_renderer("renderer.bloom.method", |_, _| "".to_string());
         registry.register_args("renderer.bloom.method", vec!["gaussian", "kawase"]);
 
         let log = Rc::new(RefCell::new(vec![]));
@@ -746,7 +725,7 @@ mod console_integration_tests {
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
-        registry.register_for_renderer("renderer.tonemapping", |_| "".to_string());
+        registry.register_for_renderer("renderer.tonemapping", |_, _| "".to_string());
         registry.register_args(
             "renderer.tonemapping",
             vec!["reinhard", "aces", "filmic", "uncharted2"],
@@ -771,7 +750,7 @@ mod console_integration_tests {
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
-        registry.register_for_renderer("renderer.bloom.method", |_| "".to_string());
+        registry.register_for_renderer("renderer.bloom.method", |_, _| "".to_string());
         registry.register_args("renderer.bloom.method", vec!["gaussian"]);
 
         let log = Rc::new(RefCell::new(vec![]));
@@ -792,11 +771,12 @@ mod console_integration_tests {
     #[test]
     fn test_console_execute_clear_command() {
         let log = Rc::new(RefCell::new(vec![]));
-        let mut audio = TestAudio::new(log.clone());
-        let mut physic = TestPhysic::new(log);
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
 
         let mut console = Console::new();
         let registry = CommandRegistry::new();
+        let mut cmd_queue = Vec::new();
 
         // Add some output
         console.log("line1");
@@ -804,7 +784,7 @@ mod console_integration_tests {
         assert_eq!(console.get_output().len(), 2);
 
         // Execute clear
-        let result = console.execute_command("clear", &mut audio, &mut physic, &registry);
+        let result = console.execute_command("clear", &mut cmd_queue, &audio, &physic, &registry);
 
         assert_eq!(result, "");
         assert!(console.get_output().is_empty());
@@ -813,14 +793,15 @@ mod console_integration_tests {
     #[test]
     fn test_console_execute_help_command() {
         let log = Rc::new(RefCell::new(vec![]));
-        let mut audio = TestAudio::new(log.clone());
-        let mut physic = TestPhysic::new(log);
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
 
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
-        registry.register_for_audio("audio.test", |_, _| "".to_string());
+        let mut cmd_queue = Vec::new();
+        registry.register_for_audio("audio.test", |_, _, _| "".to_string());
 
-        let result = console.execute_command("help", &mut audio, &mut physic, &registry);
+        let result = console.execute_command("help", &mut cmd_queue, &audio, &physic, &registry);
 
         assert_eq!(result, "");
         let output = console.get_output();
@@ -834,32 +815,49 @@ mod console_integration_tests {
     #[test]
     fn test_console_execute_registered_command() {
         let log = Rc::new(RefCell::new(vec![]));
-        let mut audio = TestAudio::new(log.clone());
-        let mut physic = TestPhysic::new(log);
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
 
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
+        let mut cmd_queue = Vec::new();
 
-        registry.register_for_audio("audio.mute", |engine, _| {
-            engine.mute();
+        registry.register_for_audio("audio.mute", |_, _, queue| {
+            queue.push(EngineCommand::Audio(
+                fireworks_sim::domain_contracts::AudioCommand::SetMuted(true),
+            ));
             "Audio muted".to_string()
         });
 
-        let result = console.execute_command("audio.mute", &mut audio, &mut physic, &registry);
+        let result =
+            console.execute_command("audio.mute", &mut cmd_queue, &audio, &physic, &registry);
 
         assert_eq!(result, "Audio muted");
+        assert_eq!(
+            cmd_queue,
+            vec![EngineCommand::Audio(
+                fireworks_sim::domain_contracts::AudioCommand::SetMuted(true)
+            )]
+        );
     }
 
     #[test]
     fn test_console_execute_unknown_command() {
         let log = Rc::new(RefCell::new(vec![]));
-        let mut audio = TestAudio::new(log.clone());
-        let mut physic = TestPhysic::new(log);
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
 
         let mut console = Console::new();
         let registry = CommandRegistry::new();
+        let mut cmd_queue = Vec::new();
 
-        let result = console.execute_command("nonexistent.cmd", &mut audio, &mut physic, &registry);
+        let result = console.execute_command(
+            "nonexistent.cmd",
+            &mut cmd_queue,
+            &audio,
+            &physic,
+            &registry,
+        );
 
         assert!(result.contains("Unknown"));
     }
@@ -867,17 +865,18 @@ mod console_integration_tests {
     #[test]
     fn test_console_execute_with_whitespace() {
         let log = Rc::new(RefCell::new(vec![]));
-        let mut audio = TestAudio::new(log.clone());
-        let mut physic = TestPhysic::new(log);
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
 
         let mut console = Console::new();
         let registry = CommandRegistry::new();
+        let mut cmd_queue = Vec::new();
 
         // Command with leading/trailing whitespace
-        let result = console.execute_command("  clear  ", &mut audio, &mut physic, &registry);
+        let result =
+            console.execute_command("  clear  ", &mut cmd_queue, &audio, &physic, &registry);
 
         assert_eq!(result, "");
-        // clear should have worked
     }
 
     // ---------- Console State Tests ----------
@@ -923,8 +922,8 @@ mod console_integration_tests {
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
-        registry.register_for_audio("audio.a", |_, _| "".to_string());
-        registry.register_for_audio("audio.b", |_, _| "".to_string());
+        registry.register_for_audio("audio.a", |_, _, _| "".to_string());
+        registry.register_for_audio("audio.b", |_, _, _| "".to_string());
 
         let log = Rc::new(RefCell::new(vec![]));
         let audio = TestAudio::new(log.clone());
@@ -942,8 +941,8 @@ mod console_integration_tests {
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
 
-        registry.register_for_audio("audio.mute", |_, _| "".to_string());
-        registry.register_for_renderer("renderer.bloom", |_| "".to_string());
+        registry.register_for_audio("audio.mute", |_, _, _| "".to_string());
+        registry.register_for_renderer("renderer.bloom", |_, _| "".to_string());
 
         let log = Rc::new(RefCell::new(vec![]));
         let audio = TestAudio::new(log.clone());
@@ -972,28 +971,35 @@ mod console_integration_tests {
     #[test]
     fn test_console_execute_physic_and_renderer_commands() {
         let log = Rc::new(RefCell::new(vec![]));
-        let mut audio = TestAudio::new(log.clone());
-        let mut physic = TestPhysic::new(log);
+        let audio = TestAudio::new(log.clone());
+        let physic = TestPhysic::new(log);
         let mut console = Console::new();
         let mut registry = CommandRegistry::new();
+        let mut cmd_queue = Vec::new();
 
-        registry.register_for_physic("physic.config", |engine, _| {
+        registry.register_for_physic("physic.config", |engine, _, _| {
             format!("Config: max_rockets={}", engine.get_config().max_rockets)
         });
-        registry.register_for_physic("physic.apply", |_, _| "Applied".to_string());
-        registry.register_for_renderer("renderer.bloom", |input| {
+        registry.register_for_physic("physic.apply", |_, _, _| "Applied".to_string());
+        registry.register_for_renderer("renderer.bloom", |input, _| {
             format!("Bloom command: {}", input)
         });
 
         let res_config =
-            console.execute_command("physic.config", &mut audio, &mut physic, &registry);
+            console.execute_command("physic.config", &mut cmd_queue, &audio, &physic, &registry);
         assert!(res_config.contains("Config: max_rockets"));
 
-        let res_apply = console.execute_command("physic.apply", &mut audio, &mut physic, &registry);
+        let res_apply =
+            console.execute_command("physic.apply", &mut cmd_queue, &audio, &physic, &registry);
         assert_eq!(res_apply, "Applied");
 
-        let res_bloom =
-            console.execute_command("renderer.bloom enable", &mut audio, &mut physic, &registry);
+        let res_bloom = console.execute_command(
+            "renderer.bloom enable",
+            &mut cmd_queue,
+            &audio,
+            &physic,
+            &registry,
+        );
         assert!(res_bloom.contains("Bloom command"));
     }
 }

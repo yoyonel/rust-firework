@@ -14,7 +14,7 @@ fn test_gui_session_state_default_values() {
     assert_eq!(session.active_tab, 0);
     assert!(session.search_filter.is_empty());
     assert!(!session.show_audio_diagnostic);
-    assert!(session.show_audio_visual_overlay);
+    assert!(!session.show_audio_visual_overlay);
     assert!(!session.audio_muted);
     assert_eq!(session.audio_master_volume, 0.80);
     assert_eq!(session.audio_reverb_wet, 0.08);

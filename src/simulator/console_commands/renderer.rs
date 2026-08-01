@@ -13,155 +13,161 @@ where
 {
     pub(crate) fn register_renderer_base_commands(&mut self) {
         // Reload Shaders
-        let reload_flag = self.reload_shaders_requested.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.reload_shaders", move |_| {
-                reload_flag.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.commands_registry.register_for_renderer(
+            "renderer.reload_shaders",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::ReloadShaders,
+                ));
                 "-> Shader reload requested".to_string()
-            });
+            },
+        );
 
         // Config View
         let cfg = self.renderer_config.clone();
         self.commands_registry
-            .register_for_renderer("renderer.config", move |_| {
+            .register_for_renderer("renderer.config", move |_, _| {
                 cfg.read()
                     .map(|c| format!("{:#?}", *c))
                     .unwrap_or_else(|_| "x Lock fail".into())
             });
 
         // Config Save
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.config.save", move |_| {
-                if let Ok(c) = cfg.read() {
-                    match c.save_to_file("assets/config/renderer.toml") {
-                        Ok(_) => "-> Config saved".into(),
-                        Err(e) => format!("x Save failed: {}", e),
-                    }
-                } else {
-                    "x Lock fail".into()
-                }
-            });
+        self.commands_registry.register_for_renderer(
+            "renderer.config.save",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SaveConfig,
+                ));
+                "-> Config saved".into()
+            },
+        );
 
         // Config Reload
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.config.reload", move |_| {
-                match crate::renderer_engine::RendererConfig::from_file(
-                    "assets/config/renderer.toml",
-                ) {
-                    Ok(new_c) => {
-                        if let Ok(mut c) = cfg.write() {
-                            *c = new_c;
-                            "-> Config reloaded".into()
-                        } else {
-                            "x Lock fail".into()
-                        }
-                    }
-                    Err(e) => format!("x Load failed: {}", e),
-                }
-            });
+        self.commands_registry.register_for_renderer(
+            "renderer.config.reload",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::ReloadConfig,
+                ));
+                "-> Config reloaded".into()
+            },
+        );
     }
 
     pub(crate) fn register_bloom_commands(&mut self) {
-        // Macro pour éviter de répéter le config.clone() + write lock check partout
-        macro_rules! update_config {
-            ($self:expr, $name:expr, $logic:expr) => {
-                let cfg = $self.renderer_config.clone();
-                $self
-                    .commands_registry
-                    .register_for_renderer($name, move |args| {
-                        if let Ok(mut config) = cfg.write() {
-                            let f: &dyn Fn(
-                                &mut crate::renderer_engine::RendererConfig,
-                                &str,
-                            ) -> String = &$logic;
-                            f(&mut *config, args)
-                        } else {
-                            "x Failed to lock config".to_string()
-                        }
-                    });
-            };
-        }
-
-        // Enable/Disable simplifiés
-        update_config!(self, "renderer.bloom.enable", |c, _| {
-            c.bloom_enabled = true;
-            "-> Bloom enabled".into()
-        });
-        update_config!(self, "renderer.bloom.disable", |c, _| {
-            c.bloom_enabled = false;
-            "-> Bloom disabled".into()
-        });
+        // Enable/Disable
+        self.commands_registry.register_for_renderer(
+            "renderer.bloom.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetBloomEnabled(true),
+                ));
+                "-> Bloom enabled".into()
+            },
+        );
+        self.commands_registry.register_for_renderer(
+            "renderer.bloom.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetBloomEnabled(false),
+                ));
+                "-> Bloom disabled".into()
+            },
+        );
 
         // Intensity
-        update_config!(self, "renderer.bloom.intensity", |c, args| {
-            let val = args
-                .split_whitespace()
-                .nth(1)
-                .and_then(|s| s.parse::<f32>().ok());
-            match val {
-                Some(v) if (0.0..=10.0).contains(&v) => {
-                    c.bloom_intensity = v;
-                    format!("-> Intensity: {:.2}", v)
+        self.commands_registry.register_for_renderer(
+            "renderer.bloom.intensity",
+            move |args, cmd_queue| {
+                let val = args
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| s.parse::<f32>().ok());
+                match val {
+                    Some(v) if (0.0..=10.0).contains(&v) => {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetBloomIntensity(v),
+                        ));
+                        format!("-> Intensity: {:.2}", v)
+                    }
+                    _ => "Usage: bloom.intensity <0.0-10.0>".into(),
                 }
-                _ => "Usage: bloom.intensity <0.0-10.0>".into(),
-            }
-        });
+            },
+        );
         self.commands_registry
             .register_hint("renderer.bloom.intensity", "Usage: <0.0-10.0>");
 
         // Iterations
-        update_config!(self, "renderer.bloom.iterations", |c, args| {
-            let val = args
-                .split_whitespace()
-                .nth(1)
-                .and_then(|s| s.parse::<u32>().ok());
-            match val {
-                Some(v) if (1..=10).contains(&v) => {
-                    c.bloom_iterations = v;
-                    format!("-> Iterations: {}", v)
+        self.commands_registry.register_for_renderer(
+            "renderer.bloom.iterations",
+            move |args, cmd_queue| {
+                let val = args
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| s.parse::<u32>().ok());
+                match val {
+                    Some(v) if (1..=10).contains(&v) => {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetBloomIterations(v),
+                        ));
+                        format!("-> Iterations: {}", v)
+                    }
+                    _ => "Usage: bloom.iterations <1-10>".into(),
                 }
-                _ => "Usage: bloom.iterations <1-10>".into(),
-            }
-        });
+            },
+        );
         self.commands_registry
             .register_hint("renderer.bloom.iterations", "Usage: <1-10>");
 
         // Downsample
-        update_config!(self, "renderer.bloom.downsample", |c, args| {
-            match args
+        self.commands_registry.register_for_renderer(
+            "renderer.bloom.downsample",
+            move |args, cmd_queue| match args
                 .split_whitespace()
                 .nth(1)
                 .and_then(|s| s.parse::<u32>().ok())
             {
                 Some(v) if [1, 2, 4].contains(&v) => {
-                    c.bloom_downsample = v;
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                        crate::domain_contracts::RendererCommand::SetBloomDownsample(v),
+                    ));
                     format!("-> Downsample: {}x", v)
                 }
                 _ => "Usage: bloom.downsample <1|2|4>".into(),
-            }
-        });
+            },
+        );
         self.commands_registry
             .register_args("renderer.bloom.downsample", vec!["1", "2", "4"]);
         self.commands_registry
             .register_hint("renderer.bloom.downsample", "Usage: <1|2|4>");
 
         // Method
-        update_config!(self, "renderer.bloom.method", |c, args| {
-            let method = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
-            match method.as_str() {
-                "gaussian" => {
-                    c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Gaussian;
-                    "-> Method: Gaussian".into()
+        self.commands_registry.register_for_renderer(
+            "renderer.bloom.method",
+            move |args, cmd_queue| {
+                let method = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
+                match method.as_str() {
+                    "gaussian" => {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetBloomBlurMethod(
+                                crate::renderer_engine::config::BlurMethod::Gaussian,
+                            ),
+                        ));
+                        "-> Method: Gaussian".into()
+                    }
+                    "kawase" => {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetBloomBlurMethod(
+                                crate::renderer_engine::config::BlurMethod::Kawase,
+                            ),
+                        ));
+                        "-> Method: Kawase".into()
+                    }
+                    _ => "Usage: bloom.method <gaussian|kawase>".into(),
                 }
-                "kawase" => {
-                    c.bloom_blur_method = crate::renderer_engine::config::BlurMethod::Kawase;
-                    "-> Method: Kawase".into()
-                }
-                _ => "Usage: bloom.method <gaussian|kawase>".into(),
-            }
-        });
+            },
+        );
         self.commands_registry
             .register_args("renderer.bloom.method", vec!["gaussian", "kawase"]);
         self.commands_registry
@@ -202,23 +208,21 @@ where
     }
 
     pub(crate) fn register_tonemapping_commands(&mut self) {
-        let cfg = self.renderer_config.clone();
-
-        self.commands_registry
-            .register_for_renderer("renderer.tonemapping", move |args| {
+        self.commands_registry.register_for_renderer(
+            "renderer.tonemapping",
+            move |args, cmd_queue| {
                 let mode_str = args.split_whitespace().nth(1).unwrap_or("").to_lowercase();
-                // J'utilise Self::parse_tonemap_mode pour garder le code propre
                 let mode = Self::parse_tonemap_mode(&mode_str);
 
                 if let Some(m) = mode {
-                    if let Ok(mut config) = cfg.write() {
-                        config.tone_mapping_mode = m;
-                        return format!("-> Tone mapping: {:?}", m);
-                    }
-                    return "x Lock fail".to_string();
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                        crate::domain_contracts::RendererCommand::SetToneMappingMode(m),
+                    ));
+                    return format!("-> Tone mapping: {:?}", m);
                 }
                 "Available: reinhard, reinhard_extended, aces, uncharted2, khronos".to_string()
-            });
+            },
+        );
         self.commands_registry.register_args(
             "renderer.tonemapping",
             vec![
@@ -241,17 +245,22 @@ where
 
         // Comparison Toggle
         let comparison_mode = self.tonemapping_comparison_mode.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.tonemapping.compare", move |_| {
-                let old = comparison_mode.fetch_xor(true, std::sync::atomic::Ordering::Relaxed);
-                // fetch_xor retourne l'ancienne valeur. Si c'était false, c'était devenu true (Enabled).
-                if !old {
+        self.commands_registry.register_for_renderer(
+            "renderer.tonemapping.compare",
+            move |_, cmd_queue| {
+                let old = comparison_mode.load(std::sync::atomic::Ordering::Relaxed);
+                let new_val = !old;
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetTonemappingComparisonMode(new_val),
+                ));
+                if new_val {
                     "-> Comparison enabled"
                 } else {
                     "-> Comparison disabled"
                 }
                 .to_string()
-            });
+            },
+        );
 
         let comparison_mode = self.tonemapping_comparison_mode.clone();
         self.commands_registry.register_current_value(
@@ -266,92 +275,84 @@ where
         );
 
         // Rockets visibility
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.rockets.enable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_rockets = true;
-                    "-> Rockets rendering enabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.rockets.disable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_rockets = false;
-                    "-> Rockets rendering disabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
+        self.commands_registry.register_for_renderer(
+            "renderer.rockets.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderRockets(true),
+                ));
+                "-> Rockets rendering enabled".into()
+            },
+        );
+        self.commands_registry.register_for_renderer(
+            "renderer.rockets.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderRockets(false),
+                ));
+                "-> Rockets rendering disabled".into()
+            },
+        );
 
         // Smoke visibility
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.smoke.enable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_smoke = true;
-                    "-> Smoke rendering enabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.smoke.disable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_smoke = false;
-                    "-> Smoke rendering disabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderSmoke(true),
+                ));
+                "-> Smoke rendering enabled".into()
+            },
+        );
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderSmoke(false),
+                ));
+                "-> Smoke rendering disabled".into()
+            },
+        );
 
         // Trails visibility
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.trails.enable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_trails = true;
-                    "-> Rocket trails rendering enabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.trails.disable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_trails = false;
-                    "-> Rocket trails rendering disabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
+        self.commands_registry.register_for_renderer(
+            "renderer.trails.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderTrails(true),
+                ));
+                "-> Rocket trails rendering enabled".into()
+            },
+        );
+        self.commands_registry.register_for_renderer(
+            "renderer.trails.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderTrails(false),
+                ));
+                "-> Rocket trails rendering disabled".into()
+            },
+        );
 
         // Explosions visibility
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.explosions.enable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_explosions = true;
-                    "-> Explosions rendering enabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
-        let cfg = self.renderer_config.clone();
-        self.commands_registry
-            .register_for_renderer("renderer.explosions.disable", move |_| {
-                if let Ok(mut c) = cfg.write() {
-                    c.render_explosions = false;
-                    "-> Explosions rendering disabled".into()
-                } else {
-                    "x Lock fail".into()
-                }
-            });
+        self.commands_registry.register_for_renderer(
+            "renderer.explosions.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderExplosions(true),
+                ));
+                "-> Explosions rendering enabled".into()
+            },
+        );
+        self.commands_registry.register_for_renderer(
+            "renderer.explosions.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetRenderExplosions(false),
+                ));
+                "-> Explosions rendering disabled".into()
+            },
+        );
     }
 
     // Helper pur pour le parsing (peut être statique ou hors de la classe)
