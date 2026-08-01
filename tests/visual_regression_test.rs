@@ -1,6 +1,6 @@
 #![cfg(feature = "interactive_tests")]
 
-use image::{GenericImageView, Pixel};
+use image::GenericImageView;
 use std::path::Path;
 
 /// Compares two images using Mean Squared Error (MSE) per RGB channel.
