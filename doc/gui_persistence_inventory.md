@@ -22,6 +22,16 @@ Buttons that perform an immediate action rather than retain a setting (save,
 reload, reset, shader reload, start/stop stress scene) have no persisted value.
 Their resulting settings are covered by the rows above.
 
+## Session Management
+
+The Zero-Allocation UI architecture decouples state persistence into domain-specific engine commands:
+
+* **GUI Session**: `GuiCommand::SaveSession` saves `GuiSessionState` to `assets/config/gui_session.toml` (restored via `GuiCommand::ReloadSession`).
+* **Physics Configuration**: `physic.config.save` (`PhysicCommand::SaveConfig`) saves `PhysicConfig` to `assets/config/physic.toml` (restored via `physic.config.reload` / `PhysicCommand::ReloadConfig`).
+* **Renderer Configuration**: `renderer.config.save` (`RendererCommand::SaveConfig`) saves `RendererConfig` to `assets/config/renderer.toml` (restored via `renderer.config.reload` / `RendererCommand::ReloadConfig`).
+
+Pressing **Save Session** dispatches `GuiCommand::SaveSession`, `physic.config.save`, and `renderer.config.save`. Pressing **Reload Session** dispatches `GuiCommand::ReloadSession`, `physic.config.reload`, and `renderer.config.reload`.
+
 ## Exit contract
 
 `Simulator::save_gui_session`, called for both normal shutdown paths, writes
