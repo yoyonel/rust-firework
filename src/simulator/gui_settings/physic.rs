@@ -139,14 +139,43 @@ pub fn apply_session_to_physic<P: PhysicEngineFull>(
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+pub fn preset_weights_from_shape(shape: &crate::physic_engine::ExplosionShape) -> [f32; 5] {
+    let mut weights = [1.0f32; 5];
+    match shape {
+        crate::physic_engine::ExplosionShape::Spherical => weights,
+        crate::physic_engine::ExplosionShape::Image(img) => {
+            let key = img.file_stem.to_lowercase();
+            for (i, (_, stem, _, _, _)) in PRESET_DEFINITIONS.iter().enumerate() {
+                if *stem == key {
+                    weights[i] = 1.0;
+                } else {
+                    weights[i] = 0.0;
+                }
+            }
+            weights
+        }
+        crate::physic_engine::ExplosionShape::MultiImage { shapes, .. } => {
+            for (i, (_, stem, _, _, _)) in PRESET_DEFINITIONS.iter().enumerate() {
+                if let Some((_, w)) = shapes
+                    .iter()
+                    .find(|(s, _)| s.file_stem.to_lowercase() == *stem)
+                {
+                    weights[i] = *w;
+                } else {
+                    weights[i] = 0.0;
+                }
+            }
+            weights
+        }
+    }
+}
+
 pub fn render_physics_settings_tab(
     ui: &Ui,
     filter: &str,
     state: &impl PhysicStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
     physic_reinit_requested: &AtomicBool,
-    preset_weights: &mut [f32; 5],
 ) {
     let cfg = state.config();
 
@@ -478,25 +507,48 @@ pub fn render_physics_settings_tab(
         }
 
         let explosion_shape = state.explosion_shape();
-        let current_shape_str = match explosion_shape {
+        match explosion_shape {
             crate::physic_engine::ExplosionShape::Spherical => {
-                "Spherical (Standard 3D/2D Burst)".to_string()
+                ui.text("Current Mode: Spherical (Standard 3D/2D Burst)");
             }
             crate::physic_engine::ExplosionShape::Image(img) => {
-                format!("Single Image: '{}'", img.file_stem)
+                let mut buf = [0u8; 128];
+                let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                if std::io::Write::write_fmt(
+                    &mut cursor,
+                    format_args!("Current Mode: Single Image: '{}'", img.file_stem),
+                )
+                .is_ok()
+                {
+                    let pos = cursor.position() as usize;
+                    if let Ok(s) = std::str::from_utf8(&buf[..pos]) {
+                        ui.text(s);
+                    }
+                }
             }
             crate::physic_engine::ExplosionShape::MultiImage {
                 shapes,
                 total_weight,
             } => {
-                format!(
-                    "MultiImage ({} shapes active, total weight {:.1})",
-                    shapes.len(),
-                    total_weight
+                let mut buf = [0u8; 128];
+                let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                if std::io::Write::write_fmt(
+                    &mut cursor,
+                    format_args!(
+                        "Current Mode: MultiImage ({} shapes active, total weight {:.1})",
+                        shapes.len(),
+                        total_weight
+                    ),
                 )
+                .is_ok()
+                {
+                    let pos = cursor.position() as usize;
+                    if let Ok(s) = std::str::from_utf8(&buf[..pos]) {
+                        ui.text(s);
+                    }
+                }
             }
-        };
-        ui.text(format!("Current Mode: {}", current_shape_str));
+        }
 
         if ui.button("Spherical Mode (`physic.explosion.shape spherical`)") {
             cmd_queue.push(EngineCommand::Physic(
@@ -508,19 +560,19 @@ pub fn render_physics_settings_tab(
         ui.text_colored([0.9, 0.9, 0.4, 1.0], "Presets & Custom Weight Adjustment:");
         ui.same_line();
         if ui.small_button("Reset All Preset Weights") {
-            *preset_weights = [1.0; 5];
             cmd_queue.push(EngineCommand::Physic(PhysicCommand::ResetAllPresetWeights));
         }
 
+        let mut preset_weights = preset_weights_from_shape(explosion_shape);
+
         for (i, (name, _stem, _path, _scale, _flight_time)) in PRESET_DEFINITIONS.iter().enumerate()
         {
-            let label_name = format!("{:<6}", name);
-            ui.text(&label_name);
+            let _id = ui.push_id_usize(i);
+            ui.text(*name);
             ui.same_line();
 
             ui.set_next_item_width(110.0);
-            let slider_label = format!("Weight##preset_w_{}", i);
-            if ui.slider(&slider_label, 0.1, 10.0, &mut preset_weights[i]) {
+            if ui.slider("Weight", 0.1, 10.0, &mut preset_weights[i]) {
                 cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetPresetWeight {
                     index: i as u32,
                     weight: preset_weights[i],
@@ -528,9 +580,7 @@ pub fn render_physics_settings_tab(
             }
             ui.same_line();
 
-            let reset_w_btn = format!("Reset##reset_w_{}", i);
-            if ui.small_button(&reset_w_btn) {
-                preset_weights[i] = 1.0;
+            if ui.small_button("Reset") {
                 cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetPresetWeight {
                     index: i as u32,
                     weight: 1.0,
@@ -541,19 +591,17 @@ pub fn render_physics_settings_tab(
             }
             ui.same_line();
 
-            let set_btn = format!("Set##set_{}", name);
-            if ui.button(&set_btn) {
+            if ui.button("Set") {
                 cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetPresetSingleShape {
                     index: i as u32,
                 }));
             }
             if ui.is_item_hovered() {
-                ui.tooltip_text(format!("Set single active shape: {}", name));
+                ui.tooltip_text("Set single active shape");
             }
             ui.same_line();
 
-            let add_btn = format!("+Add##add_{}", name);
-            if ui.button(&add_btn) {
+            if ui.button("+Add") {
                 cmd_queue.push(EngineCommand::Physic(
                     PhysicCommand::AddPresetShapeWeighted {
                         index: i as u32,
@@ -562,10 +610,7 @@ pub fn render_physics_settings_tab(
                 ));
             }
             if ui.is_item_hovered() {
-                ui.tooltip_text(format!(
-                    "Add {} to MultiImage set with weight {:.1}",
-                    name, preset_weights[i]
-                ));
+                ui.tooltip_text("Add to MultiImage set");
             }
         }
 
@@ -575,18 +620,27 @@ pub fn render_physics_settings_tab(
                 let (def_scale, def_flight) = get_preset_defaults(&img.file_stem);
 
                 ui.spacing();
-                ui.text_colored(
-                    [0.2, 0.9, 0.4, 1.0],
-                    format!("--- Active Single Image: '{}' ---", img.file_stem),
-                );
+                {
+                    let mut buf = [0u8; 128];
+                    let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                    if std::io::Write::write_fmt(
+                        &mut cursor,
+                        format_args!("--- Active Single Image: '{}' ---", img.file_stem),
+                    )
+                    .is_ok()
+                    {
+                        let pos = cursor.position() as usize;
+                        if let Ok(s) = std::str::from_utf8(&buf[..pos]) {
+                            ui.text_colored([0.2, 0.9, 0.4, 1.0], s);
+                        }
+                    }
+                }
                 ui.same_line();
-                let del_btn = format!("[X Delete '{}']", img.file_stem);
-                if ui.button(&del_btn) {
+                if ui.button("[X Delete]") {
                     cmd_queue.push(EngineCommand::Physic(PhysicCommand::DeleteSingleShape));
                 }
                 ui.same_line();
-                let reset_shape_btn = format!("[Reset '{}' Defaults]", img.file_stem);
-                if ui.button(&reset_shape_btn) {
+                if ui.button("[Reset Defaults]") {
                     cmd_queue.push(EngineCommand::Physic(
                         PhysicCommand::ResetSingleShapeDefaults,
                     ));
@@ -604,8 +658,7 @@ pub fn render_physics_settings_tab(
                     )));
                 }
                 ui.same_line();
-                let reset_scale_btn = format!("Reset Scale##single_scale_{}", img.file_stem);
-                if ui.small_button(&reset_scale_btn) {
+                if ui.small_button("Reset Scale") {
                     cmd_queue.push(EngineCommand::Physic(PhysicCommand::SetSingleShapeScale(
                         def_scale,
                     )));
@@ -623,8 +676,7 @@ pub fn render_physics_settings_tab(
                     ));
                 }
                 ui.same_line();
-                let reset_flight_btn = format!("Reset Flight##single_flight_{}", img.file_stem);
-                if ui.small_button(&reset_flight_btn) {
+                if ui.small_button("Reset Flight") {
                     cmd_queue.push(EngineCommand::Physic(
                         PhysicCommand::SetSingleShapeFlightTime(def_flight),
                     ));
@@ -635,16 +687,28 @@ pub fn render_physics_settings_tab(
                 total_weight,
             } => {
                 ui.spacing();
-                ui.text_colored(
-                    [0.2, 0.9, 0.4, 1.0],
-                    format!(
-                        "--- Active MultiImage Shapes ({}) & Parameters Breakdown ---",
-                        shapes.len()
-                    ),
-                );
+                {
+                    let mut buf = [0u8; 128];
+                    let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                    if std::io::Write::write_fmt(
+                        &mut cursor,
+                        format_args!(
+                            "--- Active MultiImage Shapes ({}) & Parameters Breakdown ---",
+                            shapes.len()
+                        ),
+                    )
+                    .is_ok()
+                    {
+                        let pos = cursor.position() as usize;
+                        if let Ok(s) = std::str::from_utf8(&buf[..pos]) {
+                            ui.text_colored([0.2, 0.9, 0.4, 1.0], s);
+                        }
+                    }
+                }
 
                 for (idx, (shape, weight)) in shapes.iter().enumerate() {
                     let idx_u32 = idx as u32;
+                    let _id = ui.push_id_usize(idx);
                     let (def_scale, def_flight) = get_preset_defaults(&shape.file_stem);
 
                     let pct = if *total_weight > 0.0 {
@@ -653,20 +717,32 @@ pub fn render_physics_settings_tab(
                         0.0
                     };
 
-                    ui.text_colored(
-                        [0.4, 0.8, 1.0, 1.0],
-                        format!("* Forme: '{}' ({:.1}% d'apparition)", shape.file_stem, pct),
-                    );
+                    {
+                        let mut buf = [0u8; 128];
+                        let mut cursor = std::io::Cursor::new(&mut buf[..]);
+                        if std::io::Write::write_fmt(
+                            &mut cursor,
+                            format_args!(
+                                "* Forme: '{}' ({:.1}% d'apparition)",
+                                shape.file_stem, pct
+                            ),
+                        )
+                        .is_ok()
+                        {
+                            let pos = cursor.position() as usize;
+                            if let Ok(s) = std::str::from_utf8(&buf[..pos]) {
+                                ui.text_colored([0.4, 0.8, 1.0, 1.0], s);
+                            }
+                        }
+                    }
                     ui.same_line();
-                    let del_btn = format!("[X Delete]##{}", shape.file_stem);
-                    if ui.button(&del_btn) {
+                    if ui.button("[X Delete]") {
                         cmd_queue.push(EngineCommand::Physic(PhysicCommand::DeleteMultiShapeItem(
                             idx_u32,
                         )));
                     }
                     ui.same_line();
-                    let reset_all_btn = format!("[Reset Defaults]##{}", shape.file_stem);
-                    if ui.button(&reset_all_btn) {
+                    if ui.button("[Reset Defaults]") {
                         cmd_queue.push(EngineCommand::Physic(
                             PhysicCommand::ResetMultiShapeItemDefaults(idx_u32),
                         ));
@@ -674,8 +750,7 @@ pub fn render_physics_settings_tab(
 
                     // Weight Slider & Reset
                     let mut w = *weight;
-                    let weight_label = format!("Weight##w_{}", shape.file_stem);
-                    if ui.slider(&weight_label, 0.0, 10.0, &mut w) {
+                    if ui.slider("Weight", 0.0, 10.0, &mut w) {
                         cmd_queue.push(EngineCommand::Physic(
                             PhysicCommand::SetMultiShapeItemWeight {
                                 index: idx_u32,
@@ -684,8 +759,7 @@ pub fn render_physics_settings_tab(
                         ));
                     }
                     ui.same_line();
-                    let reset_w_btn = format!("Reset W##rw_{}", shape.file_stem);
-                    if ui.small_button(&reset_w_btn) {
+                    if ui.small_button("Reset W") {
                         cmd_queue.push(EngineCommand::Physic(
                             PhysicCommand::SetMultiShapeItemWeight {
                                 index: idx_u32,
@@ -696,8 +770,7 @@ pub fn render_physics_settings_tab(
 
                     // Image Scale Slider & Reset
                     let mut scale = shape.scale;
-                    let scale_label = format!("Image Scale (px)##scale_{}", shape.file_stem);
-                    if ui.slider(&scale_label, 20.0, 500.0, &mut scale) {
+                    if ui.slider("Image Scale (px)", 20.0, 500.0, &mut scale) {
                         cmd_queue.push(EngineCommand::Physic(
                             PhysicCommand::SetMultiShapeItemScale {
                                 index: idx_u32,
@@ -706,8 +779,7 @@ pub fn render_physics_settings_tab(
                         ));
                     }
                     ui.same_line();
-                    let reset_s_btn = format!("Reset Scale##rs_{}", shape.file_stem);
-                    if ui.small_button(&reset_s_btn) {
+                    if ui.small_button("Reset Scale") {
                         cmd_queue.push(EngineCommand::Physic(
                             PhysicCommand::SetMultiShapeItemScale {
                                 index: idx_u32,
@@ -718,8 +790,7 @@ pub fn render_physics_settings_tab(
 
                     // Flight Time Slider & Reset
                     let mut flight_time = shape.flight_time;
-                    let flight_label = format!("Flight Time (s)##flight_{}", shape.file_stem);
-                    if ui.slider(&flight_label, 0.2, 5.0, &mut flight_time) {
+                    if ui.slider("Flight Time (s)", 0.2, 5.0, &mut flight_time) {
                         cmd_queue.push(EngineCommand::Physic(
                             PhysicCommand::SetMultiShapeItemFlightTime {
                                 index: idx_u32,
@@ -728,8 +799,7 @@ pub fn render_physics_settings_tab(
                         ));
                     }
                     ui.same_line();
-                    let reset_f_btn = format!("Reset Flight##rf_{}", shape.file_stem);
-                    if ui.small_button(&reset_f_btn) {
+                    if ui.small_button("Reset Flight") {
                         cmd_queue.push(EngineCommand::Physic(
                             PhysicCommand::SetMultiShapeItemFlightTime {
                                 index: idx_u32,
@@ -811,8 +881,6 @@ mod tests {
         let engine = PhysicEngineFireworks::new(&config, 800.0);
         let mut cmd_queue: Vec<EngineCommand> = Vec::with_capacity(16);
         let reinit = AtomicBool::new(false);
-        let mut weights = [1.0; 5];
-
         let mut imgui_ctx = imgui::Context::create();
         imgui_ctx.set_ini_filename(None);
         imgui_ctx.fonts().build_rgba32_texture();
@@ -820,7 +888,7 @@ mod tests {
 
         let ui = imgui_ctx.frame();
 
-        render_physics_settings_tab(ui, "", &engine, &mut cmd_queue, &reinit, &mut weights);
+        render_physics_settings_tab(ui, "", &engine, &mut cmd_queue, &reinit);
 
         assert!(cmd_queue.capacity() >= 16);
     }

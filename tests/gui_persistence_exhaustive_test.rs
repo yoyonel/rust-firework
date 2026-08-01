@@ -185,7 +185,6 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
     settings.open = true;
     settings.active_tab = 2;
     settings.search_filter = "reverb".to_string();
-    settings.preset_weights = [2.0, 1.5, 4.0, 0.5, 1.0];
     settings.theme = GuiTheme::DraculaSynthwave;
     settings.gui_scale = 1.30;
     settings.window_pos = Some([150.0, 200.0]);
@@ -234,7 +233,7 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
     assert!(!fresh_audio.get_effect_enabled(AudioEffect::LowPassFilter));
     assert!(fresh_audio.get_effect_enabled(AudioEffect::SpatialReverb));
 
-    assert_eq!(loaded_session.preset_weights, [2.0, 1.5, 4.0, 0.5, 1.0]);
+    assert_eq!(loaded_session.preset_weights, [1.5, 0.0, 3.5, 0.0, 0.0]);
     assert_eq!(loaded_session.theme, GuiTheme::DraculaSynthwave);
     assert_eq!(loaded_session.gui_scale, 1.30);
     assert_eq!(loaded_session.window_pos, Some([150.0, 200.0]));

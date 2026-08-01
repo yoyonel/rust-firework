@@ -34,6 +34,9 @@ impl WindowEngine for GlfwWindowEngine {
             glfw::OpenGlProfileHint::Core,
         ));
 
+        // Empêche GLFW de crasher sous Xvfb en cas de perte de focus
+        glfw.window_hint(glfw::WindowHint::AutoIconify(false));
+
         let (mut window, events) = glfw
             .create_window(
                 width as u32,
@@ -108,7 +111,6 @@ impl WindowEngine for GlfwWindowEngine {
     }
 
     fn swap_buffers(&mut self) {
-        self.glfw.set_swap_interval(glfw::SwapInterval::None);
         self.window.swap_buffers();
     }
 

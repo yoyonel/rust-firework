@@ -120,6 +120,13 @@ pub enum SmokeCommand {
     ApplyPreset(u8),
 }
 
+/// Commands sent from UI for overall session management without dynamic allocations.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum GuiCommand {
+    SaveSession,
+    ReloadSession,
+}
+
 /// Unified domain command enum decoupling UI from core engines.
 ///
 /// Designed with minimal memory layout to fit tightly into CPU cache lines.
@@ -129,6 +136,7 @@ pub enum EngineCommand {
     Physic(PhysicCommand),
     Renderer(RendererCommand),
     Smoke(SmokeCommand),
+    Gui(GuiCommand),
 }
 
 /// Read-only interface exposing Audio engine state to UI.
