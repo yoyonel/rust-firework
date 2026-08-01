@@ -1,3 +1,4 @@
+pub mod domain_contracts;
 pub mod simulator;
 pub use simulator::Simulator;
 // Renderer engine
