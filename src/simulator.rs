@@ -92,6 +92,7 @@ where
     pub last_audio_debug_update: Instant,
     pub show_audio_diagnostic: bool,
     pub gui_settings: crate::simulator::gui_settings::GuiSettings,
+    pub engine_commands: Vec<crate::domain_contracts::EngineCommand>,
 
     // Tone mapping comparison
     pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
@@ -182,6 +183,7 @@ where
             last_audio_debug_update: Instant::now(),
             show_audio_diagnostic: false,
             gui_settings: crate::simulator::gui_settings::GuiSettings::new(),
+            engine_commands: Vec::with_capacity(64),
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 gui_session.tonemapping_comparison_mode,
             )),
