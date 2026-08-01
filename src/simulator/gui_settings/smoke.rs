@@ -1,7 +1,7 @@
 // GUI_PERSIST: physics.config
 
+use crate::domain_contracts::{EngineCommand, SmokeCommand, SmokeStateReader};
 use crate::physic_engine::config::{PhysicConfig, SmokeColorMode};
-use crate::physic_engine::PhysicEngineFull;
 use crate::renderer_engine::smoke_preview::{
     PreviewContext, SmokePreviewRenderer, PREVIEW_PAN_X, PREVIEW_PAN_Y, PREVIEW_ROT_Z, PREVIEW_ZOOM,
 };
@@ -12,9 +12,13 @@ static mut PREVIEW_GPU: Option<SmokePreviewRenderer> = None;
 pub static SHOW_GEOMETRY_TRIMMING: AtomicBool = AtomicBool::new(true);
 
 /// Shared GUI control panel for Smoke & Alpha Erosion parameters with per-parameter reset buttons.
-pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
+pub fn render_smoke_controls(
+    ui: &Ui,
+    state: &impl SmokeStateReader,
+    cmd_queue: &mut Vec<EngineCommand>,
+) {
+    let cfg = state.config();
     let default_cfg = PhysicConfig::default();
-    let mut modified = false;
 
     let item_width = (ui.content_region_avail()[0] * 0.38).clamp(160.0, 300.0);
 
@@ -26,16 +30,20 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         "=== 1. ALPHA EROSION (DISSOLVE & BURN SEAM) ===",
     );
 
+    let mut erosion_enabled = cfg.smoke_erosion_enabled;
     if ui.checkbox(
         "Enable Alpha Erosion Dissolve (`physic.smoke_erosion_enabled`)",
-        &mut cfg_mut.smoke_erosion_enabled,
+        &mut erosion_enabled,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionEnabled(
+            erosion_enabled,
+        )));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_smoke_erosion_enabled") {
-        cfg_mut.smoke_erosion_enabled = default_cfg.smoke_erosion_enabled;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionEnabled(
+            default_cfg.smoke_erosion_enabled,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -44,20 +52,24 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         ));
     }
 
-    if cfg_mut.smoke_erosion_enabled {
+    if cfg.smoke_erosion_enabled {
+        let mut erosion_scale = cfg.smoke_erosion_scale;
         ui.set_next_item_width(item_width);
         if ui.slider(
             "Erosion Aggressiveness / Scale (`physic.smoke_erosion_scale`)",
             0.0,
             2.0,
-            &mut cfg_mut.smoke_erosion_scale,
+            &mut erosion_scale,
         ) {
-            modified = true;
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionScale(
+                erosion_scale,
+            )));
         }
         ui.same_line();
         if ui.small_button("Reset##reset_smoke_erosion_scale") {
-            cfg_mut.smoke_erosion_scale = default_cfg.smoke_erosion_scale;
-            modified = true;
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionScale(
+                default_cfg.smoke_erosion_scale,
+            )));
         }
         if ui.is_item_hovered() {
             ui.tooltip_text(format!(
@@ -66,19 +78,23 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
             ));
         }
 
+        let mut edge_width = cfg.smoke_erosion_edge_width;
         ui.set_next_item_width(item_width);
         if ui.slider(
             "Erosion Edge Width (`physic.smoke_erosion_edge_width`)",
             0.0,
             0.80,
-            &mut cfg_mut.smoke_erosion_edge_width,
+            &mut edge_width,
         ) {
-            modified = true;
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionEdgeWidth(
+                edge_width,
+            )));
         }
         ui.same_line();
         if ui.small_button("Reset##reset_smoke_erosion_edge_width") {
-            cfg_mut.smoke_erosion_edge_width = default_cfg.smoke_erosion_edge_width;
-            modified = true;
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionEdgeWidth(
+                default_cfg.smoke_erosion_edge_width,
+            )));
         }
         if ui.is_item_hovered() {
             ui.tooltip_text(format!(
@@ -87,21 +103,35 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
             ));
         }
 
+        let mut edge_color = cfg.smoke_erosion_edge_color;
         ui.set_next_item_width(item_width);
         if ui
             .color_edit3_config(
                 "Erosion Edge Glowing Color (`physic.smoke_erosion_edge_color`)",
-                &mut cfg_mut.smoke_erosion_edge_color,
+                &mut edge_color,
             )
             .flags(ColorEditFlags::PICKER_HUE_BAR | ColorEditFlags::DISPLAY_HEX)
             .build()
         {
-            modified = true;
+            let u8_color = [
+                (edge_color[0] * 255.0).clamp(0.0, 255.0) as u8,
+                (edge_color[1] * 255.0).clamp(0.0, 255.0) as u8,
+                (edge_color[2] * 255.0).clamp(0.0, 255.0) as u8,
+            ];
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionEdgeColor(
+                u8_color,
+            )));
         }
         ui.same_line();
         if ui.small_button("Reset##reset_smoke_erosion_edge_color") {
-            cfg_mut.smoke_erosion_edge_color = default_cfg.smoke_erosion_edge_color;
-            modified = true;
+            let u8_color = [
+                (default_cfg.smoke_erosion_edge_color[0] * 255.0) as u8,
+                (default_cfg.smoke_erosion_edge_color[1] * 255.0) as u8,
+                (default_cfg.smoke_erosion_edge_color[2] * 255.0) as u8,
+            ];
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionEdgeColor(
+                u8_color,
+            )));
         }
         if ui.is_item_hovered() {
             ui.tooltip_text(format!(
@@ -114,19 +144,23 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
     }
 
     ui.spacing();
+    let mut flow_distortion = cfg.flow_distortion_strength;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Flow Distortion Strength (`physic.flow_distortion_strength`)",
         0.0,
         1.0,
-        &mut cfg_mut.flow_distortion_strength,
+        &mut flow_distortion,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(
+            SmokeCommand::SetFlowDistortionStrength(flow_distortion),
+        ));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_flow_distortion_strength") {
-        cfg_mut.flow_distortion_strength = default_cfg.flow_distortion_strength;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(
+            SmokeCommand::SetFlowDistortionStrength(default_cfg.flow_distortion_strength),
+        ));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -135,19 +169,23 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         ));
     }
 
+    let mut flow_speed = cfg.flow_animation_speed;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Flow Animation Speed (`physic.flow_animation_speed`)",
         0.0,
         5.0,
-        &mut cfg_mut.flow_animation_speed,
+        &mut flow_speed,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetFlowAnimationSpeed(
+            flow_speed,
+        )));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_flow_animation_speed") {
-        cfg_mut.flow_animation_speed = default_cfg.flow_animation_speed;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetFlowAnimationSpeed(
+            default_cfg.flow_animation_speed,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -164,44 +202,55 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
     // =========================================================================
     ui.text_colored([0.4, 0.8, 1.0, 1.0], "=== 2. SMOKE CORE TINT & COLOR ===");
 
-    let mut is_rocket_color = cfg_mut.smoke_color_mode == SmokeColorMode::RocketColor;
-    let mut is_custom_color = cfg_mut.smoke_color_mode == SmokeColorMode::Custom;
+    let mut is_rocket_color = cfg.smoke_color_mode == SmokeColorMode::RocketColor;
+    let mut is_custom_color = cfg.smoke_color_mode == SmokeColorMode::Custom;
 
     ui.text("Smoke Base Core Tint Mode:");
     ui.same_line();
     if ui.radio_button("Rocket Color (Inherited)", &mut is_rocket_color, true) {
-        cfg_mut.smoke_color_mode = SmokeColorMode::RocketColor;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetColorMode(
+            SmokeColorMode::RocketColor,
+        )));
     }
     ui.same_line();
     if ui.radio_button("Custom Fixed Color", &mut is_custom_color, true) {
-        cfg_mut.smoke_color_mode = SmokeColorMode::Custom;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetColorMode(
+            SmokeColorMode::Custom,
+        )));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_smoke_color_mode") {
-        cfg_mut.smoke_color_mode = default_cfg.smoke_color_mode;
-        cfg_mut.smoke_inherited_color_intensity = default_cfg.smoke_inherited_color_intensity;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetColorMode(
+            default_cfg.smoke_color_mode,
+        )));
+        cmd_queue.push(EngineCommand::Smoke(
+            SmokeCommand::SetInheritedColorIntensity(default_cfg.smoke_inherited_color_intensity),
+        ));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text("Reset color mode to default (RocketColor)");
     }
 
-    if cfg_mut.smoke_color_mode == SmokeColorMode::RocketColor {
+    if cfg.smoke_color_mode == SmokeColorMode::RocketColor {
+        let mut intensity = cfg.smoke_inherited_color_intensity;
         ui.set_next_item_width(item_width);
         if ui.slider(
             "Inherited Rocket Color Intensity (`physic.smoke_inherited_color_intensity`)",
             0.0,
             2.0,
-            &mut cfg_mut.smoke_inherited_color_intensity,
+            &mut intensity,
         ) {
-            modified = true;
+            cmd_queue.push(EngineCommand::Smoke(
+                SmokeCommand::SetInheritedColorIntensity(intensity),
+            ));
         }
         ui.same_line();
         if ui.small_button("Reset##reset_smoke_inherited_color_intensity") {
-            cfg_mut.smoke_inherited_color_intensity = default_cfg.smoke_inherited_color_intensity;
-            modified = true;
+            cmd_queue.push(EngineCommand::Smoke(
+                SmokeCommand::SetInheritedColorIntensity(
+                    default_cfg.smoke_inherited_color_intensity,
+                ),
+            ));
         }
         if ui.is_item_hovered() {
             ui.tooltip_text(format!(
@@ -211,22 +260,32 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         }
     }
 
-    if cfg_mut.smoke_color_mode == SmokeColorMode::Custom {
+    if cfg.smoke_color_mode == SmokeColorMode::Custom {
+        let mut custom_color = cfg.smoke_custom_color;
         ui.set_next_item_width(item_width);
         if ui
             .color_edit3_config(
                 "Smoke Custom Core Color (`physic.smoke_custom_color`)",
-                &mut cfg_mut.smoke_custom_color,
+                &mut custom_color,
             )
             .flags(ColorEditFlags::PICKER_HUE_BAR | ColorEditFlags::DISPLAY_HEX)
             .build()
         {
-            modified = true;
+            let u8_color = [
+                (custom_color[0] * 255.0).clamp(0.0, 255.0) as u8,
+                (custom_color[1] * 255.0).clamp(0.0, 255.0) as u8,
+                (custom_color[2] * 255.0).clamp(0.0, 255.0) as u8,
+            ];
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetCustomColor(u8_color)));
         }
         ui.same_line();
         if ui.small_button("Reset##reset_smoke_custom_color") {
-            cfg_mut.smoke_custom_color = default_cfg.smoke_custom_color;
-            modified = true;
+            let u8_color = [
+                (default_cfg.smoke_custom_color[0] * 255.0) as u8,
+                (default_cfg.smoke_custom_color[1] * 255.0) as u8,
+                (default_cfg.smoke_custom_color[2] * 255.0) as u8,
+            ];
+            cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetCustomColor(u8_color)));
         }
         if ui.is_item_hovered() {
             ui.tooltip_text(format!(
@@ -249,19 +308,21 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         "=== 3. EMISSION CADENCE & LIFETIME DYNAMICS ===",
     );
 
+    let mut spawn_rate = cfg.smoke_spawn_rate;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Spawn Rate (`physic.smoke_spawn_rate`)",
         0.0,
         120.0,
-        &mut cfg_mut.smoke_spawn_rate,
+        &mut spawn_rate,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetSpawnRate(spawn_rate)));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_smoke_spawn_rate") {
-        cfg_mut.smoke_spawn_rate = default_cfg.smoke_spawn_rate;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetSpawnRate(
+            default_cfg.smoke_spawn_rate,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -270,19 +331,23 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         ));
     }
 
+    let mut initial_size = cfg.smoke_initial_size;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Initial Size (`physic.smoke_initial_size`)",
         1.0,
         40.0,
-        &mut cfg_mut.smoke_initial_size,
+        &mut initial_size,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetInitialSize(
+            initial_size,
+        )));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_smoke_initial_size") {
-        cfg_mut.smoke_initial_size = default_cfg.smoke_initial_size;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetInitialSize(
+            default_cfg.smoke_initial_size,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -291,19 +356,23 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         ));
     }
 
+    let mut growth_rate = cfg.smoke_growth_rate_multiplier;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Growth Rate Multiplier (`physic.smoke_growth_rate_multiplier`)",
         0.0,
         5.0,
-        &mut cfg_mut.smoke_growth_rate_multiplier,
+        &mut growth_rate,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetGrowthRateMultiplier(
+            growth_rate,
+        )));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_smoke_growth_rate_multiplier") {
-        cfg_mut.smoke_growth_rate_multiplier = default_cfg.smoke_growth_rate_multiplier;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetGrowthRateMultiplier(
+            default_cfg.smoke_growth_rate_multiplier,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -312,19 +381,23 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         ));
     }
 
+    let mut fade_duration = cfg.smoke_fade_duration;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Fade Duration (s) (`physic.smoke_fade_duration`)",
         0.05,
         3.0,
-        &mut cfg_mut.smoke_fade_duration,
+        &mut fade_duration,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetFadeDuration(
+            fade_duration,
+        )));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_smoke_fade_duration") {
-        cfg_mut.smoke_fade_duration = default_cfg.smoke_fade_duration;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetFadeDuration(
+            default_cfg.smoke_fade_duration,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -333,19 +406,21 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         ));
     }
 
+    let mut intensity = cfg.smoke_intensity;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Intensity / Brightness (`physic.smoke_intensity`)",
         0.0,
         2.0,
-        &mut cfg_mut.smoke_intensity,
+        &mut intensity,
     ) {
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetIntensity(intensity)));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_smoke_intensity") {
-        cfg_mut.smoke_intensity = default_cfg.smoke_intensity;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetIntensity(
+            default_cfg.smoke_intensity,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -354,7 +429,7 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         ));
     }
 
-    let mut max_smoke = cfg_mut.max_smoke_particles as i32;
+    let mut max_smoke = cfg.max_smoke_particles as i32;
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Max Smoke Particles Pool (`physic.max_smoke_particles`)",
@@ -362,13 +437,15 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
         16384,
         &mut max_smoke,
     ) {
-        cfg_mut.max_smoke_particles = max_smoke.max(100) as usize;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetMaxSmokeParticles(
+            max_smoke.max(100) as u32,
+        )));
     }
     ui.same_line();
     if ui.small_button("Reset##reset_max_smoke_particles") {
-        cfg_mut.max_smoke_particles = default_cfg.max_smoke_particles;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetMaxSmokeParticles(
+            default_cfg.max_smoke_particles as u32,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text(format!(
@@ -376,14 +453,15 @@ pub fn render_smoke_controls(ui: &Ui, cfg_mut: &mut PhysicConfig) -> bool {
             default_cfg.max_smoke_particles
         ));
     }
-
-    modified
 }
 
 /// Renders the dedicated Smoke & Alpha Erosion settings tab.
-pub fn render_smoke_settings_tab<P: PhysicEngineFull>(ui: &Ui, physic_engine: &mut P) {
-    let cfg_mut = physic_engine.get_config_mut();
-    let mut modified = false;
+pub fn render_smoke_settings_tab(
+    ui: &Ui,
+    state: &impl SmokeStateReader,
+    cmd_queue: &mut Vec<EngineCommand>,
+) {
+    let cfg = state.config();
 
     ui.text_colored(
         [0.4, 0.8, 1.0, 1.0],
@@ -391,20 +469,7 @@ pub fn render_smoke_settings_tab<P: PhysicEngineFull>(ui: &Ui, physic_engine: &m
     );
     ui.same_line();
     if ui.small_button("Reset Smoke Defaults") {
-        let default_cfg = PhysicConfig::default();
-        cfg_mut.smoke_spawn_rate = default_cfg.smoke_spawn_rate;
-        cfg_mut.smoke_initial_size = default_cfg.smoke_initial_size;
-        cfg_mut.smoke_growth_rate_multiplier = default_cfg.smoke_growth_rate_multiplier;
-        cfg_mut.smoke_fade_duration = default_cfg.smoke_fade_duration;
-        cfg_mut.max_smoke_particles = default_cfg.max_smoke_particles;
-        cfg_mut.smoke_intensity = default_cfg.smoke_intensity;
-        cfg_mut.smoke_color_mode = default_cfg.smoke_color_mode;
-        cfg_mut.smoke_custom_color = default_cfg.smoke_custom_color;
-        cfg_mut.smoke_erosion_enabled = default_cfg.smoke_erosion_enabled;
-        cfg_mut.smoke_erosion_scale = default_cfg.smoke_erosion_scale;
-        cfg_mut.smoke_erosion_edge_width = default_cfg.smoke_erosion_edge_width;
-        cfg_mut.smoke_erosion_edge_color = default_cfg.smoke_erosion_edge_color;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ResetDefaults));
     }
 
     ui.separator();
@@ -418,39 +483,19 @@ pub fn render_smoke_settings_tab<P: PhysicEngineFull>(ui: &Ui, physic_engine: &m
     ui.same_line();
 
     if ui.button("[Fire & Ember]") {
-        cfg_mut.smoke_erosion_edge_width = 0.12;
-        cfg_mut.smoke_erosion_edge_color = [1.0, 0.4, 0.05];
-        cfg_mut.smoke_color_mode = SmokeColorMode::Custom;
-        cfg_mut.smoke_custom_color = [0.15, 0.15, 0.15];
-        cfg_mut.smoke_intensity = 0.85;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ApplyPreset(0)));
     }
     ui.same_line();
     if ui.button("[Plasma Blue]") {
-        cfg_mut.smoke_erosion_edge_width = 0.15;
-        cfg_mut.smoke_erosion_edge_color = [0.1, 0.8, 1.0];
-        cfg_mut.smoke_color_mode = SmokeColorMode::Custom;
-        cfg_mut.smoke_custom_color = [0.8, 0.9, 1.0];
-        cfg_mut.smoke_intensity = 1.0;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ApplyPreset(1)));
     }
     ui.same_line();
     if ui.button("[Volumetric Cloud]") {
-        cfg_mut.smoke_erosion_edge_width = 0.05;
-        cfg_mut.smoke_erosion_edge_color = [0.75, 0.75, 0.75];
-        cfg_mut.smoke_color_mode = SmokeColorMode::Custom;
-        cfg_mut.smoke_custom_color = [0.85, 0.85, 0.85];
-        cfg_mut.smoke_intensity = 0.5;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ApplyPreset(2)));
     }
     ui.same_line();
     if ui.button("[Toxic Plasma]") {
-        cfg_mut.smoke_erosion_edge_width = 0.18;
-        cfg_mut.smoke_erosion_edge_color = [0.2, 1.0, 0.3];
-        cfg_mut.smoke_color_mode = SmokeColorMode::Custom;
-        cfg_mut.smoke_custom_color = [0.1, 0.25, 0.1];
-        cfg_mut.smoke_intensity = 0.9;
-        modified = true;
+        cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ApplyPreset(3)));
     }
 
     ui.spacing();
@@ -468,7 +513,7 @@ pub fn render_smoke_settings_tab<P: PhysicEngineFull>(ui: &Ui, physic_engine: &m
         let rot_z = PREVIEW_ROT_Z.load(Ordering::Relaxed) as f32 / 10.0;
         let canvas_aspect = (avail_width / 145.0).max(0.1);
         let ctx = PreviewContext {
-            config: cfg_mut,
+            config: cfg,
             zoom,
             pan_x,
             pan_y,
@@ -729,13 +774,28 @@ pub fn render_smoke_settings_tab<P: PhysicEngineFull>(ui: &Ui, physic_engine: &m
     ui.spacing();
     ui.separator();
 
-    if render_smoke_controls(ui, cfg_mut) {
-        modified = true;
-    }
+    render_smoke_controls(ui, state, cmd_queue);
+}
 
-    // REAL-TIME INSTANT SYNC WITH ENGINE
-    if modified {
-        let pending = physic_engine.get_config_mut().clone();
-        let _ = physic_engine.reload_config(&pending);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::physic_engine::config::PhysicConfig;
+
+    #[test]
+    fn test_render_smoke_controls_pure_function() {
+        let config = PhysicConfig::default();
+        let mut cmd_queue: Vec<EngineCommand> = Vec::with_capacity(16);
+
+        let mut imgui_ctx = imgui::Context::create();
+        imgui_ctx.set_ini_filename(None);
+        imgui_ctx.fonts().build_rgba32_texture();
+        imgui_ctx.io_mut().display_size = [800.0, 600.0];
+
+        let ui = imgui_ctx.frame();
+
+        render_smoke_controls(ui, &config, &mut cmd_queue);
+
+        assert!(cmd_queue.capacity() >= 16);
     }
 }
