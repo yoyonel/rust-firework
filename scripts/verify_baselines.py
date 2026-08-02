@@ -29,8 +29,10 @@ def compute_image_mse(img_a, img_b):
     img_a_rgb = img_a.convert("RGB")
     img_b_rgb = img_b.convert("RGB")
     
-    data_a = list(img_a_rgb.getdata())
-    data_b = list(img_b_rgb.getdata())
+    data_a_fn = getattr(img_a_rgb, "get_flattened_data", img_a_rgb.getdata)
+    data_b_fn = getattr(img_b_rgb, "get_flattened_data", img_b_rgb.getdata)
+    data_a = list(data_a_fn())
+    data_b = list(data_b_fn())
     
     sum_squared_diff = 0.0
     for px_a, px_b in zip(data_a, data_b):

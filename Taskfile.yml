@@ -159,7 +159,7 @@ tasks:
           fi
         else
           echo "[TEST:VISUAL] Running engine tests with interactive_tests feature..."
-          xvfb-run -a cargo test --features "interactive_tests"
+          xvfb-run -a cargo test --features "interactive_tests" -- --test-threads=1
           echo "[TEST:VISUAL] Evaluating MSE visual baselines..."
           chmod +x scripts/verify_baselines.py
           python3 scripts/verify_baselines.py
