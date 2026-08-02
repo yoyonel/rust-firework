@@ -158,9 +158,8 @@ tasks:
             echo "Error: No container runtime found." && exit 1
           fi
         else
-          echo "[TEST:VISUAL] Executing universal visual regression suite"
-          chmod +x scripts/verify_visual.py
-          xvfb-run -a python3 scripts/verify_visual.py
+          echo "[TEST:VISUAL] Executing native visual regression suite..."
+          xvfb-run -a cargo test --test visual_regression_test --features interactive_tests
         fi
 
   test:chaos:

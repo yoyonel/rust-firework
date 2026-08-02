@@ -22,7 +22,7 @@
 | Test Typology | Status | Target CLI | Infrastructure Needs |
 | :--- | :--- | :--- | :--- |
 | **Unit Testing** | `[ OK ]` | `task test:unit` | Agnostic self-reentrant test execution under Xvfb. |
-| **Visual Regression** | `[ TODO ]` | `task test:visual` | Python validator + SHA256 Golden references under Xvfb. |
+| **Visual Regression** | `[ OK ]` | `task test:visual` | Native Rust visual regression test suite under Xvfb. |
 | **Chaos / Stress** | `[ TODO ]` | `task test:chaos` | Fuzzing & stress test execution. |
 
 ## 4. CI/CD & Remote Pipelines
