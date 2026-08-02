@@ -41,7 +41,7 @@ L'implémentation de la vitesse radiale calculait le pitch-shifting via l'équat
 *   **Correction** : L'algorithme dans [process_doppler](../src/audio_engine/dsp_processor.rs#L92-L108) intercepte désormais les dénominateurs négatifs ou nuls et applique un plafonnement physique robuste de la vitesse de lecture à un facteur maximal de `4.0`.
 
 ### E. Suppression Complète des Buffers Scratch Résiduels
-Les vecteurs `scratch_mono` et `scratch_stereo` qui servaient historiquement de tampons intermédiaires de mixage dans `DspProcessor` ont été définitivement supprimés. 
+Les vecteurs `scratch_mono` et `scratch_stereo` qui servaient historiquement de tampons intermédiaires de mixage dans `DspProcessor` ont été définitivement supprimés.
 Le processeur mixe désormais directement ses calculs de voix dans le buffer d'accumulation de sortie (`acc`), libérant de l'espace sur la pile et évitant des écritures mémoires redondantes.
 
 ---

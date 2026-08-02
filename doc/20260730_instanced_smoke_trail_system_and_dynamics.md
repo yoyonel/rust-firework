@@ -1,7 +1,7 @@
 # Spécification Technique & Architecture : Moteur de Trainée de Fumée Instancié & Érosion Alpha (Dissolve)
 
-Date : 30-31 juillet 2026  
-Branche : `feature/smoke-trail-system`  
+Date : 30-31 juillet 2026
+Branche : `feature/smoke-trail-system`
 
 ---
 

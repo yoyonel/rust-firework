@@ -66,7 +66,7 @@ gantt
     title Profil Temporel Typique d'une Frame (Médiane 590 us)
     dateFormat  X
     axisFormat %H:%M:%S
-    
+
     section CPU Rendering Loop
     UBO subdata update          :active, 0, 15
     Thread Sync / Fences check :crit, 15, 45

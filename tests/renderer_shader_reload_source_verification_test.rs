@@ -171,13 +171,13 @@ fn test_reload_shaders_updates_uniform_locations() {
 fn test_why_these_tests_matter() {
     let explanation = r#"
     Ces tests sont critiques car ils détectent le bug suivant:
-    
+
     BUG ORIGINAL:
     1. reload_shaders() recompilait les shaders
     2. Mettait à jour shader_program, loc_size, loc_tex
     3. ❌ OUBLIAIT de restaurer l'uniform uTexRatio
     4. Résultat: quads texturés invisibles après reload
-    
+
     FIX:
     1. Ajout du champ tex_ratio: f32 dans la struct
     2. Stockage du ratio lors de l'initialisation
@@ -186,7 +186,7 @@ fn test_why_these_tests_matter() {
            gl::GetUniformLocation(self.shader_program, cstr!("uTexRatio")),
            self.tex_ratio,
        );
-    
+
     CES TESTS DÉTECTENT:
     - Si tex_ratio est supprimé de la struct (test_reload_shaders_uses_tex_ratio_field)
     - Si reload_shaders n'utilise plus self.tex_ratio (test_reload_shaders_uses_tex_ratio_field)

@@ -1,8 +1,8 @@
 # Rapport de Performance MangoHud & Suivi Profiling Tracy
 
-**Date :** 31 Juillet 2026  
-**Branche :** `feature/smoke-trail-system`  
-**Comparaison :** Commit `master` vs `feature/smoke-trail-system`  
+**Date :** 31 Juillet 2026
+**Branche :** `feature/smoke-trail-system`
+**Comparaison :** Commit `master` vs `feature/smoke-trail-system`
 **Environnement :** Debian 13 (Linux 6.12), Intel Core i7-1355U, Mesa Intel Iris Xe Graphics, `release` / `ultra-speed` profile.
 
 ---

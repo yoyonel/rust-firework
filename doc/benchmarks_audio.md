@@ -89,7 +89,7 @@ benches/
 
 ### `audio_dsp_bench.rs` — Rééchantillonnage DSP
 
-**Fichier** : [benches/audio_dsp_bench.rs](../benches/audio_dsp_bench.rs)  
+**Fichier** : [benches/audio_dsp_bench.rs](../benches/audio_dsp_bench.rs)
 **Fonction testée** : [`resample_linear_mono`](../src/audio_engine/dsp.rs)
 
 | Groupe Criterion | Paramètres | Objectif |
@@ -131,7 +131,7 @@ Le `black_box` est crucial : sans lui, LLVM peut détecter que le résultat n'es
 
 ### `audio_binaural_bench.rs` — Spatialisation 3D
 
-**Fichier** : [benches/audio_binaural_bench.rs](../benches/audio_binaural_bench.rs)  
+**Fichier** : [benches/audio_binaural_bench.rs](../benches/audio_binaural_bench.rs)
 **Fonction testée** : [`binauralize_mono`](../src/audio_engine/binaural_processing.rs)
 
 | Groupe Criterion | Paramètres | Objectif |

@@ -23,9 +23,9 @@ layout (std140) uniform GlobalData {
 mat3 build_world_matrix(float size, float angle) {
     // Position du sommet quad dans l'espace clip (avec taille)
     float scale = size;
-    
+
     float sx = scale * uTexRatio;
-    float sy = scale * 1.0;            
+    float sy = scale * 1.0;
 
     mat3 mat_scale = mat3(
         sx, 0.0, 0.0,
@@ -40,7 +40,7 @@ mat3 build_world_matrix(float size, float angle) {
         s,  c, 0.0,
         0.0, 0.0, 1.0
     );
-    
+
     mat3 mat_translation = mat3(
         1.0, 0.0, 0.0,
         0.0, 1.0, 0.0,
@@ -62,7 +62,7 @@ void main() {
     vBrightness = aBrightness;  // Pass brightness to fragment shader
 
     // On reconstruit les coordonnées UV du quad (-1.0 → -1.0) -> (0.0, 0.0)
-    vUV = aQuad * 0.5 + 0.5;            
+    vUV = aQuad * 0.5 + 0.5;
 
     mat3 mat_model = build_world_matrix(size * (2.0 + 5.0 * vAlpha), angle);
     vec2 world_pos = (mat_model * vec3(aQuad, 1.0)).xy;

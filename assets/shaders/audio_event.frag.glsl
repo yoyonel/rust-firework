@@ -19,7 +19,7 @@ const float RING_WIDTH     = 0.08;
 void main() {
     // Normalised lifetime [0..1]
     float t = clamp(vAge / vTtl, 0.0, 1.0);
-    
+
     // Fast attack, smooth decay (safe smoothstep usage with edge0 < edge1)
     float attack = smoothstep(0.0, 0.05, t);
     float decay = 1.0 - smoothstep(0.5, 1.0, t);

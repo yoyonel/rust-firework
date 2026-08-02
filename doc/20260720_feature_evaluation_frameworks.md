@@ -10,7 +10,7 @@ Ce document présente **4 frameworks complémentaires d'ingénierie logicielle**
 
 ## 1. La Matrice 2D : Valeur vs Effort (Value vs Effort Matrix)
 
-La Matrice 2D croise l'**Effort/Complexité d'implémentation** (axe X) avec la **Valeur/Immersion produite** (axe Y). 
+La Matrice 2D croise l'**Effort/Complexité d'implémentation** (axe X) avec la **Valeur/Immersion produite** (axe Y).
 
 ```text
        ▲ VALEUR / IMMERSION PRODUITE
@@ -38,7 +38,7 @@ La Matrice 2D croise l'**Effort/Complexité d'implémentation** (axe X) avec la 
 
 Le framework **RICE** fournit un score numérique quantifiable pour départager objectivement plusieurs fonctionnalités concurrentes.
 
-> **Formule du Score RICE :**  
+> **Formule du Score RICE :**
 > **Score RICE = ( Reach &times; Impact &times; Confidence ) / Effort**
 
 ### Décomposition des 4 Facteurs :

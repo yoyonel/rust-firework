@@ -2,7 +2,7 @@
 
 ## Contexte
 
-Le projet utilise des **Persistently Mapped Buffers** (extension `ARB_buffer_storage`, OpenGL 4.4+) 
+Le projet utilise des **Persistently Mapped Buffers** (extension `ARB_buffer_storage`, OpenGL 4.4+)
 pour les buffers de particules GPU. Ce pattern impose des contraintes de lifecycle strictes :
 
 > **Spec ARB_buffer_storage §4** : Un buffer mappé persistamment ne doit pas être supprimé

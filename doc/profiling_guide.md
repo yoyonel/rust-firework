@@ -507,19 +507,19 @@ echo "Timestamp,FPS,CPU%,GPU%,RAM_MB" > metrics.csv
 
 while true; do
     timestamp=$(date +%s)
-    
+
     # CPU (approximatif)
     cpu=$(top -bn1 | grep "fireworks_sim" | awk '{print $9}')
-    
+
     # GPU (NVIDIA)
     gpu=$(nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits)
-    
+
     # RAM
     ram=$(ps aux | grep fireworks_sim | awk '{print $6}')
-    
+
     # FPS (à extraire des logs)
     fps=$(tail -1 /tmp/fireworks.log | grep -oP 'FPS: \K[0-9]+')
-    
+
     echo "$timestamp,$fps,$cpu,$gpu,$ram" >> metrics.csv
     sleep 1
 done

@@ -14,6 +14,6 @@ void main() {
     sum += texture(uTexture, vTexCoord + uHalfPixel.xy);
     sum += texture(uTexture, vTexCoord + vec2(uHalfPixel.x, -uHalfPixel.y));
     sum += texture(uTexture, vTexCoord - vec2(uHalfPixel.x, -uHalfPixel.y));
-    
+
     FragColor = sum / 8.0;
 }

@@ -29,7 +29,7 @@ T_déclenchement = T_visuel - D_audio
 Le son atteint l'oreille de l'utilisateur précisément à l'instant où l'événement apparaît sur son écran.
 
 ### Projection Cinématique Indépendante du Frame Rate
-La simulation physique n'est pas cadencée à un taux fixe de 60 Hz ; elle s'exécute à la fréquence de rafraîchissement de la carte graphique (variable et non bridée, pouvant dépasser 200 FPS). L'anticipation ne peut donc pas se mesurer en nombre de frames, car la durée d'une frame (dt) fluctue constamment. 
+La simulation physique n'est pas cadencée à un taux fixe de 60 Hz ; elle s'exécute à la fréquence de rafraîchissement de la carte graphique (variable et non bridée, pouvant dépasser 200 FPS). L'anticipation ne peut donc pas se mesurer en nombre de frames, car la durée d'une frame (dt) fluctue constamment.
 
 L'anticipation est définie par une durée absolue en millisecondes : t_anticip = D_ms / 1000.
 
@@ -76,7 +76,7 @@ graph TD
     D -->|Mise à jour en place| A
 ```
 
-Lorsqu'un événement audio démarre matériellement au niveau du pilote, l'audio-thread émet un événement diagnostique `AudioDebugEvent::Started` contenant le timestamp matériel exact du début du bloc sonore (T_started). 
+Lorsqu'un événement audio démarre matériellement au niveau du pilote, l'audio-thread émet un événement diagnostique `AudioDebugEvent::Started` contenant le timestamp matériel exact du début du bloc sonore (T_started).
 De son côté, le moteur physique enregistre l'instant du spawn visuel (T_spawn).
 
 L'erreur algébrique de synchronisation (en ms) est définie par :

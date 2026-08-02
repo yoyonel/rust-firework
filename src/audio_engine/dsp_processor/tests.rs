@@ -646,6 +646,7 @@ fn test_spatial_bus_hrtf_rendering_left_right() {
 }
 
 #[test]
+#[allow(clippy::needless_range_loop)]
 fn test_spatial_bus_snr_quality() {
     use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
     use crate::audio_engine::types::Voice;

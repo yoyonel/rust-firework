@@ -1,9 +1,9 @@
 # Gestion des Compétences IA (Agent Skills) : Architecture & Workflow
 
-**Date :** 18 Juillet 2026  
-**Auteur :** Équipe d'Ingénierie Rust Firework  
-**Mots-clés :** IA, Antigravity, agy, Repomix, Taskfile, LLM, Workflow, Architecture  
-**Statut :** Spécification active  
+**Date :** 18 Juillet 2026
+**Auteur :** Équipe d'Ingénierie Rust Firework
+**Mots-clés :** IA, Antigravity, agy, Repomix, Taskfile, LLM, Workflow, Architecture
+**Statut :** Spécification active
 
 ---
 

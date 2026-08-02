@@ -8,7 +8,7 @@ Ce document présente l'implémentation et l'analyse de performance des trois pi
 
 ### 1. Piste 1 : Write-Combining et Explicit Flushing (VRAM Buffer Storage)
 * **Principe :**
-  Auparavant, nos buffers persistants triple-bufferisés utilisaient `GL_MAP_COHERENT_BIT`. La cohérence matérielle automatique force le CPU et le GPU à synchroniser en continu leurs caches système. 
+  Auparavant, nos buffers persistants triple-bufferisés utilisaient `GL_MAP_COHERENT_BIT`. La cohérence matérielle automatique force le CPU et le GPU à synchroniser en continu leurs caches système.
   Nous avons supprimé ce flag de la création du stockage GPU (`gl::BufferStorage`) et du mapping (`gl::MapBufferRange`), et l'avons remplacé par un flush explicite (`gl::FlushMappedBufferRange`) restreint uniquement aux octets réellement écrits lors de la frame (`count * size_of::<ParticleGPU>()`).
 * **Gain :**
   Permet au contrôleur mémoire du processeur d'activer le cache de type **Write-Combining** sur la BAR PCIe, augmentant radicalement le débit d'écriture brute CPU \\( \rightarrow \\) GPU tout en évitant les synchronisations de cache matérielles intrusives.
@@ -69,9 +69,9 @@ L'analyse de trace générée via `task profile-tracy-headless` donne les métri
 > **Pourquoi ne voit-on pas l'amélioration de 12% directement sur la trace de base de Tracy (64 fusées) ?**
 > La configuration par défaut de l'application (`assets/config/physic.toml`) limite la simulation standard en tâche de fond à **64 fusées**.
 >
-> 1. **Coût fixe du pilote graphique (Driver Overhead) :** 
+> 1. **Coût fixe du pilote graphique (Driver Overhead) :**
 >    En Phase 4 (`GL_MAP_COHERENT_BIT`), la synchronisation de la mémoire était gérée de manière transparente par le matériel (sans aucun appel d'API OpenGL additionnel). En Phase 5, pour activer le *Write-Combining*, nous appelons manuellement `gl::FlushMappedBufferRange` à chaque frame. Cet appel système engendre un coût fixe CPU infime d'environ **1 à 2 µs**.
-> 
+>
 > 2. **L'effet d'échelle :**
 >    - À basse charge (64 fusées / 4 000 particules), les transferts PCIe sont minuscules (~160 Ko). Le temps économisé par le *Write-Combining* est inférieur au coût fixe d'appel de la fonction de flush du pilote (auquel s'ajoute le bruit d'ordonnancement de l'OS). C'est pourquoi le temps médian mesuré par Tracy oscille légèrement de 529 µs à 558 µs.
 >    - À charge moyenne/haute (200 à 4000 fusées / 250 000+ particules), le volume de données s'élève à plus de 10 Mo par frame. Ici, l'absence de cohérence matérielle et l'accès *Write-Combining* font gagner **des centaines de microsecondes** de transfert PCIe. Ce gain massif écrase complètement le coût fixe de l'appel de flush, permettant l'accélération de **12.3%** validée statistiquement par Criterion.

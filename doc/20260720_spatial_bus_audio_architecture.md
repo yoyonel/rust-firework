@@ -2,9 +2,9 @@
 
 ## Overview & Contexte
 
-Dans la simulation de feux d'artifice **`rust-firework`**, le passage à **128 fusées physiques actives** simultanées engendre jusqu'à **256 événements sonores superposés** (décollage/sifflement de la fusée + explosion et crépitement des étincelles). 
+Dans la simulation de feux d'artifice **`rust-firework`**, le passage à **128 fusées physiques actives** simultanées engendre jusqu'à **256 événements sonores superposés** (décollage/sifflement de la fusée + explosion et crépitement des étincelles).
 
-Avec l'architecture audio initiale (mode **Legacy**), chaque voix calcule individuellement et en temps réel l'ensemble de la chaîne DSP : rééchantillonnage fractionnaire, interpolation de délai d'inter-auralité (ITD), différence de niveau (ILD), et filtrage passe-bas IIR dépendant de la distance. 
+Avec l'architecture audio initiale (mode **Legacy**), chaque voix calcule individuellement et en temps réel l'ensemble de la chaîne DSP : rééchantillonnage fractionnaire, interpolation de délai d'inter-auralité (ITD), différence de niveau (ILD), et filtrage passe-bas IIR dépendant de la distance.
 
 À 128+ fusées, cette complexité <b><i>O</i>(<i>N</i><sub>voix</sub> &times; DSP)</b> dépassait le budget temps réel du thread audio CPAL (5.3 ms pour un buffer de 256 échantillons à 48 kHz), provoquant :
 1. Des coupures d'échantillons au niveau matériel Linux : `"ALSA lib pcm.c:8772:(snd_pcm_recover) underrun occurred"`.
@@ -69,9 +69,9 @@ Afin d'assurer une **équivalence stricte de gain et d'énergie (ISO)** avec la 
 > - **R(t) = W(t) + (1 / &radic;2) &times; X(t)**
 
 #### Démonstration de l'Équivalence ISO :
-- **Source au Centre (dir<sub>x</sub> = 0) :**  
+- **Source au Centre (dir<sub>x</sub> = 0) :**
   `W = (1 / √2) × S` &rArr; **L = 0.7071 S**, **R = 0.7071 S** *(Strictement identique au mode Legacy)*
-- **Source à Pleine Droite (dir<sub>x</sub> = +1.0) :**  
+- **Source à Pleine Droite (dir<sub>x</sub> = +1.0) :**
   `W = (1 / √2) × S`, `X = 1.0 S` &rArr; **L = 0.0**, **R = 1.0 S** *(Strictement identique au mode Legacy)*
 
 ---

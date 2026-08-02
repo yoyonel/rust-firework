@@ -1,8 +1,8 @@
 # Optimisations du Rendu Smoke, Benchmarks MangoHud & Découpe Polygonale (Tight Geometry)
 
-**Date** : 31 Juillet 2026  
-**Auteur** : Antigravity (Pair Programming AI Assistant)  
-**Cible GPU** : NVIDIA GTX 950M (`__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`)  
+**Date** : 31 Juillet 2026
+**Auteur** : Antigravity (Pair Programming AI Assistant)
+**Cible GPU** : NVIDIA GTX 950M (`__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia`)
 **Fichiers concernés** :
 - `src/renderer_engine/smoke_renderer.rs`
 - `assets/shaders/smoke_instanced.frag.glsl`

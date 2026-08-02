@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explores the **FireworksAudio3D engine**, a real-time 3D audio system written in Rust.  
+This document explores the **FireworksAudio3D engine**, a real-time 3D audio system written in Rust.
 We focus on **two complementary aspects**:
 
 1. **Concurrency & real-time architecture** — how the engine handles audio threads, queues, and synchronization.
@@ -109,7 +109,7 @@ Listener
 **ITD (time delay between ears)**
 
 - Calculated using head radius `r` and azimuth `θ`.
-- Simplified formula:  
+- Simplified formula:
   `itd = (head_radius / c) * (θ + sin(θ))`
 - c = speed of sound (≈ 343 m/s).
 
@@ -131,7 +131,7 @@ att = max(1 - distance / max_distance, 0)
 ### 3.3 Low-Pass Filtering
 
 - First-order filter applied per channel to simulate **distance-dependent muffling**.
-- Filter coefficient:  
+- Filter coefficient:
   `a = dt / (RC + dt)`, where `RC = 1 / (2πfc)` and `fc` depends on distance.
 - Advantage: cheap computation, smooth attenuation.
 - Limitation: only approximate frequency response, no resonance control.

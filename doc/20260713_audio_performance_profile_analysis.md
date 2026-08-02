@@ -35,7 +35,7 @@ Voici la répartition du temps de traitement CPU par symbole individuel (Self %)
 ## 3. Analyse Détaillée des Résultats
 
 ### A. Efficacité de la Boucle DSP (`process_dsp`)
-La fonction `DspProcessor::process_dsp` représente à elle seule **53.80% du temps CPU total** (et 54.31% en incluant ses sous-appels). 
+La fonction `DspProcessor::process_dsp` représente à elle seule **53.80% du temps CPU total** (et 54.31% en incluant ses sous-appels).
 *   **Pourquoi est-ce optimal ?** Dans un moteur de traitement audio temps réel, il est tout à fait normal et souhaitable que le calcul DSP pur domine largement les autres coûts (comme l'I/O système, la gestion des threads ou la désérialisation). Cela prouve que le CPU passe la quasi-totalité de son temps à faire ce qui a de la valeur : interpoler et sommer les échantillons audio.
 
 ### B. Validation du Modèle "Block-Rate" vs "Sample-Rate"
@@ -45,7 +45,7 @@ La répartition des fonctions mathématiques de `libm.so` montre que nos optimis
 *   Seule la boucle de mixage interne (recherche d'échantillons fractionnaires avec ITD et interpolation linéaire d'échantillons) s'exécute à la fréquence d'échantillonnage de 48 kHz, ce qui maintient la charge globale à un niveau extrêmement bas.
 
 ### C. Zéro-Allocation dans la Boucle Chaude
-*   Nous n'observons **aucun appel à `malloc` / `free` ou `realloc`** dans la liste des hotspots de l'audio. 
+*   Nous n'observons **aucun appel à `malloc` / `free` ou `realloc`** dans la liste des hotspots de l'audio.
 *   La suppression complète des buffers scratch mono et stéréo temporaires et l'utilisation de pointeurs partagés via `Arc::clone` à la mise en file d'attente préservent un thread audio libéré de tout verrou de l'allocateur mémoire du noyau Linux.
 
 ### D. Rendu Stéréo et Soft Clipping (`write_cpal_buffer`)

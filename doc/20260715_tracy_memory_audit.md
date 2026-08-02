@@ -6,11 +6,11 @@ Cet audit analyse en détail la consommation mémoire de l'application `firework
 
 ## 1. L'Effet "Microscope" de Tracy (Analyse de l'Échelle)
 
-> [!IMPORTANT]  
+> [!IMPORTANT]
 > Le point le plus crucial à noter est **l'échelle verticale (axe Y)** de la courbe de mémoire dans Tracy :
 > * **Consommation totale :** ~5,7 Mo (`5703 KB` à `5705 KB`).
 > * **Plage de variation (y-range) :** **2 634 octets** (soit seulement **2,57 Ko**).
-> 
+>
 > Cette fluctuation représente moins de **0,045 %** de la mémoire totale de l'application. La consommation est donc **extrêmement stable**. Tracy met à l'échelle automatiquement l'axe Y pour remplir l'écran, ce qui donne l'illusion visuelle de grandes vagues ou de changements majeurs, alors qu'il s'agit de bruit de fond microscopique.
 
 ---

@@ -65,7 +65,7 @@ Ce document récapitule les dysfonctionnements identifiés lors des phases d'év
 Lors du développement du système de mise à jour Doppler temps réel, la question s'est posée d'harmoniser la fréquence d'envoi des événements cinématiques (`DopplerEvent`) depuis le thread de simulation principal vers le thread de traitement audio CPAL. Par défaut, la physique sous-jacente de l'application est simulée à **60 Hz** tandis que les fenêtres graphiques débloquées tournent à **400+ Hz**. Le seuil de throttling temporel a été fixé à **144 Hz** (intervalle minimal de **6.94 ms**).
 
 ### A. Fréquence d'Échantillonnage Audio (Audio Rate) vs Fréquence de Contrôle (Control Rate)
-En synthèse audio et traitement du signal temps réel, il est courant de distinguer l'**Audio Rate** (le taux d'échantillonnage matériel, ici 48 kHz) et le **Control Rate** (la fréquence de mise à jour des paramètres macroscopiques comme le volume, le pitch, la position). 
+En synthèse audio et traitement du signal temps réel, il est courant de distinguer l'**Audio Rate** (le taux d'échantillonnage matériel, ici 48 kHz) et le **Control Rate** (la fréquence de mise à jour des paramètres macroscopiques comme le volume, le pitch, la position).
 Le thread CPAL traite les échantillons par blocs de N = 64 frames. La durée temporelle d'un bloc de traitement DSP est de :
 
 `Δt_bloc = N / fs = 64 / 48000 ≈ 1.33 ms`
@@ -105,6 +105,3 @@ Afin d'éviter que le fichier `src/simulator.rs` ne devienne trop volumineux et 
 
 ### C. Intégration de la tâche Taskfile
 * **Nouveau raccourci `task run-audio-stress`** : Ajout d'une tâche dédiée dans [**`Taskfile.yml`**](../Taskfile.yml) qui pré-configure toutes les variables d'environnement optimales (VSync désactivée, HUD de performance graphique activé) et lance la simulation interactive. Le nombre de sources peut être passé en paramètre (ex: `task run-audio-stress -- 256`, 128 par défaut).
-
-
-

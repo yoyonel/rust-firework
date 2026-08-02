@@ -18,7 +18,7 @@ Pour mesurer les bénéfices d'optimisations comme le UBO ou AZDO de manière re
 
 ## 🚀 Tâche Taskfile Dédiée
 
-Une tâche `profile-tracy-headless` a été ajoutée dans [Taskfile.yml](../Taskfile.yml). 
+Une tâche `profile-tracy-headless` a été ajoutée dans [Taskfile.yml](../Taskfile.yml).
 
 Pour exécuter le cycle complet de capture et d'analyse en une seule commande, lancez :
 

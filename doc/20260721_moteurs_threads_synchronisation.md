@@ -1,8 +1,8 @@
 # Architecture des Moteurs, Threading et Synchronisation
 
-> **Date** : 21 Juillet 2026  
-> **Application** : Fireworks Simulator (Rust / OpenGL AZDO / CPAL Audio 3D)  
-> **Cible** : Documentation Technique de l'Architecture Multi-Thread  
+> **Date** : 21 Juillet 2026
+> **Application** : Fireworks Simulator (Rust / OpenGL AZDO / CPAL Audio 3D)
+> **Cible** : Documentation Technique de l'Architecture Multi-Thread
 
 ---
 
@@ -90,7 +90,7 @@ graph TB
         WENGINE["Window Engine (GLFW / Events / ImGui)"]
         PHYSIC["Physic Engine (Generational Arena / Particle Pools)"]
         RENDER["Renderer Engine (AZDO Persistent Mapped Buffers)"]
-        
+
         SIM --> WENGINE
         SIM --> PHYSIC
         SIM --> RENDER
@@ -101,7 +101,7 @@ graph TB
         CPAL_CB["CPAL Audio Callback (dsp_processor.process_block)"]
         VOICES["Voice Allocation & Spatialization (Binaural HRTF / Doppler)"]
         DSP_BUS["DSP Bus & Spatial Reverb (FDN Reverb)"]
-        
+
         CPAL_CB --> VOICES
         VOICES --> DSP_BUS
     end
@@ -201,7 +201,7 @@ sequenceDiagram
     M->>M: reclaim_audio_garbage() (Drop des Arc audio terminés)
     M->>R: render() : écriture Persistent Mapped VBOs
     R->>G: glDrawArraysInstanced() / SwapBuffers
-    
+
     par Traitement Audio Temps Réel Asynchrone
         A->>C: Pop PlayRequest & DopplerEvent (try_recv non-bloquant)
         A->>A: Mixage des voix (Binaural HRTF + Doppler + Spatial Reverb)

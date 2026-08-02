@@ -27,14 +27,14 @@ heaptrack: ./target/release/fireworks_sim
 
 # Run the tests
 # https://doc.rust-lang.org/cargo/commands/cargo-test.html
-test:	
+test:
 	RUST_MIN_STACK=16777216 \
 	xvfb-run -a \
 		cargo test --lib --bins --tests -- --test-threads=1
 
 test-nocapture:
 	cargo test -- --nocapture
-	
+
 # Run the tests for the library
 test-lib:
 	cargo test --lib

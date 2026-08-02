@@ -39,7 +39,7 @@ L'origine `(0, 0)` se situe en bas à gauche de la fenêtre.
 ## 🛠️ Bugs résolus
 
 ### 1. Saturation de la limite dynamique de voix (`max_voices`)
-Dans `src/audio_engine/config.rs`, le moteur audio plafonnait dynamiquement le nombre de voix avec `std::cmp::min(self.max_voices, max_physic_rockets)`. 
+Dans `src/audio_engine/config.rs`, le moteur audio plafonnait dynamiquement le nombre de voix avec `std::cmp::min(self.max_voices, max_physic_rockets)`.
 Dans une configuration à 2 fusées (`max_rockets = 2`), cela allouait seulement **2 slots de voix**. Étant donné que les sons de décollage (whoosh) et d'explosion se superposent et possèdent des queues de decay, les voix arrivaient immédiatement à saturation, entraînant le rejet (drop) silencieux du son de l'explosion.
 * **Correction** : Ajustement de la formule de calcul dynamique pour s'assurer d'avoir toujours une marge confortable pour la superposition des sons :
   `std::cmp::max(self.max_voices, std::cmp::max(64, max_physic_rockets * 4))` (minimum 64 voix).
@@ -64,7 +64,7 @@ Nous avons implémenté le modèle physique **standard de l'industrie (OpenAL/FM
 3. **Zone de Sécurité & Fondu** : Pour libérer proprement les ressources de voix CPU, un fondu linéaire (fade) s'applique à l'approche de `max_distance` (qui a été augmentée à **`2000px`** par défaut dans les paramètres) pour ramener le volume doucement à `0.0` sans coupure brusque.
 
 ```rust
-let ref_distance = 50.0_f32; 
+let ref_distance = 50.0_f32;
 let max_distance = settings.max_distance().max(ref_distance + 1.0);
 if distance <= ref_distance {
     1.0
@@ -126,7 +126,7 @@ Dans les coordonnées de l'écran, le point `(0, 0)` est en haut à gauche et `y
 
 Dans ImGui, la console de commande occupe une large bande en haut de l'écran. Lors de l'ouverture simultanée de la console et du *Audio Diagnostic Monitor*, cliquer sur le fond de la console ramenait celle-ci au premier plan, masquant la fenêtre de diagnostic (qui passait en arrière-plan mais restait visible en transparence, interceptant ainsi tous les clics utilisateur).
 
-* **Correction** : Nous avons ajouté le flag `imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS` lors de la création de la fenêtre `"Console"` dans [src/utils/command_console/mod.rs](../src/utils/command_console/mod.rs). 
+* **Correction** : Nous avons ajouté le flag `imgui::WindowFlags::NO_BRING_TO_FRONT_ON_FOCUS` lors de la création de la fenêtre `"Console"` dans [src/utils/command_console/mod.rs](../src/utils/command_console/mod.rs).
   Ce flag force la console à **rester systématiquement en arrière-plan** des autres fenêtres d'outils flottantes. Ainsi, même si l'utilisateur interagit avec le terminal de commande, la fenêtre de diagnostic audio reste au premier plan, conserve le focus d'entrée de souris, et demeure entièrement manipulable et repositionnable.
 
 ---
@@ -185,6 +185,3 @@ Pour respecter scrupuleusement les exigences de non-allocation mémoire dans les
 * **Traitement Interne par Bloc** : Le moteur découpe et traite le signal audio selon le paramètre `block_size` configuré par l'utilisateur (par exemple `64` échantillons à 48 kHz = `1.33 ms`).
   * Avec un tampon matériel de `512` échantillons à 48 kHz, le temps de réponse maximum (attente du prochain cycle) est de `10.6 ms` (soit une latence moyenne de transit de `5.3 ms`).
   * Avec un tampon matériel ramené à **`64`** échantillons (`block_size = 64` dans [audio.toml](../assets/config/audio.toml)), l'intervalle de réveil du thread audio est réduit à seulement `1.33 ms`. La latence moyenne chute ainsi en dessous de **`0.7 ms`** (et le "render-to-audio-start" est également réduit sous les **`0.7 ms`**), offrant un rendu sonore instantané et parfaitement synchrone avec l'affichage graphique.
-
-
-

@@ -14,7 +14,7 @@ sudo usermod -aG render $USER
 # [Profiling Hardware Without Intel Sampling Drivers](https://www.intel.com/content/www/us/en/docs/vtune-profiler/cookbook/2023-0/profiling-hardware-without-sampling-drivers.html)
 sudo sh -c 'echo 0 > /proc/sys/kernel/perf_event_paranoid'
 
-# 
+#
 ╰─ source /opt/intel/oneapi/vtune/2025.7/vtune-vars.sh; vtune -collect gpu_offload -- ./target/profiling/fireworks_sim
 vtune: Warning: To profile kernel modules during the session, make sure they are available in the /lib/modules/kernel_version/ location.
 vtune: Collection started. To stop the collection, either press CTRL-C or enter from another console window: vtune -r $PATH_TO_PROJECT/r003go -command stop.

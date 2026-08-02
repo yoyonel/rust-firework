@@ -9,7 +9,7 @@ Ce document fournit une analyse technique détaillée des trous (gaps) observés
 En analysant la capture d'écran Tracy, nous constatons deux comportements asynchrones distincts :
 
 ### A. La Timeline "OpenGL Main Context" (Inactivité GPU)
-La timeline Tracy affiche des espaces vides importants (de 400 à 600 µs) entre chaque bloc `Renderer::render_frame`. 
+La timeline Tracy affiche des espaces vides importants (de 400 à 600 µs) entre chaque bloc `Renderer::render_frame`.
 * **Signification :** Le GPU traite les sommets et dessine la frame en seulement 100 à 200 µs. Une fois fini, il se met en pause (**Idle**) car sa file d'attente de commandes est vide.
 * **Causalité :** Le thread principal CPU n'a pas encore soumis les commandes suivantes. Il est occupé par :
   1. Le bloc rose `simulator::finalize_frame(swap_buffer)`.
@@ -17,7 +17,7 @@ La timeline Tracy affiche des espaces vides importants (de 400 à 600 µs) entre
   3. La gestion des événements de fenêtre et la construction de l'UI.
 
 ### B. Le Bloc rose `simulator::finalize_frame(swap_buffer)` (Driver Throttling)
-Même lorsque la VSync est désactivée (`vblank_mode=0`), le pilote graphique (NVIDIA/AMD) bride artificiellement le CPU dans `glfwSwapBuffers`. 
+Même lorsque la VSync est désactivée (`vblank_mode=0`), le pilote graphique (NVIDIA/AMD) bride artificiellement le CPU dans `glfwSwapBuffers`.
 * **Pourquoi ?** Si le CPU s'exécutait à sa vitesse maximale (sans synchronisation), la file de commandes du pilote grandirait indéfiniment. Cela causerait une explosion de la consommation mémoire et un retard d'affichage (input lag) majeur.
 * **Conséquence :** Le pilote endort le thread CPU dans `swap_buffers` jusqu'à ce que le GPU ait fini de dessiner une frame précédente et libéré un slot de swap.
 

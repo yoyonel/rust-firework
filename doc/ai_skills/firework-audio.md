@@ -17,4 +17,3 @@ Référence architecturale et technique sur le pipeline audio temps réel.
 - **Vue d'ensemble et architecture DSP :** Lire `references/summary.md` et les synthèses techniques associées (`doc/*audio*.md`, `doc/audio_engine_diagnostic_and_attenuation.md`).
 - **Code source exhaustif :** Chercher le fichier cible dans `references/files.md` via `## File: src/audio_engine/<fichier>.rs`.
 - **Arborescence :** Vérifier `references/project-structure.md` pour le poids et la complexité des modules.
-

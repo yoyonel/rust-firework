@@ -35,7 +35,7 @@ Liste non exhaustive de points à placer dans cette synthèse:
 ## 1. DIAGNOSTIC INITIAL : LATENCE AUDIO & DÉCROCHAGES DSP (XRUNS)
 
 ### Problématique & "Budget Tampon"
-En audio temps réel, le thread DSP est soumis à une contrainte de temps critique non négociable : le **Budget Tampon**. 
+En audio temps réel, le thread DSP est soumis à une contrainte de temps critique non négociable : le **Budget Tampon**.
 * À une fréquence d'échantillonnage de **48 kHz** avec un buffer de **256 échantillons**, le temps total imparti pour calculer et livrer les échantillons audio est de **5,33 ms**.
 * Si le thread DSP dépasse ce budget (à cause d'une allocation, d'un lock ou d'une mauvaise utilisation du cache), le driver de la carte son lit un buffer vide : c'est le **décrochage DSP (XRUN / Audio Dropout)**, qui se traduit par un "clic" ou un silence audible.
 
@@ -83,7 +83,7 @@ Lorsque le thread DSP a fini de lire un échantillon (ou lorsqu'un asset audio e
 ### La Solution : Le Canal de Recyclage (Garbage Channel)
 Pour garantir qu'aucune désallocation ne se produise jamais dans le callback DSP, nous avons mis en place le pattern du **Garbage Channel** :
 
-    [ Thread DSP (Audio Callback) ] 
+    [ Thread DSP (Audio Callback) ]
                  │
                  │ (Voix terminée : refcount > 0, ne drop PAS ici !)
                  ▼
@@ -117,7 +117,7 @@ Dans l'architecture initiale, le mixage audio s'effectuait en plusieurs passes s
 ## 5. VECTORISATION SIMD NATIVE & ÉLIMINATION DES BRANCHES (ZERO-BRANCH DSP)
 
 ### Philosophie "Suckless" : Auto-Vectorisation LLVM sans dépendance
-Pour la spatialisation binaurale 3D (`binauralize_mono`), l'algorithme initial calculait l'interpolation linéaire et le retard ITD échantillon par échantillon. 
+Pour la spatialisation binaurale 3D (`binauralize_mono`), l'algorithme initial calculait l'interpolation linéaire et le retard ITD échantillon par échantillon.
 * **Le Problème :** La boucle de traitement contenait un test conditionnel (`if idx <= 0.0`), un clamping (`idx.min()`) et un cast flottant-vers-entier (`as usize`) exécutés \\( N \\) fois par buffer. Ces branchements conditionnels cassaient le pipeline CPU (bulles de prédiction de branchement) et interdisaient formellement à LLVM d'auto-vectoriser le code.
 * **La Solution (Zero-Branch DSP) :** Exploitation de l'invariance de phase. Le retard ITD étant constant sur l'intégralité du quantum audio, la partie entière du décalage (`delay_int`) et le poids d'interpolation (`frac`) sont invariants pour le buffer.
     * **Loop Peeling :** Extraction de la gestion des bords de buffer hors de la boucle principale.

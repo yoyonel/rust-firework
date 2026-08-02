@@ -1,7 +1,7 @@
 
 # [GDC 2014 - Approaching Zero Driver Overhead in OpenGL (Presented by NVIDIA) - Cass Everitt, Tim Foley, John McDonald, Graham Sellers](https://gdcvault.com/play/1020791/Approaching-Zero-Driver-Overhead-in)
 > Overview:
-> 
+>
 > Driver overhead has been a frustrating reality for game developers since the beginning of the PC game industry. On desktop systems, driver overhead can decrease frame rate, while on mobile devices driver overhead is more insidious"robbing both battery life and frame rate. In this unprecedented sponsored session, Graham Sellers (AMD), Tim Foley (Intel), Cass Everitt (NVIDIA) and John McDonald (NVIDIA) will present high-level concepts available in today's OpenGL implementations that radically reduce driver overhead by up to 10x or more. The techniques presented will apply to all major vendors and are suitable for use across multiple platforms. Additionally, presenters will demo practical applications of the techniques in an extensible, open source comparison framework.
 
 [Approaching zero driver overhead - slides](https://fr.slideshare.net/slideshow/approaching-zero-driver-overhead/32554457)

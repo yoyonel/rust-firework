@@ -63,7 +63,7 @@ The integration test suite (`tests/visual_regression_test.rs`) runs during `carg
 fn test_visual_non_regression_kawase_vs_golden() {
     let current_frame = capture_offline_frame_with_config(&KawaseConfig::default());
     let golden_frame = load_golden_reference("bloom_kawase_4x.png");
-    
+
     let (passed, ssim_score) = evaluate_dual_pass_ssim_pixel_distance(&current_frame, &golden_frame);
     assert!(passed, "Visual regression detected in Kawase Bloom pass: SSIM={}", ssim_score);
 }

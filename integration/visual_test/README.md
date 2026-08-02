@@ -6,28 +6,28 @@
 
 Ce projet permet d’**analyser automatiquement les mouvements visuels d’une simulation de feux d’artifice** (ou toute autre application graphique OpenGL/Rust) à partir d’une **capture vidéo** ou d’une **série de screenshots PNG**.
 
-L’analyse utilise la technique d’**optical flow (flux optique)** pour détecter et quantifier les déplacements entre deux images successives.  
+L’analyse utilise la technique d’**optical flow (flux optique)** pour détecter et quantifier les déplacements entre deux images successives.
 L’objectif est de mesurer la **vitesse**, la **direction** et l’**accélération** des particules ou objets animés afin d’évaluer la qualité de la simulation.
 
 Ce projet est conçu pour être :
 
-- ⚙️ **Automatisable** (tests d’intégration CI, GitHub Actions)  
-- 🧠 **Analytique** (vitesse, direction, accélération)  
-- 🚀 **Optimisé CPU** (parallélisation via `ProcessPoolExecutor`)  
+- ⚙️ **Automatisable** (tests d’intégration CI, GitHub Actions)
+- 🧠 **Analytique** (vitesse, direction, accélération)
+- 🚀 **Optimisé CPU** (parallélisation via `ProcessPoolExecutor`)
 - 📦 **Facile à déployer** (gestion via [`uv`](https://docs.astral.sh/uv/))
 
 ---
 
 ## 🧩 Fonctionnalités principales
 
-- 📸 Analyse automatique de séries d’images `screenshot_*.png`  
-- 🎞️ Génération d’une vidéo annotée avec les vecteurs de mouvement  
+- 📸 Analyse automatique de séries d’images `screenshot_*.png`
+- 🎞️ Génération d’une vidéo annotée avec les vecteurs de mouvement
 - 📊 Calcul et affichage :
   - de la **vitesse moyenne par frame**
   - de l’**accélération moyenne**
   - d’un **histogramme des directions**
-- 🧰 Interface CLI basée sur **Typer** (documentation automatique, validation Pydantic)  
-- ⚡ Traitement parallèle via `concurrent.futures.ProcessPoolExecutor`  
+- 🧰 Interface CLI basée sur **Typer** (documentation automatique, validation Pydantic)
+- ⚡ Traitement parallèle via `concurrent.futures.ProcessPoolExecutor`
 - 🧱 Intégration complète avec **Makefile** et **uv**
 
 ---
@@ -75,9 +75,9 @@ make run INPUT=./output OUTPUT=./output_results
 
 Cela va :
 
-1. Charger les images `screenshot_*.png`  
-2. Calculer les vecteurs de mouvement  
-3. Annoter chaque frame  
+1. Charger les images `screenshot_*.png`
+2. Calculer les vecteurs de mouvement
+3. Annoter chaque frame
 4. Générer :
    - `annotated.mp4`
    - `motion_analysis.png`
@@ -117,9 +117,9 @@ output_results/
 
 ### Visualisations
 
-- **Vitesse moyenne (bleu)** → montre l’intensité des mouvements  
-- **Accélération (rouge)** → variation de la vitesse  
-- **Histogramme des directions (vert)** → orientation dominante des déplacements  
+- **Vitesse moyenne (bleu)** → montre l’intensité des mouvements
+- **Accélération (rouge)** → variation de la vitesse
+- **Histogramme des directions (vert)** → orientation dominante des déplacements
 
 ---
 
@@ -245,6 +245,6 @@ uv run analyze -- ./frames ./results --fps 60
 
 ## 📜 Licence
 
-**MIT License**  
-© 2025 — Conçu pour le projet *Rust Fireworks Simulator*  
+**MIT License**
+© 2025 — Conçu pour le projet *Rust Fireworks Simulator*
 Auteur : **ATTY Lionel**

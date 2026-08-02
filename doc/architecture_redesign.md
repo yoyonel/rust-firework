@@ -72,7 +72,7 @@ sequenceDiagram
     Main->>Renderer: new()
     Main->>Simulator: new(renderer, physic, audio, ...)
     Main->>Simulator: run()
-    
+
     loop Main Loop
         Simulator->>Simulator: step()
         Simulator->>PhysicEngine: update()

@@ -16,7 +16,7 @@
 ## 1. ARCHÉOLOGIE ET CONVERGENCE ARCHITECTURALE
 
 ### A. Le constat initial : Les limites du système statique
-Avant cette implémentation, le moteur audio spatialisait les sons (*panning* stéréo ou binauralisation HRTF) et calculait l'atténuation de distance **une seule fois** lors de l'appel à `prepare_voice`, juste avant l'envoi du buffer dans la file de lecture. 
+Avant cette implémentation, le moteur audio spatialisait les sons (*panning* stéréo ou binauralisation HRTF) et calculait l'atténuation de distance **une seule fois** lors de l'appel à `prepare_voice`, juste avant l'envoi du buffer dans la file de lecture.
 * **Problème :** Si cette approche est optimale pour des événements ponctuels et immobiles (comme les explosions), elle s'avère incompatible avec des objets en vol continu (les fusées). Le son restait figé aux coordonnées initiales du tir et la fréquence de lecture restait constante (\\( 1.0\times \\)), privant la simulation d'effet de vitesse et de réalisme spatial.
 * **Composants dormants :** Des structures ébauchées (`DopplerEvent`, `DopplerQueue` et `DopplerState`) témoignaient d'une intention d'intégration, mais l'existence d'un `DopplerState` isolé menaçait d'introduire une seconde boucle de mixage DSP parallèle, redoublant la complexité et les risques de verrous de concurrence.
 

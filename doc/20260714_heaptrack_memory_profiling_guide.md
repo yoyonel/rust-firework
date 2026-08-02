@@ -23,7 +23,7 @@ Ce document explique les concepts de profilage de la mémoire à l'aide de **hea
 
 ## 1. Introduction : Pourquoi profiler la mémoire en temps réel ?
 
-Dans une application interactive en temps réel comportant un moteur physique, un rendu GPU à haut framerate et un moteur audio 3D binaural, la **latence** et la **régularité du framerate** sont cruciales. 
+Dans une application interactive en temps réel comportant un moteur physique, un rendu GPU à haut framerate et un moteur audio 3D binaural, la **latence** et la **régularité du framerate** sont cruciales.
 Bien que Rust ne possède pas de ramasse-miettes (Garbage Collector) causant des pauses imprévisibles, les **allocations dynamiques sur le tas** (via `malloc` ou l'allocateur système) restent coûteuses :
 * **Latence de verrouillage (Lock Contention) :** L'allocateur système doit souvent acquérir un verrou global. Si le thread audio ou de rendu alloue en même temps que d'autres threads, cela provoque des bégaiements (stutters/underruns).
 * **Fragmentation de la mémoire :** Des milliers d'allocations de tailles diverses dégradent la localité du cache processeur.
@@ -38,7 +38,7 @@ Bien que Rust ne possède pas de ramasse-miettes (Garbage Collector) causant des
 Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq sources d'allocations dynamiques sur le tas dans les chemins critiques.
 
 ### A. Élimination des allocations de chaînes du Profiler
-* **Problème détecté :** Le profiler de performance interne acceptait des clés génériques via `label: impl Into<String>`. 
+* **Problème détecté :** Le profiler de performance interne acceptait des clés génériques via `label: impl Into<String>`.
   Dans [dsp_processor.rs](../src/audio_engine/dsp_processor.rs#L56), chaque appel à `profile_block("write_cpal_buffer")` ou `record_metric("audio latency", ...)` convertissait le littéral `&str` en un `String` alloué sur le tas, générant plus de **10 000 allocations temporaires** par tranche de 10 secondes dans le thread audio.
 * **Correction dans [profiler.rs](../src/profiler.rs) :**
   Les HashMaps et les signatures de fonctions ont été réécrites pour stocker et consommer des références statiques `&'static str` :
@@ -50,7 +50,7 @@ Grâce au profilage mémoire Heaptrack, nous avons identifié et résolu cinq so
   ```
 
 ### B. Remplacement de `Box<dyn Iterator>` par des closures
-* **Problème détecté :** L'interface d'itération physique `PhysicEngineIterator` renvoyait des itérateurs dynamiques boxés (`Box<dyn Iterator<Item = &Particle>>`). 
+* **Problème détecté :** L'interface d'itération physique `PhysicEngineIterator` renvoyait des itérateurs dynamiques boxés (`Box<dyn Iterator<Item = &Particle>>`).
   À chaque frame de rendu, la méthode `fill_particle_data_direct` appelait ces fonctions, allouant un objet `Box` sur le tas pour encapsuler le pipeline de filtrage, créant des milliers d'allocations temporaires dans la boucle de rendu.
 * **Correction dans [trait.rs](../src/physic_engine/trait.rs) & [physic_engine_generational_arena.rs](../src/physic_engine/physic_engine_generational_arena.rs) :**
   Nous avons remplacé l'itération externe (renvoi d'itérateurs) par de l'**itération interne** en passant des closures temporaires (`&mut dyn FnMut(&Particle)`) :
@@ -174,7 +174,7 @@ Pour évaluer précisément l'évolution des performances sous charge de 10 à 4
 
 ### 🔍 Analyse de la charge GPU/CPU :
 * **Pourquoi la faible variation auparavant ?** Lors de nos premiers tests, la simulation progressait naturellement dans le temps. En raison du grand nombre d'itérations de Criterion, la simulation atteignait rapidement son état stationnaire par défaut (environ 120 fusées), quel que soit le nombre initial de fusées injectées au démarrage.
-* **Comportement sous haute charge :** En adaptant les intervalles de génération à l'état stationnaire, nous constatons désormais une courbe de mise à l'échelle logique. À 4000 fusées actives, le moteur gère en permanence des dizaines de milliers de particules de traînées et d'explosions. 
+* **Comportement sous haute charge :** En adaptant les intervalles de génération à l'état stationnaire, nous constatons désormais une courbe de mise à l'échelle logique. À 4000 fusées actives, le moteur gère en permanence des dizaines de milliers de particules de traînées et d'explosions.
 * **Optimisation mémoire sous haute charge :** À 4000 fusées, la version optimisée montre son plus grand avantage (**+9.8% de gain**), car l'absence totale d'allocations dans la boucle chaude évite la fragmentation du tas et les micro-latences induites par le mapping dynamique des buffers GPU et le recyclage des voix audio.
 
 ---

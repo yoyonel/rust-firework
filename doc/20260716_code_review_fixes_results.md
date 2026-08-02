@@ -12,7 +12,7 @@ Ce rapport documente les corrections apportées aux 12 findings soulevés lors d
 
 ### B. Suppression de la Généralité Spéculative (Dead Parameters & Fields)
 - **Problème :** Le paramètre `window_size` était propagé dans `ParticleGraphicsRenderer::render_particles_with_persistent_buffer` mais n'était plus utilisé depuis le passage globale au UBO. De plus, `loc_comp_intensity` dans [bloom/](../src/renderer_engine/bloom/) était conservé inutilement.
-- **Résolution :** 
+- **Résolution :**
   - Nettoyage du paramètre `window_size` de la signature du trait `ParticleGraphicsRenderer` et de toutes ses implémentations (`RendererGraphics` et `RendererGraphicsInstanced`).
   - Suppression complète de `loc_comp_intensity` dans `BloomPass` (champs, initialisation, reloads).
 

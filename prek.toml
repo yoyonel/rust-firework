@@ -1,5 +1,5 @@
 # ==========================================
-# Configuration prek.toml pour la qualité 
+# Configuration prek.toml pour la qualité
 # globale du projet Rust
 # ==========================================
 
@@ -21,7 +21,7 @@ rev = "0.28.1"
 # ==========================================
 [[repos]]
 repo = "local"
-  
+
   # 1. Vérification du formatage (cargo fmt)
   # S'assure que tout le code respecte le style standard Rust
   [[repos.hooks]]
