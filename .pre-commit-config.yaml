@@ -45,7 +45,7 @@ repos:
 
       - id: cargo-test
         name: Cargo Test Unit Suite
-        entry: cargo test --lib --tests
+        entry: cargo test --lib --tests -- --test-threads=1
         language: system
         pass_filenames: false
         stages: [pre-push]
