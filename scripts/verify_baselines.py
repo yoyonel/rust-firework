@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 import os
 import sys
-try:
-    from PIL import Image, ImageChops, ImageEnhance
-except ImportError:
-    import subprocess
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "--break-system-packages", "Pillow"])
-    from PIL import Image, ImageChops, ImageEnhance
+from PIL import Image, ImageChops, ImageEnhance
 
 CANDIDATES_DIR = "tests/visual_baselines/candidates"
 BASELINES_DIR = "tests/visual_baselines"
