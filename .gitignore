@@ -281,4 +281,5 @@ assets/config/*.toml
 
 # Local downloaded binary tools (e.g. Vale)
 /bin/
+tests/visual_baselines/artifacts/
 

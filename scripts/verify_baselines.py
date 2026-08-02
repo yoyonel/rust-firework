@@ -1,109 +1,126 @@
 #!/usr/bin/env python3
 import os
 import sys
-from PIL import Image, ImageChops, ImageEnhance
+import numpy as np
+from PIL import Image
+from skimage.metrics import structural_similarity as ssim
+import concurrent.futures
 
 CANDIDATES_DIR = "tests/visual_baselines/candidates"
 BASELINES_DIR = "tests/visual_baselines"
 ARTIFACTS_DIR = "tests/visual_baselines/artifacts"
-DEFAULT_TOLERANCE = 0.001
 
-def compute_image_mse(img_a, img_b):
-    """
-    Replicates exact compute_image_mse math from tests/visual_regression_test.rs:
-    diff = (px_a[c] - px_b[c]) / 255.0
-    sum_squared_diff += diff * diff
-    mse = sum_squared_diff / (total_pixels * 3.0)
-    """
-    if img_a.size != img_b.size:
-        raise ValueError(f"Dimension mismatch: {img_a.size} vs {img_b.size}")
+PIXEL_DIFF_THRESHOLD_COUNT = 50
+PIXEL_COLOR_DIFF_PERCENT = 0.05  # 5% of 255 = 12.75
+SSIM_THRESHOLD = 0.999
+CROSS_VAL_SSIM_MAX = 0.98
+
+def run_self_calibration():
+    path_kawase = os.path.join(BASELINES_DIR, "bloom_kawase_4x.png")
+    path_gaussian = os.path.join(BASELINES_DIR, "bloom_gaussian_2x.png")
+    
+    if not os.path.exists(path_kawase) or not os.path.exists(path_gaussian):
+        print("⚠️ Self-calibration skipped: baseline test images missing.")
+        return
         
-    width, height = img_a.size
-    total_pixels = width * height
+    img_k = np.array(Image.open(path_kawase).convert("RGB"))
+    img_g = np.array(Image.open(path_gaussian).convert("RGB"))
     
-    img_a_rgb = img_a.convert("RGB")
-    img_b_rgb = img_b.convert("RGB")
-    
-    data_a_fn = getattr(img_a_rgb, "get_flattened_data", img_a_rgb.getdata)
-    data_b_fn = getattr(img_b_rgb, "get_flattened_data", img_b_rgb.getdata)
-    data_a = list(data_a_fn())
-    data_b = list(data_b_fn())
-    
-    sum_squared_diff = 0.0
-    for px_a, px_b in zip(data_a, data_b):
-        for c in range(3):
-            diff = (px_a[c] - px_b[c]) / 255.0
-            sum_squared_diff += diff * diff
-            
-    mse = sum_squared_diff / (total_pixels * 3.0)
-    return mse
+    score = ssim(img_k, img_g, channel_axis=2)
+    print(f"🧪 Self-Calibration Test: Kawase 4x vs Gaussian 2x SSIM = {score:.6f}")
+    if score > CROSS_VAL_SSIM_MAX:
+        print(f"❌ Calibration Failure: Cannot distinguish Kawase from Gaussian (SSIM {score:.6f} > {CROSS_VAL_SSIM_MAX})!")
+        sys.exit(1)
+    print("✅ Self-Calibration PASSED (Distinct visual signatures confirmed)")
 
-def create_heatmap_diff(img_cand, img_base, diff_img, diff_path):
-    cand_rgba = img_cand.convert("RGBA")
-    base_rgba = img_base.convert("RGBA")
+def create_heatmap_diff(base_np, diff_mask, diff_path):
+    base_dark = (base_np.astype(float) * 0.2).astype(np.uint8)
+    heatmap_np = base_dark.copy()
+    heatmap_np[diff_mask] = [255, 0, 0]
+    Image.fromarray(heatmap_np).save(diff_path)
+
+def evaluate_single_image(filename):
+    cand_path = os.path.join(CANDIDATES_DIR, filename)
+    base_path = os.path.join(BASELINES_DIR, filename)
     
-    base_dark = ImageEnhance.Brightness(base_rgba).enhance(0.2)
-    diff_gray = diff_img.convert("L")
-    threshold_mask = diff_gray.point(lambda p: 255 if p > 5 else 0)
+    if not os.path.exists(base_path):
+        return (filename, False, f"[FAIL: NO GOLDEN BASELINE] {filename} missing baseline in '{BASELINES_DIR}'")
+        
+    try:
+        cand_img = Image.open(cand_path).convert("RGB")
+        base_img = Image.open(base_path).convert("RGB")
+    except Exception as e:
+        return (filename, False, f"[FAIL: IMAGE LOAD ERROR] {filename}: {e}")
+        
+    if cand_img.size != base_img.size:
+        return (filename, False, f"[FAIL: DIMENSION MISMATCH] {filename} (candidate: {cand_img.size}, baseline: {base_img.size})")
+        
+    cand_np = np.array(cand_img)
+    base_np = np.array(base_img)
     
-    red_layer = Image.new("RGBA", img_cand.size, (255, 0, 0, 255))
-    heatmap = Image.composite(red_layer, base_dark, threshold_mask)
-    heatmap.save(diff_path)
+    # Pass A: Strict Pixel Threshold
+    channel_diffs = np.abs(cand_np.astype(float) - base_np.astype(float))
+    max_pixel_diff = np.max(channel_diffs, axis=2)
+    diff_mask = max_pixel_diff > (255.0 * PIXEL_COLOR_DIFF_PERCENT)
+    differing_pixel_count = np.sum(diff_mask)
+    
+    # Pass B: SSIM
+    score_ssim = ssim(cand_np, base_np, channel_axis=2)
+    
+    if differing_pixel_count > PIXEL_DIFF_THRESHOLD_COUNT:
+        diff_filename = f"{os.path.splitext(filename)[0]}_diff.png"
+        diff_path = os.path.join(ARTIFACTS_DIR, diff_filename)
+        create_heatmap_diff(base_np, diff_mask, diff_path)
+        return (filename, False, f"[FAIL: STRICT PIXEL THRESHOLD] {filename} ({differing_pixel_count} pixels differ by > 5% color distance > limit {PIXEL_DIFF_THRESHOLD_COUNT}) -> Heatmap saved to {diff_path}")
+    elif score_ssim < SSIM_THRESHOLD:
+        diff_filename = f"{os.path.splitext(filename)[0]}_diff.png"
+        diff_path = os.path.join(ARTIFACTS_DIR, diff_filename)
+        create_heatmap_diff(base_np, diff_mask, diff_path)
+        return (filename, False, f"[FAIL: SSIM THRESHOLD] {filename} (SSIM: {score_ssim:.6f} < threshold {SSIM_THRESHOLD}) -> Heatmap saved to {diff_path}")
+    else:
+        return (filename, True, f"[PASS: DUAL-PASS VALIDATED] {filename} (SSIM: {score_ssim:.6f}, diff pixels: {differing_pixel_count})")
 
 def main():
     os.makedirs(ARTIFACTS_DIR, exist_ok=True)
+    
+    # 1. Level 3 FX Finesse: Self-Calibration Test (Sequential)
+    run_self_calibration()
     
     if not os.path.exists(CANDIDATES_DIR):
         print(f"[WARN] Candidates directory '{CANDIDATES_DIR}' does not exist.")
         sys.exit(0)
         
-    candidate_files = [f for f in os.listdir(CANDIDATES_DIR) if f.endswith(".png")]
+    candidate_files = sorted([f for f in os.listdir(CANDIDATES_DIR) if f.endswith(".png")])
     if not candidate_files:
         print(f"[WARN] No candidate PNG files found in '{CANDIDATES_DIR}'.")
         sys.exit(0)
         
-    failed = False
-    print(f"🔍 Evaluating {len(candidate_files)} candidate frame(s) against golden baselines (tolerance MSE <= {DEFAULT_TOLERANCE})...")
+    print(f"\n🔍 Parallel Dual-Pass Evaluation: {len(candidate_files)} candidate(s) (Strict Pixel Threshold > {PIXEL_DIFF_THRESHOLD_COUNT} px @ 5%, SSIM >= {SSIM_THRESHOLD})...")
     
-    for filename in sorted(candidate_files):
-        cand_path = os.path.join(CANDIDATES_DIR, filename)
-        base_path = os.path.join(BASELINES_DIR, filename)
-        
-        if not os.path.exists(base_path):
-            print(f"[FAIL: NO GOLDEN BASELINE] {filename} missing baseline in '{BASELINES_DIR}'")
+    failed = False
+    results = {}
+    
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        future_to_file = {executor.submit(evaluate_single_image, f): f for f in candidate_files}
+        for future in concurrent.futures.as_completed(future_to_file):
+            filename = future_to_file[future]
+            try:
+                fname, passed, msg = future.result()
+                results[fname] = (passed, msg)
+            except Exception as e:
+                results[filename] = (False, f"[FAIL: WORKER EXCEPTION] {filename}: {e}")
+                
+    for filename in candidate_files:
+        passed, msg = results[filename]
+        print(msg)
+        if not passed:
             failed = True
-            continue
-            
-        try:
-            img_cand = Image.open(cand_path)
-            img_base = Image.open(base_path)
-        except Exception as e:
-            print(f"[FAIL: IMAGE LOAD ERROR] {filename}: {e}")
-            failed = True
-            continue
-            
-        if img_cand.size != img_base.size:
-            print(f"[FAIL: DIMENSION MISMATCH] {filename} (candidate: {img_cand.size}, baseline: {img_base.size})")
-            failed = True
-            continue
-            
-        mse = compute_image_mse(img_cand, img_base)
-        
-        if mse > DEFAULT_TOLERANCE:
-            diff = ImageChops.difference(img_cand.convert("RGB"), img_base.convert("RGB"))
-            diff_filename = f"{os.path.splitext(filename)[0]}_diff.png"
-            diff_path = os.path.join(ARTIFACTS_DIR, diff_filename)
-            create_heatmap_diff(img_cand, img_base, diff, diff_path)
-            print(f"[FAIL: MSE EXCEEDS THRESHOLD] {filename} (MSE: {mse:.6f} > {DEFAULT_TOLERANCE}) -> Heatmap saved to {diff_path}")
-            failed = True
-        else:
-            print(f"[PASS: MSE WITHIN TOLERANCE] {filename} (MSE: {mse:.6f} <= {DEFAULT_TOLERANCE})")
             
     if failed:
-        print("❌ Universal MSE Baseline Validation: FAILED")
+        print("\n❌ Universal Hybrid Visual Regression Pipeline: FAILED")
         sys.exit(1)
     else:
-        print("✅ Universal MSE Baseline Validation: PASSED")
+        print("\n✅ Universal Hybrid Visual Regression Pipeline: PASSED")
         sys.exit(0)
 
 if __name__ == "__main__":
