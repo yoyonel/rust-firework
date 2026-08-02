@@ -2,15 +2,26 @@ name: Quality Canvas CI/CD
 
 on:
   push:
-    branches:
-      - "**"
+    branches: ["**"]
   pull_request:
-    branches:
-      - master
-      - develop
+    branches: [master, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  packages: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  CARGO_TERM_COLOR: always
 
 jobs:
-  quality-canvas:
+  static-checks:
+    name: Lint & Static Analysis
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -22,8 +33,55 @@ jobs:
           version: 3.38.0
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build Container Environment
-        run: task env:sync
+      - name: Lint GitHub Actions workflows
+        uses: rhysd/actionlint@v1.7.4
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.2.0
+        with:
+          dockerfile: env/Dockerfile.env
+
+  quality-canvas:
+    name: Build & Test Canvas Engine
+    needs: static-checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.38.0
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Cargo Dependencies & Build Artifacts
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache Docker Layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ hashFiles('env/Dockerfile.env') }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Resolve & Sync Container Environment
+        run: |
+          REGISTRY="ghcr.io/${{ github.repository_owner }}"
+          IMAGE="$REGISTRY/rust-firework-env:latest"
+          if docker pull "$IMAGE"; then
+            echo "GHCR image pulled, tagging canvas-env:latest..."
+            docker tag "$IMAGE" canvas-env:latest
+          else
+            echo "Fallback to local sync..."
+            task env:sync
+          fi
 
       - name: Run Native Unit Tests
         run: task test:unit
@@ -37,3 +95,5 @@ jobs:
         with:
           name: visual-regression-heatmaps
           path: tests/visual_baselines/artifacts/
+          if-no-files-found: ignore
+          retention-days: 7
