@@ -2,9 +2,9 @@ name: Quality Canvas CI/CD
 
 on:
   push:
-    branches: ["**"]
+    branches: [master, main, develop]
   pull_request:
-    branches: [master, develop]
+    branches: [master, main, develop]
   workflow_dispatch:
 
 concurrency:
@@ -40,6 +40,7 @@ jobs:
         uses: hadolint/hadolint-action@v3.2.0
         with:
           dockerfile: env/Dockerfile.env
+          config: .hadolint.yaml
 
   quality-canvas:
     name: Build & Test Canvas Engine

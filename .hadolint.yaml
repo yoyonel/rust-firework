@@ -1,0 +1,6 @@
+---
+# Ignore unpinned package versions for dynamic dev environments
+ignored:
+  - DL3008 # Pin versions in apt get install
+  - DL3013 # Pin versions in pip
+failure-threshold: error
