@@ -158,7 +158,8 @@ tasks:
             echo "Error: No container runtime found." && exit 1
           fi
         else
-          echo "[TEST:VISUAL] Running headless visual regression tests"
+          echo "[TEST:VISUAL] Executing universal visual regression suite"
+          chmod +x scripts/verify_visual.py
           xvfb-run -a python3 scripts/verify_visual.py
         fi
 
