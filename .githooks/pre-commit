@@ -1,9 +1,5 @@
 #!/bin/sh
 set -eu
 
-if command -v task >/dev/null 2>&1; then
-    task gui-persistence-check
-else
-    ./scripts/check_gui_persistence.sh
-fi
+./scripts/check_gui_persistence.sh
 cargo fmt -- --check
