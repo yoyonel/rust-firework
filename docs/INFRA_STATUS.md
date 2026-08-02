@@ -5,9 +5,7 @@
 | Tool / Compiler | Version / OS | Status | Execution Context |
 | :--- | :--- | :--- | :--- |
 | **Base OS** | Ubuntu 24.04 LTS | `[ OK ]` | `canvas-env:latest` |
-| **C/C++** | Clang 18.1.3 | `[ OK ]` | Built-in container |
 | **Rust** | Cargo 1.97.1 | `[ OK ]` | Built-in container |
-| **Odin** | dev-2026-05-nightly | `[ OK ]` | Built-in container |
 | **Python** | Python 3 + pip | `[ OK ]` | Built-in container |
 
 ## 2. Core Infrastructure
@@ -16,13 +14,13 @@
 | **Root Orchestrator** | `[ OK ]` | `task --list` | go-task API exposing all commands. |
 | **Container Engine** | `[ OK ]` | `task env:sync` | Builds/Syncs the Docker image locally. |
 | **Execution Wrapper** | `[ OK ]` | Self-Reentrant Tasks | Auto-reentrant container task execution. |
-| **Project Initializer** | `[ OK ]` | `./scripts/init_project.sh` | Template instantiation for C11, Vulkan, Rust, and Odin. |
+| **Project Initializer** | `[ OK ]` | `./scripts/init_project.sh` | Template instantiation for Rust workspace. |
 
 ## 3. QA & Testing Pipeline
 | Test Typology | Status | Target CLI | Infrastructure Needs |
 | :--- | :--- | :--- | :--- |
-| **Unit Testing** | `[ OK ]` | `task test:unit` | Agnostic self-reentrant test execution under Xvfb. |
-| **Visual Regression** | `[ OK ]` | `task test:visual` | Native Rust visual regression test suite under Xvfb. |
+| **Unit Testing** | `[ OK ]` | `task test:unit` | Cargo unit test execution under Xvfb. |
+| **Visual Regression** | `[ OK ]` | `task test:visual` | Headless Python multiprocessing pipeline (`verify_baselines.py`). |
 | **Chaos / Stress** | `[ TODO ]` | `task test:chaos` | Fuzzing & stress test execution. |
 
 ## 4. CI/CD & Remote Pipelines

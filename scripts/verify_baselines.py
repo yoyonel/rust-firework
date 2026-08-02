@@ -87,13 +87,13 @@ def main():
     run_self_calibration()
     
     if not os.path.exists(CANDIDATES_DIR):
-        print(f"[WARN] Candidates directory '{CANDIDATES_DIR}' does not exist.")
-        sys.exit(0)
+        print(f"[FAIL: CRITICAL] Candidates directory '{CANDIDATES_DIR}' does not exist.")
+        sys.exit(1)
         
     candidate_files = sorted([f for f in os.listdir(CANDIDATES_DIR) if f.endswith(".png")])
     if not candidate_files:
-        print(f"[WARN] No candidate PNG files found in '{CANDIDATES_DIR}'.")
-        sys.exit(0)
+        print(f"[FAIL: CRITICAL] No candidate PNG files found in '{CANDIDATES_DIR}'.")
+        sys.exit(1)
         
     print(f"\n🔍 Parallel Dual-Pass Evaluation: {len(candidate_files)} candidate(s) (Strict Pixel Threshold > {PIXEL_DIFF_THRESHOLD_COUNT} px @ 5%, SSIM >= {SSIM_THRESHOLD})...")
     

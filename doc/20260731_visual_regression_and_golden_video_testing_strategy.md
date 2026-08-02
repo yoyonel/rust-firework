@@ -8,7 +8,7 @@ This strategy provides:
 1. **Deterministic Offline Frame/Clip Capture**: Renders predictable simulation state matrix snapshots without manual user interaction.
 2. **100% GUI-Free Capture Rule**: All golden reference snapshots and videos are recorded with ImGui hidden (`gui_open = false` or headless FBO rendering) to prevent control panels from obscuring visual rendering.
 3. **Human Baseline Validation Protocol**: A structured workflow for human inspection and sign-off on golden reference images and videos.
-4. **Automated E2E Pixel & Structural Non-Regression Testing**: Automated image diff comparison (using MSE / SSIM pixel delta thresholds) integrated into CI/CD pipelines.
+4. **Automated E2E Pixel & Structural Non-Regression Testing**: Automated image diff comparison (using Dual-pass SSIM & Strict Pixel distance thresholds) integrated into CI/CD pipelines.
 
 ---
 
@@ -64,8 +64,8 @@ fn test_visual_non_regression_kawase_vs_golden() {
     let current_frame = capture_offline_frame_with_config(&KawaseConfig::default());
     let golden_frame = load_golden_reference("bloom_kawase_4x.png");
     
-    let diff = compute_pixel_delta_mse(&current_frame, &golden_frame);
-    assert!(diff < MAX_ALLOWED_PIXEL_DELTA, "Visual regression detected in Kawase Bloom pass: MSE={}", diff);
+    let (passed, ssim_score) = evaluate_dual_pass_ssim_pixel_distance(&current_frame, &golden_frame);
+    assert!(passed, "Visual regression detected in Kawase Bloom pass: SSIM={}", ssim_score);
 }
 ```
 
