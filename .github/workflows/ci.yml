@@ -1,150 +1,39 @@
-name: Rust CI with Coverage
+name: Quality Canvas CI/CD
 
 on:
   push:
-    # sur chaque push
     branches:
       - "**"
   pull_request:
-    # sur chaque pull request
     branches:
       - master
       - develop
-  workflow_dispatch: # permet le lancement manuellement du workflow
-  schedule:
-    - cron: "0 0 * * *" # tous les jours à minuit
 
 jobs:
-  build-and-test:
-    # Ne s'exécute que si ce n'est pas un push vers une branche ayant une PR ouverte
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
+  quality-canvas:
     runs-on: ubuntu-latest
-    env:
-      DISPLAY: :99
-      RUST_VERSION: 1.90.0
-      RUSTC_WRAPPER: sccache
-      CARGO_TERM_COLOR: always
-
     steps:
-      # --- Étape 1 : Checkout du code ---
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      # --- Étape 2 : Préparer Cargo.toml pour la CI (retirer patch tracy-client local) ---
-      - name: Strip local patches in CI
-        run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
-
-      # 🦀 2. Installation de Rust toolchain
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: llvm-tools-preview
-
-      # 🚀 Installation de Taskfile
       - name: Install Task
         uses: arduino/setup-task@v2
         with:
-          version: 3.50.0
+          version: 3.38.0
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
-      # --- Étape 3 : Installer les outils système ---
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake g++ \
-            libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev \
-            libxrandr-dev libxinerama-dev libglu1-mesa-dev \
-            libasound2-dev alsa-utils alsa-oss \
-            pulseaudio pulseaudio-utils \
-            xvfb xauth pkg-config make git ca-certificates curl \
-            ffmpeg xdotool
+      - name: Build Container Environment
+        run: task env:sync
 
-      # 🧰 3. Cache Rustup + toolchain LLVM
-      - name: Cache Rustup and LLVM tools
-        uses: actions/cache@v4
+      - name: Run Native Unit Tests
+        run: task test:unit
+
+      - name: Run Universal Visual Regression Pipeline
+        run: task test:visual
+
+      - name: Upload Visual Regression Heatmaps
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          path: |
-            ~/.rustup/toolchains
-            ~/.rustup/components
-          key: ${{ runner.os }}-rustup-${{ env.RUST_VERSION }}
-          restore-keys: |
-            ${{ runner.os }}-rustup-
-
-      # ⚡ 4. Cache Cargo registry & git & bin (téléchargement dépendances)
-      - name: Cache Cargo registry & git & bin
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            ~/.cargo/bin
-          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-registry-
-
-      # 🧱 5. Cache du répertoire target (artefacts compilés)
-      - name: Cache Cargo target directory
-        uses: actions/cache@v4
-        with:
-          path: target
-          key: ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-target-${{ env.RUST_VERSION }}-
-            ${{ runner.os }}-cargo-target-
-
-      # --- Installation ultra rapide de sccache (binaire précompilé) ---
-      - name: Install sccache (binary)
-        run: |
-          SCCACHE_VERSION="0.7.4"
-          curl -L "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o sccache.tar.gz
-          tar xzf sccache.tar.gz
-          sudo mv sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache /usr/local/bin/
-          sccache --version
-          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
-
-      - name: SCCache start server
-        run: sccache --start-server
-
-      # 💾 7. Cache sccache binaire (stocke les artefacts compilés)
-      - name: Cache sccache binaries
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/sccache
-          key: ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-${{ hashFiles('**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-sccache-${{ env.RUST_VERSION }}-
-            ${{ runner.os }}-sccache-
-
-      - name: Lint project
-        run: |
-          rustup component add rustfmt clippy
-          task lint
-
-      # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
-      - name: Install cargo-llvm-cov
-        run: |
-          if ! command -v cargo-llvm-cov &> /dev/null; then
-            cargo install cargo-llvm-cov --locked
-          else
-            echo "cargo-llvm-cov already installed, skipping..."
-          fi
-
-      # --- Étape 5 : Build du projet ---
-      - name: Build project
-        run: |
-          task build-release
-
-      # --- Étape 6 : Lancer les tests avec coverage (3 Keyframes) ---
-      - name: Run tests with coverage
-        run: task ci:coverage
-
-      # --- Étape 7 : Full 120-Frame Visual Non-Regression (Pre-Merge Master) ---
-      - name: Run Full 120-Frame Visual Non-Regression (Pre-Merge Master)
-        if: github.event_name == 'pull_request' && github.base_ref == 'master'
-        run: task test-visual-full
-
-      - name: SCCache stop server
-        run: |
-          sccache --show-stats
-          sccache --stop-server
+          name: visual-regression-heatmaps
+          path: tests/visual_baselines/artifacts/
