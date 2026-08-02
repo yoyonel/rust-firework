@@ -25,218 +25,86 @@ tasks:
     desc: "Build dev binary with debug symbols & runtime checks"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task build:dev
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task build:dev
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[BUILD:DEV] Executing target build for {{.PROJECT_NAME}}"
-          cargo build
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[BUILD:DEV] Executing target build for {{.PROJECT_NAME}}"
+        cargo build
 
   build:release:
     desc: "Build fully optimized release binary"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task build:release
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task build:release
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[BUILD:RELEASE] Executing LTO/Release target build"
-          cargo build --release
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[BUILD:RELEASE] Executing LTO/Release target build"
+        cargo build --release
 
   build:sanitized:
     desc: "Build with AddressSanitizer (ASan) & UBSan"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task build:sanitized
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task build:sanitized
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[BUILD:SANITIZED] Building with ASan/UBSan instrumentation"
-          RUSTFLAGS="-Zsanitizer=address" cargo build
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[BUILD:SANITIZED] Building with ASan/UBSan instrumentation"
+        RUSTFLAGS="-Zsanitizer=address" cargo build
 
   check:format:
     desc: "Check formatting across all code and meta-files"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task check:format
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task check:format
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[CHECK:FORMAT] Running clang-format / rustfmt / odin fmt / prettier"
-          cargo fmt --check
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[CHECK:FORMAT] Running clang-format / rustfmt / odin fmt / prettier"
+        cargo fmt --check
 
   check:lint:
     desc: "Run static analysis and linters"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task check:lint
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task check:lint
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[CHECK:LINT] Running clang-tidy / clippy / odin check / hadolint / actionlint"
-          cargo clippy -- -D warnings
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[CHECK:LINT] Running clang-tidy / clippy / odin check / hadolint / actionlint"
+        cargo clippy -- -D warnings
 
   test:unit:
     desc: "Execute native unit test suite"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task test:unit
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task test:unit
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "Running unit tests natively..."
-          chmod +x scripts/run_unit_tests.sh
-          ./scripts/run_unit_tests.sh
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "Running unit tests natively..."
+        chmod +x scripts/run_unit_tests.sh
+        ./scripts/run_unit_tests.sh
 
   test:visual:
     desc: "Execute headless visual regression tests under Xvfb"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task test:visual
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task test:visual
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[TEST:VISUAL] Running engine tests with interactive_tests feature..."
-          xvfb-run -a cargo test --features "interactive_tests" -- --test-threads=1
-          echo "[TEST:VISUAL] Evaluating MSE visual baselines..."
-          chmod +x scripts/verify_baselines.py
-          python3 scripts/verify_baselines.py
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[TEST:VISUAL] Running engine tests with interactive_tests feature..."
+        xvfb-run -a cargo test --features "interactive_tests" -- --test-threads=1
+        echo "[TEST:VISUAL] Evaluating MSE visual baselines..."
+        chmod +x scripts/verify_baselines.py
+        python3 scripts/verify_baselines.py
 
   test:chaos:
     desc: "Execute stress & chaos testing"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task test:chaos
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task test:chaos
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[TEST:CHAOS] Running chaos input/state stress scenarios"
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[TEST:CHAOS] Running chaos input/state stress scenarios"
 
   profile:mem:
     desc: "Profile memory allocation with Heaptrack & Valgrind"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task profile:mem
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task profile:mem
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[PROFILE:MEM] Running Heaptrack / Valgrind Memcheck"
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[PROFILE:MEM] Running Heaptrack / Valgrind Memcheck"
 
   profile:cpu:
     desc: "Profile CPU execution with Tracy / perf"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task profile:cpu
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task profile:cpu
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[PROFILE:CPU] Collecting CPU trace & flamegraph data"
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[PROFILE:CPU] Collecting CPU trace & flamegraph data"
 
   profile:gpu:
     desc: "Capture GPU frame trace with RenderDoc"
     cmds:
       - |
-        if [ "{{.IN_CONTAINER}}" = "false" ]; then
-          if command -v distrobox >/dev/null 2>&1 && distrobox list | grep -q "{{.DISTROBOX_NAME}}"; then
-            exec distrobox enter "{{.DISTROBOX_NAME}}" -- task profile:gpu
-          elif command -v docker >/dev/null 2>&1; then
-            exec docker run --rm -i \
-              -v "$PWD:/work" -w /work \
-              -e DISPLAY=${DISPLAY:-} -v /tmp/.X11-unix:/tmp/.X11-unix \
-              "{{.CONTAINER_IMAGE}}" task profile:gpu
-          else
-            echo "Error: No container runtime found." && exit 1
-          fi
-        else
-          echo "[PROFILE:GPU] Capturing RenderDoc frame trace"
-        fi
+        [ "{{.IN_CONTAINER}}" = "false" ] && exec ./scripts/run_in_container.sh "{{.TASK}}" "{{.DISTROBOX_NAME}}" "{{.CONTAINER_IMAGE}}"
+        echo "[PROFILE:GPU] Capturing RenderDoc frame trace"
