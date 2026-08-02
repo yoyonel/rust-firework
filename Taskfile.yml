@@ -206,7 +206,7 @@ tasks:
     desc: "Stress test de bascule rapide Fullscreen ↔ Window (détection deadlocks / session logout)"
     deps: [build-debug]
     cmds:
-      - "./scripts/test_stress_fullscreen_rust.sh ./target/debug/{{.APP_NAME}} {{.CLI_ARGS | default \"50 100\"}}"
+      - "./scripts/test_stress_fullscreen_rust.sh ./target/debug/{{.APP_NAME}} {{.CLI_ARGS | default \"50 20\"}}"
 
   run-prime-with-hud:
     desc: "MangoHud (Compatible NVidia) Raccourci: RIGHT-SHIFT+F10"

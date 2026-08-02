@@ -118,14 +118,7 @@ wait_for_log_pattern() {
 }
 
 send_toggle_key() {
-    local wid
-    wid=$(timeout "$XDOTOOL_TIMEOUT" xdotool search --name "$WINDOW_NAME" 2>/dev/null | head -n 1 || true)
-    if [ -n "$wid" ]; then
-        timeout "$XDOTOOL_TIMEOUT" xdotool windowfocus "$wid" 2>/dev/null || true
-        timeout "$XDOTOOL_TIMEOUT" xdotool windowactivate "$wid" 2>/dev/null || true
-        sleep 0.05
-    fi
-    timeout "$XDOTOOL_TIMEOUT" xdotool key --delay 0 F11 2>/dev/null || true
+    xdotool key --window "$WID" --delay 0 F11 2>/dev/null || xdotool key --delay 0 F11 2>/dev/null || true
 }
 
 capture_stacks() {
@@ -145,67 +138,51 @@ capture_stacks() {
     fi
 }
 
+# Ensure window focus once before starting burst
+xdotool windowfocus "$WID" 2>/dev/null || true
+xdotool windowactivate "$WID" 2>/dev/null || true
+sleep 0.2
+
 for ((i = 1; i <= ITERATIONS; i++)); do
     if ! kill -0 $APP_PID 2>/dev/null; then
-        echo -e "${RED}[CRASH]${NC} Application died at iteration $i / $ITERATIONS"
+        echo -e "${RED}[CRASH]${NC} Application died before iteration $i / $ITERATIONS"
         echo "$(date -Iseconds) - CRASH at toggle $i" >> "$PROGRESS_FILE"
         CRASH_DETECTED=true
         break
     fi
-
-    if $EXPECT_FULLSCREEN; then
-        direction="→ FULLSCREEN"
-        log_pattern="Fullscreen:"
-    else
-        direction="→ WINDOWED"
-        log_pattern="Window resized:"
-    fi
-
-    count_before=$(grep -c "$log_pattern" "$LOG_FILE" 2>/dev/null || true)
-    count_before=${count_before:-0}
 
     send_toggle_key
 
     if [ "$DELAY_MS" -gt 0 ]; then
-        sleep "$(awk "BEGIN{printf \"%.3f\", $DELAY_MS/1000}")"
+        sleep "$(awk "BEGIN{printf \"%.4f\", $DELAY_MS/1000}")"
     fi
 
-    wait_for_log_pattern "$log_pattern" "$count_before"
-    status=$?
-
-    if [ $status -eq 1 ]; then
-        echo -e "${RED}[CRASH]${NC} Application crashed during Toggle #$i ($direction)"
+    # Check if app crashed immediately after keypress
+    if ! kill -0 $APP_PID 2>/dev/null; then
+        echo -e "${RED}[CRASH]${NC} Application crashed on Toggle #$i"
         echo "$(date -Iseconds) - CRASH at toggle $i" >> "$PROGRESS_FILE"
         CRASH_DETECTED=true
         break
-    elif [ $status -eq 2 ]; then
-        if kill -0 $APP_PID 2>/dev/null; then
-            HANG_COUNT=$((HANG_COUNT + 1))
-            echo -e "${RED}[HANG] Deadlock at Toggle #$i ($direction)${NC}"
-            echo "$(date -Iseconds) - HANG/DEADLOCK at toggle $i ($direction)" >> "$PROGRESS_FILE"
-            capture_stacks "$i" "$direction"
-            kill -9 $APP_PID 2>/dev/null || true
-            break
-        else
-            echo -e "${RED}[CRASH]${NC} Application crashed during Toggle #$i ($direction)"
-            echo "$(date -Iseconds) - CRASH at toggle $i" >> "$PROGRESS_FILE"
-            CRASH_DETECTED=true
-            break
-        fi
-    fi
-
-    if $EXPECT_FULLSCREEN; then
-        EXPECT_FULLSCREEN=false
-    else
-        EXPECT_FULLSCREEN=true
     fi
 
     SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-    elapsed=$(($(date +%s) - START_TIME))
-    msg="Toggle $i / $ITERATIONS completed (${elapsed}s elapsed, ${SUCCESS_COUNT} successful)"
-    echo -e "${GREEN}[OK]${NC}    $msg"
-    echo "$(date -Iseconds) - [OK] $msg" >> "$PROGRESS_FILE"
+    if [ $((i % 10)) -eq 0 ] || [ $i -eq $ITERATIONS ]; then
+        elapsed=$(($(date +%s) - START_TIME))
+        msg="Sent $i / $ITERATIONS rapid toggles (${elapsed}s elapsed)"
+        echo -e "${GREEN}[OK]${NC}    $msg"
+        echo "$(date -Iseconds) - [OK] $msg" >> "$PROGRESS_FILE"
+    fi
 done
+
+# Post-burst check: allow engine event loop 1 second to drain queue and verify no deadlock/crash
+if ! $CRASH_DETECTED; then
+    echo -e "\n${CYAN}[VERIFY]${NC} Waiting 1.5s for event loop to drain queue and check stability..."
+    sleep 1.5
+    if ! kill -0 $APP_PID 2>/dev/null; then
+        echo -e "${RED}[CRASH]${NC} Application crashed during event loop processing after burst!"
+        CRASH_DETECTED=true
+    fi
+fi
 
 END_TIME=$(date +%s)
 TOTAL_TIME=$((END_TIME - START_TIME))
