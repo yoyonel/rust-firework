@@ -459,8 +459,16 @@ impl DspProcessor {
                     let w_out = &mut bus_w_slice[..count];
                     let x_out = &mut bus_x_slice[..count];
 
-                    let inv_fade_in = if fade_in > 0 { 1.0 / fade_in as f32 } else { 0.0 };
-                    let inv_fade_out = if fade_out > 0 { 1.0 / fade_out as f32 } else { 0.0 };
+                    let inv_fade_in = if fade_in > 0 {
+                        1.0 / fade_in as f32
+                    } else {
+                        0.0
+                    };
+                    let inv_fade_out = if fade_out > 0 {
+                        1.0 / fade_out as f32
+                    } else {
+                        0.0
+                    };
 
                     if !active_fade && !apply_lpf {
                         // Boucle 100% vectorisable par le compilateur (SIMD 8-wide AVX2)
@@ -498,8 +506,16 @@ impl DspProcessor {
                 }
             } else {
                 // Path fallback : Vitesse variable (Doppler / Pitch shift avec LERP)
-                let inv_fade_in = if fade_in > 0 { 1.0 / fade_in as f32 } else { 0.0 };
-                let inv_fade_out = if fade_out > 0 { 1.0 / fade_out as f32 } else { 0.0 };
+                let inv_fade_in = if fade_in > 0 {
+                    1.0 / fade_in as f32
+                } else {
+                    0.0
+                };
+                let inv_fade_out = if fade_out > 0 {
+                    1.0 / fade_out as f32
+                } else {
+                    0.0
+                };
 
                 for i in 0..frames {
                     let current_pos = v.pos;
@@ -636,8 +652,16 @@ impl DspProcessor {
             let itd_step_l = (itd_l_samples - start_itd_l) / frames as f32;
             let itd_step_r = (itd_r_samples - start_itd_r) / frames as f32;
 
-            let inv_fade_in = if v.fade_in_samples > 0 { 1.0 / v.fade_in_samples as f32 } else { 0.0 };
-            let inv_fade_out = if v.fade_out_samples > 0 { 1.0 / v.fade_out_samples as f32 } else { 0.0 };
+            let inv_fade_in = if v.fade_in_samples > 0 {
+                1.0 / v.fade_in_samples as f32
+            } else {
+                0.0
+            };
+            let inv_fade_out = if v.fade_out_samples > 0 {
+                1.0 / v.fade_out_samples as f32
+            } else {
+                0.0
+            };
 
             // 3. Boucle de Mixage : Lecture spatiale directe (Zéro Buffer Intermédiaire)
             for (i, frame) in self.acc[..frames].iter_mut().enumerate() {

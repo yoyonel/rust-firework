@@ -52,6 +52,9 @@ Ces outils aident à traquer les goulots d'étranglement (CPU/GPU) et les alloca
 
 | Commande | Description |
 |:---|:---|
+| `task build-profiling-native` | Compile en mode profiling avec `RUSTFLAGS="-C target-cpu=native"` pour émettre les instructions vectorielles AVX2 SIMD natives. |
+| `task asm-dsp-spatial-bus` | Décompile automatiquement la fonction `DspProcessor::process_dsp_spatial_bus` via GDB pour inspecter le kernel vectoriel AVX2 256-bit. |
+| `task asm-count-simd` | Compte et affiche le bilan des instructions SIMD AVX2 (ymm) vs scalaires (xmm) vs divisions (`fdiv`/`divss`) dans le code décompilé. |
 | `task valgrind-callgrind` | Lance le simulateur sous Valgrind Callgrind pour profiler l'usage des caches et du CPU. |
 | `task heaptrack` | Analyse en détail les allocations de tas dynamiques (Heap tracking) pour éliminer tout débordement ou allocation dans les boucles de rendu. |
 
