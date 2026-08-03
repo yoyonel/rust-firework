@@ -23,6 +23,9 @@ pub struct PreviewContext<'a> {
     pub canvas_aspect: f32,
     pub time: f32,
     pub dt: f32,
+    pub rocket_color: [f32; 3],
+    pub simulated_speed: f32,
+    pub simulated_angle_offset_deg: f32,
 }
 
 pub struct SmokePreviewRenderer {
@@ -57,6 +60,7 @@ pub struct SmokePreviewRenderer {
     loc_quad_size: i32,
     loc_quad_tex: i32,
     loc_quad_rot_z: i32,
+    loc_quad_color: i32,
 
     // Task 4.A: Local isolated SmokeSystem for realistic continuous trail physics
     pub smoke_system: SmokeSystem,
@@ -321,6 +325,7 @@ impl SmokePreviewRenderer {
             let loc_quad_size = gl::GetUniformLocation(quad_program, cstr!("uSize"));
             let loc_quad_tex = gl::GetUniformLocation(quad_program, cstr!("uTex"));
             let loc_quad_rot_z = gl::GetUniformLocation(quad_program, cstr!("uRotZ"));
+            let loc_quad_color = gl::GetUniformLocation(quad_program, cstr!("uColor"));
 
             let mut quad_vao = 0;
             let mut quad_vbo = 0;
@@ -384,6 +389,7 @@ impl SmokePreviewRenderer {
                 loc_quad_size,
                 loc_quad_tex,
                 loc_quad_rot_z,
+                loc_quad_color,
                 smoke_system: SmokeSystem::new(128),
                 rng: rand::rng(),
                 emit_timer: 0.0,
@@ -422,12 +428,14 @@ impl SmokePreviewRenderer {
             let nozzle_x = center_x + (rocket_h * 0.5) * rot_rad.sin();
             let nozzle_y = center_y - (rocket_h * 0.5) * rot_rad.cos();
 
-            // Task 4.A: Simulated velocity exhaust vector away from static rocket nozzle
+            // Task 4.A: Simulated velocity exhaust vector with configurable speed and angle offset
             let nozzle_pos = Vec2::new(nozzle_x, nozzle_y);
-            let simulated_rocket_vel = Vec2::new(-rot_rad.sin(), rot_rad.cos()) * 400.0;
+            let total_angle_rad = (ctx.rot_deg + ctx.simulated_angle_offset_deg).to_radians();
+            let simulated_rocket_vel =
+                Vec2::new(-total_angle_rad.sin(), total_angle_rad.cos()) * ctx.simulated_speed;
             let inherited_col = match ctx.config.smoke_color_mode {
                 SmokeColorMode::Custom => Vec3::from_array(ctx.config.smoke_custom_color),
-                SmokeColorMode::RocketColor => Vec3::ONE,
+                SmokeColorMode::RocketColor => Vec3::from_array(ctx.rocket_color),
             };
 
             // Emit particles into isolated local SmokeSystem
@@ -555,6 +563,14 @@ impl SmokePreviewRenderer {
             gl::Uniform2f(self.loc_quad_size, sim_w, sim_h);
             gl::Uniform4f(self.loc_quad_rect, center_x, center_y, rocket_w, rocket_h);
             gl::Uniform1f(self.loc_quad_rot_z, rot_rad);
+            if self.loc_quad_color != -1 {
+                gl::Uniform3f(
+                    self.loc_quad_color,
+                    ctx.rocket_color[0],
+                    ctx.rocket_color[1],
+                    ctx.rocket_color[2],
+                );
+            }
             gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, self.rocket_tex);
             gl::Uniform1i(self.loc_quad_tex, 0);

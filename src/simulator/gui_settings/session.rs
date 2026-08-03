@@ -62,6 +62,15 @@ pub struct GuiSessionState {
     // GUI_PERSIST: gui.layout
     #[serde(default = "default_show_geometry_trimming")]
     pub show_geometry_trimming: bool,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_rocket_color")]
+    pub smoke_preview_rocket_color: [f32; 3],
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_simulated_speed")]
+    pub smoke_preview_simulated_speed: f32,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_simulated_angle_offset")]
+    pub smoke_preview_simulated_angle_offset: f32,
 }
 
 fn default_smoke_preview_max_zoom() -> f32 {
@@ -70,6 +79,18 @@ fn default_smoke_preview_max_zoom() -> f32 {
 
 fn default_show_geometry_trimming() -> bool {
     true
+}
+
+fn default_smoke_preview_rocket_color() -> [f32; 3] {
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR
+}
+
+fn default_smoke_preview_simulated_speed() -> f32 {
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED
+}
+
+fn default_smoke_preview_simulated_angle_offset() -> f32 {
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET
 }
 
 impl Default for GuiSessionState {
@@ -96,6 +117,12 @@ impl Default for GuiSessionState {
             gui_scale: DEFAULT_GUI_SCALE,
             smoke_preview_max_zoom: crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM,
             show_geometry_trimming: true,
+            smoke_preview_rocket_color:
+                crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR,
+            smoke_preview_simulated_speed:
+                crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED,
+            smoke_preview_simulated_angle_offset:
+                crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET,
         }
     }
 }

@@ -51,6 +51,9 @@ pub struct GuiSettings {
     pub gui_scale: f32,
     pub smoke_preview_max_zoom: f32,
     pub show_geometry_trimming: bool,
+    pub smoke_preview_rocket_color: [f32; 3],
+    pub smoke_preview_simulated_speed: f32,
+    pub smoke_preview_simulated_angle_offset: f32,
 }
 
 impl Default for GuiSettings {
@@ -78,6 +81,9 @@ impl GuiSettings {
             gui_scale: session.gui_scale,
             smoke_preview_max_zoom: session.smoke_preview_max_zoom,
             show_geometry_trimming: session.show_geometry_trimming,
+            smoke_preview_rocket_color: session.smoke_preview_rocket_color,
+            smoke_preview_simulated_speed: session.smoke_preview_simulated_speed,
+            smoke_preview_simulated_angle_offset: session.smoke_preview_simulated_angle_offset,
         };
         // Sync static AtomicBool from persisted session state
         smoke::SHOW_GEOMETRY_TRIMMING.store(
@@ -177,6 +183,9 @@ impl GuiSettings {
             smoke_preview_max_zoom: self.smoke_preview_max_zoom,
             show_geometry_trimming: smoke::SHOW_GEOMETRY_TRIMMING
                 .load(std::sync::atomic::Ordering::Relaxed),
+            smoke_preview_rocket_color: self.smoke_preview_rocket_color,
+            smoke_preview_simulated_speed: self.smoke_preview_simulated_speed,
+            smoke_preview_simulated_angle_offset: self.smoke_preview_simulated_angle_offset,
         };
 
         if let Err(e) = session.save_to_file(path) {
@@ -409,6 +418,9 @@ impl GuiSettings {
                                 cmd_queue,
                                 physic_reinit_requested,
                                 &mut self.smoke_preview_max_zoom,
+                                &mut self.smoke_preview_rocket_color,
+                                &mut self.smoke_preview_simulated_speed,
+                                &mut self.smoke_preview_simulated_angle_offset,
                             );
                         });
                     }
@@ -428,6 +440,9 @@ impl GuiSettings {
                                 physic_engine,
                                 cmd_queue,
                                 &mut self.smoke_preview_max_zoom,
+                                &mut self.smoke_preview_rocket_color,
+                                &mut self.smoke_preview_simulated_speed,
+                                &mut self.smoke_preview_simulated_angle_offset,
                             );
                         });
                     }

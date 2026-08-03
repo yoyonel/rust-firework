@@ -15,11 +15,15 @@ static mut PREVIEW_GPU: Option<SmokePreviewRenderer> = None;
 pub static SHOW_GEOMETRY_TRIMMING: AtomicBool = AtomicBool::new(true);
 
 /// Shared GUI control panel for Smoke & Alpha Erosion parameters with per-parameter reset buttons.
+#[allow(clippy::too_many_arguments)]
 pub fn render_smoke_controls(
     ui: &Ui,
     state: &impl SmokeStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
     preview_max_zoom: &mut f32,
+    preview_rocket_color: &mut [f32; 3],
+    preview_simulated_speed: &mut f32,
+    preview_simulated_angle_offset: &mut f32,
 ) {
     let cfg = state.config();
     let default_cfg = PhysicConfig::default();
@@ -476,14 +480,68 @@ pub fn render_smoke_controls(
             physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM
         ));
     }
+
+    ui.set_next_item_width(item_width);
+    ui.color_edit3(
+        "Preview Rocket Color (`gui.smoke_preview_rocket_color`)",
+        preview_rocket_color,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_rocket_color") {
+        *preview_rocket_color = physic_constants::DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text("Reset preview rocket color to white [1.0, 1.0, 1.0]");
+    }
+
+    ui.set_next_item_width(item_width);
+    ui.slider(
+        "Preview Rocket Speed (m/s) (`gui.smoke_preview_simulated_speed`)",
+        0.0,
+        1000.0,
+        preview_simulated_speed,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_simulated_speed") {
+        *preview_simulated_speed = physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text(format!(
+            "Reset to default: {:.1} m/s",
+            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED
+        ));
+    }
+
+    ui.set_next_item_width(item_width);
+    ui.slider(
+        "Preview Velocity Angle (deg) (`gui.smoke_preview_simulated_angle_offset`)",
+        -180.0,
+        180.0,
+        preview_simulated_angle_offset,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_simulated_angle_offset") {
+        *preview_simulated_angle_offset =
+            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text(format!(
+            "Reset to default: {:.1}°",
+            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET
+        ));
+    }
 }
 
 /// Renders the dedicated Smoke & Alpha Erosion settings tab.
+#[allow(clippy::too_many_arguments)]
 pub fn render_smoke_settings_tab(
     ui: &Ui,
     state: &impl SmokeStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
     preview_max_zoom: &mut f32,
+    preview_rocket_color: &mut [f32; 3],
+    preview_simulated_speed: &mut f32,
+    preview_simulated_angle_offset: &mut f32,
 ) {
     let cfg = state.config();
 
@@ -495,6 +553,10 @@ pub fn render_smoke_settings_tab(
     if ui.small_button("Reset Smoke Defaults") {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ResetDefaults));
         *preview_max_zoom = physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM;
+        *preview_rocket_color = physic_constants::DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR;
+        *preview_simulated_speed = physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED;
+        *preview_simulated_angle_offset =
+            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET;
     }
 
     ui.separator();
@@ -546,6 +608,9 @@ pub fn render_smoke_settings_tab(
             canvas_aspect,
             time: ui.time() as f32,
             dt: ui.io().delta_time,
+            rocket_color: *preview_rocket_color,
+            simulated_speed: *preview_simulated_speed,
+            simulated_angle_offset_deg: *preview_simulated_angle_offset,
         };
         preview.render(&ctx)
     };
@@ -799,7 +864,15 @@ pub fn render_smoke_settings_tab(
     ui.spacing();
     ui.separator();
 
-    render_smoke_controls(ui, state, cmd_queue, preview_max_zoom);
+    render_smoke_controls(
+        ui,
+        state,
+        cmd_queue,
+        preview_max_zoom,
+        preview_rocket_color,
+        preview_simulated_speed,
+        preview_simulated_angle_offset,
+    );
 }
 
 #[cfg(test)]
@@ -823,7 +896,18 @@ mod tests {
         let ui = imgui_ctx.frame();
 
         let mut preview_max_zoom = 10.0;
-        render_smoke_controls(ui, &config, &mut cmd_queue, &mut preview_max_zoom);
+        let mut preview_rocket_color = [1.0, 1.0, 1.0];
+        let mut preview_simulated_speed = 400.0;
+        let mut preview_simulated_angle_offset = 0.0;
+        render_smoke_controls(
+            ui,
+            &config,
+            &mut cmd_queue,
+            &mut preview_max_zoom,
+            &mut preview_rocket_color,
+            &mut preview_simulated_speed,
+            &mut preview_simulated_angle_offset,
+        );
 
         assert!(cmd_queue.capacity() >= 16);
     }
