@@ -7,8 +7,10 @@ use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture};
 use crate::utils::human_bytes::HumanBytes;
 use crate::{label_gl_object, pop_debug_group, push_debug_group};
 
-const VERTEX_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.vert.glsl";
-const FRAGMENT_SHADER_PATH: &str = "assets/shaders/instanced_textured_quad.frag.glsl";
+use crate::renderer_engine::constants;
+
+const VERTEX_SHADER_PATH: &str = constants::SHADER_INSTANCED_QUAD_VERTEX_PATH;
+const FRAGMENT_SHADER_PATH: &str = constants::SHADER_INSTANCED_QUAD_FRAGMENT_PATH;
 
 pub struct RendererGraphicsInstanced {
     vaos: [u32; 3],

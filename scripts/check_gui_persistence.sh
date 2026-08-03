@@ -44,8 +44,9 @@ GREP_CMD="grep -rn -q -F"
 if command -v rg >/dev/null 2>&1; then
     GREP_CMD="rg -q -F"
 fi
-$GREP_CMD 'save_to_file("assets/config/renderer.toml")' src/simulator.rs
-$GREP_CMD 'save_to_file("assets/config/physic.toml")' src/simulator.rs
+$GREP_CMD 'save_to_file' src/simulator.rs
+$GREP_CMD 'get_renderer_config_path' src/simulator.rs
+$GREP_CMD 'get_physic_config_path' src/simulator.rs
 $GREP_CMD 'tonemapping_comparison_mode' "$SOURCE"
 $GREP_CMD 'explosion_shape' "$SOURCE"
 $GREP_CMD 'fullscreen' "$SOURCE"

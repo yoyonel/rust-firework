@@ -10,8 +10,10 @@ use crate::renderer_engine::utils::texture::load_texture;
 use crate::utils::human_bytes::HumanBytes;
 use crate::{label_gl_object, pop_debug_group, push_debug_group};
 
-const VERTEX_SHADER_PATH: &str = "assets/shaders/smoke_instanced.vert.glsl";
-const FRAGMENT_SHADER_PATH: &str = "assets/shaders/smoke_instanced.frag.glsl";
+use crate::renderer_engine::constants;
+
+const VERTEX_SHADER_PATH: &str = constants::SHADER_SMOKE_VERTEX_PATH;
+const FRAGMENT_SHADER_PATH: &str = constants::SHADER_SMOKE_FRAGMENT_PATH;
 
 /// GPU instance data structure for instanced smoke rendering.
 /// Pass layout: position (vec3), scale (float), alpha (float), rotation (float), intensity (float), color (vec3), normalized_age (float).
@@ -67,8 +69,8 @@ pub struct SmokeRenderer {
 
 impl SmokeRenderer {
     pub fn new(max_smoke_particles: usize, texture_path: &str) -> Self {
-        const NOISE_TEXTURE_PATH: &str = "assets/textures/noise.png";
-        const FLOW_MAP_TEXTURE_PATH: &str = "assets/textures/flowmap.png";
+        const NOISE_TEXTURE_PATH: &str = constants::TEXTURE_NOISE_PATH;
+        const FLOW_MAP_TEXTURE_PATH: &str = constants::TEXTURE_FLOW_MAP_PATH;
 
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };

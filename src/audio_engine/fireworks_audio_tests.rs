@@ -41,9 +41,10 @@ fn enqueue_sound_test(engine: &FireworksAudio3D, pos: glam::Vec2, gain: f32) -> 
 }
 
 fn build_engine() -> FireworksAudio3D {
+    use crate::audio_engine::constants;
     FireworksAudio3D::new(FireworksAudioConfig {
-        rocket_path: "assets/sounds/rocket.wav".into(),
-        explosion_path: "assets/sounds/explosion.wav".into(),
+        rocket_path: constants::DEFAULT_ROCKET_SOUND_PATH.into(),
+        explosion_path: constants::DEFAULT_EXPLOSION_SOUND_PATH.into(),
         listener_pos: glam::Vec2::ZERO,
         sample_rate: 1000,
         block_size: 1024 * 4,
