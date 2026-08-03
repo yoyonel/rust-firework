@@ -21,6 +21,10 @@ fn test_gui_session_state_default_values() {
     assert_ne!(session.audio_dsp_mask, 0);
     assert_eq!(session.explosion_shape, PersistedExplosionShape::Spherical);
     assert!(!session.tonemapping_comparison_mode);
+    assert_eq!(session.smoke_preview_zoom, 1.0);
+    assert_eq!(session.smoke_preview_pan_x, 0.0);
+    assert_eq!(session.smoke_preview_pan_y, 0.0);
+    assert_eq!(session.smoke_preview_rot_z, 0.0);
 }
 
 #[test]
@@ -32,6 +36,10 @@ fn test_gui_session_state_toml_serialization() -> anyhow::Result<()> {
     session.audio_muted = true;
     session.audio_reverb_wet = 0.35;
     session.tonemapping_comparison_mode = true;
+    session.smoke_preview_zoom = 2.5;
+    session.smoke_preview_pan_x = 15.0;
+    session.smoke_preview_pan_y = -10.0;
+    session.smoke_preview_rot_z = -72.0;
     session.explosion_shape = PersistedExplosionShape::Images {
         images: vec![PersistedExplosionImage {
             file_stem: "heart".to_string(),
@@ -57,6 +65,10 @@ fn test_gui_session_state_toml_serialization() -> anyhow::Result<()> {
         session.tonemapping_comparison_mode
     );
     assert_eq!(restored.explosion_shape, session.explosion_shape);
+    assert_eq!(restored.smoke_preview_zoom, 2.5);
+    assert_eq!(restored.smoke_preview_pan_x, 15.0);
+    assert_eq!(restored.smoke_preview_pan_y, -10.0);
+    assert_eq!(restored.smoke_preview_rot_z, -72.0);
 
     Ok(())
 }
@@ -76,6 +88,10 @@ fn test_gui_session_state_file_persistence() -> anyhow::Result<()> {
     session.audio_reverb_wet = 0.50;
     session.preset_weights = [2.5, 3.0, 1.0, 0.5, 4.0];
     session.tonemapping_comparison_mode = true;
+    session.smoke_preview_zoom = 3.0;
+    session.smoke_preview_pan_x = -20.0;
+    session.smoke_preview_pan_y = 12.0;
+    session.smoke_preview_rot_z = 45.0;
     session.explosion_shape = PersistedExplosionShape::Images {
         images: vec![PersistedExplosionImage {
             file_stem: "heart".to_string(),
@@ -106,6 +122,10 @@ fn test_gui_session_state_file_persistence() -> anyhow::Result<()> {
     assert_eq!(loaded.window_pos, Some([100.0, 150.0]));
     assert_eq!(loaded.window_size, Some([700.0, 600.0]));
     assert_eq!(loaded.scroll_y, Some(250.0));
+    assert_eq!(loaded.smoke_preview_zoom, 3.0);
+    assert_eq!(loaded.smoke_preview_pan_x, -20.0);
+    assert_eq!(loaded.smoke_preview_pan_y, 12.0);
+    assert_eq!(loaded.smoke_preview_rot_z, 45.0);
 
     Ok(())
 }

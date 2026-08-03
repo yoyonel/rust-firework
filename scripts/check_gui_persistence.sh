@@ -54,6 +54,10 @@ $GREP_CMD 'show_geometry_trimming' "$SOURCE"
 $GREP_CMD 'smoke_preview_rocket_color' "$SOURCE"
 $GREP_CMD 'smoke_preview_simulated_speed' "$SOURCE"
 $GREP_CMD 'smoke_preview_simulated_angle_offset' "$SOURCE"
+$GREP_CMD 'smoke_preview_zoom' "$SOURCE"
+$GREP_CMD 'smoke_preview_pan_x' "$SOURCE"
+$GREP_CMD 'smoke_preview_pan_y' "$SOURCE"
+$GREP_CMD 'smoke_preview_rot_z' "$SOURCE"
 
 
 echo "GUI persistence check passed ($(printf '%s\n' "$markers" | wc -l | tr -d ' ') inventory rows)."

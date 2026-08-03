@@ -79,6 +79,10 @@ fn test_full_gui_persistence_roundtrip_between_runs() -> anyhow::Result<()> {
             weight: 2.0,
         }],
     };
+    session.smoke_preview_zoom = 2.5;
+    session.smoke_preview_pan_x = 15.0;
+    session.smoke_preview_pan_y = -10.0;
+    session.smoke_preview_rot_z = -72.0;
     session.save_to_file(gui_session_path_str)?;
 
     // =========================================================================
@@ -129,6 +133,10 @@ fn test_full_gui_persistence_roundtrip_between_runs() -> anyhow::Result<()> {
     assert_eq!(loaded_session.window_pos, Some([120.0, 180.0]));
     assert_eq!(loaded_session.window_size, Some([800.0, 650.0]));
     assert_eq!(loaded_session.scroll_y, Some(140.0));
+    assert_eq!(loaded_session.smoke_preview_zoom, 2.5);
+    assert_eq!(loaded_session.smoke_preview_pan_x, 15.0);
+    assert_eq!(loaded_session.smoke_preview_pan_y, -10.0);
+    assert_eq!(loaded_session.smoke_preview_rot_z, -72.0);
     assert_eq!(loaded_session.explosion_shape, session.explosion_shape);
 
     Ok(())
