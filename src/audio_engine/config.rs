@@ -26,8 +26,8 @@ use crate::audio_engine::constants;
 impl Default for AudioConfig {
     fn default() -> Self {
         Self {
-            rocket_path: PathBuf::from("assets/sounds/rocket.wav"),
-            explosion_path: PathBuf::from("assets/sounds/explosion.wav"),
+            rocket_path: PathBuf::from(constants::DEFAULT_ROCKET_SOUND_PATH),
+            explosion_path: PathBuf::from(constants::DEFAULT_EXPLOSION_SOUND_PATH),
             listener_pos: [0.0, 0.0],
             sample_rate: constants::DEFAULT_SAMPLE_RATE,
             block_size: constants::DEFAULT_BLOCK_SIZE,
@@ -39,7 +39,7 @@ impl Default for AudioConfig {
 
 impl AudioConfig {
     /// Charge la configuration depuis un fichier TOML.
-    pub fn from_file(path: &str) -> anyhow::Result<Self> {
+    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Self> {
         let text = std::fs::read_to_string(path)?;
         Ok(toml::from_str(&text)?)
     }
