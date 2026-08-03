@@ -1,6 +1,8 @@
+use super::theme::{COLOR_COMMAND_NAME, COLOR_HEADER, COLOR_TEXT_HINT, COLOR_TEXT_MUTED};
 use crate::audio_engine::AudioEngine;
 use crate::domain_contracts::{EngineCommand, RendererCommand, RendererStateReader};
 use crate::physic_engine::PhysicEngineFull;
+use crate::renderer_engine::constants as renderer_constants;
 use crate::utils::command_console::CommandRegistry;
 use imgui::Ui;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -17,7 +19,7 @@ pub fn render_renderer_settings_tab(
 
     // GUI_PERSIST: renderer.config
     ui.spacing();
-    ui.text_colored([0.4, 0.8, 1.0, 1.0], "=== SHADER & CONFIG ACTIONS ===");
+    ui.text_colored(COLOR_HEADER, "=== SHADER & CONFIG ACTIONS ===");
 
     if ui.button("[RELOAD] Reload Shaders (`renderer.reload_shaders`)") {
         reload_shaders_requested.store(true, Ordering::Relaxed);
@@ -39,10 +41,7 @@ pub fn render_renderer_settings_tab(
 
     ui.spacing();
     ui.separator();
-    ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
-        "=== GRAPHICAL ELEMENTS VISIBILITY ===",
-    );
+    ui.text_colored(COLOR_HEADER, "=== GRAPHICAL ELEMENTS VISIBILITY ===");
     ui.same_line();
     if ui.small_button("Reset Visibility Defaults") {
         cmd_queue.push(EngineCommand::Renderer(
@@ -93,21 +92,17 @@ pub fn render_renderer_settings_tab(
     ui.spacing();
     ui.separator();
 
-    // Use a responsive item width (45% of content region, capped 200px..360px) so labels have plenty of space on the right
-    let item_width = (ui.content_region_avail()[0] * 0.45).clamp(200.0, 360.0);
+    let font_sz = ui.current_font_size();
+    let item_width = (ui.content_region_avail()[0] * 0.45).clamp(font_sz * 14.0, font_sz * 26.0);
     let _item_w_token = ui.push_item_width(item_width);
 
-    ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
-        "=== TONEMAPPING (`renderer.tonemapping`) ===",
-    );
+    ui.text_colored(COLOR_HEADER, "=== TONEMAPPING (`renderer.tonemapping`) ===");
     ui.same_line();
     if ui.small_button("Reset Tonemapping") {
         cmd_queue.push(EngineCommand::Renderer(RendererCommand::ResetTonemapping));
         tonemapping_comparison_mode.store(false, Ordering::Relaxed);
     }
 
-    // Current Tonemapping mode
     let modes = [
         (
             "Reinhard",
@@ -146,7 +141,6 @@ pub fn render_renderer_settings_tab(
         ));
     }
 
-    // Comparison mode checkbox
     let mut comparison_active = tonemapping_comparison_mode.load(Ordering::Relaxed);
     if ui.checkbox(
         "Grid Comparison Mode (`renderer.tonemapping.compare`)",
@@ -160,16 +154,12 @@ pub fn render_renderer_settings_tab(
 
     ui.spacing();
     ui.separator();
-    ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
-        "=== BLOOM PIPELINE (`renderer.bloom.*`) ===",
-    );
+    ui.text_colored(COLOR_HEADER, "=== BLOOM PIPELINE (`renderer.bloom.*`) ===");
     ui.same_line();
     if ui.small_button("Reset Bloom Defaults") {
         cmd_queue.push(EngineCommand::Renderer(RendererCommand::ResetBloomDefaults));
     }
 
-    // Enable / Disable Bloom
     let mut bloom_enabled = cfg.bloom_enabled;
     if ui.checkbox(
         "Enable Bloom (`renderer.bloom.enable` / `disable`)",
@@ -180,12 +170,11 @@ pub fn render_renderer_settings_tab(
         )));
     }
 
-    // Bloom Intensity
     let mut bloom_intensity = cfg.bloom_intensity;
     if ui.slider(
         "Intensity (`renderer.bloom.intensity`)",
-        0.0,
-        10.0,
+        renderer_constants::SLIDER_BLOOM_INTENSITY_MIN,
+        renderer_constants::SLIDER_BLOOM_INTENSITY_MAX,
         &mut bloom_intensity,
     ) {
         cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetBloomIntensity(
@@ -193,17 +182,21 @@ pub fn render_renderer_settings_tab(
         )));
     }
 
-    // Bloom Iterations
     let mut iter = cfg.bloom_iterations as i32;
-    if ui.slider("Iterations (`renderer.bloom.iterations`)", 1, 10, &mut iter) {
+    if ui.slider(
+        "Iterations (`renderer.bloom.iterations`)",
+        renderer_constants::SLIDER_BLOOM_ITERATIONS_MIN as i32,
+        renderer_constants::SLIDER_BLOOM_ITERATIONS_MAX as i32,
+        &mut iter,
+    ) {
         cmd_queue.push(EngineCommand::Renderer(
-            RendererCommand::SetBloomIterations(iter.max(1) as u32),
+            RendererCommand::SetBloomIterations(
+                iter.max(renderer_constants::SLIDER_BLOOM_ITERATIONS_MIN as i32) as u32,
+            ),
         ));
     }
 
-    // Downsample Ratio
-    let downsample_options = [1u32, 2u32, 4u32];
-    let cur_down_idx = downsample_options
+    let cur_down_idx = renderer_constants::BLOOM_DOWNSAMPLE_OPTIONS
         .iter()
         .position(|&v| v == cfg.bloom_downsample)
         .unwrap_or(0);
@@ -215,11 +208,12 @@ pub fn render_renderer_settings_tab(
         &down_labels,
     ) {
         cmd_queue.push(EngineCommand::Renderer(
-            RendererCommand::SetBloomDownsample(downsample_options[sel_down]),
+            RendererCommand::SetBloomDownsample(
+                renderer_constants::BLOOM_DOWNSAMPLE_OPTIONS[sel_down],
+            ),
         ));
     }
 
-    // Blur Method
     let methods = [
         (
             "Gaussian (Classic 5-tap dual)",
@@ -255,10 +249,7 @@ pub fn render_commands_overview_tab<A: AudioEngine, P: PhysicEngineFull>(
     physic_engine: &P,
 ) {
     ui.spacing();
-    ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
-        "=== ALL REGISTERED CONSOLE COMMANDS ===",
-    );
+    ui.text_colored(COLOR_HEADER, "=== ALL REGISTERED CONSOLE COMMANDS ===");
     ui.text("Reference list of commands across Audio, Physics, and Renderer engines:");
 
     let mut commands = commands_registry.get_commands();
@@ -281,13 +272,13 @@ pub fn render_commands_overview_tab<A: AudioEngine, P: PhysicEngineFull>(
                     .cloned()
                     .unwrap_or_default();
 
-                ui.text_colored([0.2, 1.0, 0.6, 1.0], &cmd);
+                ui.text_colored(COLOR_COMMAND_NAME, &cmd);
                 ui.same_line();
-                ui.text_colored([0.8, 0.8, 0.8, 1.0], format!("= {}", val));
+                ui.text_colored(COLOR_TEXT_MUTED, format!("= {}", val));
 
                 if !hint.is_empty() {
                     ui.same_line();
-                    ui.text_colored([0.5, 0.5, 0.5, 1.0], format!("({})", hint));
+                    ui.text_colored(COLOR_TEXT_HINT, format!("({})", hint));
                 }
             }
         });
@@ -305,6 +296,9 @@ mod tests {
         let reload_shaders = AtomicBool::new(false);
         let compare_mode = AtomicBool::new(false);
 
+        let _guard = crate::simulator::gui_settings::IMGUI_TEST_MUTEX
+            .lock()
+            .unwrap();
         let mut imgui_ctx = imgui::Context::create();
         imgui_ctx.set_ini_filename(None);
         imgui_ctx.fonts().build_rgba32_texture();

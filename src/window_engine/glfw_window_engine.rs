@@ -69,10 +69,10 @@ impl WindowEngine for GlfwWindowEngine {
         }
 
         let mut imgui = ImContext::create();
-        imgui.set_ini_filename(Some(std::path::PathBuf::from("assets/config/imgui.ini")));
+        imgui.set_ini_filename(crate::utils::config_path::get_imgui_ini_path());
 
-        let font_data =
-            std::fs::read("assets/fonts/PerfectDOSVGA437.ttf").expect("Failed to read font file");
+        let font_data = std::fs::read(crate::utils::config_path::DEFAULT_FONT_PATH)
+            .expect("Failed to read font file");
         imgui.fonts().add_font(&[imgui::FontSource::TtfData {
             data: &font_data,
             size_pixels: 18.0,
@@ -85,9 +85,9 @@ impl WindowEngine for GlfwWindowEngine {
         }]);
 
         imgui.fonts().build_rgba32_texture();
-        let session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
-            crate::simulator::gui_settings::GUI_SESSION_PATH,
-        );
+        let session_path = crate::utils::config_path::get_gui_session_path();
+        let session =
+            crate::simulator::gui_settings::GuiSessionState::load_from_file(&session_path);
         crate::simulator::gui_settings::apply_theme_to_context(&mut imgui, session.theme);
 
         let imgui_glfw = ImguiGLFW::new(&mut imgui, &mut window);

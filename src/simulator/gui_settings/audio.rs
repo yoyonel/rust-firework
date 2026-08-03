@@ -1,10 +1,12 @@
+use super::theme::{COLOR_ALERT, COLOR_HEADER};
+use crate::audio_engine::constants as audio_constants;
 use crate::audio_engine::effect_flags::AudioEffect;
 use crate::domain_contracts::{AudioCommand, AudioStateReader, EngineCommand};
 use crate::simulator::audio_stress_scene::AudioStressScene;
 use imgui::Ui;
 
 pub fn default_audio_master_volume() -> f32 {
-    0.80
+    audio_constants::DEFAULT_GLOBAL_GAIN
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -19,13 +21,17 @@ pub fn render_audio_settings_tab(
     _window_size_f32: (f32, f32),
 ) {
     ui.spacing();
-    ui.text_colored([0.4, 0.8, 1.0, 1.0], "=== GLOBAL AUDIO CONTROLS ===");
+    ui.text_colored(COLOR_HEADER, "=== GLOBAL AUDIO CONTROLS ===");
 
     ui.same_line();
     if ui.button("[RESET AUDIO DEFAULTS]") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(0.80)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::DEFAULT_GLOBAL_GAIN,
+        )));
         cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMuted(false)));
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(0.08)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(
+            audio_constants::REVERB_DEFAULT_WET_GAIN,
+        )));
         cmd_queue.push(EngineCommand::Audio(AudioCommand::SetAllEffectsEnabled(
             true,
         )));
@@ -33,14 +39,14 @@ pub fn render_audio_settings_tab(
         *show_audio_visual_overlay = true;
     }
 
-    // Master Volume Slider & Reset
+    let font_sz = ui.current_font_size();
     let mut master_vol = state.master_volume();
-    ui.set_next_item_width(200.0);
+    ui.set_next_item_width(font_sz * 14.0);
     if ui
         .slider_config(
             "Master Volume (`audio.volume`)##master_vol_slider",
-            0.0,
-            2.0,
+            audio_constants::SLIDER_VOLUME_MIN,
+            audio_constants::SLIDER_VOLUME_MAX,
         )
         .display_format("%.3f")
         .build(&mut master_vol)
@@ -51,7 +57,9 @@ pub fn render_audio_settings_tab(
     }
     ui.same_line();
     if ui.small_button("Reset Vol") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(0.80)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::DEFAULT_GLOBAL_GAIN,
+        )));
     }
     if ui.is_item_hovered() {
         ui.tooltip_text("Reset Master Volume to default 0.80 (80%)");
@@ -61,27 +69,39 @@ pub fn render_audio_settings_tab(
     ui.text("Volume Presets:");
     ui.same_line();
     if ui.small_button("Mute (0%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(0.0)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::PRESET_VOL_MUTE,
+        )));
     }
     ui.same_line();
     if ui.small_button("Low (25%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(0.25)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::PRESET_VOL_LOW,
+        )));
     }
     ui.same_line();
     if ui.small_button("Medium (50%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(0.50)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::PRESET_VOL_MEDIUM,
+        )));
     }
     ui.same_line();
     if ui.small_button("Default (80%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(0.80)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::PRESET_VOL_DEFAULT,
+        )));
     }
     ui.same_line();
     if ui.small_button("Full (100%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(1.00)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::PRESET_VOL_FULL,
+        )));
     }
     ui.same_line();
     if ui.small_button("Boost (150%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(1.50)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetMasterVolume(
+            audio_constants::PRESET_VOL_BOOST,
+        )));
     }
 
     ui.spacing();
@@ -105,13 +125,18 @@ pub fn render_audio_settings_tab(
     ui.spacing();
     ui.separator();
     ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
+        COLOR_HEADER,
         "=== SPATIAL REVERB WET MIX (`audio.reverb_wet`) ===",
     );
 
     let mut reverb_wet = state.spatial_reverb();
-    ui.set_next_item_width(200.0);
-    if ui.slider("Reverb Wet Gain", 0.0, 1.0, &mut reverb_wet) {
+    ui.set_next_item_width(font_sz * 14.0);
+    if ui.slider(
+        "Reverb Wet Gain",
+        audio_constants::SLIDER_REVERB_MIN,
+        audio_constants::SLIDER_REVERB_MAX,
+        &mut reverb_wet,
+    ) {
         cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(
             reverb_wet,
         )));
@@ -126,29 +151,39 @@ pub fn render_audio_settings_tab(
     ui.text("Presets:");
     ui.same_line();
     if ui.button("Dry (0%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(0.0)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(
+            audio_constants::PRESET_REVERB_DRY,
+        )));
     }
     ui.same_line();
     if ui.button("Default (8%) [Reset]") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(0.08)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(
+            audio_constants::PRESET_REVERB_DEFAULT,
+        )));
     }
     ui.same_line();
     if ui.button("Medium (20%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(0.20)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(
+            audio_constants::PRESET_REVERB_MEDIUM,
+        )));
     }
     ui.same_line();
     if ui.button("Cathedral (50%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(0.50)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(
+            audio_constants::PRESET_REVERB_CATHEDRAL,
+        )));
     }
     ui.same_line();
     if ui.button("Full Wet (100%)") {
-        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(1.0)));
+        cmd_queue.push(EngineCommand::Audio(AudioCommand::SetSpatialReverb(
+            audio_constants::PRESET_REVERB_FULL_WET,
+        )));
     }
 
     ui.spacing();
     ui.separator();
     ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
+        COLOR_HEADER,
         "=== DSP EFFECTS MATRIX (`audio.fx`, `audio.fx_all`) ===",
     );
 
@@ -173,7 +208,6 @@ pub fn render_audio_settings_tab(
     ui.spacing();
     ui.text("Individual DSP Effects:");
 
-    // Display grid of all registered Audio Effects with zero allocations
     for (name, fx) in AudioEffect::all_names() {
         if !filter.is_empty() && !name.contains(filter) {
             continue;
@@ -193,10 +227,7 @@ pub fn render_audio_settings_tab(
 
     ui.spacing();
     ui.separator();
-    ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
-        "=== AUDIO DIAGNOSTICS & MONITORING ===",
-    );
+    ui.text_colored(COLOR_HEADER, "=== AUDIO DIAGNOSTICS & MONITORING ===");
 
     ui.checkbox(
         "Display Audio Diagnostic Monitor (F3)",
@@ -208,10 +239,7 @@ pub fn render_audio_settings_tab(
     );
 
     if audio_stress_scene.enabled {
-        ui.text_colored(
-            [1.0, 0.8, 0.0, 1.0],
-            "[ACTIVE] Audio Stress Test Scene is ACTIVE",
-        );
+        ui.text_colored(COLOR_ALERT, "[ACTIVE] Audio Stress Test Scene is ACTIVE");
         if ui.button("Stop Stress Test Scene") {
             audio_stress_scene.enabled = false;
         }
@@ -252,7 +280,10 @@ mod tests {
 
     #[test]
     fn test_default_audio_master_volume() {
-        assert_eq!(default_audio_master_volume(), 0.80);
+        assert_eq!(
+            default_audio_master_volume(),
+            audio_constants::DEFAULT_GLOBAL_GAIN
+        );
     }
 
     #[test]
@@ -284,6 +315,9 @@ mod tests {
         let mut show_overlay = true;
         let mut stress_scene = AudioStressScene::new();
 
+        let _guard = crate::simulator::gui_settings::IMGUI_TEST_MUTEX
+            .lock()
+            .unwrap();
         let mut imgui_ctx = imgui::Context::create();
         imgui_ctx.set_ini_filename(None);
         imgui_ctx.fonts().build_rgba32_texture();

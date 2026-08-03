@@ -199,3 +199,232 @@ pub const DEFAULT_FLOW_DISTORTION_STRENGTH: f32 = 0.15;
 
 /// Default Flow Map animation speed multiplier for smoke turbulence.
 pub const DEFAULT_FLOW_ANIMATION_SPEED: f32 = 1.0;
+
+/// Default texture path for Rocket particle type.
+pub const TEXTURE_ROCKET_PATH: &str =
+    "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png";
+
+/// Default texture path for Explosion particle type.
+pub const TEXTURE_EXPLOSION_CIRCLE_PATH: &str =
+    "assets/textures/kenney_particle-pack/PNG (Black background)/circle_05.png";
+
+/// Default texture path for Smoke particle type.
+pub const TEXTURE_SMOKE_PATH: &str =
+    "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png";
+
+/// Default texture path for Trail particle type.
+pub const TEXTURE_TRAIL_TRACE_PATH: &str =
+    "assets/textures/kenney_particle-pack/PNG (Black background)/trace_03.png";
+
+/// Texture path for heart explosion shape.
+pub const SHAPE_HEART_PATH: &str = "assets/textures/explosion_shapes/heart.png";
+
+/// Texture path for star explosion shape.
+pub const SHAPE_STAR_PATH: &str = "assets/textures/explosion_shapes/star.png";
+
+/// Texture path for smiley explosion shape.
+pub const SHAPE_SMILEY_PATH: &str = "assets/textures/explosion_shapes/smiley.png";
+
+/// Texture path for note explosion shape.
+pub const SHAPE_NOTE_PATH: &str = "assets/textures/explosion_shapes/note.png";
+
+/// Directory containing explosion shape PNG textures.
+pub const EXPLOSION_SHAPES_DIR: &str = "assets/textures/explosion_shapes";
+
+/// Formats the texture path for a given explosion shape file stem.
+pub fn get_explosion_shape_texture_path(file_stem: &str) -> String {
+    format!("{}/{}.png", EXPLOSION_SHAPES_DIR, file_stem)
+}
+
+/// Texture path for ring explosion shape.
+pub const SHAPE_RING_PATH: &str = "assets/textures/explosion_shapes/ring.png";
+
+// Preset defaults (Scale, Flight Time)
+pub const PRESET_HEART_SCALE: f32 = 150.0;
+pub const PRESET_HEART_FLIGHT_TIME: f32 = 1.5;
+
+pub const PRESET_STAR_SCALE: f32 = 180.0;
+pub const PRESET_STAR_FLIGHT_TIME: f32 = 1.5;
+
+pub const PRESET_SMILEY_SCALE: f32 = 200.0;
+pub const PRESET_SMILEY_FLIGHT_TIME: f32 = 2.0;
+
+pub const PRESET_NOTE_SCALE: f32 = 160.0;
+pub const PRESET_NOTE_FLIGHT_TIME: f32 = 1.5;
+
+pub const PRESET_RING_SCALE: f32 = 190.0;
+pub const PRESET_RING_FLIGHT_TIME: f32 = 1.8;
+
+/// Specification for an explosion shape preset.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ExplosionPresetSpec {
+    pub name: &'static str,
+    pub stem: &'static str,
+    pub path: &'static str,
+    pub default_scale: f32,
+    pub default_flight_time: f32,
+}
+
+impl ExplosionPresetSpec {
+    /// Look up a preset specification by its file stem (case-insensitive).
+    pub fn find_by_stem(stem: &str) -> Option<&'static ExplosionPresetSpec> {
+        let key = stem.trim().to_lowercase();
+        PRESET_DEFINITIONS.iter().find(|p| p.stem == key)
+    }
+}
+
+/// Canonical array of available explosion shape presets.
+pub const PRESET_DEFINITIONS: &[ExplosionPresetSpec] = &[
+    ExplosionPresetSpec {
+        name: "Heart",
+        stem: "heart",
+        path: SHAPE_HEART_PATH,
+        default_scale: PRESET_HEART_SCALE,
+        default_flight_time: PRESET_HEART_FLIGHT_TIME,
+    },
+    ExplosionPresetSpec {
+        name: "Star",
+        stem: "star",
+        path: SHAPE_STAR_PATH,
+        default_scale: PRESET_STAR_SCALE,
+        default_flight_time: PRESET_STAR_FLIGHT_TIME,
+    },
+    ExplosionPresetSpec {
+        name: "Smiley",
+        stem: "smiley",
+        path: SHAPE_SMILEY_PATH,
+        default_scale: PRESET_SMILEY_SCALE,
+        default_flight_time: PRESET_SMILEY_FLIGHT_TIME,
+    },
+    ExplosionPresetSpec {
+        name: "Note",
+        stem: "note",
+        path: SHAPE_NOTE_PATH,
+        default_scale: PRESET_NOTE_SCALE,
+        default_flight_time: PRESET_NOTE_FLIGHT_TIME,
+    },
+    ExplosionPresetSpec {
+        name: "Ring",
+        stem: "ring",
+        path: SHAPE_RING_PATH,
+        default_scale: PRESET_RING_SCALE,
+        default_flight_time: PRESET_RING_FLIGHT_TIME,
+    },
+];
+
+// GUI Control Slider Bounds
+pub const SLIDER_ROCKETS_MIN: i32 = 1;
+pub const SLIDER_ROCKETS_MAX: i32 = 100;
+
+pub const SLIDER_PARTICLES_EXPLOSION_MIN: i32 = 10;
+pub const SLIDER_PARTICLES_EXPLOSION_MAX: i32 = 1000;
+
+pub const SLIDER_PARTICLES_TRAIL_MIN: i32 = 0;
+pub const SLIDER_PARTICLES_TRAIL_MAX: i32 = 200;
+
+pub const SLIDER_SMOKE_PARTICLES_MIN: i32 = 100;
+pub const SLIDER_SMOKE_PARTICLES_MAX: i32 = 16384;
+
+pub const SLIDER_INTERVAL_MEAN_MIN: f32 = 0.05;
+pub const SLIDER_INTERVAL_MEAN_MAX: f32 = 5.0;
+
+pub const SLIDER_INTERVAL_VAR_MIN: f32 = 0.0;
+pub const SLIDER_INTERVAL_VAR_MAX: f32 = 3.0;
+
+pub const SLIDER_MAX_NEXT_INT_MIN: f32 = 0.1;
+pub const SLIDER_MAX_NEXT_INT_MAX: f32 = 10.0;
+
+pub const SLIDER_SPAWN_MARGIN_MIN: f32 = 0.0;
+pub const SLIDER_SPAWN_MARGIN_MAX: f32 = 200.0;
+
+pub const SLIDER_ROCKETS_MIN_CLAMP: u32 = 1;
+pub const SLIDER_PARTICLES_EXPLOSION_MIN_CLAMP: u32 = 10;
+
+pub const SLIDER_SPAWN_ANGLE_MIN: f32 = 0.0;
+pub const SLIDER_ANGLE_VAR_MIN: f32 = 0.0;
+pub const SLIDER_ANGLE_VAR_MAX: f32 = 1.57;
+
+pub const SLIDER_SPAWN_SPEED_MIN: f32 = 10.0;
+pub const SLIDER_SPAWN_SPEED_MAX: f32 = 2000.0;
+pub const SLIDER_INIT_SPEED_MAX: f32 = 1500.0;
+
+pub const SLIDER_GRAVITY_MIN: f32 = -2000.0;
+pub const SLIDER_GRAVITY_MAX: f32 = 2000.0;
+
+pub const SLIDER_EXPLOSION_THRESH_MIN: f32 = 0.0;
+pub const SLIDER_EXPLOSION_THRESH_MAX: f32 = 500.0;
+
+pub const SLIDER_EXPLOSION_VEL_MIN: f32 = 1.0;
+pub const SLIDER_EXPLOSION_VEL_MAX: f32 = 2000.0;
+
+pub const SLIDER_IMAGE_SCALE_MIN: f32 = 20.0;
+pub const SLIDER_IMAGE_SCALE_MAX: f32 = 500.0;
+
+pub const SLIDER_FLIGHT_TIME_MIN: f32 = 0.2;
+pub const SLIDER_FLIGHT_TIME_MAX: f32 = 5.0;
+
+pub const SLIDER_WEIGHT_MIN: f32 = 0.0;
+pub const SLIDER_WEIGHT_MAX: f32 = 10.0;
+
+pub const SLIDER_SMOKE_SPAWN_RATE_MIN: f32 = 0.0;
+pub const SLIDER_SMOKE_SPAWN_RATE_MAX: f32 = 120.0;
+
+pub const SLIDER_SMOKE_INIT_SIZE_MIN: f32 = 1.0;
+pub const SLIDER_SMOKE_INIT_SIZE_MAX: f32 = 40.0;
+
+pub const SLIDER_SMOKE_GROWTH_MIN: f32 = 0.0;
+pub const SLIDER_SMOKE_GROWTH_MAX: f32 = 5.0;
+
+pub const SLIDER_SMOKE_FADE_DUR_MIN: f32 = 0.05;
+pub const SLIDER_SMOKE_FADE_DUR_MAX: f32 = 3.0;
+
+pub const SLIDER_SMOKE_INTENSITY_MIN: f32 = 0.0;
+pub const SLIDER_SMOKE_INTENSITY_MAX: f32 = 2.0;
+
+#[derive(Debug, Clone, Copy)]
+pub struct SmokePresetSpec {
+    pub name: &'static str,
+    pub edge_width: f32,
+    pub edge_color: [f32; 3],
+    pub custom_color: [f32; 3],
+    pub intensity: f32,
+}
+
+pub const SMOKE_PRESET_FIRE_EMBER: SmokePresetSpec = SmokePresetSpec {
+    name: "Fire & Ember",
+    edge_width: 0.12,
+    edge_color: [1.0, 0.4, 0.05],
+    custom_color: [0.15, 0.15, 0.15],
+    intensity: 0.85,
+};
+
+pub const SMOKE_PRESET_PLASMA_BLUE: SmokePresetSpec = SmokePresetSpec {
+    name: "Plasma Blue",
+    edge_width: 0.15,
+    edge_color: [0.1, 0.8, 1.0],
+    custom_color: [0.8, 0.9, 1.0],
+    intensity: 1.0,
+};
+
+pub const SMOKE_PRESET_VOLUMETRIC_CLOUD: SmokePresetSpec = SmokePresetSpec {
+    name: "Volumetric Cloud",
+    edge_width: 0.05,
+    edge_color: [0.75, 0.75, 0.75],
+    custom_color: [0.85, 0.85, 0.85],
+    intensity: 0.5,
+};
+
+pub const SMOKE_PRESET_TOXIC_PLASMA: SmokePresetSpec = SmokePresetSpec {
+    name: "Toxic Plasma",
+    edge_width: 0.18,
+    edge_color: [0.2, 1.0, 0.3],
+    custom_color: [0.1, 0.25, 0.1],
+    intensity: 0.9,
+};
+
+pub const SMOKE_PRESET_DEFINITIONS: &[SmokePresetSpec] = &[
+    SMOKE_PRESET_FIRE_EMBER,
+    SMOKE_PRESET_PLASMA_BLUE,
+    SMOKE_PRESET_VOLUMETRIC_CLOUD,
+    SMOKE_PRESET_TOXIC_PLASMA,
+];

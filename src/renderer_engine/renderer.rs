@@ -6,6 +6,7 @@ use log::info;
 
 use crate::gpu_profile_zone;
 use crate::physic_engine::config::PhysicConfig;
+use crate::renderer_engine::constants;
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
@@ -88,11 +89,11 @@ impl Renderer {
             Box::new(RendererGraphicsInstanced::new(
                 physic_config.max_rockets,
                 crate::physic_engine::ParticleType::Rocket,
-                "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png",
+                constants::TEXTURE_PRIMARY_PARTICLE_PATH,
             )),
             Box::new(crate::renderer_engine::smoke_renderer::SmokeRenderer::new(
                 physic_config.max_smoke_particles,
-                "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png",
+                constants::TEXTURE_SMOKE_PARTICLE_PATH,
             )),
         ];
 
@@ -121,13 +122,17 @@ impl Renderer {
             );
             gl::BindBuffer(gl::UNIFORM_BUFFER, 0);
 
-            // Bind global UBO to binding point 0
-            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, ubo_global);
+            // Bind global UBO to binding point
+            gl::BindBufferBase(
+                gl::UNIFORM_BUFFER,
+                constants::GLOBAL_UBO_BINDING_INDEX,
+                ubo_global,
+            );
         }
 
         Ok(Self {
             config: crate::renderer_engine::RendererConfig::from_file(
-                "assets/config/renderer.toml",
+                crate::utils::config_path::get_renderer_config_path(),
             )
             .unwrap_or_default(),
             window_size_f32: (width as f32, height as f32),

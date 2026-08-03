@@ -729,9 +729,9 @@ fn test_spatial_bus_snr_quality() {
     let mut sum_ref_sq = 0.0f64;
     let mut sum_err_sq = 0.0f64;
 
-    for i in 0..block_size {
-        for ch in 0..2 {
-            let s_ref = ref_out[i][ch] as f64;
+    for (i, ref_frame) in ref_out.iter().enumerate().take(block_size) {
+        for (ch, &s_ref_val) in ref_frame.iter().enumerate() {
+            let s_ref = s_ref_val as f64;
             let s_opt = dsp.acc[i][ch] as f64;
             let err = s_ref - s_opt;
             sum_ref_sq += s_ref * s_ref;

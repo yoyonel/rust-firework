@@ -37,6 +37,9 @@ pub const DEFAULT_BLOOM_ITERATIONS: u32 = 3;
 /// - **System influence:** Reduces fillrate and memory bandwidth requirements for post-processing.
 pub const DEFAULT_BLOOM_DOWNSAMPLE: u32 = 2;
 
+/// Supported downsample divisor options for bloom pipeline GUI selector.
+pub const BLOOM_DOWNSAMPLE_OPTIONS: [u32; 3] = [1, 2, 4];
+
 /// Default blur algorithm used in bloom pass.
 ///
 /// - **Unit:** enum (`BlurMethod`)
@@ -134,9 +137,85 @@ pub const AUDIO_EVENT_EXPLOSION_TTL_SECS: f32 = 0.75;
 pub const SHADER_POINT_VERTEX_PATH: &str = "assets/shaders/point_rendering.vert.glsl";
 
 /// Default fragment shader path for particle rendering.
-///
-/// - **Unit:** file path
-/// - **Technical meaning:** Path to GLSL fragment shader for point particle rendering.
-/// - **Bounds:** Valid file path string.
-/// - **System influence:** Shader source loaded during graphics pipeline initialization.
 pub const SHADER_POINT_FRAGMENT_PATH: &str = "assets/shaders/point_rendering.frag.glsl";
+
+/// Vertex shader path for audio event rendering.
+pub const SHADER_AUDIO_EVENT_VERTEX_PATH: &str = "assets/shaders/audio_event.vert.glsl";
+
+/// Fragment shader path for audio event rendering.
+pub const SHADER_AUDIO_EVENT_FRAGMENT_PATH: &str = "assets/shaders/audio_event.frag.glsl";
+
+/// Vertex shader path for circle rendering.
+pub const SHADER_CIRCLE_VERTEX_PATH: &str = "assets/shaders/circle.vert.glsl";
+
+/// Fragment shader path for circle rendering.
+pub const SHADER_CIRCLE_FRAGMENT_PATH: &str = "assets/shaders/circle.frag.glsl";
+
+/// Vertex shader path for instanced textured quad particle rendering.
+pub const SHADER_INSTANCED_QUAD_VERTEX_PATH: &str =
+    "assets/shaders/instanced_textured_quad.vert.glsl";
+
+/// Fragment shader path for instanced textured quad particle rendering.
+pub const SHADER_INSTANCED_QUAD_FRAGMENT_PATH: &str =
+    "assets/shaders/instanced_textured_quad.frag.glsl";
+
+/// Vertex shader path for smoke rendering.
+pub const SHADER_SMOKE_VERTEX_PATH: &str = "assets/shaders/smoke_instanced.vert.glsl";
+
+/// Fragment shader path for smoke rendering.
+pub const SHADER_SMOKE_FRAGMENT_PATH: &str = "assets/shaders/smoke_instanced.frag.glsl";
+
+/// Vertex shader path for bloom fullscreen quad.
+pub const SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH: &str =
+    "assets/shaders/bloom/fullscreen_quad.vert.glsl";
+
+/// Fragment shader path for bloom gaussian blur.
+pub const SHADER_BLOOM_GAUSSIAN_BLUR_FRAGMENT_PATH: &str =
+    "assets/shaders/bloom/gaussian_blur.frag.glsl";
+
+/// Fragment shader path for bloom kawase downsample.
+pub const SHADER_BLOOM_KAWASE_DOWNSAMPLE_FRAGMENT_PATH: &str =
+    "assets/shaders/bloom/kawase_downsample.frag.glsl";
+
+/// Fragment shader path for bloom kawase upsample.
+pub const SHADER_BLOOM_KAWASE_UPSAMPLE_FRAGMENT_PATH: &str =
+    "assets/shaders/bloom/kawase_upsample.frag.glsl";
+
+/// Fragment shader path for bloom composition.
+pub const SHADER_BLOOM_COMPOSITION_FRAGMENT_PATH: &str =
+    "assets/shaders/bloom/bloom_composition.frag.glsl";
+
+/// Fragment shader path for bloom composition compare.
+pub const SHADER_BLOOM_COMPOSITION_COMPARE_FRAGMENT_PATH: &str =
+    "assets/shaders/bloom/bloom_composition_compare.frag.glsl";
+
+/// Fragment shader path for bloom passthrough.
+pub const SHADER_BLOOM_PASSTHROUGH_FRAGMENT_PATH: &str =
+    "assets/shaders/bloom/passthrough.frag.glsl";
+
+/// Texture path for noise.
+pub const TEXTURE_NOISE_PATH: &str = "assets/textures/noise.png";
+
+/// Texture path for flow map.
+pub const TEXTURE_FLOW_MAP_PATH: &str = "assets/textures/flowmap.png";
+
+/// Texture path for primary spark particle.
+pub const TEXTURE_PRIMARY_PARTICLE_PATH: &str =
+    "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png";
+
+// Renderer GUI Control Bounds
+pub const SLIDER_BLOOM_INTENSITY_MIN: f32 = 0.0;
+pub const SLIDER_BLOOM_INTENSITY_MAX: f32 = 10.0;
+
+pub const SLIDER_BLOOM_ITERATIONS_MIN: u32 = 1;
+pub const SLIDER_BLOOM_ITERATIONS_MAX: u32 = 10;
+
+pub const SLIDER_BLOOM_DOWNSAMPLE_MIN: u32 = 1;
+pub const SLIDER_BLOOM_DOWNSAMPLE_MAX: u32 = 8;
+
+/// Texture path for smoke particle.
+pub const TEXTURE_SMOKE_PARTICLE_PATH: &str =
+    "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png";
+
+/// Global UBO binding index for OpenGL shaders.
+pub const GLOBAL_UBO_BINDING_INDEX: u32 = 0;

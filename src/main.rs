@@ -32,11 +32,12 @@ fn main() -> Result<()> {
         }
     }
 
-    // TODO: mettre en place un vrai gestionnaire de configurations (avec traits) !
-    let physic_config = PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
+    let physic_path = fireworks_sim::utils::config_path::get_physic_config_path();
+    let physic_config = PhysicConfig::from_file(&physic_path).unwrap_or_default();
     info!("Physic config loaded:\n{:#?}", physic_config);
 
-    let audio_file_config = AudioConfig::from_file("assets/config/audio.toml").unwrap_or_default();
+    let audio_path = fireworks_sim::utils::config_path::get_audio_config_path();
+    let audio_file_config = AudioConfig::from_file(&audio_path).unwrap_or_default();
     info!("Audio config loaded:\n{:#?}", audio_file_config);
 
     // --------------------------

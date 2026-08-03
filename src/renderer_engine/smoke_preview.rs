@@ -97,20 +97,30 @@ impl SmokePreviewRenderer {
 
             // 2. Create GlobalData UBO (binding 0)
             let mut ubo_global = 0;
+            use crate::renderer_engine::constants;
+
             gl::GenBuffers(1, &mut ubo_global);
             gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_global);
             gl::BufferData(gl::UNIFORM_BUFFER, 16, std::ptr::null(), gl::DYNAMIC_DRAW);
-            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, ubo_global);
+            gl::BindBufferBase(
+                gl::UNIFORM_BUFFER,
+                constants::GLOBAL_UBO_BINDING_INDEX,
+                ubo_global,
+            );
 
             // 3. Compile Smoke Instanced Shader
             let smoke_program = crate::renderer_engine::shader::compile_shader_program_from_files(
-                "assets/shaders/smoke_instanced.vert.glsl",
-                "assets/shaders/smoke_instanced.frag.glsl",
+                constants::SHADER_SMOKE_VERTEX_PATH,
+                constants::SHADER_SMOKE_FRAGMENT_PATH,
             );
 
             let block_idx = gl::GetUniformBlockIndex(smoke_program, cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
-                gl::UniformBlockBinding(smoke_program, block_idx, 0);
+                gl::UniformBlockBinding(
+                    smoke_program,
+                    block_idx,
+                    constants::GLOBAL_UBO_BINDING_INDEX,
+                );
             }
 
             let loc_smoke_tex = gl::GetUniformLocation(smoke_program, cstr!("u_SmokeTexture"));
@@ -248,13 +258,10 @@ impl SmokePreviewRenderer {
             gl::BindVertexArray(0);
 
             // 5. Load Textures
-            let (smoke_tex, _, _) = load_texture(
-                "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png",
-            );
-            let (flow_map_tex, _, _) = load_texture("assets/textures/flowmap.png");
-            let (noise_tex, _, _) = load_texture("assets/textures/noise.png");
-            let (rocket_tex, _, _) =
-                load_texture("assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png");
+            let (smoke_tex, _, _) = load_texture(constants::TEXTURE_SMOKE_PARTICLE_PATH);
+            let (flow_map_tex, _, _) = load_texture(constants::TEXTURE_FLOW_MAP_PATH);
+            let (noise_tex, _, _) = load_texture(constants::TEXTURE_NOISE_PATH);
+            let (rocket_tex, _, _) = load_texture(constants::TEXTURE_PRIMARY_PARTICLE_PATH);
 
             // 6. Quad Shader for Rocket Rendering with Z-Rotation
             let vert_src = cstr!(

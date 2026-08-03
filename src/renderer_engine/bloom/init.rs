@@ -134,37 +134,39 @@ impl BloomPass {
             // Unbind framebuffer
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
+            use crate::renderer_engine::constants;
+
             // Compile shaders
             let blur_shader = try_compile_shader_program_from_files(
-                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-                "assets/shaders/bloom/gaussian_blur.frag.glsl",
+                constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+                constants::SHADER_BLOOM_GAUSSIAN_BLUR_FRAGMENT_PATH,
             )?;
 
             let kawase_downsample_shader = try_compile_shader_program_from_files(
-                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-                "assets/shaders/bloom/kawase_downsample.frag.glsl",
+                constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+                constants::SHADER_BLOOM_KAWASE_DOWNSAMPLE_FRAGMENT_PATH,
             )?;
 
             let kawase_upsample_shader = try_compile_shader_program_from_files(
-                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-                "assets/shaders/bloom/kawase_upsample.frag.glsl",
+                constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+                constants::SHADER_BLOOM_KAWASE_UPSAMPLE_FRAGMENT_PATH,
             )?;
 
             let composition_shader = try_compile_shader_program_from_files(
-                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-                "assets/shaders/bloom/bloom_composition.frag.glsl",
+                constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+                constants::SHADER_BLOOM_COMPOSITION_FRAGMENT_PATH,
             )?;
 
             // Compile comparison shader (MRT)
             let comparison_shader = try_compile_shader_program_from_files(
-                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-                "assets/shaders/bloom/bloom_composition_compare.frag.glsl",
+                constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+                constants::SHADER_BLOOM_COMPOSITION_COMPARE_FRAGMENT_PATH,
             )?;
 
             // Compile passthrough shader (for displaying comparison textures)
             let passthrough_shader = try_compile_shader_program_from_files(
-                "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-                "assets/shaders/bloom/passthrough.frag.glsl",
+                constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+                constants::SHADER_BLOOM_PASSTHROUGH_FRAGMENT_PATH,
             )?;
 
             // Create comparison mode resources (FBO + 5 textures)
@@ -475,15 +477,17 @@ impl BloomPass {
     pub unsafe fn reload_shaders(&mut self) -> Result<(), String> {
         info!("🔄 Reloading bloom shaders...");
 
+        use crate::renderer_engine::constants;
+
         // Try to compile new shaders
         let new_blur = try_compile_shader_program_from_files(
-            "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-            "assets/shaders/bloom/gaussian_blur.frag.glsl",
+            constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+            constants::SHADER_BLOOM_GAUSSIAN_BLUR_FRAGMENT_PATH,
         )?;
 
         let new_composition = try_compile_shader_program_from_files(
-            "assets/shaders/bloom/fullscreen_quad.vert.glsl",
-            "assets/shaders/bloom/bloom_composition.frag.glsl",
+            constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+            constants::SHADER_BLOOM_COMPOSITION_FRAGMENT_PATH,
         )?;
 
         // Delete old shaders

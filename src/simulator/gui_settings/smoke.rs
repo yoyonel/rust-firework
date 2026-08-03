@@ -1,7 +1,9 @@
 // GUI_PERSIST: physics.config
 
+use super::theme::{COLOR_ALERT, COLOR_HEADER, COLOR_TEXT_HINT, COLOR_WARNING};
 use crate::domain_contracts::{EngineCommand, SmokeCommand, SmokeStateReader};
 use crate::physic_engine::config::{PhysicConfig, SmokeColorMode};
+use crate::physic_engine::constants as physic_constants;
 use crate::renderer_engine::smoke_preview::{
     PreviewContext, SmokePreviewRenderer, PREVIEW_PAN_X, PREVIEW_PAN_Y, PREVIEW_ROT_Z, PREVIEW_ZOOM,
 };
@@ -20,13 +22,14 @@ pub fn render_smoke_controls(
     let cfg = state.config();
     let default_cfg = PhysicConfig::default();
 
-    let item_width = (ui.content_region_avail()[0] * 0.38).clamp(160.0, 300.0);
+    let font_sz = ui.current_font_size();
+    let item_width = (ui.content_region_avail()[0] * 0.38).clamp(font_sz * 11.0, font_sz * 21.0);
 
     // =========================================================================
     // 1. ALPHA EROSION (DISSOLVE & BURN SEAM)
     // =========================================================================
     ui.text_colored(
-        [0.9, 0.6, 0.2, 1.0],
+        COLOR_HEADER,
         "=== 1. ALPHA EROSION (DISSOLVE & BURN SEAM) ===",
     );
 
@@ -200,7 +203,7 @@ pub fn render_smoke_controls(
     // =========================================================================
     // 2. SMOKE CORE TINT & COLOR SELECTION
     // =========================================================================
-    ui.text_colored([0.4, 0.8, 1.0, 1.0], "=== 2. SMOKE CORE TINT & COLOR ===");
+    ui.text_colored(COLOR_HEADER, "=== 2. SMOKE CORE TINT & COLOR ===");
 
     let mut is_rocket_color = cfg.smoke_color_mode == SmokeColorMode::RocketColor;
     let mut is_custom_color = cfg.smoke_color_mode == SmokeColorMode::Custom;
@@ -304,7 +307,7 @@ pub fn render_smoke_controls(
     // 3. EMISSION CADENCE & LIFETIME DYNAMICS
     // =========================================================================
     ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
+        COLOR_HEADER,
         "=== 3. EMISSION CADENCE & LIFETIME DYNAMICS ===",
     );
 
@@ -312,8 +315,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Spawn Rate (`physic.smoke_spawn_rate`)",
-        0.0,
-        120.0,
+        physic_constants::SLIDER_SMOKE_SPAWN_RATE_MIN,
+        physic_constants::SLIDER_SMOKE_SPAWN_RATE_MAX,
         &mut spawn_rate,
     ) {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetSpawnRate(spawn_rate)));
@@ -335,8 +338,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Initial Size (`physic.smoke_initial_size`)",
-        1.0,
-        40.0,
+        physic_constants::SLIDER_SMOKE_INIT_SIZE_MIN,
+        physic_constants::SLIDER_SMOKE_INIT_SIZE_MAX,
         &mut initial_size,
     ) {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetInitialSize(
@@ -360,8 +363,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Growth Rate Multiplier (`physic.smoke_growth_rate_multiplier`)",
-        0.0,
-        5.0,
+        physic_constants::SLIDER_SMOKE_GROWTH_MIN,
+        physic_constants::SLIDER_SMOKE_GROWTH_MAX,
         &mut growth_rate,
     ) {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetGrowthRateMultiplier(
@@ -385,8 +388,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Fade Duration (s) (`physic.smoke_fade_duration`)",
-        0.05,
-        3.0,
+        physic_constants::SLIDER_SMOKE_FADE_DUR_MIN,
+        physic_constants::SLIDER_SMOKE_FADE_DUR_MAX,
         &mut fade_duration,
     ) {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetFadeDuration(
@@ -410,8 +413,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Smoke Intensity / Brightness (`physic.smoke_intensity`)",
-        0.0,
-        2.0,
+        physic_constants::SLIDER_SMOKE_INTENSITY_MIN,
+        physic_constants::SLIDER_SMOKE_INTENSITY_MAX,
         &mut intensity,
     ) {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetIntensity(intensity)));
@@ -433,8 +436,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Max Smoke Particles Pool (`physic.max_smoke_particles`)",
-        100,
-        16384,
+        physic_constants::SLIDER_SMOKE_PARTICLES_MIN,
+        physic_constants::SLIDER_SMOKE_PARTICLES_MAX,
         &mut max_smoke,
     ) {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetMaxSmokeParticles(
@@ -464,7 +467,7 @@ pub fn render_smoke_settings_tab(
     let cfg = state.config();
 
     ui.text_colored(
-        [0.4, 0.8, 1.0, 1.0],
+        COLOR_HEADER,
         "SMOKE TRAIL & ALPHA EROSION (DISSOLVE) CONTROLS",
     );
     ui.same_line();
@@ -479,7 +482,7 @@ pub fn render_smoke_settings_tab(
     // =========================================================================
     // 1. QUICK PRESETS
     // =========================================================================
-    ui.text_colored([0.9, 0.8, 0.3, 1.0], "Quick Dissolve Style Presets:");
+    ui.text_colored(COLOR_WARNING, "Quick Dissolve Style Presets:");
     ui.same_line();
 
     if ui.button("[Fire & Ember]") {
@@ -591,7 +594,7 @@ pub fn render_smoke_settings_tab(
 
             ui.set_cursor_pos([10.0, 10.0]);
             ui.text_colored(
-                [0.4, 0.8, 1.0, 1.0],
+                COLOR_HEADER,
                 format!(
                     "LIVE GPU VIEWPORT | Zoom: {:.1}x | Pan: ({:.0}, {:.0}) | Rot Z: {:.0}°",
                     zoom, pan_x, pan_y, rot_z
@@ -608,7 +611,7 @@ pub fn render_smoke_settings_tab(
 
             ui.set_cursor_pos([10.0, 160.0]);
             ui.text_colored(
-                [0.6, 0.6, 0.6, 0.9],
+                COLOR_TEXT_HINT,
                 "[Middle Drag: Pan X/Y] | [Right Drag: Rotate Z] | [Wheel: Zoom]",
             );
         });
@@ -735,7 +738,7 @@ pub fn render_smoke_settings_tab(
                 // Right Column: Technical Stats & Explanatory Legend
                 ui.set_cursor_pos([225.0, 15.0]);
                 ui.text_colored(
-                    [0.0, 1.0, 0.8, 1.0],
+                    COLOR_HEADER,
                     "=== GEOMETRY TRIMMING SPECIFICATIONS (1:1 SCALE) ===",
                 );
 
@@ -749,10 +752,7 @@ pub fn render_smoke_settings_tab(
                 ui.text("- Vertex Allocation: 10 Vertices (1 Center + 8 Perimeter + 1 Loop)");
 
                 ui.set_cursor_pos([225.0, 105.0]);
-                ui.text_colored(
-                    [1.0, 0.3, 0.3, 1.0],
-                    "[Red Shaded Corners] Bypassed Surface:",
-                );
+                ui.text_colored(COLOR_ALERT, "[Red Shaded Corners] Bypassed Surface:");
 
                 ui.set_cursor_pos([240.0, 125.0]);
                 ui.text("  -17.2% surface area eliminated from Hardware Rasterization.");
@@ -762,7 +762,7 @@ pub fn render_smoke_settings_tab(
 
                 ui.set_cursor_pos([225.0, 170.0]);
                 ui.text_colored(
-                    [0.0, 1.0, 0.8, 1.0],
+                    COLOR_HEADER,
                     "[Cyan Octagon Mesh] Active GPU Raster Boundary:",
                 );
 
@@ -784,6 +784,9 @@ mod tests {
 
     #[test]
     fn test_render_smoke_controls_pure_function() {
+        let _guard = crate::simulator::gui_settings::IMGUI_TEST_MUTEX
+            .lock()
+            .unwrap();
         let config = PhysicConfig::default();
         let mut cmd_queue: Vec<EngineCommand> = Vec::with_capacity(16);
 

@@ -1,6 +1,31 @@
 use imgui::StyleColor;
 use serde::{Deserialize, Serialize};
 
+// UI Text Palette Tokens
+pub const COLOR_HEADER: [f32; 4] = [0.4, 0.8, 1.0, 1.0];
+pub const COLOR_TITLE: [f32; 4] = [0.3, 0.8, 1.0, 1.0];
+pub const COLOR_SUCCESS: [f32; 4] = [0.2, 0.9, 0.4, 1.0];
+pub const COLOR_WARNING: [f32; 4] = [0.9, 0.9, 0.4, 1.0];
+pub const COLOR_ALERT: [f32; 4] = [1.0, 0.8, 0.0, 1.0];
+pub const COLOR_COMMAND_NAME: [f32; 4] = [0.2, 1.0, 0.6, 1.0];
+pub const COLOR_TEXT_MUTED: [f32; 4] = [0.8, 0.8, 0.8, 1.0];
+pub const COLOR_TEXT_HINT: [f32; 4] = [0.5, 0.5, 0.5, 1.0];
+
+// UI Layout & Zoom Scaling Tokens
+pub const DEFAULT_GUI_SCALE: f32 = 0.85;
+pub const GUI_SCALE_MIN: f32 = 0.60;
+pub const GUI_SCALE_MAX: f32 = 1.50;
+pub const GUI_SCALE_STEP: f32 = 0.05;
+
+pub const ZOOM_PRESETS: [(f32, &str); 6] = [
+    (0.65, "65% (Tiny)"),
+    (0.75, "75% (Compact)"),
+    (0.85, "85% (Optimal)"),
+    (1.00, "100% (Standard)"),
+    (1.15, "115% (Large)"),
+    (1.30, "130% (Huge)"),
+];
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub enum GuiTheme {
     #[default]
@@ -182,6 +207,9 @@ mod tests {
 
     #[test]
     fn test_gui_theme_apply_to_context() {
+        let _guard = crate::simulator::gui_settings::IMGUI_TEST_MUTEX
+            .lock()
+            .unwrap();
         let mut ctx = imgui::Context::create();
         for (theme, _) in GuiTheme::all_themes() {
             apply_theme_to_context(&mut ctx, *theme);

@@ -196,19 +196,20 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
     let comparison_mode = true;
     let fullscreen = true;
 
-    // Save live session state to disk
-    settings.save_session_state(
+    // Save live session state to disk (isolated temp path)
+    let temp_session_path = dir.path().join("gui_session_test.toml");
+    settings.save_session_state_to_path(
         &audio_engine,
         &physic_engine,
         show_diag,
         show_overlay,
         comparison_mode,
         fullscreen,
+        &temp_session_path,
     );
 
     // Copy to temp path
-    let loaded_state =
-        GuiSessionState::load_from_file(fireworks_sim::simulator::gui_settings::GUI_SESSION_PATH);
+    let loaded_state = GuiSessionState::load_from_file(temp_session_path.to_str().unwrap());
     loaded_state.save_to_file(path_str)?;
 
     // 3. Instantiate fresh AudioEngine and PhysicEngine and restore session
@@ -220,7 +221,12 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
     // Apply restored session to live fresh engines
     let mut restored_diag = false;
     let mut restored_overlay = false;
-    settings.apply_session_to_audio(&mut fresh_audio, &mut restored_diag, &mut restored_overlay);
+    settings.apply_session_from_path_to_audio(
+        std::path::Path::new(path_str),
+        &mut fresh_audio,
+        &mut restored_diag,
+        &mut restored_overlay,
+    );
     apply_session_to_physic(
         loaded_session.preset_weights,
         &loaded_session.explosion_shape,

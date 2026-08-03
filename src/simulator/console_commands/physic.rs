@@ -231,11 +231,17 @@ where
                 cmd_queue.push(crate::domain_contracts::EngineCommand::Physic(
                     crate::domain_contracts::PhysicCommand::SaveConfig,
                 ));
-                "-> Physics configuration saved to assets/config/physic.toml".to_string()
+                format!(
+                    "-> Physics configuration saved to {}",
+                    crate::utils::config_path::get_physic_config_path().display()
+                )
             });
         self.commands_registry.register_hint(
             "physic.config.save",
-            "Save current applied physics configuration to assets/config/physic.toml",
+            &format!(
+                "Save current applied physics configuration to {}",
+                crate::utils::config_path::get_physic_config_path().display()
+            ),
         );
 
         // Reload configuration from disk
@@ -251,7 +257,10 @@ where
         );
         self.commands_registry.register_hint(
             "physic.config.reload",
-            "Reload physics configuration from assets/config/physic.toml and re-synchronize engines",
+            &format!(
+                "Reload physics configuration from {} and re-synchronize engines",
+                crate::utils::config_path::get_physic_config_path().display()
+            ),
         );
 
         // --- Explosion Shape Commands ---
@@ -810,7 +819,7 @@ mod tests {
         assert_eq!(PRESET_DEFINITIONS.len(), 5);
         let names: Vec<&str> = PRESET_DEFINITIONS
             .iter()
-            .map(|(name, _, _, _, _)| *name)
+            .map(|preset| preset.name)
             .collect();
         assert!(names.contains(&"Heart"));
         assert!(names.contains(&"Star"));

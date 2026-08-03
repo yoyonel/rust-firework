@@ -16,19 +16,12 @@ pub enum ParticleType {
 impl ParticleType {
     /// Retourne le chemin de la texture par défaut pour ce type de particule
     pub fn default_texture_path(&self) -> &'static str {
+        use super::constants;
         match self {
-            ParticleType::Rocket => {
-                "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png"
-            }
-            ParticleType::Explosion => {
-                "assets/textures/kenney_particle-pack/PNG (Black background)/circle_05.png"
-            }
-            ParticleType::Smoke => {
-                "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png"
-            }
-            ParticleType::Trail => {
-                "assets/textures/kenney_particle-pack/PNG (Black background)/trace_03.png"
-            }
+            ParticleType::Rocket => constants::TEXTURE_ROCKET_PATH,
+            ParticleType::Explosion => constants::TEXTURE_EXPLOSION_CIRCLE_PATH,
+            ParticleType::Smoke => constants::TEXTURE_SMOKE_PATH,
+            ParticleType::Trail => constants::TEXTURE_TRAIL_TRACE_PATH,
         }
     }
 

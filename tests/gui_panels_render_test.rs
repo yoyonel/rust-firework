@@ -27,7 +27,10 @@ fn test_gui_settings_session_sync() {
     let (msg, _) = settings.status_message.as_ref().unwrap();
     assert_eq!(msg, "Test status message");
 
-    settings.save_session_state(&audio, &physic, diag, overlay, false, false);
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_path = temp_dir.path().join("gui_session_sync.toml");
+    settings.save_session_state_to_path(&audio, &physic, diag, overlay, false, false, &temp_path);
+    assert!(temp_path.exists());
 }
 
 #[test]

@@ -461,12 +461,12 @@ where
                 self.window_engine.is_fullscreen(),
             );
             if let Ok(c) = self.renderer_config.read() {
-                let _ = c.save_to_file("assets/config/renderer.toml");
+                let _ = c.save_to_file(crate::utils::config_path::get_renderer_config_path());
             }
             let _ = self
                 .physic_engine
                 .get_config()
-                .save_to_file("assets/config/physic.toml");
+                .save_to_file(crate::utils::config_path::get_physic_config_path());
             self.gui_settings
                 .set_status("All GUI & Engine Sessions Saved to Disk!");
         }
@@ -478,7 +478,7 @@ where
                 &mut self.show_audio_visual_overlay,
             );
             let session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
-                crate::simulator::gui_settings::GUI_SESSION_PATH,
+                crate::utils::config_path::get_gui_session_path(),
             );
             self.gui_settings.search_filter = session.search_filter;
             self.gui_settings.set_selected_tab = Some(session.active_tab);
@@ -495,17 +495,17 @@ where
             );
             self.gui_settings
                 .apply_session_to_physic(&mut self.physic_engine);
-            if let Ok(config) =
-                crate::physic_engine::config::PhysicConfig::from_file("assets/config/physic.toml")
-            {
+            if let Ok(config) = crate::physic_engine::config::PhysicConfig::from_file(
+                crate::utils::config_path::get_physic_config_path(),
+            ) {
                 *self.physic_engine.get_config_mut() = config.clone();
                 let _ = self.physic_engine.reload_config(&config);
                 self.physic_reinit_requested
                     .store(true, std::sync::atomic::Ordering::Relaxed);
             }
-            if let Ok(config) =
-                crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
-            {
+            if let Ok(config) = crate::renderer_engine::RendererConfig::from_file(
+                crate::utils::config_path::get_renderer_config_path(),
+            ) {
                 if let Ok(mut renderer) = self.renderer_config.write() {
                     *renderer = config;
                 }
