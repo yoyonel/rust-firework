@@ -26,8 +26,12 @@ pub struct PreviewContext<'a> {
 }
 
 pub struct SmokePreviewRenderer {
+    hdr_fbo: u32,
+    hdr_tex: u32,
     fbo: u32,
     color_tex: u32,
+    postproc_program: u32,
+    loc_postproc_tex: i32,
     ubo_global: u32,
     smoke_program: u32,
     loc_smoke_tex: i32,
@@ -63,7 +67,37 @@ pub struct SmokePreviewRenderer {
 impl SmokePreviewRenderer {
     pub fn init() -> Self {
         unsafe {
-            // 1. Create Framebuffer and Texture Attachment (480x200)
+            // 1. Create HDR Scene Framebuffer (linear space) and Final Composite Framebuffer (sRGB / Tone Mapped)
+            let mut hdr_fbo = 0;
+            gl::GenFramebuffers(1, &mut hdr_fbo);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, hdr_fbo);
+
+            let mut hdr_tex = 0;
+            gl::GenTextures(1, &mut hdr_tex);
+            gl::BindTexture(gl::TEXTURE_2D, hdr_tex);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA16F as i32,
+                480,
+                200,
+                0,
+                gl::RGBA,
+                gl::FLOAT,
+                std::ptr::null(),
+            );
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            gl::FramebufferTexture2D(
+                gl::FRAMEBUFFER,
+                gl::COLOR_ATTACHMENT0,
+                gl::TEXTURE_2D,
+                hdr_tex,
+                0,
+            );
+
             let mut fbo = 0;
             gl::GenFramebuffers(1, &mut fbo);
             gl::BindFramebuffer(gl::FRAMEBUFFER, fbo);
@@ -95,9 +129,19 @@ impl SmokePreviewRenderer {
             );
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
+            // Post-processing Tone-Mapping + Gamma Correction Shader (loaded from external .glsl files)
+            use crate::renderer_engine::constants;
+            use crate::renderer_engine::shader::compile_shader_program_from_files;
+
+            let postproc_program = compile_shader_program_from_files(
+                constants::SHADER_SMOKE_PREVIEW_POSTPROC_VERTEX_PATH,
+                constants::SHADER_SMOKE_PREVIEW_POSTPROC_FRAGMENT_PATH,
+            );
+
+            let loc_postproc_tex = gl::GetUniformLocation(postproc_program, cstr!("uTex"));
+
             // 2. Create GlobalData UBO (binding 0)
             let mut ubo_global = 0;
-            use crate::renderer_engine::constants;
 
             gl::GenBuffers(1, &mut ubo_global);
             gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_global);
@@ -147,12 +191,16 @@ impl SmokePreviewRenderer {
 
             gl::BindVertexArray(smoke_vao);
 
-            let quad_vertices: [f32; 8] = [-1.0, -1.0, 1.0, -1.0, -1.0, 1.0, 1.0, 1.0];
+            const OCTAGON_VERTICES: [f32; 20] = [
+                0.0, 0.0, // Center vertex for TRIANGLE_FAN
+                1.082392, 0.0, 0.765366, 0.765366, 0.0, 1.082392, -0.765366, 0.765366, -1.082392,
+                0.0, -0.765366, -0.765366, 0.0, -1.082392, 0.765366, -0.765366, 1.082392, 0.0,
+            ];
             gl::BindBuffer(gl::ARRAY_BUFFER, smoke_quad_vbo);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
-                (quad_vertices.len() * 4) as isize,
-                quad_vertices.as_ptr() as *const _,
+                (OCTAGON_VERTICES.len() * 4) as isize,
+                OCTAGON_VERTICES.as_ptr() as *const _,
                 gl::STATIC_DRAW,
             );
 
@@ -263,57 +311,11 @@ impl SmokePreviewRenderer {
             let (noise_tex, _, _) = load_texture(constants::TEXTURE_NOISE_PATH);
             let (rocket_tex, _, _) = load_texture(constants::TEXTURE_PRIMARY_PARTICLE_PATH);
 
-            // 6. Quad Shader for Rocket Rendering with Z-Rotation
-            let vert_src = cstr!(
-                "#version 330 core\n\
-                layout(location = 0) in vec2 aPos;\n\
-                layout(location = 1) in vec2 aTexCoord;\n\
-                out vec2 vTexCoord;\n\
-                uniform vec4 uRect;\n\
-                uniform vec2 uSize;\n\
-                uniform float uRotZ;\n\
-                void main() {\n\
-                    vTexCoord = aTexCoord;\n\
-                    vec2 half_extent = uRect.zw * 0.5;\n\
-                    vec2 local_pos = aPos * half_extent;\n\
-                    float cos_a = cos(uRotZ);\n\
-                    float sin_a = sin(uRotZ);\n\
-                    vec2 rotated_local = vec2(\n\
-                        local_pos.x * cos_a - local_pos.y * sin_a,\n\
-                        local_pos.x * sin_a + local_pos.y * cos_a\n\
-                    );\n\
-                    vec2 world_pos = uRect.xy + rotated_local;\n\
-                    vec2 ndc = (world_pos / uSize) * 2.0 - 1.0;\n\
-                    gl_Position = vec4(ndc, 0.0, 1.0);\n\
-                }\n\0"
+            // 6. Quad Shader for Rocket Rendering with Z-Rotation (loaded from external .glsl files)
+            let quad_program = compile_shader_program_from_files(
+                constants::SHADER_SMOKE_PREVIEW_QUAD_VERTEX_PATH,
+                constants::SHADER_SMOKE_PREVIEW_QUAD_FRAGMENT_PATH,
             );
-
-            let frag_src = cstr!(
-                "#version 330 core\n\
-                in vec2 vTexCoord;\n\
-                out vec4 FragColor;\n\
-                uniform sampler2D uTex;\n\
-                void main() {\n\
-                    vec4 texColor = texture(uTex, vTexCoord);\n\
-                    if (texColor.a < 0.05) discard;\n\
-                    FragColor = texColor;\n\
-                }\n\0"
-            );
-
-            let v_sh = gl::CreateShader(gl::VERTEX_SHADER);
-            gl::ShaderSource(v_sh, 1, &vert_src, std::ptr::null());
-            gl::CompileShader(v_sh);
-
-            let f_sh = gl::CreateShader(gl::FRAGMENT_SHADER);
-            gl::ShaderSource(f_sh, 1, &frag_src, std::ptr::null());
-            gl::CompileShader(f_sh);
-
-            let quad_program = gl::CreateProgram();
-            gl::AttachShader(quad_program, v_sh);
-            gl::AttachShader(quad_program, f_sh);
-            gl::LinkProgram(quad_program);
-            gl::DeleteShader(v_sh);
-            gl::DeleteShader(f_sh);
 
             let loc_quad_rect = gl::GetUniformLocation(quad_program, cstr!("uRect"));
             let loc_quad_size = gl::GetUniformLocation(quad_program, cstr!("uSize"));
@@ -351,8 +353,12 @@ impl SmokePreviewRenderer {
             gl::BindVertexArray(0);
 
             Self {
+                hdr_fbo,
+                hdr_tex,
                 fbo,
                 color_tex,
+                postproc_program,
+                loc_postproc_tex,
                 ubo_global,
                 smoke_program,
                 loc_smoke_tex,
@@ -392,7 +398,7 @@ impl SmokePreviewRenderer {
             let mut prev_viewport = [0; 4];
             gl::GetIntegerv(gl::VIEWPORT, prev_viewport.as_mut_ptr());
 
-            gl::BindFramebuffer(gl::FRAMEBUFFER, self.fbo);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo);
             gl::Viewport(0, 0, 480, 200);
 
             // Task 4.B: Clear to pure black (night sky background for visual ISO)
@@ -418,12 +424,10 @@ impl SmokePreviewRenderer {
 
             // Task 4.A: Simulated velocity exhaust vector away from static rocket nozzle
             let nozzle_pos = Vec2::new(nozzle_x, nozzle_y);
-            let simulated_rocket_vel = Vec2::new(-rot_rad.sin(), rot_rad.cos()) * 2500.0;
+            let simulated_rocket_vel = Vec2::new(-rot_rad.sin(), rot_rad.cos()) * 400.0;
             let inherited_col = match ctx.config.smoke_color_mode {
                 SmokeColorMode::Custom => Vec3::from_array(ctx.config.smoke_custom_color),
-                SmokeColorMode::RocketColor => {
-                    Vec3::new(0.95, 0.70, 0.30) * ctx.config.smoke_inherited_color_intensity
-                }
+                SmokeColorMode::RocketColor => Vec3::ONE,
             };
 
             // Emit particles into isolated local SmokeSystem
@@ -444,21 +448,12 @@ impl SmokePreviewRenderer {
 
             self.smoke_system.update(dt, ctx.config);
 
-            // 1. RENDER ROCKET SPRITE
-            gl::UseProgram(self.quad_program);
-            gl::Uniform2f(self.loc_quad_size, sim_w, sim_h);
-            gl::Uniform4f(self.loc_quad_rect, center_x, center_y, rocket_w, rocket_h);
-            gl::Uniform1f(self.loc_quad_rot_z, rot_rad);
-            gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.rocket_tex);
-            gl::Uniform1i(self.loc_quad_tex, 0);
+            // 1. RENDER INSTANCED SMOKE PARTICLES (render_order=10 in main scene)
+            // Match main scene GL state: disable depth writes for smoke
+            gl::DepthMask(gl::FALSE);
 
-            gl::BindVertexArray(self.quad_vao);
-            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
-
-            // 2. RENDER INSTANCED SMOKE PARTICLES
             gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global);
-            let ubo_data: [f32; 4] = [sim_w, sim_h, 399.0 / 385.0, 0.0];
+            let ubo_data: [f32; 4] = [sim_w, sim_h, 399.0 / 385.0, 1.5];
             gl::BufferSubData(gl::UNIFORM_BUFFER, 0, 16, ubo_data.as_ptr() as *const _);
             gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global);
 
@@ -548,9 +543,43 @@ impl SmokePreviewRenderer {
                 );
 
                 gl::BindVertexArray(self.smoke_vao);
-                gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, instances.len() as i32);
+                gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, instances.len() as i32);
                 gl::BindVertexArray(0);
             }
+
+            // Restore depth write (ISO with smoke_renderer.rs)
+            gl::DepthMask(gl::TRUE);
+
+            // 2. RENDER ROCKET SPRITE (render_order=20 in main scene — drawn OVER smoke)
+            gl::UseProgram(self.quad_program);
+            gl::Uniform2f(self.loc_quad_size, sim_w, sim_h);
+            gl::Uniform4f(self.loc_quad_rect, center_x, center_y, rocket_w, rocket_h);
+            gl::Uniform1f(self.loc_quad_rot_z, rot_rad);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.rocket_tex);
+            gl::Uniform1i(self.loc_quad_tex, 0);
+
+            gl::BindVertexArray(self.quad_vao);
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+
+            // 3. POST-PROCESS COMPOSITE PASS: Tone-Mapping (KhronosPBR) & Gamma Correction (1.0/2.2)
+            // Exactly ISO with main scene bloom composition shader
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.fbo);
+            gl::Viewport(0, 0, 480, 200);
+            gl::ClearColor(0.0, 0.0, 0.0, 1.0);
+            gl::Clear(gl::COLOR_BUFFER_BIT);
+
+            gl::Disable(gl::BLEND);
+            gl::UseProgram(self.postproc_program);
+            gl::ActiveTexture(gl::TEXTURE0);
+            gl::BindTexture(gl::TEXTURE_2D, self.hdr_tex);
+            if self.loc_postproc_tex != -1 {
+                gl::Uniform1i(self.loc_postproc_tex, 0);
+            }
+
+            gl::BindVertexArray(self.quad_vao);
+            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+            gl::BindVertexArray(0);
 
             // Restore previous framebuffer and viewport
             gl::BindFramebuffer(gl::FRAMEBUFFER, prev_fbo as u32);
