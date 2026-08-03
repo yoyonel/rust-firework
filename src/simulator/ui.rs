@@ -499,6 +499,22 @@ where
                 session.show_geometry_trimming,
                 std::sync::atomic::Ordering::Relaxed,
             );
+            crate::renderer_engine::smoke_preview::PREVIEW_ZOOM.store(
+                (session.smoke_preview_zoom * 100.0) as u32,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            crate::renderer_engine::smoke_preview::PREVIEW_PAN_X.store(
+                (session.smoke_preview_pan_x * 10.0) as i32,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            crate::renderer_engine::smoke_preview::PREVIEW_PAN_Y.store(
+                (session.smoke_preview_pan_y * 10.0) as i32,
+                std::sync::atomic::Ordering::Relaxed,
+            );
+            crate::renderer_engine::smoke_preview::PREVIEW_ROT_Z.store(
+                (session.smoke_preview_rot_z * 10.0) as i32,
+                std::sync::atomic::Ordering::Relaxed,
+            );
             self.tonemapping_comparison_mode.store(
                 session.tonemapping_comparison_mode,
                 std::sync::atomic::Ordering::Relaxed,
