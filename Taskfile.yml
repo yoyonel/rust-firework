@@ -88,6 +88,40 @@ tasks:
     cmds:
       - "{{.CARGO}} build --profile profiling"
 
+  build-profiling-native:
+    desc: "Compile en mode profiling avec RUSTFLAGS natifs (AVX2 SIMD activé)"
+    cmds:
+      - RUSTFLAGS="-C target-cpu=native" {{.CARGO}} build --profile profiling
+
+  asm-dsp-spatial-bus:
+    desc: "Décompile la fonction DspProcessor::process_dsp_spatial_bus via GDB (avec recherche auto d'adresse)"
+    deps: [build-profiling-native]
+    cmds:
+      - |
+        ADDR=$(nm -C ./target/profiling/{{.APP_NAME}} | grep "process_dsp_spatial_bus" | awk '{print $1}')
+        echo "🔍 Décompilation assembleur SIMD AVX2 de process_dsp_spatial_bus (0x$ADDR) :"
+        gdb -batch -ex "file ./target/profiling/{{.APP_NAME}}" -ex "disassemble 0x$ADDR, +3500" | grep -A 22 -B 3 "vbroadcastss"
+
+  asm-count-simd:
+    desc: "Compte automatiquement les instructions SIMD AVX2 256-bit vs scalaires dans process_dsp_spatial_bus"
+    deps: [build-profiling-native]
+    cmds:
+      - |
+        ADDR=$(nm -C ./target/profiling/{{.APP_NAME}} | grep "process_dsp_spatial_bus" | awk '{print $1}')
+        gdb -batch -ex "file ./target/profiling/{{.APP_NAME}}" -ex "disassemble 0x$ADDR, +3500" | awk '
+        /vaddps|vmulps|vsubps|vdivps|vfmadd|vbroadcast|vmovups|vhaddps|vpermpd/ { vec++ }
+        /vaddss|vmulss|vsubss|vdivss|vcmpeqss|vmaxss|vminss/ { scal++ }
+        /fdiv|divss/ { div++ }
+        END {
+          print "--------------------------------------------------------"
+          print "📊 ANALYSE ASSEMBLEUR SIMD (process_dsp_spatial_bus)"
+          print "--------------------------------------------------------"
+          print "⚡ Instructions Vectorielles SIMD AVX2 256-bit (ymm) :", vec+0
+          print "🎯 Instructions Scalaires AVX/SSE (xmm)          :", scal+0
+          print "🚫 Divisions flottantes matérielles (fdiv/divss) :", div+0
+          print "--------------------------------------------------------"
+        }'
+
   valgrind-callgrind:
     desc: "Profiling avec Valgrind"
     deps: [build-profiling]
