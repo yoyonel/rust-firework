@@ -93,18 +93,10 @@ fn interpolate_mono_sample(slice: &[[f32; 2]], pos: f64) -> f32 {
     }
 
     let s0 = &slice[index];
-    let sample0 = if s0[0] == s0[1] {
-        s0[0]
-    } else {
-        (s0[0] + s0[1]) * 0.5
-    };
+    let sample0 = (s0[0] + s0[1]) * 0.5;
     let sample1 = if index + 1 < total_len {
         let s1 = &slice[index + 1];
-        if s1[0] == s1[1] {
-            s1[0]
-        } else {
-            (s1[0] + s1[1]) * 0.5
-        }
+        (s1[0] + s1[1]) * 0.5
     } else {
         0.0
     };
@@ -119,19 +111,16 @@ fn apply_fade_in_out(
     total_len: usize,
     fade_in_samples: usize,
     fade_out_samples: usize,
+    inv_fade_in: f32,
+    inv_fade_out: f32,
 ) -> f32 {
-    let mut result = sample;
     if index < fade_in_samples {
-        let alpha = index as f32 / fade_in_samples as f32;
-        result *= alpha;
+        sample * (index as f32 * inv_fade_in)
+    } else if total_len - index < fade_out_samples {
+        sample * ((total_len - index) as f32 * inv_fade_out)
     } else {
-        let remaining = total_len - index;
-        if remaining < fade_out_samples {
-            let alpha = remaining as f32 / fade_out_samples as f32;
-            result *= alpha;
-        }
+        sample
     }
-    result
 }
 
 #[inline(always)]
@@ -470,41 +459,48 @@ impl DspProcessor {
                     let w_out = &mut bus_w_slice[..count];
                     let x_out = &mut bus_x_slice[..count];
 
+                    let inv_fade_in = if fade_in > 0 { 1.0 / fade_in as f32 } else { 0.0 };
+                    let inv_fade_out = if fade_out > 0 { 1.0 / fade_out as f32 } else { 0.0 };
+
                     if !active_fade && !apply_lpf {
                         // Boucle 100% vectorisable par le compilateur (SIMD 8-wide AVX2)
-                        for ((s, w), x) in sample_slice
-                            .iter()
-                            .zip(w_out.iter_mut())
-                            .zip(x_out.iter_mut())
-                        {
+                        for i in 0..count {
+                            let s = sample_slice[i];
                             let sample = (s[0] + s[1]) * 0.5;
-                            *w += sample * w_weight;
-                            *x += sample * x_weight;
+                            w_out[i] += sample * w_weight;
+                            x_out[i] += sample * x_weight;
                         }
                     } else {
-                        for (i, (s, (w, x))) in sample_slice
-                            .iter()
-                            .zip(w_out.iter_mut().zip(x_out.iter_mut()))
-                            .enumerate()
-                        {
+                        for i in 0..count {
                             let index = start_idx + i;
+                            let s = sample_slice[i];
                             let mut sample = (s[0] + s[1]) * 0.5;
                             if active_fade {
-                                sample =
-                                    apply_fade_in_out(sample, index, total_len, fade_in, fade_out);
+                                sample = apply_fade_in_out(
+                                    sample,
+                                    index,
+                                    total_len,
+                                    fade_in,
+                                    fade_out,
+                                    inv_fade_in,
+                                    inv_fade_out,
+                                );
                             }
                             if apply_lpf {
                                 sample = apply_iir_lowpass(sample, prev_mono, filter_a);
                                 prev_mono = sample;
                             }
-                            *w += sample * w_weight;
-                            *x += sample * x_weight;
+                            w_out[i] += sample * w_weight;
+                            x_out[i] += sample * x_weight;
                         }
                     }
                     v.pos += count as f64;
                 }
             } else {
                 // Path fallback : Vitesse variable (Doppler / Pitch shift avec LERP)
+                let inv_fade_in = if fade_in > 0 { 1.0 / fade_in as f32 } else { 0.0 };
+                let inv_fade_out = if fade_out > 0 { 1.0 / fade_out as f32 } else { 0.0 };
+
                 for i in 0..frames {
                     let current_pos = v.pos;
                     let index = current_pos as usize;
@@ -516,7 +512,15 @@ impl DspProcessor {
                     let mut sample = interpolate_mono_sample(slice_ref, current_pos);
 
                     if active_fade {
-                        sample = apply_fade_in_out(sample, index, total_len, fade_in, fade_out);
+                        sample = apply_fade_in_out(
+                            sample,
+                            index,
+                            total_len,
+                            fade_in,
+                            fade_out,
+                            inv_fade_in,
+                            inv_fade_out,
+                        );
                     }
 
                     if apply_lpf {
@@ -556,18 +560,13 @@ impl DspProcessor {
             self.hrtf_convolver
                 .process_bus(bus_w_slice, bus_x_slice, &mut self.acc, frames);
         } else {
-            // Compensation d'énergie Isopuissance (SQRT_2) :
-            // - Au centre (dir_x = 0) : L = 0.7071 S, R = 0.7071 S (100% ISO avec le mode Legacy)
-            // - À gauche/droite (dir_x = +-1) : L = 1.0 S, R = 0.0 S (100% ISO avec le mode Legacy)
             let frac_1_sqrt2 = std::f32::consts::FRAC_1_SQRT_2;
             let acc_slice = &mut self.acc[..frames];
-            for ((&w, &x), acc_frame) in bus_w_slice
-                .iter()
-                .zip(bus_x_slice.iter())
-                .zip(acc_slice.iter_mut())
-            {
-                acc_frame[0] = w - frac_1_sqrt2 * x;
-                acc_frame[1] = w + frac_1_sqrt2 * x;
+            for i in 0..frames {
+                let w = bus_w_slice[i];
+                let x = bus_x_slice[i];
+                acc_slice[i][0] = w - frac_1_sqrt2 * x;
+                acc_slice[i][1] = w + frac_1_sqrt2 * x;
             }
         }
     }
@@ -637,6 +636,9 @@ impl DspProcessor {
             let itd_step_l = (itd_l_samples - start_itd_l) / frames as f32;
             let itd_step_r = (itd_r_samples - start_itd_r) / frames as f32;
 
+            let inv_fade_in = if v.fade_in_samples > 0 { 1.0 / v.fade_in_samples as f32 } else { 0.0 };
+            let inv_fade_out = if v.fade_out_samples > 0 { 1.0 / v.fade_out_samples as f32 } else { 0.0 };
+
             // 3. Boucle de Mixage : Lecture spatiale directe (Zéro Buffer Intermédiaire)
             for (i, frame) in self.acc[..frames].iter_mut().enumerate() {
                 let current_pos = v.pos;
@@ -659,6 +661,8 @@ impl DspProcessor {
                         total_len,
                         v.fade_in_samples,
                         v.fade_out_samples,
+                        inv_fade_in,
+                        inv_fade_out,
                     );
                     r = apply_fade_in_out(
                         r,
@@ -666,6 +670,8 @@ impl DspProcessor {
                         total_len,
                         v.fade_in_samples,
                         v.fade_out_samples,
+                        inv_fade_in,
+                        inv_fade_out,
                     );
                 }
 
@@ -724,15 +730,17 @@ impl DspProcessor {
 
             if fx_enabled(fx_mask, AudioEffect::Normalization) {
                 // Saturation douce via fast_tanh polynomial Padé (évite tout appel libc::tanhf)
-                for (sample, out_pair) in acc_slice.iter().zip(data_slice.chunks_exact_mut(2)) {
-                    out_pair[0] = fast_tanh(sample[0] * global_gain);
-                    out_pair[1] = fast_tanh(sample[1] * global_gain);
+                for i in 0..frames {
+                    let sample = acc_slice[i];
+                    data_slice[2 * i] = fast_tanh(sample[0] * global_gain);
+                    data_slice[2 * i + 1] = fast_tanh(sample[1] * global_gain);
                 }
             } else {
                 // Bypass : pas de gain global, clampage linéaire simple [-1.0, 1.0]
-                for (sample, out_pair) in acc_slice.iter().zip(data_slice.chunks_exact_mut(2)) {
-                    out_pair[0] = sample[0].clamp(-1.0, 1.0);
-                    out_pair[1] = sample[1].clamp(-1.0, 1.0);
+                for i in 0..frames {
+                    let sample = acc_slice[i];
+                    data_slice[2 * i] = sample[0].clamp(-1.0, 1.0);
+                    data_slice[2 * i + 1] = sample[1].clamp(-1.0, 1.0);
                 }
             }
         });
