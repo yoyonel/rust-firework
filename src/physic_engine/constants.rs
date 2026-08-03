@@ -215,6 +215,42 @@ pub const DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED: f32 = 400.0;
 /// Default simulated rocket trajectory angle offset (degrees) in preview.
 pub const DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET: f32 = 0.0;
 
+/// Velocity inheritance factor for smoke particles in ground frame (-5% of rocket velocity).
+pub const SMOKE_EMISSION_VELOCITY_INHERITANCE_FACTOR: f32 = -0.05;
+
+/// Relative exhaust velocity scaling factor for stationary preview viewport (-1.05 * rocket velocity).
+pub const SMOKE_PREVIEW_RELATIVE_EXHAUST_SCALE: f32 = -1.05;
+
+/// Minimum position jitter (pixels) for smoke particle emission.
+pub const SMOKE_EMISSION_POSITION_OFFSET_MIN: f32 = -3.0;
+
+/// Maximum position jitter (pixels) for smoke particle emission.
+pub const SMOKE_EMISSION_POSITION_OFFSET_MAX: f32 = 3.0;
+
+/// Minimum horizontal dispersion velocity for smoke emission.
+pub const SMOKE_EMISSION_DISPERSION_X_MIN: f32 = -10.0;
+
+/// Maximum horizontal dispersion velocity for smoke emission.
+pub const SMOKE_EMISSION_DISPERSION_X_MAX: f32 = 10.0;
+
+/// Minimum vertical dispersion velocity for smoke emission.
+pub const SMOKE_EMISSION_DISPERSION_Y_MIN: f32 = -12.0;
+
+/// Maximum vertical dispersion velocity for smoke emission.
+pub const SMOKE_EMISSION_DISPERSION_Y_MAX: f32 = -3.0;
+
+/// Minimum initial opacity (alpha) for volumetric smoke emission.
+pub const SMOKE_EMISSION_OPACITY_MIN: f32 = 0.35;
+
+/// Maximum initial opacity (alpha) for volumetric smoke emission.
+pub const SMOKE_EMISSION_OPACITY_MAX: f32 = 0.60;
+
+/// Minimum lifetime & size variation multiplier for randomized particle emission.
+pub const SMOKE_EMISSION_VARIATION_MIN: f32 = 0.85;
+
+/// Maximum lifetime & size variation multiplier for randomized particle emission.
+pub const SMOKE_EMISSION_VARIATION_MAX: f32 = 1.15;
+
 /// Default texture path for Rocket particle type.
 pub const TEXTURE_ROCKET_PATH: &str =
     "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png";

@@ -445,7 +445,7 @@ impl SmokePreviewRenderer {
             let interval = 1.0 / spawn_rate;
             while self.emit_timer >= interval {
                 self.emit_timer -= interval;
-                self.smoke_system.emit(
+                self.smoke_system.emit_preview(
                     nozzle_pos,
                     simulated_rocket_vel,
                     inherited_col,
