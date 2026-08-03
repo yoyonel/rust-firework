@@ -200,11 +200,74 @@ pub const DEFAULT_FLOW_DISTORTION_STRENGTH: f32 = 0.15;
 /// Default Flow Map animation speed multiplier for smoke turbulence.
 pub const DEFAULT_FLOW_ANIMATION_SPEED: f32 = 1.0;
 
+/// Default zoom factor for live GPU smoke preview viewport.
+pub const DEFAULT_SMOKE_PREVIEW_ZOOM: f32 = 1.0;
+
+/// Default pan X translation (pixels) for live GPU smoke preview viewport.
+pub const DEFAULT_SMOKE_PREVIEW_PAN_X: f32 = 0.0;
+
+/// Default pan Y translation (pixels) for live GPU smoke preview viewport.
+pub const DEFAULT_SMOKE_PREVIEW_PAN_Y: f32 = 0.0;
+
+/// Default rotation Z angle (degrees) for live GPU smoke preview viewport.
+pub const DEFAULT_SMOKE_PREVIEW_ROT_Z: f32 = 0.0;
+
 /// Minimum zoom factor for the live GPU smoke preview viewport.
 pub const DEFAULT_SMOKE_PREVIEW_MIN_ZOOM: f32 = 0.4;
 
 /// Maximum zoom factor for the live GPU smoke preview viewport.
 pub const DEFAULT_SMOKE_PREVIEW_MAX_ZOOM: f32 = 10.0;
+
+/// Minimum erosion scale slider bound.
+pub const SMOKE_EROSION_SCALE_MIN: f32 = 0.0;
+
+/// Maximum erosion scale slider bound.
+pub const SMOKE_EROSION_SCALE_MAX: f32 = 2.0;
+
+/// Minimum erosion edge width slider bound.
+pub const SMOKE_EROSION_EDGE_WIDTH_MIN: f32 = 0.0;
+
+/// Maximum erosion edge width slider bound.
+pub const SMOKE_EROSION_EDGE_WIDTH_MAX: f32 = 0.80;
+
+/// Minimum flow distortion strength slider bound.
+pub const FLOW_DISTORTION_STRENGTH_MIN: f32 = 0.0;
+
+/// Maximum flow distortion strength slider bound.
+pub const FLOW_DISTORTION_STRENGTH_MAX: f32 = 1.0;
+
+/// Minimum flow animation speed slider bound.
+pub const FLOW_ANIMATION_SPEED_MIN: f32 = 0.0;
+
+/// Maximum flow animation speed slider bound.
+pub const FLOW_ANIMATION_SPEED_MAX: f32 = 5.0;
+
+/// Minimum smoke inherited rocket color intensity slider bound.
+pub const SMOKE_INHERITED_COLOR_INTENSITY_MIN: f32 = 0.0;
+
+/// Maximum smoke inherited rocket color intensity slider bound.
+pub const SMOKE_INHERITED_COLOR_INTENSITY_MAX: f32 = 2.0;
+
+/// Minimum preview viewport max zoom slider bound.
+pub const SMOKE_PREVIEW_MAX_ZOOM_MIN: f32 = 2.0;
+
+/// Maximum preview viewport max zoom slider bound.
+pub const SMOKE_PREVIEW_MAX_ZOOM_MAX: f32 = 20.0;
+
+/// Minimum preview simulated speed slider bound.
+pub const SMOKE_PREVIEW_SIMULATED_SPEED_MIN: f32 = 0.0;
+
+/// Maximum preview simulated speed slider bound.
+pub const SMOKE_PREVIEW_SIMULATED_SPEED_MAX: f32 = 1000.0;
+
+/// Minimum preview simulated angle offset slider bound.
+pub const SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET_MIN: f32 = -180.0;
+
+/// Maximum preview simulated angle offset slider bound.
+pub const SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET_MAX: f32 = 180.0;
+
+/// Texture path for smoke puff sprite.
+pub const TEXTURE_SMOKE_PUFF_PATH: &str = "assets/textures/smoke_puff.png";
 
 /// Default rocket sprite albedo color for the smoke preview viewport.
 pub const DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR: [f32; 3] = [1.0, 1.0, 1.0];

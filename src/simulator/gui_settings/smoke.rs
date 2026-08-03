@@ -67,8 +67,8 @@ pub fn render_smoke_controls(
         ui.set_next_item_width(item_width);
         if ui.slider(
             "Erosion Aggressiveness / Scale (`physic.smoke_erosion_scale`)",
-            0.0,
-            2.0,
+            physic_constants::SMOKE_EROSION_SCALE_MIN,
+            physic_constants::SMOKE_EROSION_SCALE_MAX,
             &mut erosion_scale,
         ) {
             cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionScale(
@@ -92,8 +92,8 @@ pub fn render_smoke_controls(
         ui.set_next_item_width(item_width);
         if ui.slider(
             "Erosion Edge Width (`physic.smoke_erosion_edge_width`)",
-            0.0,
-            0.80,
+            physic_constants::SMOKE_EROSION_EDGE_WIDTH_MIN,
+            physic_constants::SMOKE_EROSION_EDGE_WIDTH_MAX,
             &mut edge_width,
         ) {
             cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetErosionEdgeWidth(
@@ -158,8 +158,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Flow Distortion Strength (`physic.flow_distortion_strength`)",
-        0.0,
-        1.0,
+        physic_constants::FLOW_DISTORTION_STRENGTH_MIN,
+        physic_constants::FLOW_DISTORTION_STRENGTH_MAX,
         &mut flow_distortion,
     ) {
         cmd_queue.push(EngineCommand::Smoke(
@@ -183,8 +183,8 @@ pub fn render_smoke_controls(
     ui.set_next_item_width(item_width);
     if ui.slider(
         "Flow Animation Speed (`physic.flow_animation_speed`)",
-        0.0,
-        5.0,
+        physic_constants::FLOW_ANIMATION_SPEED_MIN,
+        physic_constants::FLOW_ANIMATION_SPEED_MAX,
         &mut flow_speed,
     ) {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::SetFlowAnimationSpeed(
@@ -246,8 +246,8 @@ pub fn render_smoke_controls(
         ui.set_next_item_width(item_width);
         if ui.slider(
             "Inherited Rocket Color Intensity (`physic.smoke_inherited_color_intensity`)",
-            0.0,
-            2.0,
+            physic_constants::SMOKE_INHERITED_COLOR_INTENSITY_MIN,
+            physic_constants::SMOKE_INHERITED_COLOR_INTENSITY_MAX,
             &mut intensity,
         ) {
             cmd_queue.push(EngineCommand::Smoke(
@@ -531,7 +531,9 @@ pub fn render_smoke_settings_tab(
         let pan_x = PREVIEW_PAN_X.load(Ordering::Relaxed) as f32 / 10.0;
         let pan_y = PREVIEW_PAN_Y.load(Ordering::Relaxed) as f32 / 10.0;
         let rot_z = PREVIEW_ROT_Z.load(Ordering::Relaxed) as f32 / 10.0;
-        let canvas_aspect = (avail_width / 145.0).max(0.1);
+        let font_sz = ui.current_font_size();
+        let preview_height = font_sz * 11.15;
+        let canvas_aspect = (avail_width / preview_height).max(0.1);
         let ctx = PreviewContext {
             config: cfg,
             zoom,
@@ -552,8 +554,13 @@ pub fn render_smoke_settings_tab(
     // =========================================================================
     // 2. 100% BIT-FOR-BIT ISO GPU FBO PREVIEW CANVAS (INTERACTIVE VIEWPORT)
     // =========================================================================
+    let font_sz = ui.current_font_size();
+    let font_scale = font_sz / 13.0;
+    let preview_outer_height = font_sz * 14.23;
+    let preview_height = font_sz * 11.15;
+
     ui.child_window("SmokeErosionPreviewCanvas")
-        .size([avail_width, 185.0])
+        .size([avail_width, preview_outer_height])
         .border(true)
         .focused(false)
         .flags(imgui::WindowFlags::NO_SCROLL_WITH_MOUSE | imgui::WindowFlags::NO_SCROLLBAR)
@@ -564,7 +571,6 @@ pub fn render_smoke_settings_tab(
             let rot_z = PREVIEW_ROT_Z.load(Ordering::Relaxed) as f32 / 10.0;
 
             let preview_width = ui.content_region_avail()[0];
-            let preview_height = 145.0;
 
             let canvas_pos = ui.cursor_screen_pos();
             let tex_id = imgui::TextureId::new(fbo_tex as usize);
@@ -574,9 +580,6 @@ pub fn render_smoke_settings_tab(
                 .build(ui);
 
             // Draw subtle translucent directional vector arrow representing virtual rocket velocity
-            let font_sz = ui.current_font_size();
-            let font_scale = font_sz / 13.0; // Dynamic UI scaling
-
             let aspect = (preview_width / preview_height.max(1.0)).max(0.1);
             let sim_h = 200.0 / zoom.max(0.01);
             let sim_w = sim_h * aspect;
@@ -619,10 +622,10 @@ pub fn render_smoke_settings_tab(
             let draw_list = ui.get_window_draw_list();
 
             // Only draw arrow if rocket tip is near/inside visible canvas bounds
-            if start_x >= canvas_pos[0] - 100.0
-                && start_x <= canvas_pos[0] + preview_width + 100.0
-                && start_y >= canvas_pos[1] - 100.0
-                && start_y <= canvas_pos[1] + preview_height + 100.0
+            if start_x >= canvas_pos[0] - 100.0 * font_scale
+                && start_x <= canvas_pos[0] + preview_width + 100.0 * font_scale
+                && start_y >= canvas_pos[1] - 100.0 * font_scale
+                && start_y <= canvas_pos[1] + preview_height + 100.0 * font_scale
             {
                 // Draw shaft line
                 draw_list
@@ -699,7 +702,7 @@ pub fn render_smoke_settings_tab(
                 }
             }
 
-            ui.set_cursor_pos([10.0, 10.0]);
+            ui.set_cursor_pos([10.0 * font_scale, 10.0 * font_scale]);
             ui.text_colored(
                 COLOR_HEADER,
                 format!(
@@ -716,7 +719,7 @@ pub fn render_smoke_settings_tab(
                 PREVIEW_ROT_Z.store(0, Ordering::Relaxed);
             }
 
-            ui.set_cursor_pos([10.0, 160.0]);
+            ui.set_cursor_pos([10.0 * font_scale, preview_height + 15.0 * font_scale]);
             ui.text_colored(
                 COLOR_TEXT_HINT,
                 "[Middle Drag: Pan X/Y] | [Right Drag: Rotate Z] | [Wheel: Zoom]",
@@ -733,8 +736,8 @@ pub fn render_smoke_settings_tab(
     ui.set_next_item_width(item_width);
     ui.slider(
         "Preview Viewport Max Zoom (`gui.smoke_preview_max_zoom`)",
-        2.0,
-        20.0,
+        physic_constants::SMOKE_PREVIEW_MAX_ZOOM_MIN,
+        physic_constants::SMOKE_PREVIEW_MAX_ZOOM_MAX,
         preview_max_zoom,
     );
     ui.same_line();
@@ -764,8 +767,8 @@ pub fn render_smoke_settings_tab(
     ui.set_next_item_width(item_width);
     ui.slider(
         "Preview Rocket Speed (m/s) (`gui.smoke_preview_simulated_speed`)",
-        0.0,
-        1000.0,
+        physic_constants::SMOKE_PREVIEW_SIMULATED_SPEED_MIN,
+        physic_constants::SMOKE_PREVIEW_SIMULATED_SPEED_MAX,
         preview_simulated_speed,
     );
     ui.same_line();
@@ -782,8 +785,8 @@ pub fn render_smoke_settings_tab(
     ui.set_next_item_width(item_width);
     ui.slider(
         "Preview Velocity Angle (deg) (`gui.smoke_preview_simulated_angle_offset`)",
-        -180.0,
-        180.0,
+        physic_constants::SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET_MIN,
+        physic_constants::SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET_MAX,
         preview_simulated_angle_offset,
     );
     ui.same_line();
@@ -816,10 +819,13 @@ pub fn render_smoke_settings_tab(
     }
 
     if show_trimming && raw_smoke_tex != 0 {
-        let tex_box_size = 200.0;
+        let font_sz = ui.current_font_size();
+        let font_scale = font_sz / 13.0;
+        let tex_box_size = font_sz * 15.38;
+        let container_height = font_sz * 16.92;
 
         ui.child_window("GeometryTrimmingContainer")
-            .size([avail_width, 220.0])
+            .size([avail_width, container_height])
             .border(true)
             .flags(imgui::WindowFlags::NO_SCROLLBAR | imgui::WindowFlags::NO_SCROLL_WITH_MOUSE)
             .build(|| {
@@ -840,32 +846,32 @@ pub fn render_smoke_settings_tab(
 
                 let draw_list = ui.get_window_draw_list();
 
-                // 2. Bounding Quad (Square 200x200) in Red
+                // 2. Bounding Quad (Square)
                 let sq_p0 = [center[0] - half, center[1] - half];
                 let sq_p1 = [center[0] + half, center[1] - half];
                 let sq_p2 = [center[0] + half, center[1] + half];
                 let sq_p3 = [center[0] - half, center[1] + half];
 
                 draw_list
-                    .add_line(sq_p0, sq_p1, [1.0, 0.2, 0.2, 0.9])
-                    .thickness(1.5)
+                    .add_line(sq_p0, sq_p1, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
+                    .thickness(1.5 * font_scale)
                     .build();
                 draw_list
-                    .add_line(sq_p1, sq_p2, [1.0, 0.2, 0.2, 0.9])
-                    .thickness(1.5)
+                    .add_line(sq_p1, sq_p2, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
+                    .thickness(1.5 * font_scale)
                     .build();
                 draw_list
-                    .add_line(sq_p2, sq_p3, [1.0, 0.2, 0.2, 0.9])
-                    .thickness(1.5)
+                    .add_line(sq_p2, sq_p3, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
+                    .thickness(1.5 * font_scale)
                     .build();
                 draw_list
-                    .add_line(sq_p3, sq_p0, [1.0, 0.2, 0.2, 0.9])
-                    .thickness(1.5)
+                    .add_line(sq_p3, sq_p0, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
+                    .thickness(1.5 * font_scale)
                     .build();
 
                 // 3. 1:1 Octagon Vertices matching GPU SmokeRenderer primitive
                 let r_maj = half;
-                let r_diag = half * (0.765366 / 1.082392); // ~70.7px
+                let r_diag = half * (0.765366 / 1.082392);
 
                 let oct = [
                     [center[0] + r_maj, center[1]],           // V0 (right)
@@ -880,19 +886,39 @@ pub fn render_smoke_settings_tab(
 
                 // 4. Shaded Trimmed Corners in Red Translucent (-17.2% Fillrate Surface Bypassed)
                 draw_list
-                    .add_triangle(sq_p0, oct[6], oct[5], [1.0, 0.1, 0.1, 0.45])
+                    .add_triangle(
+                        sq_p0,
+                        oct[6],
+                        oct[5],
+                        renderer_constants::COLOR_TRIMMING_CORNER_SHADE,
+                    )
                     .filled(true)
                     .build();
                 draw_list
-                    .add_triangle(sq_p1, oct[7], oct[6], [1.0, 0.1, 0.1, 0.45])
+                    .add_triangle(
+                        sq_p1,
+                        oct[7],
+                        oct[6],
+                        renderer_constants::COLOR_TRIMMING_CORNER_SHADE,
+                    )
                     .filled(true)
                     .build();
                 draw_list
-                    .add_triangle(sq_p2, oct[1], oct[2], [1.0, 0.1, 0.1, 0.45])
+                    .add_triangle(
+                        sq_p2,
+                        oct[1],
+                        oct[2],
+                        renderer_constants::COLOR_TRIMMING_CORNER_SHADE,
+                    )
                     .filled(true)
                     .build();
                 draw_list
-                    .add_triangle(sq_p3, oct[3], oct[2], [1.0, 0.1, 0.1, 0.45])
+                    .add_triangle(
+                        sq_p3,
+                        oct[3],
+                        oct[2],
+                        renderer_constants::COLOR_TRIMMING_CORNER_SHADE,
+                    )
                     .filled(true)
                     .build();
 
@@ -900,55 +926,75 @@ pub fn render_smoke_settings_tab(
                 for i in 0..8 {
                     let next = (i + 1) % 8;
                     draw_list
-                        .add_line(oct[i], oct[next], [0.0, 1.0, 0.8, 1.0])
-                        .thickness(2.0)
+                        .add_line(
+                            oct[i],
+                            oct[next],
+                            renderer_constants::COLOR_TRIMMING_OCTAGON_OUTLINE,
+                        )
+                        .thickness(2.0 * font_scale)
                         .build();
                     draw_list
-                        .add_line(center, oct[i], [0.0, 1.0, 0.8, 0.35])
-                        .thickness(1.0)
+                        .add_line(
+                            center,
+                            oct[i],
+                            renderer_constants::COLOR_TRIMMING_OCTAGON_INNER,
+                        )
+                        .thickness(1.0 * font_scale)
                         .build();
                     draw_list
-                        .add_circle(oct[i], 4.0, [0.0, 1.0, 1.0, 1.0])
+                        .add_circle(
+                            oct[i],
+                            4.0 * font_scale,
+                            renderer_constants::COLOR_TRIMMING_VERTEX_INDICATOR,
+                        )
                         .filled(true)
                         .build();
                 }
                 draw_list
-                    .add_circle(center, 4.5, [1.0, 1.0, 0.0, 1.0])
+                    .add_circle(
+                        center,
+                        4.5 * font_scale,
+                        renderer_constants::COLOR_TRIMMING_CENTER_PIN,
+                    )
                     .filled(true)
                     .build();
 
                 // Right Column: Technical Stats & Explanatory Legend
-                ui.set_cursor_pos([225.0, 15.0]);
+                let right_col_x = tex_box_size + 25.0 * font_scale;
+                ui.set_cursor_pos([right_col_x, 15.0 * font_scale]);
                 ui.text_colored(
                     COLOR_HEADER,
                     "=== GEOMETRY TRIMMING SPECIFICATIONS (1:1 SCALE) ===",
                 );
 
-                ui.set_cursor_pos([225.0, 40.0]);
-                ui.text("- Target Sprite Texture: assets/textures/smoke_puff.png (512x512)");
+                ui.set_cursor_pos([right_col_x, 40.0 * font_scale]);
+                ui.text(format!(
+                    "- Target Sprite Texture: {} (512x512)",
+                    physic_constants::TEXTURE_SMOKE_PUFF_PATH
+                ));
 
-                ui.set_cursor_pos([225.0, 60.0]);
+                ui.set_cursor_pos([right_col_x, 60.0 * font_scale]);
                 ui.text("- Hardware Primitive: GL_TRIANGLE_FAN");
 
-                ui.set_cursor_pos([225.0, 80.0]);
+                ui.set_cursor_pos([right_col_x, 80.0 * font_scale]);
                 ui.text("- Vertex Allocation: 10 Vertices (1 Center + 8 Perimeter + 1 Loop)");
 
-                ui.set_cursor_pos([225.0, 105.0]);
+                ui.set_cursor_pos([right_col_x, 105.0 * font_scale]);
                 ui.text_colored(COLOR_ALERT, "[Red Shaded Corners] Bypassed Surface:");
 
-                ui.set_cursor_pos([240.0, 125.0]);
+                ui.set_cursor_pos([right_col_x + 15.0 * font_scale, 125.0 * font_scale]);
                 ui.text("  -17.2% surface area eliminated from Hardware Rasterization.");
 
-                ui.set_cursor_pos([240.0, 145.0]);
+                ui.set_cursor_pos([right_col_x + 15.0 * font_scale, 145.0 * font_scale]);
                 ui.text("  Zero fragment shader threads scheduled for transparent quad corners.");
 
-                ui.set_cursor_pos([225.0, 170.0]);
+                ui.set_cursor_pos([right_col_x, 170.0 * font_scale]);
                 ui.text_colored(
                     COLOR_HEADER,
                     "[Cyan Octagon Mesh] Active GPU Raster Boundary:",
                 );
 
-                ui.set_cursor_pos([240.0, 190.0]);
+                ui.set_cursor_pos([right_col_x + 15.0 * font_scale, 190.0 * font_scale]);
                 ui.text("  Tight 8-sided polygon circumscribing the volumetric cloud core.");
             });
     }
