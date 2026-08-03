@@ -106,19 +106,19 @@ fn default_smoke_preview_simulated_angle_offset() -> f32 {
 }
 
 fn default_smoke_preview_zoom() -> f32 {
-    1.0
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_ZOOM
 }
 
 fn default_smoke_preview_pan_x() -> f32 {
-    0.0
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_PAN_X
 }
 
 fn default_smoke_preview_pan_y() -> f32 {
-    0.0
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_PAN_Y
 }
 
 fn default_smoke_preview_rot_z() -> f32 {
-    0.0
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_ROT_Z
 }
 
 impl Default for GuiSessionState {
