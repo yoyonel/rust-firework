@@ -206,6 +206,15 @@ pub const DEFAULT_SMOKE_PREVIEW_MIN_ZOOM: f32 = 0.4;
 /// Maximum zoom factor for the live GPU smoke preview viewport.
 pub const DEFAULT_SMOKE_PREVIEW_MAX_ZOOM: f32 = 10.0;
 
+/// Default rocket sprite albedo color for the smoke preview viewport.
+pub const DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
+
+/// Default simulated rocket speed (m/s) for smoke particle ejection in preview.
+pub const DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED: f32 = 400.0;
+
+/// Default simulated rocket trajectory angle offset (degrees) in preview.
+pub const DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET: f32 = 0.0;
+
 /// Default texture path for Rocket particle type.
 pub const TEXTURE_ROCKET_PATH: &str =
     "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png";

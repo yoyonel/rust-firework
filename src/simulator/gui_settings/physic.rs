@@ -186,6 +186,7 @@ fn slider_i32_with_reset<F>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn render_physics_settings_tab(
     ui: &Ui,
     filter: &str,
@@ -193,6 +194,9 @@ pub fn render_physics_settings_tab(
     cmd_queue: &mut Vec<EngineCommand>,
     physic_reinit_requested: &AtomicBool,
     preview_max_zoom: &mut f32,
+    preview_rocket_color: &mut [f32; 3],
+    preview_simulated_speed: &mut f32,
+    preview_simulated_angle_offset: &mut f32,
 ) {
     let cfg = state.config();
 
@@ -301,7 +305,15 @@ pub fn render_physics_settings_tab(
             cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ResetDefaults));
         }
 
-        super::smoke::render_smoke_controls(ui, state, cmd_queue, preview_max_zoom);
+        super::smoke::render_smoke_controls(
+            ui,
+            state,
+            cmd_queue,
+            preview_max_zoom,
+            preview_rocket_color,
+            preview_simulated_speed,
+            preview_simulated_angle_offset,
+        );
     }
 
     // 3. Launch & Spawn Dynamics
@@ -824,6 +836,9 @@ mod tests {
         let ui = imgui_ctx.frame();
 
         let mut preview_max_zoom = 10.0;
+        let mut preview_rocket_color = [1.0, 1.0, 1.0];
+        let mut preview_simulated_speed = 400.0;
+        let mut preview_simulated_angle_offset = 0.0;
         render_physics_settings_tab(
             ui,
             "",
@@ -831,6 +846,9 @@ mod tests {
             &mut cmd_queue,
             &reinit,
             &mut preview_max_zoom,
+            &mut preview_rocket_color,
+            &mut preview_simulated_speed,
+            &mut preview_simulated_angle_offset,
         );
 
         assert!(cmd_queue.capacity() >= 16);
