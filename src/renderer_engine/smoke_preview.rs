@@ -64,7 +64,7 @@ pub struct SmokePreviewRenderer {
 
     // Task 4.A: Local isolated SmokeSystem for realistic continuous trail physics
     pub smoke_system: SmokeSystem,
-    pub rng: rand::rngs::ThreadRng,
+    pub rng: rand::rngs::StdRng,
     emit_timer: f32,
 }
 
@@ -391,7 +391,7 @@ impl SmokePreviewRenderer {
                 loc_quad_rot_z,
                 loc_quad_color,
                 smoke_system: SmokeSystem::new(128),
-                rng: rand::rng(),
+                rng: rand::SeedableRng::seed_from_u64(0x421337),
                 emit_timer: 0.0,
             }
         }
@@ -608,5 +608,16 @@ impl SmokePreviewRenderer {
 
             self.color_tex
         }
+    }
+
+    pub fn fbo(&self) -> u32 {
+        self.fbo
+    }
+
+    pub fn reset_seed(&mut self) {
+        use rand::SeedableRng;
+        self.rng = rand::rngs::StdRng::seed_from_u64(0x421337);
+        self.smoke_system = SmokeSystem::new(128);
+        self.emit_timer = 0.0;
     }
 }
