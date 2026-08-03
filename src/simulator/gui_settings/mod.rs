@@ -85,9 +85,25 @@ impl GuiSettings {
             smoke_preview_simulated_speed: session.smoke_preview_simulated_speed,
             smoke_preview_simulated_angle_offset: session.smoke_preview_simulated_angle_offset,
         };
-        // Sync static AtomicBool from persisted session state
+        // Sync static AtomicBool and viewport transform atomics from persisted session state
         smoke::SHOW_GEOMETRY_TRIMMING.store(
             result.show_geometry_trimming,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        crate::renderer_engine::smoke_preview::PREVIEW_ZOOM.store(
+            (session.smoke_preview_zoom * 100.0) as u32,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        crate::renderer_engine::smoke_preview::PREVIEW_PAN_X.store(
+            (session.smoke_preview_pan_x * 10.0) as i32,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        crate::renderer_engine::smoke_preview::PREVIEW_PAN_Y.store(
+            (session.smoke_preview_pan_y * 10.0) as i32,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        crate::renderer_engine::smoke_preview::PREVIEW_ROT_Z.store(
+            (session.smoke_preview_rot_z * 10.0) as i32,
             std::sync::atomic::Ordering::Relaxed,
         );
         result
@@ -186,6 +202,18 @@ impl GuiSettings {
             smoke_preview_rocket_color: self.smoke_preview_rocket_color,
             smoke_preview_simulated_speed: self.smoke_preview_simulated_speed,
             smoke_preview_simulated_angle_offset: self.smoke_preview_simulated_angle_offset,
+            smoke_preview_zoom: crate::renderer_engine::smoke_preview::PREVIEW_ZOOM
+                .load(std::sync::atomic::Ordering::Relaxed) as f32
+                / 100.0,
+            smoke_preview_pan_x: crate::renderer_engine::smoke_preview::PREVIEW_PAN_X
+                .load(std::sync::atomic::Ordering::Relaxed) as f32
+                / 10.0,
+            smoke_preview_pan_y: crate::renderer_engine::smoke_preview::PREVIEW_PAN_Y
+                .load(std::sync::atomic::Ordering::Relaxed) as f32
+                / 10.0,
+            smoke_preview_rot_z: crate::renderer_engine::smoke_preview::PREVIEW_ROT_Z
+                .load(std::sync::atomic::Ordering::Relaxed) as f32
+                / 10.0,
         };
 
         if let Err(e) = session.save_to_file(path) {

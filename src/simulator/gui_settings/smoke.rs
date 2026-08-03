@@ -20,10 +20,10 @@ pub fn render_smoke_controls(
     ui: &Ui,
     state: &impl SmokeStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
-    preview_max_zoom: &mut f32,
-    preview_rocket_color: &mut [f32; 3],
-    preview_simulated_speed: &mut f32,
-    preview_simulated_angle_offset: &mut f32,
+    _preview_max_zoom: &mut f32,
+    _preview_rocket_color: &mut [f32; 3],
+    _preview_simulated_speed: &mut f32,
+    _preview_simulated_angle_offset: &mut f32,
 ) {
     let cfg = state.config();
     let default_cfg = PhysicConfig::default();
@@ -462,74 +462,6 @@ pub fn render_smoke_controls(
             default_cfg.max_smoke_particles
         ));
     }
-
-    ui.set_next_item_width(item_width);
-    ui.slider(
-        "Preview Viewport Max Zoom (`gui.smoke_preview_max_zoom`)",
-        2.0,
-        20.0,
-        preview_max_zoom,
-    );
-    ui.same_line();
-    if ui.small_button("Reset##reset_smoke_preview_max_zoom") {
-        *preview_max_zoom = physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM;
-    }
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!(
-            "Reset to default: {:.1}x",
-            physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM
-        ));
-    }
-
-    ui.set_next_item_width(item_width);
-    ui.color_edit3(
-        "Preview Rocket Color (`gui.smoke_preview_rocket_color`)",
-        preview_rocket_color,
-    );
-    ui.same_line();
-    if ui.small_button("Reset##reset_smoke_preview_rocket_color") {
-        *preview_rocket_color = physic_constants::DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR;
-    }
-    if ui.is_item_hovered() {
-        ui.tooltip_text("Reset preview rocket color to white [1.0, 1.0, 1.0]");
-    }
-
-    ui.set_next_item_width(item_width);
-    ui.slider(
-        "Preview Rocket Speed (m/s) (`gui.smoke_preview_simulated_speed`)",
-        0.0,
-        1000.0,
-        preview_simulated_speed,
-    );
-    ui.same_line();
-    if ui.small_button("Reset##reset_smoke_preview_simulated_speed") {
-        *preview_simulated_speed = physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED;
-    }
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!(
-            "Reset to default: {:.1} m/s",
-            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED
-        ));
-    }
-
-    ui.set_next_item_width(item_width);
-    ui.slider(
-        "Preview Velocity Angle (deg) (`gui.smoke_preview_simulated_angle_offset`)",
-        -180.0,
-        180.0,
-        preview_simulated_angle_offset,
-    );
-    ui.same_line();
-    if ui.small_button("Reset##reset_smoke_preview_simulated_angle_offset") {
-        *preview_simulated_angle_offset =
-            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET;
-    }
-    if ui.is_item_hovered() {
-        ui.tooltip_text(format!(
-            "Reset to default: {:.1}°",
-            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET
-        ));
-    }
 }
 
 /// Renders the dedicated Smoke & Alpha Erosion settings tab.
@@ -705,6 +637,81 @@ pub fn render_smoke_settings_tab(
                 "[Middle Drag: Pan X/Y] | [Right Drag: Rotate Z] | [Wheel: Zoom]",
             );
         });
+
+    // =========================================================================
+    // ROCKET & VIEWPORT PREVIEW SETTINGS (DIRECTLY BELOW VIEWPORT)
+    // =========================================================================
+    ui.spacing();
+    let font_sz = ui.current_font_size();
+    let item_width = (ui.content_region_avail()[0] * 0.38).clamp(font_sz * 11.0, font_sz * 21.0);
+
+    ui.set_next_item_width(item_width);
+    ui.slider(
+        "Preview Viewport Max Zoom (`gui.smoke_preview_max_zoom`)",
+        2.0,
+        20.0,
+        preview_max_zoom,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_max_zoom") {
+        *preview_max_zoom = physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text(format!(
+            "Reset to default: {:.1}x",
+            physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM
+        ));
+    }
+
+    ui.set_next_item_width(item_width);
+    ui.color_edit3(
+        "Preview Rocket Color (`gui.smoke_preview_rocket_color`)",
+        preview_rocket_color,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_rocket_color") {
+        *preview_rocket_color = physic_constants::DEFAULT_SMOKE_PREVIEW_ROCKET_COLOR;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text("Reset preview rocket color to white [1.0, 1.0, 1.0]");
+    }
+
+    ui.set_next_item_width(item_width);
+    ui.slider(
+        "Preview Rocket Speed (m/s) (`gui.smoke_preview_simulated_speed`)",
+        0.0,
+        1000.0,
+        preview_simulated_speed,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_simulated_speed") {
+        *preview_simulated_speed = physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text(format!(
+            "Reset to default: {:.1} m/s",
+            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED
+        ));
+    }
+
+    ui.set_next_item_width(item_width);
+    ui.slider(
+        "Preview Velocity Angle (deg) (`gui.smoke_preview_simulated_angle_offset`)",
+        -180.0,
+        180.0,
+        preview_simulated_angle_offset,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_simulated_angle_offset") {
+        *preview_simulated_angle_offset =
+            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text(format!(
+            "Reset to default: {:.1}°",
+            physic_constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET
+        ));
+    }
 
     // =========================================================================
     // 3. DEDICATED GEOMETRY TRIMMING & SPRITE MESH VIEWPORT (1:1 SCALE)

@@ -71,6 +71,18 @@ pub struct GuiSessionState {
     // GUI_PERSIST: gui.layout
     #[serde(default = "default_smoke_preview_simulated_angle_offset")]
     pub smoke_preview_simulated_angle_offset: f32,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_zoom")]
+    pub smoke_preview_zoom: f32,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_pan_x")]
+    pub smoke_preview_pan_x: f32,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_pan_y")]
+    pub smoke_preview_pan_y: f32,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_rot_z")]
+    pub smoke_preview_rot_z: f32,
 }
 
 fn default_smoke_preview_max_zoom() -> f32 {
@@ -91,6 +103,22 @@ fn default_smoke_preview_simulated_speed() -> f32 {
 
 fn default_smoke_preview_simulated_angle_offset() -> f32 {
     crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET
+}
+
+fn default_smoke_preview_zoom() -> f32 {
+    1.0
+}
+
+fn default_smoke_preview_pan_x() -> f32 {
+    0.0
+}
+
+fn default_smoke_preview_pan_y() -> f32 {
+    0.0
+}
+
+fn default_smoke_preview_rot_z() -> f32 {
+    0.0
 }
 
 impl Default for GuiSessionState {
@@ -123,6 +151,10 @@ impl Default for GuiSessionState {
                 crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_SPEED,
             smoke_preview_simulated_angle_offset:
                 crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_SIMULATED_ANGLE_OFFSET,
+            smoke_preview_zoom: 1.0,
+            smoke_preview_pan_x: 0.0,
+            smoke_preview_pan_y: 0.0,
+            smoke_preview_rot_z: 0.0,
         }
     }
 }

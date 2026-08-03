@@ -196,6 +196,15 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
     let comparison_mode = true;
     let fullscreen = true;
 
+    fireworks_sim::renderer_engine::smoke_preview::PREVIEW_ZOOM
+        .store(250, std::sync::atomic::Ordering::Relaxed);
+    fireworks_sim::renderer_engine::smoke_preview::PREVIEW_PAN_X
+        .store(150, std::sync::atomic::Ordering::Relaxed);
+    fireworks_sim::renderer_engine::smoke_preview::PREVIEW_PAN_Y
+        .store(-100, std::sync::atomic::Ordering::Relaxed);
+    fireworks_sim::renderer_engine::smoke_preview::PREVIEW_ROT_Z
+        .store(-720, std::sync::atomic::Ordering::Relaxed);
+
     // Save live session state to disk (isolated temp path)
     let temp_session_path = dir.path().join("gui_session_test.toml");
     settings.save_session_state_to_path(
@@ -247,6 +256,10 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
     assert_eq!(loaded_session.scroll_y, Some(95.0));
     assert!(loaded_session.fullscreen);
     assert!(loaded_session.tonemapping_comparison_mode);
+    assert_eq!(loaded_session.smoke_preview_zoom, 2.5);
+    assert_eq!(loaded_session.smoke_preview_pan_x, 15.0);
+    assert_eq!(loaded_session.smoke_preview_pan_y, -10.0);
+    assert_eq!(loaded_session.smoke_preview_rot_z, -72.0);
 
     match fresh_physic.get_explosion_shape() {
         ExplosionShape::MultiImage {
