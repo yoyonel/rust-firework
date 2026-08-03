@@ -49,6 +49,8 @@ pub struct GuiSettings {
     pub theme: GuiTheme,
     pub pending_theme_change: Option<GuiTheme>,
     pub gui_scale: f32,
+    pub smoke_preview_max_zoom: f32,
+    pub show_geometry_trimming: bool,
 }
 
 impl Default for GuiSettings {
@@ -61,7 +63,7 @@ impl GuiSettings {
     pub fn new() -> Self {
         let session_path = crate::utils::config_path::get_gui_session_path();
         let session = GuiSessionState::load_from_file(&session_path);
-        Self {
+        let result = Self {
             open: session.gui_open,
             active_tab: session.active_tab,
             set_selected_tab: Some(session.active_tab),
@@ -74,7 +76,15 @@ impl GuiSettings {
             theme: session.theme,
             pending_theme_change: None,
             gui_scale: session.gui_scale,
-        }
+            smoke_preview_max_zoom: session.smoke_preview_max_zoom,
+            show_geometry_trimming: session.show_geometry_trimming,
+        };
+        // Sync static AtomicBool from persisted session state
+        smoke::SHOW_GEOMETRY_TRIMMING.store(
+            result.show_geometry_trimming,
+            std::sync::atomic::Ordering::Relaxed,
+        );
+        result
     }
 
     pub fn get_preset_defaults(stem: &str) -> (f32, f32) {
@@ -164,6 +174,9 @@ impl GuiSettings {
             fullscreen,
             theme: self.theme,
             gui_scale: self.gui_scale,
+            smoke_preview_max_zoom: self.smoke_preview_max_zoom,
+            show_geometry_trimming: smoke::SHOW_GEOMETRY_TRIMMING
+                .load(std::sync::atomic::Ordering::Relaxed),
         };
 
         if let Err(e) = session.save_to_file(path) {
@@ -395,6 +408,7 @@ impl GuiSettings {
                                 physic_engine,
                                 cmd_queue,
                                 physic_reinit_requested,
+                                &mut self.smoke_preview_max_zoom,
                             );
                         });
                     }
@@ -409,7 +423,12 @@ impl GuiSettings {
                         }
                         tab.build(ui, || {
                             self.active_tab = 2;
-                            render_smoke_settings_tab(ui, physic_engine, cmd_queue);
+                            render_smoke_settings_tab(
+                                ui,
+                                physic_engine,
+                                cmd_queue,
+                                &mut self.smoke_preview_max_zoom,
+                            );
                         });
                     }
 

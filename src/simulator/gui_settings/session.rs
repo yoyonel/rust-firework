@@ -56,6 +56,20 @@ pub struct GuiSessionState {
     // GUI_PERSIST: gui.scale
     #[serde(default = "default_gui_scale")]
     pub gui_scale: f32,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_smoke_preview_max_zoom")]
+    pub smoke_preview_max_zoom: f32,
+    // GUI_PERSIST: gui.layout
+    #[serde(default = "default_show_geometry_trimming")]
+    pub show_geometry_trimming: bool,
+}
+
+fn default_smoke_preview_max_zoom() -> f32 {
+    crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM
+}
+
+fn default_show_geometry_trimming() -> bool {
+    true
 }
 
 impl Default for GuiSessionState {
@@ -80,6 +94,8 @@ impl Default for GuiSessionState {
             fullscreen: false,
             theme: GuiTheme::default(),
             gui_scale: DEFAULT_GUI_SCALE,
+            smoke_preview_max_zoom: crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM,
+            show_geometry_trimming: true,
         }
     }
 }

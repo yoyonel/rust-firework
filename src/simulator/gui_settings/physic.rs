@@ -192,6 +192,7 @@ pub fn render_physics_settings_tab(
     state: &impl PhysicStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
     physic_reinit_requested: &AtomicBool,
+    preview_max_zoom: &mut f32,
 ) {
     let cfg = state.config();
 
@@ -251,7 +252,7 @@ pub fn render_physics_settings_tab(
         slider_i32_with_reset(
             ui,
             cmd_queue,
-            "Particles per Explosion (`physic.particles_per_explosion`)",
+            "Particles Per Explosion (`physic.particles_per_explosion`)",
             physic_constants::SLIDER_PARTICLES_EXPLOSION_MIN,
             physic_constants::SLIDER_PARTICLES_EXPLOSION_MAX,
             cfg.particles_per_explosion,
@@ -264,7 +265,7 @@ pub fn render_physics_settings_tab(
         slider_i32_with_reset(
             ui,
             cmd_queue,
-            "Particles per Trail (`physic.particles_per_trail`)",
+            "Particles Per Trail (`physic.particles_per_trail`)",
             physic_constants::SLIDER_PARTICLES_TRAIL_MIN,
             physic_constants::SLIDER_PARTICLES_TRAIL_MAX,
             cfg.particles_per_trail,
@@ -300,7 +301,7 @@ pub fn render_physics_settings_tab(
             cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ResetDefaults));
         }
 
-        super::smoke::render_smoke_controls(ui, state, cmd_queue);
+        super::smoke::render_smoke_controls(ui, state, cmd_queue, preview_max_zoom);
     }
 
     // 3. Launch & Spawn Dynamics
@@ -822,7 +823,15 @@ mod tests {
 
         let ui = imgui_ctx.frame();
 
-        render_physics_settings_tab(ui, "", &engine, &mut cmd_queue, &reinit);
+        let mut preview_max_zoom = 10.0;
+        render_physics_settings_tab(
+            ui,
+            "",
+            &engine,
+            &mut cmd_queue,
+            &reinit,
+            &mut preview_max_zoom,
+        );
 
         assert!(cmd_queue.capacity() >= 16);
     }

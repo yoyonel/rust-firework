@@ -50,6 +50,7 @@ $GREP_CMD 'get_physic_config_path' src/simulator.rs
 $GREP_CMD 'tonemapping_comparison_mode' "$SOURCE"
 $GREP_CMD 'explosion_shape' "$SOURCE"
 $GREP_CMD 'fullscreen' "$SOURCE"
+$GREP_CMD 'show_geometry_trimming' "$SOURCE"
 
 
 echo "GUI persistence check passed ($(printf '%s\n' "$markers" | wc -l | tr -d ' ') inventory rows)."
