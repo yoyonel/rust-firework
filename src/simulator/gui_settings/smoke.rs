@@ -544,6 +544,7 @@ pub fn render_smoke_settings_tab(
             rocket_color: *preview_rocket_color,
             simulated_speed: *preview_simulated_speed,
             simulated_angle_offset_deg: *preview_simulated_angle_offset,
+            tone_mapping_mode: 5,
         };
         preview.render(&ctx)
     };
