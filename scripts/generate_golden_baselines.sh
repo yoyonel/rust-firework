@@ -27,8 +27,12 @@ capture_variant() {
     echo "----------------------------------------------------"
     echo "📹 Recording Candidate: $name"
 
-    # Temporary config overrides with gui_open = false
-    cat << EOF > assets/config/gui_session.toml
+    # Temporary isolated config directory
+    local config_tmp="/tmp/golden_config_$name"
+    mkdir -p "$config_tmp"
+    cp -r assets/config/* "$config_tmp/" 2>/dev/null || true
+
+    cat << EOF > "$config_tmp/gui_session.toml"
 gui_open = false
 active_tab = 2
 search_filter = ""
@@ -37,10 +41,10 @@ show_performance_overlay = false
 EOF
 
     # Apply variant config
-    echo "$render_config" > assets/config/renderer.toml
+    echo "$render_config" > "$config_tmp/renderer.toml"
 
-    # Launch simulator
-    ./target/release/fireworks_sim &
+    # Launch simulator with isolated configuration directory
+    FIREWORKS_CONFIG_DIR="$config_tmp" ./target/release/fireworks_sim &
     SIM_PID=$!
     sleep 2.5
 
@@ -55,6 +59,7 @@ EOF
     cp "$OUTPUT_DIR/${name}_t2.png" "$png_file"
 
     kill $SIM_PID 2>/dev/null || true
+    rm -rf "$config_tmp"
     echo "  ✅ Saved $mp4_file and 3 keyframe PNGs (t1, t2, t3)"
 }
 
@@ -187,9 +192,6 @@ render_rockets = false
 render_smoke = false
 render_trails = true
 render_explosions = true'
-
-# Restore default config files
-git checkout assets/config/renderer.toml assets/config/gui_session.toml 2>/dev/null || true
 
 echo "----------------------------------------------------"
 echo "🎉 Complete Exhaustive Golden Video Dataset generated!"

@@ -183,13 +183,17 @@ impl Default for PhysicConfig {
 }
 
 impl PhysicConfig {
-    pub fn from_file(path: &str) -> anyhow::Result<Self> {
+    pub fn from_file<P: AsRef<std::path::Path>>(path: P) -> anyhow::Result<Self> {
         let text = std::fs::read_to_string(path)?;
         Ok(toml::from_str(&text)?)
     }
 
-    pub fn save_to_file(&self, path: &str) -> anyhow::Result<()> {
+    pub fn save_to_file<P: AsRef<std::path::Path>>(&self, path: P) -> anyhow::Result<()> {
+        let path = path.as_ref();
         let text = toml::to_string_pretty(self)?;
+        if let Some(parent) = path.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
         std::fs::write(path, text)?;
         Ok(())
     }

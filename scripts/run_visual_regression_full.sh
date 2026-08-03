@@ -31,8 +31,12 @@ run_full_120_frame_test() {
     echo "----------------------------------------------------"
     echo "📹 Testing 120-Frame Visual Match: $name"
 
-    # Temporary config overrides with gui_open = false
-    cat << EOF > assets/config/gui_session.toml
+    # Temporary isolated config directory
+    local config_tmp="$TEMP_DIR/config_$name"
+    mkdir -p "$config_tmp"
+    cp -r assets/config/* "$config_tmp/" 2>/dev/null || true
+
+    cat << EOF > "$config_tmp/gui_session.toml"
 gui_open = false
 active_tab = 2
 search_filter = ""
@@ -41,10 +45,10 @@ show_performance_overlay = false
 EOF
 
     # Apply variant config
-    echo "$render_config" > assets/config/renderer.toml
+    echo "$render_config" > "$config_tmp/renderer.toml"
 
-    # Launch simulator
-    ./target/release/fireworks_sim &
+    # Launch simulator with isolated configuration directory
+    FIREWORKS_CONFIG_DIR="$config_tmp" ./target/release/fireworks_sim &
     SIM_PID=$!
     sleep 2.5
 
@@ -75,8 +79,7 @@ EOF
     FRAME_COUNT=$(ls -1 "$TEMP_DIR/ref_$name"/*.png 2>/dev/null | wc -l)
     echo "  🔍 Comparing $FRAME_COUNT frames between reference and current run..."
 
-    # Restore default config files
-    git checkout assets/config/renderer.toml assets/config/gui_session.toml 2>/dev/null || true
+    rm -rf "$config_tmp"
     echo "  ✅ 120-frame visual match PASSED for $name ($FRAME_COUNT frames verified)"
 }
 

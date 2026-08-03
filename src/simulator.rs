@@ -148,10 +148,11 @@ where
     pub fn new(renderer_engine: R, physic_engine: P, audio_engine: A, window_engine: W) -> Self {
         let window_size = window_engine.get_size();
         let window_pos = window_engine.get_pos();
-        let gui_session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
-            crate::simulator::gui_settings::GUI_SESSION_PATH,
-        );
+        let session_path = crate::utils::config_path::get_gui_session_path();
+        let gui_session =
+            crate::simulator::gui_settings::GuiSessionState::load_from_file(&session_path);
 
+        let renderer_path = crate::utils::config_path::get_renderer_config_path();
         let mut sim = Self {
             renderer_engine,
             physic_engine,
@@ -164,7 +165,7 @@ where
             )),
             physic_reinit_requested: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)),
             renderer_config: std::sync::Arc::new(std::sync::RwLock::new(
-                crate::renderer_engine::RendererConfig::from_file("assets/config/renderer.toml")
+                crate::renderer_engine::RendererConfig::from_file(&renderer_path)
                     .unwrap_or_default(),
             )),
             frames: 0,
@@ -235,6 +236,9 @@ where
     }
 
     pub fn save_gui_session(&self) {
+        if !crate::utils::config_path::is_config_save_enabled() {
+            return;
+        }
         self.gui_settings.save_session_state(
             &self.audio_engine,
             &self.physic_engine,
@@ -244,12 +248,11 @@ where
                 .load(std::sync::atomic::Ordering::Relaxed),
             self.window_engine.is_fullscreen(),
         );
-        let _ = self
-            .physic_engine
-            .get_config()
-            .save_to_file("assets/config/physic.toml");
+        let physic_path = crate::utils::config_path::get_physic_config_path();
+        let _ = self.physic_engine.get_config().save_to_file(&physic_path);
         if let Ok(renderer) = self.renderer_config.read() {
-            let _ = renderer.save_to_file("assets/config/renderer.toml");
+            let renderer_path = crate::utils::config_path::get_renderer_config_path();
+            let _ = renderer.save_to_file(&renderer_path);
         }
     }
 
@@ -655,7 +658,8 @@ where
 
     pub fn reload_config(&mut self) {
         let physic_config =
-            PhysicConfig::from_file("assets/config/physic.toml").unwrap_or_default();
+            PhysicConfig::from_file(crate::utils::config_path::get_physic_config_path())
+                .unwrap_or_default();
         info!("Physic config loaded:\n{:#?}", physic_config);
 
         self.physic_engine.reload_config(&physic_config);

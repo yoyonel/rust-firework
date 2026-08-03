@@ -44,7 +44,7 @@ echo "✅ ALSA dummy device ready (isolated via $ALSA_CONFIG_PATH)"
 # --- 3. Allocation dynamique d'écran Xvfb ---
 echo "🖥️  Starting virtual X display..."
 DISP_NUM=99
-while [ -e "/tmp/.X${DISP_NUM}-lock" ]; do
+while [ -e "/tmp/.X${DISP_NUM}-lock" ] || [ -e "/tmp/.X11-unix/X${DISP_NUM}" ]; do
     DISP_NUM=$((DISP_NUM + 1))
 done
 export DISPLAY=":${DISP_NUM}"
@@ -61,7 +61,7 @@ echo "✅ Virtual display started on $DISPLAY"
 
 # --- 4. Exécution du simulateur en tâche de fond ---
 echo "🚀 Running fireworks simulator headless for 5 seconds..."
-RUST_LOG=fireworks_sim=INFO \
+FIREWORKS_NO_CONFIG_SAVE=1 RUST_LOG=fireworks_sim=INFO \
     ./target/release/fireworks_sim 2>&1 | tee output/log.txt &
 SIM_PID=$!
 
