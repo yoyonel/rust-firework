@@ -28,19 +28,23 @@ impl Default for CircleGPURenderer {
 impl CircleGPURenderer {
     pub fn new() -> Self {
         unsafe {
+            use crate::renderer_engine::constants;
+
             // Compile shaders
             let shader_program = compile_shader_program_from_files(
-                "assets/shaders/circle.vert.glsl",
-                "assets/shaders/circle.frag.glsl",
+                constants::SHADER_CIRCLE_VERTEX_PATH,
+                constants::SHADER_CIRCLE_FRAGMENT_PATH,
             );
 
-            // Bind global data uniform block to binding point 0 (matches particles)
+            // Bind global data uniform block to binding point (matches particles)
             let block_idx = gl::GetUniformBlockIndex(shader_program, crate::cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
-                gl::UniformBlockBinding(shader_program, block_idx, 0);
+                gl::UniformBlockBinding(
+                    shader_program,
+                    block_idx,
+                    constants::GLOBAL_UBO_BINDING_INDEX,
+                );
             }
-
-            use crate::renderer_engine::constants;
 
             // 1. Quad vertices for filled disks (-0.5 to 0.5 to center on UV)
             let quad_vertices = constants::QUAD_VERTICES;

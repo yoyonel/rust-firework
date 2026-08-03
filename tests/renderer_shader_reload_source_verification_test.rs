@@ -79,12 +79,14 @@ fn test_shader_paths_are_constants() {
     );
 
     assert!(
-        source_code.contains("instanced_textured_quad.vert.glsl"),
+        source_code.contains("SHADER_INSTANCED_QUAD_VERTEX_PATH")
+            || source_code.contains("instanced_textured_quad.vert.glsl"),
         "Vertex shader path must point to instanced_textured_quad.vert.glsl"
     );
 
     assert!(
-        source_code.contains("instanced_textured_quad.frag.glsl"),
+        source_code.contains("SHADER_INSTANCED_QUAD_FRAGMENT_PATH")
+            || source_code.contains("instanced_textured_quad.frag.glsl"),
         "Fragment shader path must point to instanced_textured_quad.frag.glsl"
     );
 }

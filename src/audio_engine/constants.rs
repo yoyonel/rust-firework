@@ -250,3 +250,29 @@ pub const FFT_MIN_CHUNK_BOUND: usize = 128;
 /// - **Bounds:** `256` to `4096` samples.
 /// - **System influence:** Balances FFT latency against algorithmic efficiency.
 pub const FFT_MAX_CHUNK_BOUND: usize = 512;
+
+/// Default file path for rocket launch sound asset.
+pub const DEFAULT_ROCKET_SOUND_PATH: &str = "assets/sounds/rocket.wav";
+
+/// Default file path for explosion sound asset.
+pub const DEFAULT_EXPLOSION_SOUND_PATH: &str = "assets/sounds/explosion.wav";
+
+// Audio GUI Control Bounds & Presets
+pub const SLIDER_VOLUME_MIN: f32 = 0.0;
+pub const SLIDER_VOLUME_MAX: f32 = 2.0;
+
+pub const SLIDER_REVERB_MIN: f32 = 0.0;
+pub const SLIDER_REVERB_MAX: f32 = 1.0;
+
+pub const PRESET_VOL_MUTE: f32 = 0.0;
+pub const PRESET_VOL_LOW: f32 = 0.25;
+pub const PRESET_VOL_MEDIUM: f32 = 0.50;
+pub const PRESET_VOL_DEFAULT: f32 = 0.80;
+pub const PRESET_VOL_FULL: f32 = 1.00;
+pub const PRESET_VOL_BOOST: f32 = 1.50;
+
+pub const PRESET_REVERB_DRY: f32 = 0.0;
+pub const PRESET_REVERB_DEFAULT: f32 = 0.08;
+pub const PRESET_REVERB_MEDIUM: f32 = 0.20;
+pub const PRESET_REVERB_CATHEDRAL: f32 = 0.50;
+pub const PRESET_REVERB_FULL_WET: f32 = 1.00;

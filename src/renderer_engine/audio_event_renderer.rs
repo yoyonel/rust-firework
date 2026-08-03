@@ -11,6 +11,7 @@
 ///   The beam pass simply ignores the quad aQuad attribute and uses the
 ///   line VBO instead.
 /// - 2 draw calls per frame regardless of the number of active events.
+use crate::renderer_engine::constants;
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use std::ptr;
 
@@ -142,14 +143,18 @@ impl AudioEventRenderer {
     pub fn new() -> Self {
         unsafe {
             let shader_program = compile_shader_program_from_files(
-                "assets/shaders/audio_event.vert.glsl",
-                "assets/shaders/audio_event.frag.glsl",
+                constants::SHADER_AUDIO_EVENT_VERTEX_PATH,
+                constants::SHADER_AUDIO_EVENT_FRAGMENT_PATH,
             );
 
-            // Bind shared GlobalData UBO to binding point 0 (same as particles)
+            // Bind shared GlobalData UBO to binding point (same as particles)
             let block_idx = gl::GetUniformBlockIndex(shader_program, crate::cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
-                gl::UniformBlockBinding(shader_program, block_idx, 0);
+                gl::UniformBlockBinding(
+                    shader_program,
+                    block_idx,
+                    constants::GLOBAL_UBO_BINDING_INDEX,
+                );
             }
 
             // Cache the uMode uniform location (set per-draw-pass to 0=ring or 1=beam)
