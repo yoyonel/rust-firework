@@ -11,6 +11,7 @@ use imgui::{ColorEditFlags, Ui};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static mut PREVIEW_GPU: Option<SmokePreviewRenderer> = None;
+// GUI_PERSIST: gui.layout
 pub static SHOW_GEOMETRY_TRIMMING: AtomicBool = AtomicBool::new(true);
 
 /// Shared GUI control panel for Smoke & Alpha Erosion parameters with per-parameter reset buttons.
@@ -18,6 +19,7 @@ pub fn render_smoke_controls(
     ui: &Ui,
     state: &impl SmokeStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
+    preview_max_zoom: &mut f32,
 ) {
     let cfg = state.config();
     let default_cfg = PhysicConfig::default();
@@ -456,6 +458,24 @@ pub fn render_smoke_controls(
             default_cfg.max_smoke_particles
         ));
     }
+
+    ui.set_next_item_width(item_width);
+    ui.slider(
+        "Preview Viewport Max Zoom (`gui.smoke_preview_max_zoom`)",
+        2.0,
+        20.0,
+        preview_max_zoom,
+    );
+    ui.same_line();
+    if ui.small_button("Reset##reset_smoke_preview_max_zoom") {
+        *preview_max_zoom = physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM;
+    }
+    if ui.is_item_hovered() {
+        ui.tooltip_text(format!(
+            "Reset to default: {:.1}x",
+            physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM
+        ));
+    }
 }
 
 /// Renders the dedicated Smoke & Alpha Erosion settings tab.
@@ -463,6 +483,7 @@ pub fn render_smoke_settings_tab(
     ui: &Ui,
     state: &impl SmokeStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
+    preview_max_zoom: &mut f32,
 ) {
     let cfg = state.config();
 
@@ -473,6 +494,7 @@ pub fn render_smoke_settings_tab(
     ui.same_line();
     if ui.small_button("Reset Smoke Defaults") {
         cmd_queue.push(EngineCommand::Smoke(SmokeCommand::ResetDefaults));
+        *preview_max_zoom = physic_constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM;
     }
 
     ui.separator();
@@ -561,7 +583,10 @@ pub fn render_smoke_settings_tab(
                 let wheel = io.mouse_wheel;
                 if wheel != 0.0 {
                     let cur_z = PREVIEW_ZOOM.load(Ordering::Relaxed) as f32 / 100.0;
-                    let new_z = (cur_z + wheel * 0.12).clamp(0.4, 3.5);
+                    let new_z = (cur_z + wheel * 0.12).clamp(
+                        physic_constants::DEFAULT_SMOKE_PREVIEW_MIN_ZOOM,
+                        *preview_max_zoom,
+                    );
                     PREVIEW_ZOOM.store((new_z * 100.0) as u32, Ordering::Relaxed);
                     unsafe {
                         let raw_io = imgui::sys::igGetIO();
@@ -774,7 +799,7 @@ pub fn render_smoke_settings_tab(
     ui.spacing();
     ui.separator();
 
-    render_smoke_controls(ui, state, cmd_queue);
+    render_smoke_controls(ui, state, cmd_queue, preview_max_zoom);
 }
 
 #[cfg(test)]
@@ -797,7 +822,8 @@ mod tests {
 
         let ui = imgui_ctx.frame();
 
-        render_smoke_controls(ui, &config, &mut cmd_queue);
+        let mut preview_max_zoom = 10.0;
+        render_smoke_controls(ui, &config, &mut cmd_queue, &mut preview_max_zoom);
 
         assert!(cmd_queue.capacity() >= 16);
     }

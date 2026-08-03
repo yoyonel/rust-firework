@@ -200,6 +200,12 @@ pub const DEFAULT_FLOW_DISTORTION_STRENGTH: f32 = 0.15;
 /// Default Flow Map animation speed multiplier for smoke turbulence.
 pub const DEFAULT_FLOW_ANIMATION_SPEED: f32 = 1.0;
 
+/// Minimum zoom factor for the live GPU smoke preview viewport.
+pub const DEFAULT_SMOKE_PREVIEW_MIN_ZOOM: f32 = 0.4;
+
+/// Maximum zoom factor for the live GPU smoke preview viewport.
+pub const DEFAULT_SMOKE_PREVIEW_MAX_ZOOM: f32 = 10.0;
+
 /// Default texture path for Rocket particle type.
 pub const TEXTURE_ROCKET_PATH: &str =
     "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png";

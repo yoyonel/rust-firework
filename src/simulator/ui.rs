@@ -489,6 +489,12 @@ where
             self.gui_settings.theme = session.theme;
             self.gui_settings.pending_theme_change = Some(session.theme);
             self.gui_settings.gui_scale = session.gui_scale;
+            self.gui_settings.smoke_preview_max_zoom = session.smoke_preview_max_zoom;
+            self.gui_settings.show_geometry_trimming = session.show_geometry_trimming;
+            crate::simulator::gui_settings::smoke::SHOW_GEOMETRY_TRIMMING.store(
+                session.show_geometry_trimming,
+                std::sync::atomic::Ordering::Relaxed,
+            );
             self.tonemapping_comparison_mode.store(
                 session.tonemapping_comparison_mode,
                 std::sync::atomic::Ordering::Relaxed,
