@@ -4,6 +4,7 @@ use super::theme::{COLOR_ALERT, COLOR_HEADER, COLOR_TEXT_HINT, COLOR_WARNING};
 use crate::domain_contracts::{EngineCommand, SmokeCommand, SmokeStateReader};
 use crate::physic_engine::config::{PhysicConfig, SmokeColorMode};
 use crate::physic_engine::constants as physic_constants;
+use crate::renderer_engine::constants as renderer_constants;
 use crate::renderer_engine::smoke_preview::{
     PreviewContext, SmokePreviewRenderer, PREVIEW_PAN_X, PREVIEW_PAN_Y, PREVIEW_ROT_Z, PREVIEW_ZOOM,
 };
@@ -564,12 +565,95 @@ pub fn render_smoke_settings_tab(
             let preview_width = ui.content_region_avail()[0];
             let preview_height = 145.0;
 
-            // Render FBO color texture in ImGui!
+            let canvas_pos = ui.cursor_screen_pos();
             let tex_id = imgui::TextureId::new(fbo_tex as usize);
             imgui::Image::new(tex_id, [preview_width, preview_height])
                 .uv0([0.0, 1.0]) // Flip Y for OpenGL Framebuffer
                 .uv1([1.0, 0.0])
                 .build(ui);
+
+            // Draw subtle translucent directional vector arrow representing virtual rocket velocity
+            let font_sz = ui.current_font_size();
+            let font_scale = font_sz / 13.0; // Dynamic UI scaling
+
+            let aspect = (preview_width / preview_height.max(1.0)).max(0.1);
+            let sim_h = 200.0 / zoom.max(0.01);
+            let sim_w = sim_h * aspect;
+
+            let center_x = sim_w * 0.5 + pan_x;
+            let center_y = sim_h * 0.75 + pan_y;
+
+            let rot_rad = rot_z.to_radians();
+            let rocket_h = 66.0;
+
+            // Rocket nose tip in OpenGL simulation coordinates
+            let tip_x = center_x - (rocket_h * 0.5) * rot_rad.sin();
+            let tip_y = center_y + (rocket_h * 0.5) * rot_rad.cos();
+
+            // Map tip position to ImGui screen pixel coordinates
+            let u_tip = tip_x / sim_w;
+            let v_tip = tip_y / sim_h;
+            let start_x = canvas_pos[0] + u_tip * preview_width;
+            let start_y = canvas_pos[1] + (1.0 - v_tip) * preview_height;
+
+            // Trajectory direction vector in screen coordinates (+X right, +Y down)
+            let total_angle_rad = (rot_z + *preview_simulated_angle_offset).to_radians();
+            let dir_screen_x = -total_angle_rad.sin();
+            let dir_screen_y = -total_angle_rad.cos();
+
+            // Calculate arrow length proportional to simulated speed
+            let raw_len = (*preview_simulated_speed
+                * renderer_constants::SMOKE_PREVIEW_ARROW_SPEED_SCALE)
+                .clamp(
+                    renderer_constants::SMOKE_PREVIEW_ARROW_MIN_LEN,
+                    renderer_constants::SMOKE_PREVIEW_ARROW_MAX_LEN,
+                );
+            let arrow_len = raw_len * font_scale;
+
+            let end_x = start_x + dir_screen_x * arrow_len;
+            let end_y = start_y + dir_screen_y * arrow_len;
+
+            // Translucent cyan color token
+            let arrow_col = renderer_constants::SMOKE_PREVIEW_ARROW_COLOR;
+            let draw_list = ui.get_window_draw_list();
+
+            // Only draw arrow if rocket tip is near/inside visible canvas bounds
+            if start_x >= canvas_pos[0] - 100.0
+                && start_x <= canvas_pos[0] + preview_width + 100.0
+                && start_y >= canvas_pos[1] - 100.0
+                && start_y <= canvas_pos[1] + preview_height + 100.0
+            {
+                // Draw shaft line
+                draw_list
+                    .add_line([start_x, start_y], [end_x, end_y], arrow_col)
+                    .thickness(renderer_constants::SMOKE_PREVIEW_ARROW_LINE_THICKNESS * font_scale)
+                    .build();
+
+                // Draw arrowhead triangle pointer
+                let line_angle = dir_screen_y.atan2(dir_screen_x);
+                let head_size = renderer_constants::SMOKE_PREVIEW_ARROW_HEAD_SIZE * font_scale;
+                let wing_angle =
+                    renderer_constants::SMOKE_PREVIEW_ARROW_HEAD_ANGLE_DEG.to_radians();
+
+                let left_angle = line_angle + std::f32::consts::PI - wing_angle;
+                let right_angle = line_angle + std::f32::consts::PI + wing_angle;
+
+                let left_x = end_x + head_size * left_angle.cos();
+                let left_y = end_y + head_size * left_angle.sin();
+
+                let right_x = end_x + head_size * right_angle.cos();
+                let right_y = end_y + head_size * right_angle.sin();
+
+                draw_list
+                    .add_triangle(
+                        [end_x, end_y],
+                        [left_x, left_y],
+                        [right_x, right_y],
+                        arrow_col,
+                    )
+                    .filled(true)
+                    .build();
+            }
 
             let is_canvas_hovered = ui.is_item_hovered();
 
