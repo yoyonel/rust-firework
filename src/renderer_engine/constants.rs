@@ -229,6 +229,27 @@ pub const SLIDER_BLOOM_ITERATIONS_MAX: u32 = 10;
 pub const SLIDER_BLOOM_DOWNSAMPLE_MIN: u32 = 1;
 pub const SLIDER_BLOOM_DOWNSAMPLE_MAX: u32 = 8;
 
+/// Color RGBA tuple for the subtle translucent direction vector arrow in the smoke preview viewport.
+pub const SMOKE_PREVIEW_ARROW_COLOR: [f32; 4] = [0.0, 0.85, 1.0, 0.40];
+
+/// Proportional speed scale factor for the direction vector arrow length (pixels per m/s).
+pub const SMOKE_PREVIEW_ARROW_SPEED_SCALE: f32 = 0.08;
+
+/// Minimum pixel length cap for the smoke preview direction vector arrow.
+pub const SMOKE_PREVIEW_ARROW_MIN_LEN: f32 = 12.0;
+
+/// Maximum pixel length cap for the smoke preview direction vector arrow.
+pub const SMOKE_PREVIEW_ARROW_MAX_LEN: f32 = 120.0;
+
+/// Base pixel size of the arrow head (pointer triangle).
+pub const SMOKE_PREVIEW_ARROW_HEAD_SIZE: f32 = 9.0;
+
+/// Half-angle (degrees) of the arrow head pointer wings.
+pub const SMOKE_PREVIEW_ARROW_HEAD_ANGLE_DEG: f32 = 25.0;
+
+/// Line thickness (pixels) of the direction vector arrow.
+pub const SMOKE_PREVIEW_ARROW_LINE_THICKNESS: f32 = 2.0;
+
 /// Texture path for smoke particle.
 pub const TEXTURE_SMOKE_PARTICLE_PATH: &str =
     "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png";
