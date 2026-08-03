@@ -30,6 +30,7 @@ fn test_smoke_preview_golden_image_comparison() {
             rocket_color: [0.3, 0.3, 1.0],
             simulated_speed: 100.0,
             simulated_angle_offset_deg: 0.0,
+            tone_mapping_mode: 5,
         };
         color_tex = preview.render(&ctx);
     }

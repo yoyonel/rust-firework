@@ -26,6 +26,7 @@ pub struct PreviewContext<'a> {
     pub rocket_color: [f32; 3],
     pub simulated_speed: f32,
     pub simulated_angle_offset_deg: f32,
+    pub tone_mapping_mode: i32,
 }
 
 pub struct SmokePreviewRenderer {
@@ -34,7 +35,11 @@ pub struct SmokePreviewRenderer {
     fbo: u32,
     color_tex: u32,
     postproc_program: u32,
-    loc_postproc_tex: i32,
+    loc_postproc_scene_tex: i32,
+    loc_postproc_bloom_tex: i32,
+    loc_postproc_tone_mapping_mode: i32,
+    dummy_vao: u32,
+    dummy_black_tex: u32,
     ubo_global: u32,
     smoke_program: u32,
     loc_smoke_tex: i32,
@@ -133,16 +138,49 @@ impl SmokePreviewRenderer {
             );
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
-            // Post-processing Tone-Mapping + Gamma Correction Shader (loaded from external .glsl files)
+            // Post-processing Tone-Mapping + Gamma Correction Shader (shared with main scene bloom_composition shader)
             use crate::renderer_engine::constants;
             use crate::renderer_engine::shader::compile_shader_program_from_files;
 
             let postproc_program = compile_shader_program_from_files(
-                constants::SHADER_SMOKE_PREVIEW_POSTPROC_VERTEX_PATH,
-                constants::SHADER_SMOKE_PREVIEW_POSTPROC_FRAGMENT_PATH,
+                constants::SHADER_BLOOM_FULLSCREEN_QUAD_VERTEX_PATH,
+                constants::SHADER_BLOOM_COMPOSITION_FRAGMENT_PATH,
             );
 
-            let loc_postproc_tex = gl::GetUniformLocation(postproc_program, cstr!("uTex"));
+            let loc_postproc_scene_tex =
+                gl::GetUniformLocation(postproc_program, cstr!("uSceneTexture"));
+            let loc_postproc_bloom_tex =
+                gl::GetUniformLocation(postproc_program, cstr!("uBloomTexture"));
+            let loc_postproc_tone_mapping_mode =
+                gl::GetUniformLocation(postproc_program, cstr!("uToneMappingMode"));
+
+            let block_idx_post = gl::GetUniformBlockIndex(postproc_program, cstr!("GlobalData"));
+            if block_idx_post != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(
+                    postproc_program,
+                    block_idx_post,
+                    constants::GLOBAL_UBO_BINDING_INDEX,
+                );
+            }
+
+            let mut dummy_vao = 0;
+            gl::GenVertexArrays(1, &mut dummy_vao);
+
+            let mut dummy_black_tex = 0;
+            gl::GenTextures(1, &mut dummy_black_tex);
+            gl::BindTexture(gl::TEXTURE_2D, dummy_black_tex);
+            let black_pixel: [u8; 4] = [0, 0, 0, 255];
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::RGBA8 as i32,
+                1,
+                1,
+                0,
+                gl::RGBA,
+                gl::UNSIGNED_BYTE,
+                black_pixel.as_ptr() as *const _,
+            );
 
             // 2. Create GlobalData UBO (binding 0)
             let mut ubo_global = 0;
@@ -363,7 +401,11 @@ impl SmokePreviewRenderer {
                 fbo,
                 color_tex,
                 postproc_program,
-                loc_postproc_tex,
+                loc_postproc_scene_tex,
+                loc_postproc_bloom_tex,
+                loc_postproc_tone_mapping_mode,
+                dummy_vao,
+                dummy_black_tex,
                 ubo_global,
                 smoke_program,
                 loc_smoke_tex,
@@ -578,8 +620,7 @@ impl SmokePreviewRenderer {
             gl::BindVertexArray(self.quad_vao);
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
-            // 3. POST-PROCESS COMPOSITE PASS: Tone-Mapping (KhronosPBR) & Gamma Correction (1.0/2.2)
-            // Exactly ISO with main scene bloom composition shader
+            // 3. POST-PROCESS COMPOSITE PASS: Tone-Mapping & Composition (shared with main scene bloom_composition shader)
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.fbo);
             gl::Viewport(0, 0, 480, 200);
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
@@ -587,14 +628,25 @@ impl SmokePreviewRenderer {
 
             gl::Disable(gl::BLEND);
             gl::UseProgram(self.postproc_program);
+
             gl::ActiveTexture(gl::TEXTURE0);
             gl::BindTexture(gl::TEXTURE_2D, self.hdr_tex);
-            if self.loc_postproc_tex != -1 {
-                gl::Uniform1i(self.loc_postproc_tex, 0);
+            if self.loc_postproc_scene_tex != -1 {
+                gl::Uniform1i(self.loc_postproc_scene_tex, 0);
             }
 
-            gl::BindVertexArray(self.quad_vao);
-            gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
+            gl::ActiveTexture(gl::TEXTURE1);
+            gl::BindTexture(gl::TEXTURE_2D, self.dummy_black_tex);
+            if self.loc_postproc_bloom_tex != -1 {
+                gl::Uniform1i(self.loc_postproc_bloom_tex, 1);
+            }
+
+            if self.loc_postproc_tone_mapping_mode != -1 {
+                gl::Uniform1i(self.loc_postproc_tone_mapping_mode, ctx.tone_mapping_mode);
+            }
+
+            gl::BindVertexArray(self.dummy_vao);
+            gl::DrawArrays(gl::TRIANGLES, 0, 3);
             gl::BindVertexArray(0);
 
             // Restore previous framebuffer and viewport

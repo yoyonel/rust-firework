@@ -193,14 +193,6 @@ pub const SHADER_BLOOM_COMPOSITION_COMPARE_FRAGMENT_PATH: &str =
 pub const SHADER_BLOOM_PASSTHROUGH_FRAGMENT_PATH: &str =
     "assets/shaders/bloom/passthrough.frag.glsl";
 
-/// Vertex shader path for smoke preview post-processing (tone-mapping + gamma).
-pub const SHADER_SMOKE_PREVIEW_POSTPROC_VERTEX_PATH: &str =
-    "assets/shaders/smoke_preview_postproc.vert.glsl";
-
-/// Fragment shader path for smoke preview post-processing (KhronosPBR + gamma 2.2).
-pub const SHADER_SMOKE_PREVIEW_POSTPROC_FRAGMENT_PATH: &str =
-    "assets/shaders/smoke_preview_postproc.frag.glsl";
-
 /// Vertex shader path for smoke preview rocket quad (Z-rotation).
 pub const SHADER_SMOKE_PREVIEW_QUAD_VERTEX_PATH: &str =
     "assets/shaders/smoke_preview_quad.vert.glsl";
