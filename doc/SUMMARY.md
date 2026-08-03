@@ -15,6 +15,7 @@
   - [Système de Trainée de Fumée Instancié & Contrôles Dynamiques](20260730_instanced_smoke_trail_system_and_dynamics.md)
 
 - [Moteur Audio]()
+  - [Rapport d'Optimisation DSP Audio, Décompilation GDB & Validation Callgrind](20260804_audio_dsp_optimizations_decompilation_and_callgrind_report.md)
   - [Diagnostics, Latences & Modèle d'Atténuation](audio_engine_diagnostic_and_attenuation.md)
   - [Plan d'Optimisation DSP Bus Spatial & Benchmarks](20260731_audio_dsp_spatial_bus_optimization_plan.md)
   - [Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)](20260724_audio_anticipation_timeshifting_closed_loop.md)
