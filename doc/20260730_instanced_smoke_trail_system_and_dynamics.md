@@ -19,7 +19,7 @@ L'objectif de cette fonctionnalité est d'intégrer un système de trainées de 
 7. **Contrôles de Viewport 3D (Unreal/Unity)** : Navigation interactive dans le canevas de preview :
    - **Glisser Clic-Milieu (`Middle Drag`)** : Translation Pan X / Y.
    - **Glisser Clic-Droit (`Right Drag`)** : Rotation Z euclidienne rigide isotropique (0° à 360°).
-   - **Molette (`Mouse Wheel`)** : Zoom / Dézoom (`0.4x` à `3.5x`) avec isolation stricte (`WindowFlags::NO_SCROLL_WITH_MOUSE` & `igGetIO().MouseWheel = 0.0`).
+   - **Molette (`Mouse Wheel`)** : Zoom / Dézoom (`0.4x` à `10.0x`, réglable dynamiquement jusqu'à 20.0x via `gui_session.toml` / `GuiSessionState`) avec isolation stricte (`WindowFlags::NO_SCROLL_WITH_MOUSE` & `igGetIO().MouseWheel = 0.0`).
 
 ---
 
