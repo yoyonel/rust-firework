@@ -242,6 +242,24 @@ pub const SMOKE_PREVIEW_ARROW_HEAD_ANGLE_DEG: f32 = 25.0;
 /// Line thickness (pixels) of the direction vector arrow.
 pub const SMOKE_PREVIEW_ARROW_LINE_THICKNESS: f32 = 2.0;
 
+/// Quad border color (RGBA) for the geometry trimming panel.
+pub const COLOR_TRIMMING_QUAD_BORDER: [f32; 4] = [1.0, 0.2, 0.2, 0.9];
+
+/// Corner shade fill color (RGBA) for bypassed fragment areas in geometry trimming panel.
+pub const COLOR_TRIMMING_CORNER_SHADE: [f32; 4] = [1.0, 0.1, 0.1, 0.45];
+
+/// Octagon outline color (RGBA) in geometry trimming panel.
+pub const COLOR_TRIMMING_OCTAGON_OUTLINE: [f32; 4] = [0.0, 1.0, 0.8, 1.0];
+
+/// Octagon inner spoke color (RGBA) in geometry trimming panel.
+pub const COLOR_TRIMMING_OCTAGON_INNER: [f32; 4] = [0.0, 1.0, 0.8, 0.35];
+
+/// Octagon vertex indicator color (RGBA) in geometry trimming panel.
+pub const COLOR_TRIMMING_VERTEX_INDICATOR: [f32; 4] = [0.0, 1.0, 1.0, 1.0];
+
+/// Center pin indicator color (RGBA) in geometry trimming panel.
+pub const COLOR_TRIMMING_CENTER_PIN: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
+
 /// Texture path for smoke particle.
 pub const TEXTURE_SMOKE_PARTICLE_PATH: &str =
     "assets/textures/toppng.com-realistic-smoke-texture-with-soft-particle-edges-png-399x385.png";
