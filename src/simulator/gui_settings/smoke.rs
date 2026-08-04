@@ -1034,8 +1034,10 @@ pub fn render_smoke_settings_tab(
 mod tests {
     use super::*;
     use crate::physic_engine::config::PhysicConfig;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_render_smoke_controls_pure_function() {
         let _guard = crate::simulator::gui_settings::IMGUI_TEST_MUTEX
             .lock()
