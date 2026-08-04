@@ -418,7 +418,7 @@ pub fn render_physics_settings_tab(
     }
 
     // 4. Forces & Particle Physics
-    if filter.is_empty() || "gravity threshold explosion velocity forces".contains(filter) {
+    if filter.is_empty() || "gravity threshold explosion velocity forces boost".contains(filter) {
         ui.spacing();
         ui.separator();
         ui.text_colored(COLOR_HEADER, "=== FORCES & EXPLOSION DYNAMICS ===");
@@ -465,6 +465,17 @@ pub fn render_physics_settings_tab(
             physic_constants::SLIDER_EXPLOSION_VEL_MAX,
             cfg.explosion_max_vel,
             PhysicCommand::SetExplosionMaxVel,
+        );
+
+        // GUI_PERSIST: physics.config
+        slider_f32(
+            ui,
+            cmd_queue,
+            "Explosion Velocity Boost (`physic.explosion_velocity_boost`)",
+            physic_constants::SLIDER_EXPLOSION_BOOST_MIN,
+            physic_constants::SLIDER_EXPLOSION_BOOST_MAX,
+            cfg.explosion_velocity_boost,
+            PhysicCommand::SetExplosionVelocityBoost,
         );
     }
 

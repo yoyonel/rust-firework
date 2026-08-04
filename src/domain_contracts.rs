@@ -53,6 +53,7 @@ pub enum PhysicCommand {
     SetExplosionThreshold(f32),
     SetExplosionMinVel(f32),
     SetExplosionMaxVel(f32),
+    SetExplosionVelocityBoost(f32),
     SetExplosionShapeSpherical,
     ResetAllPresetWeights,
     SetPresetWeight { index: u32, weight: f32 },

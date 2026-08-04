@@ -27,6 +27,7 @@ fn test_full_gui_persistence_roundtrip_between_runs() -> anyhow::Result<()> {
     physic_cfg.max_rockets = 512;
     physic_cfg.particles_per_explosion = 800;
     physic_cfg.gravity = -350.0;
+    physic_cfg.explosion_velocity_boost = 7.5;
 
     // Custom Smoke & Alpha Erosion parameters
     physic_cfg.smoke_spawn_rate = 88.5;
@@ -92,6 +93,7 @@ fn test_full_gui_persistence_roundtrip_between_runs() -> anyhow::Result<()> {
     assert_eq!(loaded_physic.max_rockets, 512);
     assert_eq!(loaded_physic.particles_per_explosion, 800);
     assert_eq!(loaded_physic.gravity, -350.0);
+    assert_eq!(loaded_physic.explosion_velocity_boost, 7.5);
 
     // Verify smoke & erosion parameters restoration
     assert_eq!(loaded_physic.smoke_spawn_rate, 88.5);
