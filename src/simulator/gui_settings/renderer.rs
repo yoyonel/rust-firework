@@ -288,8 +288,10 @@ pub fn render_commands_overview_tab<A: AudioEngine, P: PhysicEngineFull>(
 mod tests {
     use super::*;
     use crate::renderer_engine::config::RendererConfig;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn test_render_renderer_settings_tab_pure_function() {
         let config = RendererConfig::default();
         let mut cmd_queue: Vec<EngineCommand> = Vec::with_capacity(16);

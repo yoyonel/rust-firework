@@ -252,6 +252,7 @@ pub fn render_audio_settings_tab(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     struct MockAudioState {
         volume: f32,
@@ -303,6 +304,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_render_audio_settings_tab_pure_function_execution() {
         let state = MockAudioState {
             volume: 0.80,

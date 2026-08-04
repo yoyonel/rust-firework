@@ -194,6 +194,7 @@ pub fn apply_theme_to_context(ctx: &mut imgui::Context, theme: GuiTheme) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
     fn test_gui_theme_all_themes_and_display_name() {
@@ -206,6 +207,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_gui_theme_apply_to_context() {
         let _guard = crate::simulator::gui_settings::IMGUI_TEST_MUTEX
             .lock()
