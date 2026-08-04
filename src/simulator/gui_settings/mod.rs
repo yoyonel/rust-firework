@@ -50,7 +50,6 @@ pub struct GuiSettings {
     pub pending_theme_change: Option<GuiTheme>,
     pub gui_scale: f32,
     pub smoke_preview_max_zoom: f32,
-    pub show_geometry_trimming: bool,
     pub smoke_preview_rocket_color: [f32; 3],
     pub smoke_preview_simulated_speed: f32,
     pub smoke_preview_simulated_angle_offset: f32,
@@ -80,14 +79,13 @@ impl GuiSettings {
             pending_theme_change: None,
             gui_scale: session.gui_scale,
             smoke_preview_max_zoom: session.smoke_preview_max_zoom,
-            show_geometry_trimming: session.show_geometry_trimming,
             smoke_preview_rocket_color: session.smoke_preview_rocket_color,
             smoke_preview_simulated_speed: session.smoke_preview_simulated_speed,
             smoke_preview_simulated_angle_offset: session.smoke_preview_simulated_angle_offset,
         };
         // Sync static AtomicBool and viewport transform atomics from persisted session state
         smoke::SHOW_GEOMETRY_TRIMMING.store(
-            result.show_geometry_trimming,
+            session.show_geometry_trimming,
             std::sync::atomic::Ordering::Relaxed,
         );
         crate::renderer_engine::smoke_preview::PREVIEW_ZOOM.store(

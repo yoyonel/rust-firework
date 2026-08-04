@@ -672,6 +672,7 @@ fn test_ui_state_feedback_loop_smoke() {
 
 #[test]
 fn test_apply_all_themes_to_imgui_context() {
+    let _guard = IMGUI_TEST_MUTEX.lock().unwrap();
     let mut ctx = imgui::Context::create();
     for (theme, name) in GuiTheme::all_themes() {
         apply_theme_to_context(&mut ctx, *theme);
