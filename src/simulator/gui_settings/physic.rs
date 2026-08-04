@@ -765,6 +765,7 @@ mod tests {
     use super::*;
     use crate::physic_engine::{ExplosionShape, ImageShape};
     use glam::Vec2;
+    use serial_test::serial;
 
     #[test]
     fn test_preset_definitions_and_defaults() {
@@ -817,6 +818,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_render_physics_settings_tab_pure_function() {
         use crate::physic_engine::config::PhysicConfig;
         use crate::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;

@@ -1,4 +1,5 @@
 use fireworks_sim::Simulator;
+use serial_test::serial;
 use std::cell::RefCell;
 use std::rc::Rc;
 mod helpers;
@@ -7,6 +8,7 @@ use helpers::{
 };
 
 #[test]
+#[serial]
 fn test_simulator_with_dummy_engines() -> anyhow::Result<()> {
     let renderer = DummyRenderer::default();
     let audio = DummyAudio;
@@ -21,6 +23,7 @@ fn test_simulator_with_dummy_engines() -> anyhow::Result<()> {
 }
 
 #[test]
+#[serial]
 fn test_renderer_called_by_simulator() {
     let log = Rc::new(RefCell::new(vec![]));
     let renderer = TestRenderer::new(log.clone());
@@ -46,6 +49,7 @@ fn test_renderer_called_by_simulator() {
 }
 
 #[test]
+#[serial]
 fn test_audio_called_by_simulator() {
     let log = Rc::new(RefCell::new(vec![]));
     let renderer = DummyRenderer::default();
@@ -62,6 +66,7 @@ fn test_audio_called_by_simulator() {
 }
 
 #[test]
+#[serial]
 fn test_physic_called_by_simulator() {
     let log = Rc::new(RefCell::new(vec![]));
     let renderer = DummyRenderer::default();
@@ -79,6 +84,7 @@ fn test_physic_called_by_simulator() {
 }
 
 #[test]
+#[serial]
 fn test_call_order_in_simulator_run_and_close() {
     let log = Rc::new(RefCell::new(vec![]));
     let renderer = TestRenderer::new(log.clone());
