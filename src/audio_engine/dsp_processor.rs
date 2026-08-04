@@ -1,5 +1,6 @@
 // Dans src/audio_engine/dsp_processor.rs
 
+use crate::audio_engine::constants;
 use crate::audio_engine::effect_flags::{fx_enabled, AudioEffect, AudioEffectFlags};
 use crate::audio_engine::types::{PlayRequest, Voice};
 use crate::audio_engine::{AudioBlock, DopplerEvent, SafeWavWriter};
@@ -93,10 +94,10 @@ fn interpolate_mono_sample(slice: &[[f32; 2]], pos: f64) -> f32 {
     }
 
     let s0 = &slice[index];
-    let sample0 = (s0[0] + s0[1]) * 0.5;
+    let sample0 = (s0[0] + s0[1]) * constants::STEREO_MIX_FACTOR;
     let sample1 = if index + 1 < total_len {
         let s1 = &slice[index + 1];
-        (s1[0] + s1[1]) * 0.5
+        (s1[0] + s1[1]) * constants::STEREO_MIX_FACTOR
     } else {
         0.0
     };
@@ -459,22 +460,14 @@ impl DspProcessor {
                     let w_out = &mut bus_w_slice[..count];
                     let x_out = &mut bus_x_slice[..count];
 
-                    let inv_fade_in = if fade_in > 0 {
-                        1.0 / fade_in as f32
-                    } else {
-                        0.0
-                    };
-                    let inv_fade_out = if fade_out > 0 {
-                        1.0 / fade_out as f32
-                    } else {
-                        0.0
-                    };
+                    let inv_fade_in = constants::compute_fade_reciprocal(fade_in);
+                    let inv_fade_out = constants::compute_fade_reciprocal(fade_out);
 
                     if !active_fade && !apply_lpf {
                         // Boucle 100% vectorisable par le compilateur (SIMD 8-wide AVX2)
                         for i in 0..count {
                             let s = sample_slice[i];
-                            let sample = (s[0] + s[1]) * 0.5;
+                            let sample = (s[0] + s[1]) * constants::STEREO_MIX_FACTOR;
                             w_out[i] += sample * w_weight;
                             x_out[i] += sample * x_weight;
                         }
@@ -482,7 +475,7 @@ impl DspProcessor {
                         for i in 0..count {
                             let index = start_idx + i;
                             let s = sample_slice[i];
-                            let mut sample = (s[0] + s[1]) * 0.5;
+                            let mut sample = (s[0] + s[1]) * constants::STEREO_MIX_FACTOR;
                             if active_fade {
                                 sample = apply_fade_in_out(
                                     sample,
@@ -506,16 +499,8 @@ impl DspProcessor {
                 }
             } else {
                 // Path fallback : Vitesse variable (Doppler / Pitch shift avec LERP)
-                let inv_fade_in = if fade_in > 0 {
-                    1.0 / fade_in as f32
-                } else {
-                    0.0
-                };
-                let inv_fade_out = if fade_out > 0 {
-                    1.0 / fade_out as f32
-                } else {
-                    0.0
-                };
+                let inv_fade_in = constants::compute_fade_reciprocal(fade_in);
+                let inv_fade_out = constants::compute_fade_reciprocal(fade_out);
 
                 for i in 0..frames {
                     let current_pos = v.pos;
@@ -652,16 +637,8 @@ impl DspProcessor {
             let itd_step_l = (itd_l_samples - start_itd_l) / frames as f32;
             let itd_step_r = (itd_r_samples - start_itd_r) / frames as f32;
 
-            let inv_fade_in = if v.fade_in_samples > 0 {
-                1.0 / v.fade_in_samples as f32
-            } else {
-                0.0
-            };
-            let inv_fade_out = if v.fade_out_samples > 0 {
-                1.0 / v.fade_out_samples as f32
-            } else {
-                0.0
-            };
+            let inv_fade_in = constants::compute_fade_reciprocal(v.fade_in_samples);
+            let inv_fade_out = constants::compute_fade_reciprocal(v.fade_out_samples);
 
             // 3. Boucle de Mixage : Lecture spatiale directe (Zéro Buffer Intermédiaire)
             for (i, frame) in self.acc[..frames].iter_mut().enumerate() {
