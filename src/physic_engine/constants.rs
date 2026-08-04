@@ -155,6 +155,14 @@ pub const DEFAULT_AUDIO_EXPLOSION_ANTICIPATION_MS: f32 = 25.0;
 /// - **System influence:** Filters out dark background pixels when converting images to particle positions.
 pub const IMAGE_SHAPE_THRESHOLD: u8 = 128;
 
+/// Default initial velocity boost multiplier for image-based shape explosions.
+///
+/// - **Unit:** dimensionless scalar multiplier
+/// - **Technical meaning:** Boost factor applied to target ballistic expansion velocity vectors to render image explosions vivid and dynamic.
+/// - **Bounds:** `1.0` to `10.0`.
+/// - **System influence:** Scales initial particle expansion velocity from the moving rocket center.
+pub const DEFAULT_EXPLOSION_VELOCITY_BOOST: f32 = 4.0;
+
 /// Default smoke spawn rate (particles per second per rocket).
 pub const DEFAULT_SMOKE_SPAWN_RATE: f32 = 30.0;
 
@@ -470,6 +478,9 @@ pub const SLIDER_EXPLOSION_THRESH_MAX: f32 = 500.0;
 
 pub const SLIDER_EXPLOSION_VEL_MIN: f32 = 1.0;
 pub const SLIDER_EXPLOSION_VEL_MAX: f32 = 2000.0;
+
+pub const SLIDER_EXPLOSION_BOOST_MIN: f32 = 1.0;
+pub const SLIDER_EXPLOSION_BOOST_MAX: f32 = 10.0;
 
 pub const SLIDER_IMAGE_SCALE_MIN: f32 = 20.0;
 pub const SLIDER_IMAGE_SCALE_MAX: f32 = 500.0;

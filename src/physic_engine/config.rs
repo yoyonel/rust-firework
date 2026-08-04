@@ -23,6 +23,10 @@ pub struct PhysicConfig {
     pub explosion_min_vel: f32,
     pub explosion_max_vel: f32,
 
+    /// Multiplicateur dynamique de vélocité d'expansion des explosions d'images (1.0 à 10.0)
+    #[serde(default = "default_explosion_velocity_boost")]
+    pub explosion_velocity_boost: f32,
+
     /// Temps d'anticipation pour le lancement de la fusée (ms)
     pub audio_launch_anticipation_ms: f32,
 
@@ -99,6 +103,9 @@ pub enum SmokeColorMode {
 
 use crate::physic_engine::constants;
 
+fn default_explosion_velocity_boost() -> f32 {
+    constants::DEFAULT_EXPLOSION_VELOCITY_BOOST
+}
 fn default_smoke_erosion_enabled() -> bool {
     constants::DEFAULT_SMOKE_EROSION_ENABLED
 }
@@ -161,6 +168,7 @@ impl Default for PhysicConfig {
             initial_rocket_speed: constants::DEFAULT_INITIAL_ROCKET_SPEED,
             explosion_min_vel: constants::DEFAULT_EXPLOSION_MIN_VELOCITY,
             explosion_max_vel: constants::DEFAULT_EXPLOSION_MAX_VELOCITY,
+            explosion_velocity_boost: constants::DEFAULT_EXPLOSION_VELOCITY_BOOST,
             audio_launch_anticipation_ms: constants::DEFAULT_AUDIO_LAUNCH_ANTICIPATION_MS,
             audio_explosion_anticipation_ms: constants::DEFAULT_AUDIO_EXPLOSION_ANTICIPATION_MS,
             smoke_spawn_rate: constants::DEFAULT_SMOKE_SPAWN_RATE,
