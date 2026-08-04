@@ -581,14 +581,14 @@ pub fn render_smoke_settings_tab(
 
             // Draw subtle translucent directional vector arrow representing virtual rocket velocity
             let aspect = (preview_width / preview_height.max(1.0)).max(0.1);
-            let sim_h = 200.0 / zoom.max(0.01);
+            let sim_h = renderer_constants::SMOKE_PREVIEW_FBO_HEIGHT as f32 / zoom.max(0.01);
             let sim_w = sim_h * aspect;
 
-            let center_x = sim_w * 0.5 + pan_x;
-            let center_y = sim_h * 0.75 + pan_y;
+            let center_x = sim_w * renderer_constants::SMOKE_PREVIEW_CENTER_X_FACTOR + pan_x;
+            let center_y = sim_h * renderer_constants::SMOKE_PREVIEW_CENTER_Y_FACTOR + pan_y;
 
             let rot_rad = rot_z.to_radians();
-            let rocket_h = 66.0;
+            let rocket_h = renderer_constants::SMOKE_PREVIEW_ROCKET_H;
 
             // Rocket nose tip in OpenGL simulation coordinates
             let tip_x = center_x - (rocket_h * 0.5) * rot_rad.sin();
@@ -622,10 +622,19 @@ pub fn render_smoke_settings_tab(
             let draw_list = ui.get_window_draw_list();
 
             // Only draw arrow if rocket tip is near/inside visible canvas bounds
-            if start_x >= canvas_pos[0] - 100.0 * font_scale
-                && start_x <= canvas_pos[0] + preview_width + 100.0 * font_scale
-                && start_y >= canvas_pos[1] - 100.0 * font_scale
-                && start_y <= canvas_pos[1] + preview_height + 100.0 * font_scale
+            if start_x
+                >= canvas_pos[0] - renderer_constants::SMOKE_PREVIEW_ARROW_CLIP_MARGIN * font_scale
+                && start_x
+                    <= canvas_pos[0]
+                        + preview_width
+                        + renderer_constants::SMOKE_PREVIEW_ARROW_CLIP_MARGIN * font_scale
+                && start_y
+                    >= canvas_pos[1]
+                        - renderer_constants::SMOKE_PREVIEW_ARROW_CLIP_MARGIN * font_scale
+                && start_y
+                    <= canvas_pos[1]
+                        + preview_height
+                        + renderer_constants::SMOKE_PREVIEW_ARROW_CLIP_MARGIN * font_scale
             {
                 // Draw shaft line
                 draw_list
@@ -668,10 +677,12 @@ pub fn render_smoke_settings_tab(
                 let wheel = io.mouse_wheel;
                 if wheel != 0.0 {
                     let cur_z = PREVIEW_ZOOM.load(Ordering::Relaxed) as f32 / 100.0;
-                    let new_z = (cur_z + wheel * 0.12).clamp(
-                        physic_constants::DEFAULT_SMOKE_PREVIEW_MIN_ZOOM,
-                        *preview_max_zoom,
-                    );
+                    let new_z = (cur_z
+                        + wheel * renderer_constants::SMOKE_PREVIEW_ZOOM_SCROLL_SPEED)
+                        .clamp(
+                            physic_constants::DEFAULT_SMOKE_PREVIEW_MIN_ZOOM,
+                            *preview_max_zoom,
+                        );
                     PREVIEW_ZOOM.store((new_z * 100.0) as u32, Ordering::Relaxed);
                     unsafe {
                         let raw_io = imgui::sys::igGetIO();
@@ -687,8 +698,8 @@ pub fn render_smoke_settings_tab(
                     let delta = io.mouse_delta;
                     let cur_x = PREVIEW_PAN_X.load(Ordering::Relaxed) as f32 / 10.0;
                     let cur_y = PREVIEW_PAN_Y.load(Ordering::Relaxed) as f32 / 10.0;
-                    let new_x = cur_x + delta[0] * 0.4;
-                    let new_y = cur_y - delta[1] * 0.4; // Screen Y is inverted
+                    let new_x = cur_x + delta[0] * renderer_constants::SMOKE_PREVIEW_PAN_DRAG_SPEED;
+                    let new_y = cur_y - delta[1] * renderer_constants::SMOKE_PREVIEW_PAN_DRAG_SPEED; // Screen Y is inverted
                     PREVIEW_PAN_X.store((new_x * 10.0) as i32, Ordering::Relaxed);
                     PREVIEW_PAN_Y.store((new_y * 10.0) as i32, Ordering::Relaxed);
                 }
@@ -697,7 +708,9 @@ pub fn render_smoke_settings_tab(
                 if ui.is_mouse_dragging(imgui::MouseButton::Right) {
                     let delta = io.mouse_delta;
                     let cur_r = PREVIEW_ROT_Z.load(Ordering::Relaxed) as f32 / 10.0;
-                    let new_r = (cur_r + delta[0] * 0.5) % 360.0;
+                    let new_r = (cur_r
+                        + delta[0] * renderer_constants::SMOKE_PREVIEW_ROT_DRAG_SPEED)
+                        % 360.0;
                     PREVIEW_ROT_Z.store((new_r * 10.0) as i32, Ordering::Relaxed);
                 }
             }
@@ -854,19 +867,19 @@ pub fn render_smoke_settings_tab(
 
                 draw_list
                     .add_line(sq_p0, sq_p1, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
-                    .thickness(1.5 * font_scale)
+                    .thickness(renderer_constants::TRIMMING_QUAD_BORDER_THICKNESS * font_scale)
                     .build();
                 draw_list
                     .add_line(sq_p1, sq_p2, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
-                    .thickness(1.5 * font_scale)
+                    .thickness(renderer_constants::TRIMMING_QUAD_BORDER_THICKNESS * font_scale)
                     .build();
                 draw_list
                     .add_line(sq_p2, sq_p3, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
-                    .thickness(1.5 * font_scale)
+                    .thickness(renderer_constants::TRIMMING_QUAD_BORDER_THICKNESS * font_scale)
                     .build();
                 draw_list
                     .add_line(sq_p3, sq_p0, renderer_constants::COLOR_TRIMMING_QUAD_BORDER)
-                    .thickness(1.5 * font_scale)
+                    .thickness(renderer_constants::TRIMMING_QUAD_BORDER_THICKNESS * font_scale)
                     .build();
 
                 // 3. 1:1 Octagon Vertices matching GPU SmokeRenderer primitive
@@ -931,7 +944,9 @@ pub fn render_smoke_settings_tab(
                             oct[next],
                             renderer_constants::COLOR_TRIMMING_OCTAGON_OUTLINE,
                         )
-                        .thickness(2.0 * font_scale)
+                        .thickness(
+                            renderer_constants::TRIMMING_OCTAGON_OUTLINE_THICKNESS * font_scale,
+                        )
                         .build();
                     draw_list
                         .add_line(
@@ -939,12 +954,14 @@ pub fn render_smoke_settings_tab(
                             oct[i],
                             renderer_constants::COLOR_TRIMMING_OCTAGON_INNER,
                         )
-                        .thickness(1.0 * font_scale)
+                        .thickness(
+                            renderer_constants::TRIMMING_OCTAGON_INNER_THICKNESS * font_scale,
+                        )
                         .build();
                     draw_list
                         .add_circle(
                             oct[i],
-                            4.0 * font_scale,
+                            renderer_constants::TRIMMING_VERTEX_INDICATOR_RADIUS * font_scale,
                             renderer_constants::COLOR_TRIMMING_VERTEX_INDICATOR,
                         )
                         .filled(true)
@@ -953,7 +970,7 @@ pub fn render_smoke_settings_tab(
                 draw_list
                     .add_circle(
                         center,
-                        4.5 * font_scale,
+                        renderer_constants::TRIMMING_CENTER_PIN_RADIUS * font_scale,
                         renderer_constants::COLOR_TRIMMING_CENTER_PIN,
                     )
                     .filled(true)
