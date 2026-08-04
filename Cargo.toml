@@ -70,6 +70,10 @@ harness = false
 name = "spatial_bus_bench"
 harness = false
 
+[[bench]]
+name = "physic_pool_bench"
+harness = false
+
 [features]
 default = ["simd", "test_helpers"] # SIMD activé par défaut
 fft = []
