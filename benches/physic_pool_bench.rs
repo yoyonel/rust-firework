@@ -1,41 +1,61 @@
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
-use fireworks_sim::physic_engine::particles_pools::ParticlesPoolsForRockets;
-use fireworks_sim::physic_engine::rocket::Rocket;
-use rand::SeedableRng;
+use criterion::{black_box, criterion_group, criterion_main, BatchSize, Criterion};
+use fireworks_sim::physic_engine::particles_pools::ParticlesPool;
 
-fn bench_particles_pool_allocation(c: &mut Criterion) {
-    let mut group = c.benchmark_group("physics/particles_pool");
+const MAX_BLOCKS: usize = 1_000;
+const PER_BLOCK: usize = 256;
 
-    group.bench_function("allocate_and_free_1000_blocks", |b| {
-        let max_rockets = 1000;
-        let per_explosion = 256;
-        let per_trail = 64;
+/// Benchmark isolé sur `allocate_block` seul.
+///
+/// Le pool est instancié **avant** la boucle chaude via `iter_batched` avec
+/// `BatchSize::SmallInput` (pool clone à chaque batch) pour exclure tout overhead
+/// de construction mémoire. Seul le coût de `pop()` sur la pile LIFO est mesuré.
+fn bench_allocate_block(c: &mut Criterion) {
+    let mut group = c.benchmark_group("physic-pool");
 
-        b.iter(|| {
-            let mut pools = ParticlesPoolsForRockets::new(max_rockets, per_explosion, per_trail);
-            let mut rng = rand::rngs::StdRng::seed_from_u64(42);
-
-            // Allocation intensive de tous les blocs disponibles
-            let mut allocated = Vec::with_capacity(max_rockets);
-            for _ in 0..max_rockets {
-                if let Some(range) = pools.particles_pool_for_explosions.allocate_block() {
-                    allocated.push(range);
-                }
-            }
-
-            // Libération de tous les blocs via des fusées virtuelles
-            for range in allocated {
-                let mut rocket = Rocket::new(&mut rng);
-                rocket.explosion_particle_indices = Some(range);
-                pools.free_blocks(&mut rocket);
-            }
-
-            black_box(&pools);
-        });
+    group.bench_function("allocate-block", |b| {
+        b.iter_batched(
+            || ParticlesPool::new(MAX_BLOCKS, PER_BLOCK),
+            |mut pool| {
+                // Mesure : 1 appel allocate_block sur un pool frais
+                black_box(pool.allocate_block())
+            },
+            BatchSize::SmallInput,
+        );
     });
 
     group.finish();
 }
 
-criterion_group!(benches, bench_particles_pool_allocation);
+/// Benchmark isolé sur `free_block` seul.
+///
+/// Le pool est pré-épuisé avant le batch (tous les blocs alloués) ;
+/// seul le coût de `push()` sur la pile LIFO est mesuré.
+fn bench_free_block(c: &mut Criterion) {
+    let mut group = c.benchmark_group("physic-pool");
+
+    group.bench_function("free-block", |b| {
+        b.iter_batched(
+            || {
+                let mut pool = ParticlesPool::new(MAX_BLOCKS, PER_BLOCK);
+                // Épuise tous les blocs, récupère les indices pour la libération
+                let allocated: Vec<usize> = (0..MAX_BLOCKS)
+                    .filter_map(|_| pool.allocate_block().map(|r| r.start))
+                    .collect();
+                (pool, allocated)
+            },
+            |(mut pool, allocated)| {
+                // Mesure : libération de tous les blocs alloués
+                for start in allocated {
+                    pool.free_block_by_start(start);
+                }
+                black_box(&pool)
+            },
+            BatchSize::SmallInput,
+        );
+    });
+
+    group.finish();
+}
+
+criterion_group!(benches, bench_allocate_block, bench_free_block);
 criterion_main!(benches);

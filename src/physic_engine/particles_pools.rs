@@ -22,10 +22,10 @@ impl ParticlesPoolsForRockets {
     // TODO: Il faut refactorer pour éviter de take (mut) rocket -> 0-copy
     pub fn free_blocks(&mut self, rocket: &mut Rocket) {
         if let Some(range) = rocket.explosion_particle_indices.take() {
-            self.particles_pool_for_explosions.free_block(range);
+            self.particles_pool_for_explosions.free_block(range.start);
         }
         if let Some(range) = rocket.trail_particle_indices.take() {
-            self.particles_pool_for_trails.free_block(range);
+            self.particles_pool_for_trails.free_block(range.start);
         }
     }
 }
@@ -116,12 +116,20 @@ impl ParticlesPool {
 
     /// Libère un bloc de particules après extinction.
     ///
-    /// Le bloc est remis en pile LIFO pour réutilisation ultérieure.
+    /// # Arguments
+    /// * `start_index` – indice de début du bloc (seule donnée nécessaire ; la taille est connue via `per_block`)
+    ///
     /// Complexité : **O(1)**.
-    fn free_block(&mut self, range: Range<usize>) {
-        self.free_blocks.push(range.start);
+    fn free_block(&mut self, start_index: usize) {
+        self.free_blocks.push(start_index);
         #[cfg(debug_assertions)]
-        debug!("Freed particle block starting at {}", range.start);
+        debug!("Freed particle block starting at {}", start_index);
+    }
+
+    /// Variante publique de `free_block`, exposée pour les benchmarks et tests.
+    #[inline(always)]
+    pub fn free_block_by_start(&mut self, start_index: usize) {
+        self.free_block(start_index);
     }
 
     /// Accès immuable à un bloc de particules.
