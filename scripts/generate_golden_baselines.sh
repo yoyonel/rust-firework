@@ -27,21 +27,9 @@ capture_variant() {
     echo "----------------------------------------------------"
     echo "📹 Recording Candidate: $name"
 
-    # Temporary isolated config directory
     local config_tmp="/tmp/golden_config_$name"
-    mkdir -p "$config_tmp"
-    cp -r assets/config/* "$config_tmp/" 2>/dev/null || true
-
-    cat << EOF > "$config_tmp/gui_session.toml"
-gui_open = false
-active_tab = 2
-search_filter = ""
-show_audio_diagnostic = false
-show_performance_overlay = false
-EOF
-
-    # Apply variant config
-    echo "$render_config" > "$config_tmp/renderer.toml"
+    source "$(dirname "$0")/common_config_isolation.sh"
+    setup_isolated_config "$config_tmp" "$render_config"
 
     # Launch simulator with isolated configuration directory
     FIREWORKS_CONFIG_DIR="$config_tmp" ./target/release/fireworks_sim &
