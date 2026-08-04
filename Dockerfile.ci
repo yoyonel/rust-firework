@@ -32,7 +32,8 @@ RUN mkdir -p src benches && \
     echo "fn main() {}" > benches/audio_dsp_bench.rs && \
     echo "fn main() {}" > benches/audio_binaural_bench.rs && \
     echo "fn main() {}" > benches/simulator_full_bench.rs && \
-    echo "fn main() {}" > benches/spatial_bus_bench.rs
+    echo "fn main() {}" > benches/spatial_bus_bench.rs && \
+    echo "fn main() {}" > benches/physic_pool_bench.rs
 RUN cargo build --release
 RUN rm -rf src benches
 
