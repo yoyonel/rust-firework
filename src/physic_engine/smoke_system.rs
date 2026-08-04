@@ -144,6 +144,81 @@ impl SmokeSystem {
         }
     }
 
+    /// Shared particle initialization: color, sizing, opacity, rotation, lifecycle.
+    /// Called by both `emit` and `emit_preview` after setting position and velocity.
+    fn init_particle_common(
+        p: &mut SmokeParticle,
+        rocket_color: Color,
+        config: &PhysicConfig,
+        rng: &mut impl Rng,
+    ) {
+        p.rocket_color = rocket_color;
+        p.color = match config.smoke_color_mode {
+            crate::physic_engine::config::SmokeColorMode::RocketColor => {
+                rocket_color * config.smoke_inherited_color_intensity
+            }
+            crate::physic_engine::config::SmokeColorMode::Custom => {
+                Color::from_array(config.smoke_custom_color)
+            }
+        };
+
+        let initial_size = config.smoke_initial_size
+            * rng.random_range(
+                crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MIN
+                    ..=crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MAX,
+            );
+        p.sizing = ParticleSizing {
+            initial_size,
+            current_size: initial_size,
+            growth_rate: config.smoke_growth_rate_multiplier,
+        };
+
+        let initial_alpha = rng.random_range(
+            crate::physic_engine::constants::SMOKE_EMISSION_OPACITY_MIN
+                ..=crate::physic_engine::constants::SMOKE_EMISSION_OPACITY_MAX,
+        );
+        p.opacity = ParticleOpacity {
+            initial_alpha,
+            alpha: initial_alpha,
+        };
+
+        p.rotation = rng.random_range(0.0..std::f32::consts::TAU);
+        p.lifecycle = ParticleLifecycle {
+            age: 0.0,
+            max_life: config.smoke_fade_duration
+                * rng.random_range(
+                    crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MIN
+                        ..=crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MAX,
+                ),
+        };
+        p.active = true;
+    }
+
+    /// Computes randomized emission offset and tail dispersion vectors.
+    fn compute_emission_vectors(rng: &mut impl Rng) -> (Vec2, Vec2) {
+        let offset = Vec2::new(
+            rng.random_range(
+                crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MIN
+                    ..=crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MAX,
+            ),
+            rng.random_range(
+                crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MIN
+                    ..=crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MAX,
+            ),
+        );
+        let tail_dispersion = Vec2::new(
+            rng.random_range(
+                crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_X_MIN
+                    ..=crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_X_MAX,
+            ),
+            rng.random_range(
+                crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_Y_MIN
+                    ..=crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_Y_MAX,
+            ),
+        );
+        (offset, tail_dispersion)
+    }
+
     /// Spawns soft, volumetric smoke particles at rocket base with dynamic color selection.
     pub fn emit(
         &mut self,
@@ -155,71 +230,13 @@ impl SmokeSystem {
     ) {
         crate::tracy_zone!("SmokeSystem::emit", 0x33AAFF);
         if let Some(idx) = self.free_indices.pop() {
+            let (offset, tail_dispersion) = Self::compute_emission_vectors(rng);
             let p = &mut self.particles[idx];
-            let offset_x = rng.random_range(
-                crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MIN
-                    ..=crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MAX,
-            );
-            let offset_y = rng.random_range(
-                crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MIN
-                    ..=crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MAX,
-            );
-            let tail_dispersion = Vec2::new(
-                rng.random_range(
-                    crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_X_MIN
-                        ..=crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_X_MAX,
-                ),
-                rng.random_range(
-                    crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_Y_MIN
-                        ..=crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_Y_MAX,
-                ),
-            );
-
-            p.pos = rocket_pos + Vec2::new(offset_x, offset_y);
+            p.pos = rocket_pos + offset;
             p.vel = rocket_vel
                 * crate::physic_engine::constants::SMOKE_EMISSION_VELOCITY_INHERITANCE_FACTOR
                 + tail_dispersion;
-            p.rocket_color = rocket_color;
-            p.color = match config.smoke_color_mode {
-                crate::physic_engine::config::SmokeColorMode::RocketColor => {
-                    rocket_color * config.smoke_inherited_color_intensity
-                }
-                crate::physic_engine::config::SmokeColorMode::Custom => {
-                    Color::from_array(config.smoke_custom_color)
-                }
-            };
-
-            let initial_size = config.smoke_initial_size
-                * rng.random_range(
-                    crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MIN
-                        ..=crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MAX,
-                );
-            p.sizing = ParticleSizing {
-                initial_size,
-                current_size: initial_size,
-                growth_rate: config.smoke_growth_rate_multiplier,
-            };
-
-            // Soft initial opacity for visible volumetric smoke
-            let initial_alpha = rng.random_range(
-                crate::physic_engine::constants::SMOKE_EMISSION_OPACITY_MIN
-                    ..=crate::physic_engine::constants::SMOKE_EMISSION_OPACITY_MAX,
-            );
-            p.opacity = ParticleOpacity {
-                initial_alpha,
-                alpha: initial_alpha,
-            };
-
-            p.rotation = rng.random_range(0.0..std::f32::consts::TAU);
-            p.lifecycle = ParticleLifecycle {
-                age: 0.0,
-                max_life: config.smoke_fade_duration
-                    * rng.random_range(
-                        crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MIN
-                            ..=crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MAX,
-                    ),
-            };
-            p.active = true;
+            Self::init_particle_common(p, rocket_color, config, rng);
         }
     }
 
@@ -236,70 +253,13 @@ impl SmokeSystem {
     ) {
         crate::tracy_zone!("SmokeSystem::emit_preview", 0x33AAFF);
         if let Some(idx) = self.free_indices.pop() {
+            let (offset, tail_dispersion) = Self::compute_emission_vectors(rng);
             let p = &mut self.particles[idx];
-            let offset_x = rng.random_range(
-                crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MIN
-                    ..=crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MAX,
-            );
-            let offset_y = rng.random_range(
-                crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MIN
-                    ..=crate::physic_engine::constants::SMOKE_EMISSION_POSITION_OFFSET_MAX,
-            );
-            let tail_dispersion = Vec2::new(
-                rng.random_range(
-                    crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_X_MIN
-                        ..=crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_X_MAX,
-                ),
-                rng.random_range(
-                    crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_Y_MIN
-                        ..=crate::physic_engine::constants::SMOKE_EMISSION_DISPERSION_Y_MAX,
-                ),
-            );
-
-            p.pos = nozzle_pos + Vec2::new(offset_x, offset_y);
+            p.pos = nozzle_pos + offset;
             p.vel = simulated_rocket_vel
                 * crate::physic_engine::constants::SMOKE_PREVIEW_RELATIVE_EXHAUST_SCALE
                 + tail_dispersion;
-            p.rocket_color = rocket_color;
-            p.color = match config.smoke_color_mode {
-                crate::physic_engine::config::SmokeColorMode::RocketColor => {
-                    rocket_color * config.smoke_inherited_color_intensity
-                }
-                crate::physic_engine::config::SmokeColorMode::Custom => {
-                    Color::from_array(config.smoke_custom_color)
-                }
-            };
-
-            let initial_size = config.smoke_initial_size
-                * rng.random_range(
-                    crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MIN
-                        ..=crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MAX,
-                );
-            p.sizing = ParticleSizing {
-                initial_size,
-                current_size: initial_size,
-                growth_rate: config.smoke_growth_rate_multiplier,
-            };
-
-            let initial_alpha = rng.random_range(
-                crate::physic_engine::constants::SMOKE_EMISSION_OPACITY_MIN
-                    ..=crate::physic_engine::constants::SMOKE_EMISSION_OPACITY_MAX,
-            );
-            p.opacity = ParticleOpacity {
-                initial_alpha,
-                alpha: initial_alpha,
-            };
-
-            p.rotation = rng.random_range(0.0..std::f32::consts::TAU);
-            p.lifecycle = ParticleLifecycle {
-                age: 0.0,
-                max_life: config.smoke_fade_duration
-                    * rng.random_range(
-                        crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MIN
-                            ..=crate::physic_engine::constants::SMOKE_EMISSION_VARIATION_MAX,
-                    ),
-            };
-            p.active = true;
+            Self::init_particle_common(p, rocket_color, config, rng);
         }
     }
 
