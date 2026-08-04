@@ -10,6 +10,8 @@
 - [Architecture Globale, Threads & Synchronisation](20260721_moteurs_threads_synchronisation.md)
 
 - [Moteur Physique]()
+  - [Plan d'Action de Refactoring & Feuille de Route Technique](20260804_physic_and_audio_refactoring_technical_roadmap.md)
+  - [Revue de Code Architecturale et Mathématique](20260804_physic_engine_architectural_and_mathematical_review.md)
   - [Gestion de la mémoire](physic_memory_management.md)
   - [Formes d'explosions](physic_explosion_shapes.md)
   - [Système de Trainée de Fumée Instancié & Contrôles Dynamiques](20260730_instanced_smoke_trail_system_and_dynamics.md)
