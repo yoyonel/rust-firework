@@ -1,8 +1,6 @@
 #[cfg(debug_assertions)]
 use log::debug;
-use std::collections::VecDeque;
 use std::ops::Range;
-use std::sync::{Arc, Mutex};
 
 use crate::physic_engine::particle::Particle;
 use crate::physic_engine::rocket::Rocket;
@@ -71,8 +69,8 @@ pub struct ParticlesPool {
     /// Taille d’un bloc (nombre de particules par groupe : explosion ou trail)
     per_block: usize,
 
-    /// Liste des blocs disponibles (pile LIFO)
-    free_blocks: Arc<Mutex<VecDeque<usize>>>,
+    /// Liste des blocs disponibles (pile LIFO mono-thread rapide)
+    free_blocks: Vec<usize>,
 }
 
 impl ParticlesPool {
@@ -87,10 +85,8 @@ impl ParticlesPool {
         // Initialise toutes les particules à leur état par défaut
         let particles = vec![Particle::default(); total_particles];
 
-        // Prépare la pile des blocs libres
-        let free_blocks = (0..max_blocks)
-            .map(|i| i * per_block)
-            .collect::<VecDeque<_>>();
+        // Prépare la pile LIFO des blocs libres
+        let free_blocks = (0..max_blocks).map(|i| i * per_block).collect::<Vec<_>>();
 
         #[cfg(debug_assertions)]
         debug!(
@@ -101,7 +97,7 @@ impl ParticlesPool {
         Self {
             particles,
             per_block,
-            free_blocks: Arc::new(Mutex::new(free_blocks)),
+            free_blocks,
         }
     }
 
@@ -109,10 +105,8 @@ impl ParticlesPool {
     ///
     /// Retourne `Some(range)` si un bloc est disponible, sinon `None`.
     /// Complexité : **O(1)**.
-    pub fn allocate_block(&self) -> Option<Range<usize>> {
-        let mut free_blocks = self.free_blocks.lock().unwrap();
-
-        if let Some(start) = free_blocks.pop_back() {
+    pub fn allocate_block(&mut self) -> Option<Range<usize>> {
+        if let Some(start) = self.free_blocks.pop() {
             let end = start + self.per_block;
             Some(start..end)
         } else {
@@ -122,11 +116,10 @@ impl ParticlesPool {
 
     /// Libère un bloc de particules après extinction.
     ///
-    /// Le bloc est remis en pile pour réutilisation ultérieure.
+    /// Le bloc est remis en pile LIFO pour réutilisation ultérieure.
     /// Complexité : **O(1)**.
-    fn free_block(&self, range: Range<usize>) {
-        let mut free_blocks = self.free_blocks.lock().unwrap();
-        free_blocks.push_back(range.start);
+    fn free_block(&mut self, range: Range<usize>) {
+        self.free_blocks.push(range.start);
         #[cfg(debug_assertions)]
         debug!("Freed particle block starting at {}", range.start);
     }
