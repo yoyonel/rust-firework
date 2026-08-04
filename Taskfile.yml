@@ -306,6 +306,39 @@ tasks:
       - echo "⏱️  Benchmarks comparatifs Bus Spatial 2D vs Legacy..."
       - "{{.CARGO}} bench --no-default-features --features simd --bench spatial_bus_bench"
 
+  # =========================================================================
+  # 🔬 BENCHMARK & PROFILING DU POOL DE PARTICULES (FIX-04)
+  # =========================================================================
+  # Méthodologie :
+  # 1. `task bench:pool` mesure la latence d'allocation/libération avec Criterion.rs
+  # 2. `task profile:pool:callgrind` génère la trace Valgrind Callgrind et ouvre KCachegrind
+  # 3. `task test:tsan` valide l'absence de data races cross-threads sous ThreadSanitizer
+  # =========================================================================
+  bench:pool:
+    desc: "Exécute le micro-benchmark Criterion dédié au pool de particules (allocate/free)"
+    cmds:
+      - echo "⏱️  Lancement du micro-benchmark Criterion ParticlesPool..."
+      - "{{.CARGO}} bench --bench physic_pool_bench"
+
+  bench-pool:
+    desc: "Alias pour bench:pool"
+    cmds:
+      - task: bench:pool
+
+  profile:pool:callgrind:
+    desc: "Profilage Valgrind/Callgrind sur le pool de particules (ouvre KCachegrind si disponible)"
+    deps: [build-profiling]
+    cmds:
+      - echo "🔬 Profilage Callgrind du binaire profiling sur le pool physique..."
+      - valgrind --tool=callgrind --dump-instr=yes --collect-jumps=yes --callgrind-out-file=callgrind.out.pool ./target/profiling/{{.APP_NAME}}
+      - kcachegrind callgrind.out.pool 2>/dev/null || callgrind_annotate callgrind.out.pool | head -n 30
+
+  test:tsan:
+    desc: "Exécute la suite de tests sous ThreadSanitizer (-Zsanitizer=thread - Requiert Rust Nightly)"
+    cmds:
+      - echo "🛡️  Exécution des tests sous ThreadSanitizer (Rust Nightly requis)..."
+      - RUSTFLAGS="-Zsanitizer=thread" {{.CARGO}} +nightly test --target x86_64-unknown-linux-gnu
+
   bench-save-baseline:
     desc: "Sauvegarde une baseline de performance (usage: task bench-save-baseline -- my_baseline)"
     cmds:
