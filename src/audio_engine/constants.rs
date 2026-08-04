@@ -276,3 +276,21 @@ pub const PRESET_REVERB_DEFAULT: f32 = 0.08;
 pub const PRESET_REVERB_MEDIUM: f32 = 0.20;
 pub const PRESET_REVERB_CATHEDRAL: f32 = 0.50;
 pub const PRESET_REVERB_FULL_WET: f32 = 1.00;
+
+// ── DSP stereo downmix ──────────────────────────────────────────────
+/// Mixing factor for converting stereo samples to mono: `(L + R) * STEREO_MIX_FACTOR`.
+pub const STEREO_MIX_FACTOR: f32 = 0.5;
+
+/// Sentinel reciprocal value used when fade length is zero (no fade applied).
+pub const NO_FADE_RECIPROCAL: f32 = 0.0;
+
+/// Compute the reciprocal of a fade sample count for multiplication-based fading.
+/// Returns [`NO_FADE_RECIPROCAL`] when `samples == 0` (i.e. no fade).
+#[inline(always)]
+pub fn compute_fade_reciprocal(samples: usize) -> f32 {
+    if samples > 0 {
+        1.0 / samples as f32
+    } else {
+        NO_FADE_RECIPROCAL
+    }
+}
