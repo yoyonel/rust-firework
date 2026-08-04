@@ -53,7 +53,7 @@ Estimation chiffrée pour un développeur Rust Senior spécialisé en Data-Orien
 | :--- | :--- | :--- | :--- |
 | **Stabilité Framerate (1% Low FPS)** | 35 - 45 FPS (Instabilité sur spikes) | **> 100 FPS** (Lissé et constant) | **+150% de stabilité** |
 | **Efficacité Cache L1 CPU (Ligne 64b)** | ~32% (21/64 octets utiles en AoS) | **~95%** (Données denses en SoA) | **x3 sur le débit mémoire** |
-| **Contention de Verrous (Lock Contention)** | ~5-8% du temps CPU dans Mutex Pool | **0%** (Suppression totale des Mutex) | **100% de déblocage CPU** |
+| **Contention de Verrous (Lock Contention)** | ~5-8% du temps CPU dans Mutex Pool | **0%** (`allocate-block`: 1.17µs ➡️ 4.0ns [-99.6%], `free-block`: 41.2µs ➡️ 4.0µs [-90.2%]) | **100% de déblocage CPU (Mutex éliminé)** |
 | **Décalage Temporel Audio-Visuel (Jitter)** | $\pm 25\text{ ms}$ (Fluctuant selon FPS) | **$< 1\text{ ms}$** (Sample-Accurate) | **Synchronisation parfaite** |
 | **Temps d'Intégration Physique (10k part.)** | ~1.8 ms / frame | **~0.4 ms / frame** (Auto-SIMD AVX2) | **Réduction de 77% du CPU** |
 
