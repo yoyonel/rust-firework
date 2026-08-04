@@ -48,7 +48,7 @@ fn bench_free_block(c: &mut Criterion) {
                 for start in allocated {
                     pool.free_block_by_start(start);
                 }
-                black_box(&pool)
+                black_box(pool)
             },
             BatchSize::SmallInput,
         );
