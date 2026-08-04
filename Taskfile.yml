@@ -286,7 +286,7 @@ tasks:
     desc: "Lance tous les benchmarks Criterion (DSP + Binaural)"
     cmds:
       - echo "⏱️  Lancement de tous les benchmarks..."
-      - "{{.CARGO}} bench --no-default-features --features simd"
+      - "{{.CARGO}} bench --no-default-features --features simd,test_helpers"
 
   bench-dsp:
     desc: "Benchmarks DSP audio : resample_linear_mono (upsample, downsample, identity, throughput)"
@@ -341,7 +341,7 @@ tasks:
     desc: "Tests du pool physique sous ThreadSanitizer (-Zsanitizer=thread). Requiert Rust Nightly."
     cmds:
       - echo "🛡️  Execution de physic_pool_test sous ThreadSanitizer (Rust Nightly requis)..."
-      - RUSTFLAGS="-Zsanitizer=thread" {{.CARGO}} +nightly test --test physic_pool_test --target x86_64-unknown-linux-gnu
+      - RUSTFLAGS="-Zsanitizer=thread" {{.CARGO}} +nightly test -Z build-std --test physic_pool_test --target x86_64-unknown-linux-gnu
 
   bench-save-baseline:
     desc: "Sauvegarde une baseline de performance (usage: task bench-save-baseline -- my_baseline)"
