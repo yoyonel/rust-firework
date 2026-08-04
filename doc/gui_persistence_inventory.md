@@ -12,7 +12,7 @@ restored on startup and through **Reload Session**, and be listed here.
 | `gui.theme` | Theme selector | `GuiSessionState` / `gui_session.toml` | `GuiSettings::new` and pending theme application |
 | `audio.output` | Master volume, mute, reverb wet mix, DSP matrix | `GuiSessionState` / `gui_session.toml` | `apply_session_to_audio` |
 | `audio.diagnostics` | Diagnostic monitor and visual overlay | `GuiSessionState` / `gui_session.toml` | `apply_session_to_audio` |
-| `physics.config` | Capacity, spawn, forces, smoke emission (rate, size, growth, fade, max particles, intensity, color mode, custom color, inherited color intensity), alpha erosion (enabled, scale, edge width, edge color), flow map UV distortion (strength, speed) | `PhysicConfig` / `physic.toml` | simulator startup and Reload Session |
+| `physics.config` | Capacity, spawn, forces, explosion velocity boost, smoke emission (rate, size, growth, fade, max particles, intensity, color mode, custom color, inherited color intensity), alpha erosion (enabled, scale, edge width, edge color), flow map UV distortion (strength, speed) | `PhysicConfig` / `physic.toml` | simulator startup and Reload Session |
 | `physics.explosion_shape` | Spherical/image/multi-image selection, active image parameters and weights | `GuiSessionState.explosion_shape` / `gui_session.toml` | `apply_session_to_physic` |
 | `physics.preset_weights` | Preset weight controls used before adding a shape | `GuiSessionState.preset_weights` / `gui_session.toml` | `GuiSettings::new` and Reload Session |
 | `renderer.config` | Tone mapping, all Bloom controls, and graphical elements visibility toggles (rockets, smoke, trails, explosions) | `RendererConfig` / `renderer.toml` | simulator startup and Reload Session |

@@ -211,6 +211,13 @@ where
             explosion_max_vel,
             "Set maximum velocity of explosion particles"
         );
+        reg_f32_param!(
+            self.commands_registry,
+            "physic.explosion_velocity_boost",
+            SetExplosionVelocityBoost,
+            explosion_velocity_boost,
+            "Set initial velocity boost multiplier for image-based shape explosions"
+        );
 
         // Apply config changes / reinit engines
         self.commands_registry

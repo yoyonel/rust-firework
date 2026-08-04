@@ -476,6 +476,13 @@ fn test_ui_state_feedback_loop_physic() {
     );
     test_reflection!(
         h,
+        EngineCommand::Physic(PhysicCommand::SetExplosionVelocityBoost(5.5)),
+        |h: &TestHarness| h.spy_physic.config().explosion_velocity_boost,
+        5.5,
+        "Physic explosion_velocity_boost real-time reflection"
+    );
+    test_reflection!(
+        h,
         EngineCommand::Physic(PhysicCommand::SetExplosionShapeSpherical),
         |h: &TestHarness| h.spy_physic.explosion_shape()
             == &crate::physic_engine::ExplosionShape::Spherical,

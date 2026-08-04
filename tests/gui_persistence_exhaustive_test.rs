@@ -36,6 +36,7 @@ fn test_exhaustive_physic_config_all_fields_persistence() -> anyhow::Result<()> 
     cfg.initial_rocket_speed = 650.0;
     cfg.explosion_min_vel = 75.0;
     cfg.explosion_max_vel = 850.0;
+    cfg.explosion_velocity_boost = 6.25;
     cfg.audio_launch_anticipation_ms = 120.0;
     cfg.audio_explosion_anticipation_ms = 220.0;
 
@@ -82,6 +83,7 @@ fn test_exhaustive_physic_config_all_fields_persistence() -> anyhow::Result<()> 
     assert_eq!(engine_cfg.initial_rocket_speed, 650.0);
     assert_eq!(engine_cfg.explosion_min_vel, 75.0);
     assert_eq!(engine_cfg.explosion_max_vel, 850.0);
+    assert_eq!(engine_cfg.explosion_velocity_boost, 6.25);
     assert_eq!(engine_cfg.audio_launch_anticipation_ms, 120.0);
     assert_eq!(engine_cfg.audio_explosion_anticipation_ms, 220.0);
     assert_eq!(engine_cfg.smoke_spawn_rate, 95.0);

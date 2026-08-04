@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::physic_engine::{
     config::PhysicConfig,
-    explosion_shape::ExplosionShape,
+    explosion_shape::{ExplosionShape, ImageShape},
     particle::Particle,
     particles_pools::{ParticlesPool, ParticlesPoolsForRockets, PoolKind},
     ParticleType,
@@ -355,7 +355,12 @@ impl Rocket {
             let slice = particles_pool.get_particles_mut(range);
 
             if let Some(image_shape) = explosion_shape.sample(&mut self.rng) {
-                self.trigger_image_explosion(slice, gravity, image_shape);
+                self.trigger_image_explosion(
+                    slice,
+                    gravity,
+                    config.explosion_velocity_boost,
+                    image_shape,
+                );
             } else {
                 self.trigger_spherical_explosion(slice, config);
             }
@@ -394,7 +399,8 @@ impl Rocket {
         &mut self,
         slice: &mut [Particle],
         _gravity: Vec2,
-        image_shape: &crate::physic_engine::explosion_shape::ImageShape,
+        velocity_boost: f32,
+        image_shape: &ImageShape,
     ) {
         let flight_time = image_shape.flight_time();
 
@@ -421,9 +427,10 @@ impl Rocket {
 
             // 1. Calcul de la vitesse d'expansion (pour aller du centre vers la cible)
             // On ignore la gravité ici car on veut juste la composante d'éclatement.
-            // BOOST: On multiplie par 4.0 pour rendre l'explosion plus vive et dynamique !
+            // On applique le multiplicateur dynamique de vélocité depuis la configuration physique.
             let expansion_velocity =
-                image_shape.compute_initial_velocity(self.pos, target_pos, Vec2::ZERO) * 4.0;
+                image_shape.compute_initial_velocity(self.pos, target_pos, Vec2::ZERO)
+                    * velocity_boost;
 
             // 2. Conservation du mouvement : on ajoute la vitesse de la fusée
             // Ainsi le centre de la forme continue sur la trajectoire balistique de la fusée
@@ -510,5 +517,61 @@ impl Rocket {
             angle,
             particle_type: ParticleType::Rocket,
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::physic_engine::explosion_shape::ImageShape;
+    use glam::Vec2;
+
+    #[test]
+    fn test_image_explosion_ballistics_exact_target_reach() {
+        let flight_time = 1.5;
+        let shape = ImageShape {
+            file_stem: "test_ballistics".to_string(),
+            sampled_points: vec![Vec2::new(0.5, 0.2)],
+            scale: 100.0,
+            flight_time,
+        };
+
+        let mut rng = rand::rng();
+        let mut rocket = Rocket::new(&mut rng);
+        rocket.pos = Vec2::new(100.0, 200.0);
+        rocket.vel = Vec2::new(15.0, 45.0);
+
+        let mut slice = vec![Particle::default(); 1];
+        let gravity = Vec2::new(0.0, -9.81);
+        let custom_boost = 3.5;
+
+        rocket.trigger_image_explosion(&mut slice, gravity, custom_boost, &shape);
+
+        let particle = slice[0];
+        let particle_end_pos =
+            rocket.pos + particle.vel * flight_time + 0.5 * gravity * flight_time * flight_time;
+        let rocket_center_end_pos =
+            rocket.pos + rocket.vel * flight_time + 0.5 * gravity * flight_time * flight_time;
+
+        let relative_displacement = particle_end_pos - rocket_center_end_pos;
+
+        let rocket_angle = rocket.vel.y.atan2(rocket.vel.x) - std::f32::consts::FRAC_PI_2;
+        let expected_target_pos = shape.get_target_position_rotated(
+            0,
+            rocket.pos,
+            rocket_angle.cos(),
+            rocket_angle.sin(),
+        );
+        let expected_relative_target = expected_target_pos - rocket.pos;
+        let expected_boosted_displacement = expected_relative_target * custom_boost;
+
+        let diff = (relative_displacement - expected_boosted_displacement).length();
+        assert!(
+            diff < 1e-3,
+            "Particle relative displacement ({:?}) must match boosted target relative shape ({:?}), diff={}",
+            relative_displacement,
+            expected_boosted_displacement,
+            diff
+        );
     }
 }

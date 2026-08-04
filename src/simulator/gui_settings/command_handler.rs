@@ -140,6 +140,7 @@ fn dispatch_physic_command<P: PhysicEngineFull>(
             cfg_mut.explosion_threshold = default_cfg.explosion_threshold;
             cfg_mut.explosion_min_vel = default_cfg.explosion_min_vel;
             cfg_mut.explosion_max_vel = default_cfg.explosion_max_vel;
+            cfg_mut.explosion_velocity_boost = default_cfg.explosion_velocity_boost;
         }
         PhysicCommand::SetExplosionThreshold(v) => {
             physic_engine.get_config_mut().explosion_threshold = v;
@@ -149,6 +150,12 @@ fn dispatch_physic_command<P: PhysicEngineFull>(
         }
         PhysicCommand::SetExplosionMaxVel(v) => {
             physic_engine.get_config_mut().explosion_max_vel = v;
+        }
+        PhysicCommand::SetExplosionVelocityBoost(v) => {
+            let cfg_mut = physic_engine.get_config_mut();
+            cfg_mut.explosion_velocity_boost = v;
+            let updated = cfg_mut.clone();
+            let _ = physic_engine.reload_config(&updated);
         }
         PhysicCommand::SetExplosionShapeSpherical => {
             physic_engine.set_explosion_shape(crate::physic_engine::ExplosionShape::Spherical);
