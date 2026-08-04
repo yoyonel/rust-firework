@@ -1,6 +1,7 @@
 use crate::cstr;
 use crate::physic_engine::config::{PhysicConfig, SmokeColorMode};
 use crate::physic_engine::smoke_system::SmokeSystem;
+use crate::renderer_engine::constants;
 use crate::renderer_engine::smoke_renderer::SmokeInstanceGPU;
 use crate::renderer_engine::utils::texture::load_texture;
 use glam::{Vec2, Vec3};
@@ -88,8 +89,8 @@ impl SmokePreviewRenderer {
                 gl::TEXTURE_2D,
                 0,
                 gl::RGBA16F as i32,
-                480,
-                200,
+                constants::SMOKE_PREVIEW_FBO_WIDTH,
+                constants::SMOKE_PREVIEW_FBO_HEIGHT,
                 0,
                 gl::RGBA,
                 gl::FLOAT,
@@ -118,8 +119,8 @@ impl SmokePreviewRenderer {
                 gl::TEXTURE_2D,
                 0,
                 gl::RGBA8 as i32,
-                480,
-                200,
+                constants::SMOKE_PREVIEW_FBO_WIDTH,
+                constants::SMOKE_PREVIEW_FBO_HEIGHT,
                 0,
                 gl::RGBA,
                 gl::UNSIGNED_BYTE,
@@ -250,7 +251,7 @@ impl SmokePreviewRenderer {
             gl::EnableVertexAttribArray(0);
 
             // Instance data buffer (up to 128 instances)
-            let max_preview_instances = 128;
+            let max_preview_instances = constants::SMOKE_PREVIEW_MAX_INSTANCES;
             gl::BindBuffer(gl::ARRAY_BUFFER, smoke_inst_vbo);
             gl::BufferData(
                 gl::ARRAY_BUFFER,
@@ -432,8 +433,8 @@ impl SmokePreviewRenderer {
                 loc_quad_tex,
                 loc_quad_rot_z,
                 loc_quad_color,
-                smoke_system: SmokeSystem::new(128),
-                rng: rand::SeedableRng::seed_from_u64(0x421337),
+                smoke_system: SmokeSystem::new(constants::SMOKE_PREVIEW_MAX_INSTANCES),
+                rng: rand::SeedableRng::seed_from_u64(constants::SMOKE_PREVIEW_RNG_SEED),
                 emit_timer: 0.0,
             }
         }
@@ -447,7 +448,12 @@ impl SmokePreviewRenderer {
             gl::GetIntegerv(gl::VIEWPORT, prev_viewport.as_mut_ptr());
 
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo);
-            gl::Viewport(0, 0, 480, 200);
+            gl::Viewport(
+                0,
+                0,
+                constants::SMOKE_PREVIEW_FBO_WIDTH,
+                constants::SMOKE_PREVIEW_FBO_HEIGHT,
+            );
 
             // Task 4.B: Clear to pure black (night sky background for visual ISO)
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
@@ -457,15 +463,15 @@ impl SmokePreviewRenderer {
             gl::Enable(gl::BLEND);
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
-            let sim_h = 200.0 / ctx.zoom;
+            let sim_h = constants::SMOKE_PREVIEW_FBO_HEIGHT as f32 / ctx.zoom;
             let sim_w = sim_h * ctx.canvas_aspect.max(0.1);
             let rot_rad = ctx.rot_deg.to_radians();
 
-            let center_x = sim_w * 0.5 + ctx.pan_x;
-            let center_y = sim_h * 0.75 + ctx.pan_y;
+            let center_x = sim_w * constants::SMOKE_PREVIEW_CENTER_X_FACTOR + ctx.pan_x;
+            let center_y = sim_h * constants::SMOKE_PREVIEW_CENTER_Y_FACTOR + ctx.pan_y;
 
-            let rocket_w = 22.0;
-            let rocket_h = 66.0;
+            let rocket_w = constants::SMOKE_PREVIEW_ROCKET_W;
+            let rocket_h = constants::SMOKE_PREVIEW_ROCKET_H;
 
             let nozzle_x = center_x + (rocket_h * 0.5) * rot_rad.sin();
             let nozzle_y = center_y - (rocket_h * 0.5) * rot_rad.cos();
@@ -570,7 +576,7 @@ impl SmokePreviewRenderer {
             let preview_intensity = ctx.config.smoke_intensity;
 
             self.smoke_system.for_each_active(&mut |p| {
-                if instances.len() < 128 {
+                if instances.len() < constants::SMOKE_PREVIEW_MAX_INSTANCES {
                     instances.push(SmokeInstanceGPU {
                         position: [p.pos.x, p.pos.y, 0.0],
                         scale: p.sizing.current_size,
@@ -622,7 +628,12 @@ impl SmokePreviewRenderer {
 
             // 3. POST-PROCESS COMPOSITE PASS: Tone-Mapping & Composition (shared with main scene bloom_composition shader)
             gl::BindFramebuffer(gl::FRAMEBUFFER, self.fbo);
-            gl::Viewport(0, 0, 480, 200);
+            gl::Viewport(
+                0,
+                0,
+                constants::SMOKE_PREVIEW_FBO_WIDTH,
+                constants::SMOKE_PREVIEW_FBO_HEIGHT,
+            );
             gl::ClearColor(0.0, 0.0, 0.0, 1.0);
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
@@ -668,8 +679,8 @@ impl SmokePreviewRenderer {
 
     pub fn reset_seed(&mut self) {
         use rand::SeedableRng;
-        self.rng = rand::rngs::StdRng::seed_from_u64(0x421337);
-        self.smoke_system = SmokeSystem::new(128);
+        self.rng = rand::rngs::StdRng::seed_from_u64(constants::SMOKE_PREVIEW_RNG_SEED);
+        self.smoke_system = SmokeSystem::new(constants::SMOKE_PREVIEW_MAX_INSTANCES);
         self.emit_timer = 0.0;
     }
 }

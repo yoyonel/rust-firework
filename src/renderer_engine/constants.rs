@@ -266,3 +266,57 @@ pub const TEXTURE_SMOKE_PARTICLE_PATH: &str =
 
 /// Global UBO binding index for OpenGL shaders.
 pub const GLOBAL_UBO_BINDING_INDEX: u32 = 0;
+
+// ── Smoke Preview Viewport Rendering ─────────────────────────────────
+/// Smoke preview FBO width (pixels).
+pub const SMOKE_PREVIEW_FBO_WIDTH: i32 = 480;
+
+/// Smoke preview FBO height (pixels).
+pub const SMOKE_PREVIEW_FBO_HEIGHT: i32 = 200;
+
+/// Rocket sprite width in simulation units within the smoke preview.
+pub const SMOKE_PREVIEW_ROCKET_W: f32 = 22.0;
+
+/// Rocket sprite height in simulation units within the smoke preview.
+pub const SMOKE_PREVIEW_ROCKET_H: f32 = 66.0;
+
+/// Horizontal center offset factor (fraction of sim_w) for preview rocket placement.
+pub const SMOKE_PREVIEW_CENTER_X_FACTOR: f32 = 0.5;
+
+/// Vertical center offset factor (fraction of sim_h) for preview rocket placement.
+pub const SMOKE_PREVIEW_CENTER_Y_FACTOR: f32 = 0.75;
+
+/// Maximum number of smoke particle instances rendered in preview viewport.
+pub const SMOKE_PREVIEW_MAX_INSTANCES: usize = 128;
+
+/// RNG seed for deterministic preview smoke emission.
+pub const SMOKE_PREVIEW_RNG_SEED: u64 = 0x421337;
+
+// ── Smoke Preview Viewport Interaction Constants ─────────────────────
+/// Mouse wheel scroll speed multiplier for zoom in the smoke preview viewport.
+pub const SMOKE_PREVIEW_ZOOM_SCROLL_SPEED: f32 = 0.12;
+
+/// Mouse drag speed multiplier for panning in the smoke preview viewport.
+pub const SMOKE_PREVIEW_PAN_DRAG_SPEED: f32 = 0.4;
+
+/// Mouse drag speed multiplier for rotation in the smoke preview viewport.
+pub const SMOKE_PREVIEW_ROT_DRAG_SPEED: f32 = 0.5;
+
+/// Pixel margin (in font-scale units) for arrow visibility clipping test.
+pub const SMOKE_PREVIEW_ARROW_CLIP_MARGIN: f32 = 100.0;
+
+// ── Geometry Trimming Panel Drawing Constants ────────────────────────
+/// Line thickness (in font-scale units) for the bounding quad border.
+pub const TRIMMING_QUAD_BORDER_THICKNESS: f32 = 1.5;
+
+/// Line thickness (in font-scale units) for the octagon outline.
+pub const TRIMMING_OCTAGON_OUTLINE_THICKNESS: f32 = 2.0;
+
+/// Line thickness (in font-scale units) for inner octagon spoke lines.
+pub const TRIMMING_OCTAGON_INNER_THICKNESS: f32 = 1.0;
+
+/// Radius (in font-scale units) for octagon vertex indicator circles.
+pub const TRIMMING_VERTEX_INDICATOR_RADIUS: f32 = 4.0;
+
+/// Radius (in font-scale units) for center pin indicator circle.
+pub const TRIMMING_CENTER_PIN_RADIUS: f32 = 4.5;
