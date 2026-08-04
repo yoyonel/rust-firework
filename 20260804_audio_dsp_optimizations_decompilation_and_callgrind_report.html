@@ -1,0 +1,648 @@
+<!DOCTYPE HTML>
+<html lang="en" class="navy" dir="ltr">
+    <head>
+        <!-- Book generated using mdBook -->
+        <meta charset="UTF-8">
+        <title>Rapport d&#x27;Optimisation DSP Audio, Décompilation GDB &amp; Validation Callgrind - Fireworks Simulator Documentation</title>
+
+
+        <!-- Custom HTML head -->
+        <style>
+          .mermaid-container {
+            position: relative;
+            width: 100%;
+            margin: 1.5rem 0;
+            padding: 2.5rem 1rem 1rem 1rem;
+            background: rgba(15, 23, 42, 0.75);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            border-radius: 8px;
+            box-sizing: border-box;
+            overflow: hidden;
+            transition: border-color 0.2s ease, box-shadow 0.2s ease;
+          }
+        
+          .mermaid-container:hover {
+            border-color: rgba(56, 189, 248, 0.6);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+          }
+        
+          .mermaid {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow-x: auto;
+          }
+        
+          .mermaid svg {
+            width: 100% !important;
+            max-width: 100% !important;
+            height: auto !important;
+            display: block;
+            margin: 0 auto;
+          }
+        
+          .mermaid-fullscreen-btn {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: #1e293b;
+            color: #cbd5e1;
+            border: 1px solid #475569;
+            border-radius: 4px;
+            padding: 4px 10px;
+            font-size: 0.82rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 10;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+          }
+        
+          .mermaid-fullscreen-btn:hover {
+            background: #38bdf8;
+            color: #0f172a;
+            border-color: #38bdf8;
+            font-weight: bold;
+            transform: translateY(-1px);
+          }
+        
+          /* Fullscreen Modal Overlay */
+          .mermaid-modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(2, 6, 23, 0.95);
+            backdrop-filter: blur(12px);
+            z-index: 999999;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            padding: 20px;
+            box-sizing: border-box;
+          }
+        
+          .mermaid-modal-overlay.active {
+            display: flex;
+            animation: mermaidFadeIn 0.2s ease;
+          }
+        
+          .mermaid-modal-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            color: #f8fafc;
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+          }
+        
+          .mermaid-modal-close-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s ease;
+          }
+        
+          .mermaid-modal-close-btn:hover {
+            background: #dc2626;
+          }
+        
+          .mermaid-modal-content {
+            flex: 1;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: auto;
+            padding: 20px;
+          }
+        
+          .mermaid-modal-content svg {
+            max-width: 95vw !important;
+            max-height: 85vh !important;
+            width: auto !important;
+            height: auto !important;
+          }
+        
+          @keyframes mermaidFadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+          }
+        </style>
+        
+        <script type="module">
+          import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+          mermaid.initialize({
+            startOnLoad: false,
+            theme: 'dark',
+            themeVariables: {
+              darkMode: true,
+              background: '#0f172a',
+              primaryColor: '#1e293b',
+              primaryTextColor: '#f8fafc',
+              primaryBorderColor: '#38bdf8',
+              lineColor: '#94a3b8',
+              tertiaryColor: '#1e293b'
+            },
+            flowchart: {
+              useMaxWidth: false,
+              htmlLabels: true,
+              curve: 'basis'
+            }
+          });
+        
+          // Global modal initialization
+          function setupModal() {
+            if (document.getElementById('mermaid-modal')) return;
+        
+            const modal = document.createElement('div');
+            modal.id = 'mermaid-modal';
+            modal.className = 'mermaid-modal-overlay';
+            modal.innerHTML = `
+              <div class="mermaid-modal-header">
+                <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+                <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
+              </div>
+              <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
+            `;
+            document.body.appendChild(modal);
+        
+            const closeModal = () => {
+              modal.classList.remove('active');
+              document.getElementById('mermaid-modal-content').innerHTML = '';
+            };
+        
+            document.getElementById('mermaid-modal-close').addEventListener('click', closeModal);
+            modal.addEventListener('click', (e) => {
+              if (e.target === modal || e.target.id === 'mermaid-modal-content') {
+                closeModal();
+              }
+            });
+        
+            document.addEventListener('keydown', (e) => {
+              if (e.key === 'Escape' && modal.classList.contains('active')) {
+                closeModal();
+              }
+            });
+          }
+        
+          function openFullscreen(svgElement) {
+            setupModal();
+            const modal = document.getElementById('mermaid-modal');
+            const content = document.getElementById('mermaid-modal-content');
+            content.innerHTML = '';
+            
+            // Clone SVG to preserve original diagram in page
+            const clone = svgElement.cloneNode(true);
+            clone.removeAttribute('height');
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            content.appendChild(clone);
+        
+            modal.classList.add('active');
+          }
+        
+          async function renderMermaid() {
+            const elements = document.querySelectorAll("pre code.language-mermaid");
+            if (elements.length === 0) return;
+        
+            for (let i = 0; i < elements.length; i++) {
+              const el = elements[i];
+              const pre = el.parentElement;
+              const container = document.createElement("div");
+              container.className = "mermaid-container";
+        
+              const div = document.createElement("div");
+              div.className = "mermaid";
+              div.style.cursor = "zoom-in";
+              div.title = "Double-cliquez pour agrandir en plein écran";
+              div.textContent = el.innerHTML
+                .replace(/&gt;/g, '>')
+                .replace(/&lt;/g, '<')
+                .replace(/&amp;/g, '&');
+        
+              const btn = document.createElement("button");
+              btn.className = "mermaid-fullscreen-btn";
+              btn.innerHTML = "🔍 Plein écran";
+              btn.title = "Agrandir le diagramme en plein écran";
+        
+              container.appendChild(btn);
+              container.appendChild(div);
+              pre.replaceWith(container);
+        
+              btn.addEventListener("click", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+              div.addEventListener("dblclick", () => {
+                const svg = div.querySelector("svg");
+                if (svg) openFullscreen(svg);
+              });
+            }
+        
+            try {
+              await mermaid.run();
+              // Force all generated SVGs to take 100% width of their container box
+              document.querySelectorAll(".mermaid svg").forEach((svg) => {
+                svg.style.maxWidth = "100%";
+                svg.style.width = "100%";
+                svg.style.height = "auto";
+              });
+            } catch (e) {
+              console.error("Mermaid rendering error:", e);
+            }
+          }
+        
+          if (document.readyState === "loading") {
+            document.addEventListener("DOMContentLoaded", renderMermaid);
+          } else {
+            renderMermaid();
+          }
+        </script>
+        
+        <!-- MathJax Dynamic Loader -->
+        <script type="text/javascript">
+          window.MathJax = {
+            tex: {
+              inlineMath: [['\\(', '\\)']],
+              displayMath: [['\\[', '\\]'], ['$$', '$$']],
+              processEscapes: true
+            },
+            options: {
+              ignoreHtmlClass: 'tex2jax_ignore',
+              processHtmlClass: 'tex2jax_process'
+            }
+          };
+        </script>
+        <script type="text/javascript" id="MathJax-script" async
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
+        </script>
+
+        <meta name="description" content="Documentation and performance profiling guides for the Rust Fireworks Simulator.">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="theme-color" content="#ffffff">
+
+        <link rel="icon" href="favicon.svg">
+        <link rel="shortcut icon" href="favicon.png">
+        <link rel="stylesheet" href="css/variables.css">
+        <link rel="stylesheet" href="css/general.css">
+        <link rel="stylesheet" href="css/chrome.css">
+        <link rel="stylesheet" href="css/print.css" media="print">
+
+        <!-- Fonts -->
+        <link rel="stylesheet" href="FontAwesome/css/font-awesome.css">
+        <link rel="stylesheet" href="fonts/fonts.css">
+
+        <!-- Highlight.js Stylesheets -->
+        <link rel="stylesheet" href="highlight.css">
+        <link rel="stylesheet" href="tomorrow-night.css">
+        <link rel="stylesheet" href="ayu-highlight.css">
+
+        <!-- Custom theme stylesheets -->
+
+        <!-- MathJax -->
+        <script async src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    </head>
+    <body class="sidebar-visible no-js">
+    <div id="body-container">
+        <!-- Provide site root to javascript -->
+        <script>
+            var path_to_root = "";
+            var default_theme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "navy" : "navy";
+        </script>
+
+        <!-- Work around some values being stored in localStorage wrapped in quotes -->
+        <script>
+            try {
+                var theme = localStorage.getItem('mdbook-theme');
+                var sidebar = localStorage.getItem('mdbook-sidebar');
+
+                if (theme.startsWith('"') && theme.endsWith('"')) {
+                    localStorage.setItem('mdbook-theme', theme.slice(1, theme.length - 1));
+                }
+
+                if (sidebar.startsWith('"') && sidebar.endsWith('"')) {
+                    localStorage.setItem('mdbook-sidebar', sidebar.slice(1, sidebar.length - 1));
+                }
+            } catch (e) { }
+        </script>
+
+        <!-- Set the theme before any content is loaded, prevents flash -->
+        <script>
+            var theme;
+            try { theme = localStorage.getItem('mdbook-theme'); } catch(e) { }
+            if (theme === null || theme === undefined) { theme = default_theme; }
+            var html = document.querySelector('html');
+            html.classList.remove('navy')
+            html.classList.add(theme);
+            var body = document.querySelector('body');
+            body.classList.remove('no-js')
+            body.classList.add('js');
+        </script>
+
+        <input type="checkbox" id="sidebar-toggle-anchor" class="hidden">
+
+        <!-- Hide / unhide sidebar before it is displayed -->
+        <script>
+            var body = document.querySelector('body');
+            var sidebar = null;
+            var sidebar_toggle = document.getElementById("sidebar-toggle-anchor");
+            if (document.body.clientWidth >= 1080) {
+                try { sidebar = localStorage.getItem('mdbook-sidebar'); } catch(e) { }
+                sidebar = sidebar || 'visible';
+            } else {
+                sidebar = 'hidden';
+            }
+            sidebar_toggle.checked = sidebar === 'visible';
+            body.classList.remove('sidebar-visible');
+            body.classList.add("sidebar-" + sidebar);
+        </script>
+
+        <nav id="sidebar" class="sidebar" aria-label="Table of contents">
+            <div class="sidebar-scrollbox">
+                <ol class="chapter"><li class="chapter-item expanded affix "><a href="introduction.html">Introduction</a></li><li class="chapter-item expanded affix "><a href="ubiquitous_language.html">Langage Métier (Glossaire)</a></li><li class="chapter-item expanded affix "><a href="taskfile_guide.html">Guide des Tâches (Taskfile)</a></li><li class="chapter-item expanded "><a href="20260730_unit_testing_and_coverage_guide.html"><strong aria-hidden="true">1.</strong> Guide des Tests Unitaires, Mocks & Couverture</a></li><li class="chapter-item expanded "><a href="20260730_ssot_constants_structural_refactoring.html"><strong aria-hidden="true">2.</strong> Refactoring SSOT & Éradication des Constantes Magiques</a></li><li class="chapter-item expanded "><a href="20260724_documentation_linting_pipeline.html"><strong aria-hidden="true">3.</strong> Qualité & Linting de la Documentation (Vale)</a></li><li class="chapter-item expanded "><a href="20260721_moteurs_threads_synchronisation.html"><strong aria-hidden="true">4.</strong> Architecture Globale, Threads & Synchronisation</a></li><li class="chapter-item expanded "><div><strong aria-hidden="true">5.</strong> Moteur Physique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="physic_memory_management.html"><strong aria-hidden="true">5.1.</strong> Gestion de la mémoire</a></li><li class="chapter-item expanded "><a href="physic_explosion_shapes.html"><strong aria-hidden="true">5.2.</strong> Formes d'explosions</a></li><li class="chapter-item expanded "><a href="20260730_instanced_smoke_trail_system_and_dynamics.html"><strong aria-hidden="true">5.3.</strong> Système de Trainée de Fumée Instancié & Contrôles Dynamiques</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">6.</strong> Moteur Audio</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260804_audio_dsp_optimizations_decompilation_and_callgrind_report.html" class="active"><strong aria-hidden="true">6.1.</strong> Rapport d'Optimisation DSP Audio, Décompilation GDB & Validation Callgrind</a></li><li class="chapter-item expanded "><a href="audio_engine_diagnostic_and_attenuation.html"><strong aria-hidden="true">6.2.</strong> Diagnostics, Latences & Modèle d'Atténuation</a></li><li class="chapter-item expanded "><a href="20260731_audio_dsp_spatial_bus_optimization_plan.html"><strong aria-hidden="true">6.3.</strong> Plan d'Optimisation DSP Bus Spatial & Benchmarks</a></li><li class="chapter-item expanded "><a href="20260724_audio_anticipation_timeshifting_closed_loop.html"><strong aria-hidden="true">6.4.</strong> Asservissement en Boucle Fermée & Anticipation Audio (Time-Shifting)</a></li><li class="chapter-item expanded "><a href="20260721_audio_diagnostics_underrun_imgui_fixes.html"><strong aria-hidden="true">6.5.</strong> Diagnostics, Atténuation, Résolution d'Underruns et Rendu GPU</a></li><li class="chapter-item expanded "><a href="20260720_spatial_bus_audio_architecture.html"><strong aria-hidden="true">6.6.</strong> Architecture & Spécification Bus Spatial 2D</a></li><li class="chapter-item expanded "><a href="20260720_spatial_reverb_technical_spec.html"><strong aria-hidden="true">6.7.</strong> Spécification & Guide Réverbération Spatiale</a></li><li class="chapter-item expanded "><a href="20260720_feature_evaluation_frameworks.html"><strong aria-hidden="true">6.8.</strong> Méthodologies d'Évaluation de Fonctionnalités</a></li><li class="chapter-item expanded "><a href="20260713_audio_engine_refactoring_report.html"><strong aria-hidden="true">6.9.</strong> Refactoring et Architecture</a></li><li class="chapter-item expanded "><a href="20260711_doppler_audio_technical_spec.html"><strong aria-hidden="true">6.10.</strong> Spécification Effet Doppler</a></li><li class="chapter-item expanded "><a href="audio.html"><strong aria-hidden="true">6.11.</strong> Pipeline Binaural</a></li><li class="chapter-item expanded "><a href="benchmarks_audio.html"><strong aria-hidden="true">6.12.</strong> Benchmarks Audio</a></li><li class="chapter-item expanded "><a href="20260713_audio_performance_profile_analysis.html"><strong aria-hidden="true">6.13.</strong> Analyse Performances Audio</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">7.</strong> Rendu Graphique</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="opengl_azdo_persistent_mapped_buffers.html"><strong aria-hidden="true">7.1.</strong> Persistent Mapped Buffers (AZDO)</a></li><li class="chapter-item expanded "><a href="renderer_manual.html"><strong aria-hidden="true">7.2.</strong> Manuel du Renderer</a></li><li class="chapter-item expanded "><a href="20260731_fullscreen_toggle_fix_and_stress_testing.html"><strong aria-hidden="true">7.3.</strong> Correctif Bascule Fullscreen & Stress Testing</a></li><li class="chapter-item expanded "><a href="20260731_visual_regression_and_golden_video_testing_strategy.html"><strong aria-hidden="true">7.4.</strong> Stratégie de Tests Visuels & Golden Videos</a></li><li class="chapter-item expanded "><a href="20260731_github_actions_ci_pr_merge_protection.html"><strong aria-hidden="true">7.5.</strong> Protection CI/CD Pre-Merge GitHub Actions</a></li><li class="chapter-item expanded "><a href="opengl_debug_validation_guide.html"><strong aria-hidden="true">7.6.</strong> Validation OpenGL avec Mesa Debug Layer</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">8.</strong> Profilage et Performance</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="20260716_azdo_refactoring_final_report.html"><strong aria-hidden="true">8.1.</strong> Bilan et Rapport Final (AZDO)</a></li><li class="chapter-item expanded "><a href="20260716_safe_azdo_optimizations_report.html"><strong aria-hidden="true">8.2.</strong> Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)</a></li><li class="chapter-item expanded "><a href="20260716_persistent_mapping_and_write_combining_references.html"><strong aria-hidden="true">8.3.</strong> Références Architecturales (Persistent Mapping & WC)</a></li><li class="chapter-item expanded "><a href="20260716_code_review_fixes_results.html"><strong aria-hidden="true">8.4.</strong> Corrections de Revue de Code</a></li><li class="chapter-item expanded "><a href="20260716_tracy_headless_profiling_guide.html"><strong aria-hidden="true">8.5.</strong> Profilage Headless (Tracy CLI)</a></li><li class="chapter-item expanded "><a href="20260714_heaptrack_memory_profiling_guide.html"><strong aria-hidden="true">8.6.</strong> Profilage Mémoire (Heaptrack)</a></li><li class="chapter-item expanded "><a href="20260715_gpu_stalls_analysis_and_optimization_plan.html"><strong aria-hidden="true">8.7.</strong> Attentes GPU et Optimisations (Tracy)</a></li><li class="chapter-item expanded "><a href="20260715_tracy_memory_audit.html"><strong aria-hidden="true">8.8.</strong> Audit Mémoire Temps Réel</a></li><li class="chapter-item expanded "><a href="20260713_profiling_analysis_tutorial.html"><strong aria-hidden="true">8.9.</strong> Tutoriel Général de Profilage</a></li><li class="chapter-item expanded "><a href="massif_analysis_guide.html"><strong aria-hidden="true">8.10.</strong> Guide d'analyse Massif</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_refactoring_audio_temps_reel.html"><strong aria-hidden="true">8.11.</strong> Historique - Réfringence Audio (TR)</a></li><li class="chapter-item expanded "><a href="2026-07-09_synthese_architecture_part2_profiling_gpu_azdo.html"><strong aria-hidden="true">8.12.</strong> Historique - Rendu GPU AZDO</a></li><li class="chapter-item expanded "><a href="2026-07-08_synthese_architecture_renderdoc_tracy.html"><strong aria-hidden="true">8.13.</strong> Historique - RenderDoc & Tracy</a></li></ol></li><li class="chapter-item expanded "><div><strong aria-hidden="true">9.</strong> Console Interactive & Interface Graphical GUI</div></li><li><ol class="section"><li class="chapter-item expanded "><a href="console_commands.html"><strong aria-hidden="true">9.1.</strong> Manuel des Commandes Console</a></li><li class="chapter-item expanded "><a href="20260729_imgui_control_panel_and_session_persistence.html"><strong aria-hidden="true">9.2.</strong> Panneau de Contrôle GUI ImGui & Session Persistante</a></li><li class="chapter-item expanded "><a href="20260801_imgui_x11_frame_init_latency_analysis.html"><strong aria-hidden="true">9.3.</strong> Analyse de Latence Init Frame ImGui sous X11 (9.83ms Stall)</a></li></ol></li></ol>
+            </div>
+            <div id="sidebar-resize-handle" class="sidebar-resize-handle">
+                <div class="sidebar-resize-indicator"></div>
+            </div>
+        </nav>
+
+        <!-- Track and set sidebar scroll position -->
+        <script>
+            var sidebarScrollbox = document.querySelector('#sidebar .sidebar-scrollbox');
+            sidebarScrollbox.addEventListener('click', function(e) {
+                if (e.target.tagName === 'A') {
+                    sessionStorage.setItem('sidebar-scroll', sidebarScrollbox.scrollTop);
+                }
+            }, { passive: true });
+            var sidebarScrollTop = sessionStorage.getItem('sidebar-scroll');
+            sessionStorage.removeItem('sidebar-scroll');
+            if (sidebarScrollTop) {
+                // preserve sidebar scroll position when navigating via links within sidebar
+                sidebarScrollbox.scrollTop = sidebarScrollTop;
+            } else {
+                // scroll sidebar to current active section when navigating via "next/previous chapter" buttons
+                var activeSection = document.querySelector('#sidebar .active');
+                if (activeSection) {
+                    activeSection.scrollIntoView({ block: 'center' });
+                }
+            }
+        </script>
+
+        <div id="page-wrapper" class="page-wrapper">
+
+            <div class="page">
+                                <div id="menu-bar-hover-placeholder"></div>
+                <div id="menu-bar" class="menu-bar sticky">
+                    <div class="left-buttons">
+                        <label id="sidebar-toggle" class="icon-button" for="sidebar-toggle-anchor" title="Toggle Table of Contents" aria-label="Toggle Table of Contents" aria-controls="sidebar">
+                            <i class="fa fa-bars"></i>
+                        </label>
+                        <button id="theme-toggle" class="icon-button" type="button" title="Change theme" aria-label="Change theme" aria-haspopup="true" aria-expanded="false" aria-controls="theme-list">
+                            <i class="fa fa-paint-brush"></i>
+                        </button>
+                        <ul id="theme-list" class="theme-popup" aria-label="Themes" role="menu">
+                            <li role="none"><button role="menuitem" class="theme" id="light">Light</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="rust">Rust</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="coal">Coal</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="navy">Navy</button></li>
+                            <li role="none"><button role="menuitem" class="theme" id="ayu">Ayu</button></li>
+                        </ul>
+                        <button id="search-toggle" class="icon-button" type="button" title="Search. (Shortkey: s)" aria-label="Toggle Searchbar" aria-expanded="false" aria-keyshortcuts="S" aria-controls="searchbar">
+                            <i class="fa fa-search"></i>
+                        </button>
+                    </div>
+
+                    <h1 class="menu-title">Fireworks Simulator Documentation</h1>
+
+                    <div class="right-buttons">
+                        <a href="print.html" title="Print this book" aria-label="Print this book">
+                            <i id="print-button" class="fa fa-print"></i>
+                        </a>
+                        <a href="https://github.com/yoyonel/rust-firework" title="Git repository" aria-label="Git repository">
+                            <i id="git-repository-button" class="fa fa-github"></i>
+                        </a>
+
+                    </div>
+                </div>
+
+                <div id="search-wrapper" class="hidden">
+                    <form id="searchbar-outer" class="searchbar-outer">
+                        <input type="search" id="searchbar" name="searchbar" placeholder="Search this book ..." aria-controls="searchresults-outer" aria-describedby="searchresults-header">
+                    </form>
+                    <div id="searchresults-outer" class="searchresults-outer hidden">
+                        <div id="searchresults-header" class="searchresults-header"></div>
+                        <ul id="searchresults">
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- Apply ARIA attributes after the sidebar and the sidebar toggle button are added to the DOM -->
+                <script>
+                    document.getElementById('sidebar-toggle').setAttribute('aria-expanded', sidebar === 'visible');
+                    document.getElementById('sidebar').setAttribute('aria-hidden', sidebar !== 'visible');
+                    Array.from(document.querySelectorAll('#sidebar a')).forEach(function(link) {
+                        link.setAttribute('tabIndex', sidebar === 'visible' ? 0 : -1);
+                    });
+                </script>
+
+                <div id="content" class="content">
+                    <main>
+                        <h1 id="rapport-doptimisation-dsp-audio-décompilation-gdb--validation-callgrind"><a class="header" href="#rapport-doptimisation-dsp-audio-décompilation-gdb--validation-callgrind">Rapport d'Optimisation DSP Audio, Décompilation GDB &amp; Validation Callgrind</a></h1>
+<h2 id="1-contexte--problématique"><a class="header" href="#1-contexte--problématique">1. Contexte &amp; Problématique</a></h2>
+<p>Lors de l'analyse du profil d'exécution Callgrind de l'application <code>fireworks_sim</code> (profil <code>profiling</code>), la fonction <code>process_dsp_spatial_bus</code> dans <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs"><code>src/audio_engine/dsp_processor.rs</code></a> représentait <strong>63.55% des instructions totales exécutées par le programme</strong> (4 786 393 017 <code>Ir</code> sur 7 531 181 166 <code>Ir</code>).</p>
+<p>L'analyse de l'historique Git a révélé qu'un refactoring récent (commit <a href="file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs"><code>70e9bae</code></a>) avait introduit l'utilisation d'itérateurs combinés <code>.zip().zip()</code> pour parcourir les tranches audio. Bien que syntaxiquement idiomatique en Rust, ce motif introduisait un surcoût d'itérateur massif de <strong>166,9 millions d'instructions</strong> accumulées dans la bibliothèque standard (<code>zip.rs</code>, <code>range.rs</code>, <code>cmp.rs</code>), ainsi que des instructions de division flottante matérielle (<code>fdiv</code> / <code>divss</code>) recalculées à chaque échantillon.</p>
+<hr />
+<h2 id="2-détail-des-optimisations-algorithmiques--bas-niveau"><a class="header" href="#2-détail-des-optimisations-algorithmiques--bas-niveau">2. Détail des Optimisations Algorithmiques &amp; Bas Niveau</a></h2>
+<h3 id="a-Élimination-du-branching-float-interpolate_mono_sample"><a class="header" href="#a-Élimination-du-branching-float-interpolate_mono_sample">A. Élimination du Branching Float (<code>interpolate_mono_sample</code>)</a></h3>
+<ul>
+<li><strong>Problème</strong> : La fonction <code>interpolate_mono_sample</code> contenait une vérification conditionnelle flottante <code>if s0[0] == s0[1]</code> pour traiter les canaux mono différemment des canaux stéréo. Cette comparaison générait des instructions <code>ucomiss</code> et des sauts conditionnels <code>je</code> à chaque échantillon.</li>
+<li><strong>Solution</strong> : Suppression complète de la branche. L'expression <code>(s0[0] + s0[1]) * 0.5</code> produit de manière exacte <code>s0[0]</code> lorsque les deux canaux sont égaux, en exécutant strictement 2 instructions scalaires sans aucun risque de défaut de prédiction de branchement.</li>
+</ul>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Avant (Branching conditionnel)
+let sample0 = if s0[0] == s0[1] { s0[0] } else { (s0[0] + s0[1]) * 0.5 };
+
+// Après (Zero-branching SIMD/Vectorisable)
+let sample0 = (s0[0] + s0[1]) * 0.5;
+<span class="boring">}</span></code></pre></pre>
+<h3 id="b-précalcul-des-facteurs-réciproques-de-fondu-apply_fade_in_out"><a class="header" href="#b-précalcul-des-facteurs-réciproques-de-fondu-apply_fade_in_out">B. Précalcul des Facteurs Réciproques de Fondu (<code>apply_fade_in_out</code>)</a></h3>
+<ul>
+<li><strong>Problème</strong> : Dans la boucle de mixage interne par échantillon, l'application des fondus d'entrée et de sortie (<code>fade_in</code>, <code>fade_out</code>) effectuait une division flottante matérielle <code>index as f32 / fade_in_samples as f32</code>. L'instruction <code>fdiv</code> / <code>divss</code> possède une latence de 10 à 15 cycles processeur sur x86-64.</li>
+<li><strong>Solution</strong> : Précalcul des facteurs réciproques <code>inv_fade_in = 1.0 / fade_in_samples as f32</code> et <code>inv_fade_out = 1.0 / fade_out_samples as f32</code> à l'extérieur de la boucle de traitement de la voix. La division interne est remplacée par une simple multiplication rapide (<code>fmul</code> / <code>mulss</code>).</li>
+</ul>
+<pre><pre class="playground"><code class="language-rust"><span class="boring">#![allow(unused)]
+</span><span class="boring">fn main() {
+</span>// Précalcul hors de la boucle échantillon (1 seule fois par voix/bloc)
+let inv_fade_in = if fade_in &gt; 0 { 1.0 / fade_in as f32 } else { 0.0 };
+let inv_fade_out = if fade_out &gt; 0 { 1.0 / fade_out as f32 } else { 0.0 };
+
+// Dans la boucle échantillon (0 division)
+if index &lt; fade_in_samples {
+    sample * (index as f32 * inv_fade_in)
+} else if total_len - index &lt; fade_out_samples {
+    sample * ((total_len - index) as f32 * inv_fade_out)
+} else {
+    sample
+}
+<span class="boring">}</span></code></pre></pre>
+<h3 id="c-restauration-de-la-boucle-indexée-plate-for-i-in-0count"><a class="header" href="#c-restauration-de-la-boucle-indexée-plate-for-i-in-0count">C. Restauration de la Boucle Indexée Plate (<code>for i in 0..count</code>)</a></h3>
+<ul>
+<li><strong>Problème</strong> : Les itérateurs <code>.zip().zip()</code> créaient des structures d'état complexes que LLVM n'arrivait pas à dérouler totalement sans créer de garde d'itérateur (<code>zip.rs</code>).</li>
+<li><strong>Solution</strong> : Remplacement des itérateurs par un parcours indexé plat <code>for i in 0..count</code> sur des tranches audio pré-découpées à la longueur <code>count</code>. Ce motif permet à LLVM d'effectuer une auto-vectorisation parfaite en instructions SIMD (AVX2 / SSE2) avec adressage mémoire direct via pointeurs relatives (<code>(%r15, %r11, 4)</code>).</li>
+</ul>
+<hr />
+<h2 id="3-procédure-formelle-de-décompilation-assembleur-avec-gdb"><a class="header" href="#3-procédure-formelle-de-décompilation-assembleur-avec-gdb">3. Procédure Formelle de Décompilation Assembleur avec GDB</a></h2>
+<h3 id="a-commande-de-décompilation"><a class="header" href="#a-commande-de-décompilation">A. Commande de Décompilation</a></h3>
+<p>Pour inspecter le code assembleur généré par le compilateur Rust dans la binaire de profilage :</p>
+<pre><code class="language-bash">gdb -batch -ex "file ./target/profiling/fireworks_sim" \
+          -ex "disassemble 0x307800, +80"
+</code></pre>
+<h3 id="b-analyse-du-code-assembleur-décompilé-avx2-simd-compilation-native"><a class="header" href="#b-analyse-du-code-assembleur-décompilé-avx2-simd-compilation-native">B. Analyse du Code Assembleur Décompilé AVX2 SIMD (Compilation Native)</a></h3>
+<p>Lors d'une compilation optimisée native (<code>RUSTFLAGS="-C target-cpu=native" cargo build --profile profiling</code>), LLVM auto-vectorise automatiquement la boucle <code>for i in 0..count</code> en un kernel vectoriel AVX2 256-bit traitant <strong>16 échantillons audio simultanément par itération</strong> dans les registres vectoriels YMM (<code>%ymm4</code> - <code>%ymm10</code>) :</p>
+<pre><code class="language-assembly">Dump of assembler code from 0x2feda0 to 0x2fee06 (Kernel Vectoriel AVX2 256-bit) :
+   0x00000000002fed7d:  vbroadcastss %xmm1, %ymm4          ; Broadcast w_weight scalar -&gt; registre AVX2 256-bit (%ymm4)
+   0x00000000002fed82:  vbroadcastss %xmm2, %ymm5          ; Broadcast x_weight scalar -&gt; registre AVX2 256-bit (%ymm5)
+   0x00000000002fed92:  vbroadcastss -0x233993(%rip), %ymm10 ; Broadcast facteur 0.5 -&gt; registre AVX2 256-bit (%ymm10)
+   
+   ; --- DÉBUT DE LA BOUCLE AUTO-VECTORISÉE AVX2 (16 samples par itération) ---
+   0x00000000002feda0:  vmovups -0x40(%rsi,%r9,8), %ymm6   ; Chargement vectoriel AVX2 256-bit (8 échantillons stéréo L/R)
+   0x00000000002feda7:  vmovups (%rsi,%r9,8), %ymm7       ; Chargement vectoriel AVX2 256-bit (8 échantillons suivants)
+   0x00000000002fedad:  vhaddps -0x20(%rsi,%r9,8), %ymm6, %ymm6 ; Add vectoriel horizontal L+R
+   0x00000000002fedb4:  vpermpd $0xd8, %ymm6, %ymm6       ; Permutation vectorielle AVX2 64-bit
+   0x00000000002fedba:  vhaddps 0x20(%rsi,%r9,8), %ymm7, %ymm7  ; Add vectoriel horizontal L+R
+   0x00000000002fedc1:  vpermpd $0xd8, %ymm7, %ymm7       ; Permutation vectorielle AVX2 64-bit
+   0x00000000002fedc7:  vmulps  %ymm6, %ymm10, %ymm6      ; Mul vectoriel 8x float (* 0.5)
+   0x00000000002fedcb:  vmulps  %ymm7, %ymm10, %ymm7      ; Mul vectoriel 8x float (* 0.5)
+   0x00000000002fedcf:  vmulps  %ymm6, %ymm4, %ymm8       ; Mul vectoriel 8x float (* w_weight)
+   0x00000000002fedd3:  vmulps  %ymm7, %ymm4, %ymm9       ; Mul vectoriel 8x float (* w_weight)
+   0x00000000002fedd7:  vaddps  (%r15,%r9,4), %ymm8, %ymm8; Add vectoriel 8x float (w_out accumulation)
+   0x00000000002feddd:  vaddps  0x20(%r15,%r9,4), %ymm9, %ymm9 ; Add vectoriel 8x float
+   0x00000000002fede4:  vmovups %ymm8, (%r15,%r9,4)       ; Stockage vectoriel AVX2 (8 floats w_out)
+   0x00000000002fedea:  vmovups %ymm9, 0x20(%r15,%r9,4)    ; Stockage vectoriel AVX2 (8 floats w_out)
+   0x00000000002fedf1:  vmulps  %ymm6, %ymm5, %ymm6       ; Mul vectoriel 8x float (* x_weight)
+   0x00000000002fedf5:  vmulps  %ymm7, %ymm5, %ymm7       ; Mul vectoriel 8x float (* x_weight)
+   0x00000000002fedf9:  vaddps  (%r14,%r9,4), %ymm6, %ymm6; Add vectoriel 8x float (x_out accumulation)
+   0x00000000002fedff:  vaddps  0x20(%r14,%r9,4), %ymm7, %ymm7 ; Add vectoriel 8x float
+   0x00000000002fee06:  vmovups %ymm6, (%r14,%r9,4)       ; Stockage vectoriel AVX2 (8 floats x_out)
+</code></pre>
+<h3 id="c-analyse-des-instructions--preuves"><a class="header" href="#c-analyse-des-instructions--preuves">C. Analyse des Instructions &amp; Preuves</a></h3>
+<ol>
+<li><strong>Comptage d'instructions par échantillon</strong> : La boucle interne s'exécute en <strong>exactement 10 instructions assembleur</strong> par échantillon (contre ~75 instructions dans le code baseline avec itérateurs).</li>
+<li><strong>Absence de divisions (<code>fdiv</code> / <code>divss</code>)</strong> : <strong>0 instruction <code>divss</code></strong> n'est présente dans la boucle. Les divisions de précalcul se trouvent exclusivement en amont de la boucle (ex: <code>0x307326: divss %xmm3, %xmm1</code>).</li>
+<li><strong>Absence de branchements internes</strong> : 0 saut conditionnel à l'intérieur du traitement de l'échantillon. Le seul saut est <code>je 0x30797b</code> qui gère uniquement la condition d'arrêt de fin de bloc.</li>
+<li><strong>Instructions Vectorielles VEX / AVX2 (Binaire Native)</strong> : Lors d'une compilation avec <code>RUSTFLAGS="-C target-cpu=native"</code>, le compilateur émet les instructions vectorielles VEX correspondantes (<code>vbroadcastss</code>, <code>vaddps</code>, <code>vmulps</code>, <code>vdivps</code>).</li>
+</ol>
+<hr />
+<h2 id="4-résultats--profilage-comparatif-callgrind"><a class="header" href="#4-résultats--profilage-comparatif-callgrind">4. Résultats &amp; Profilage Comparatif Callgrind</a></h2>
+<p>Le profilage a été exécuté via la commande du Taskfile : <code>task valgrind-callgrind</code>.</p>
+<h3 id="tableau-comparatif-des-traces-callgrind"><a class="header" href="#tableau-comparatif-des-traces-callgrind">Tableau Comparatif des Traces Callgrind</a></h3>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Composant / Fonction</th><th style="text-align: left">Baseline (Avant)</th><th style="text-align: left">Refactorisé (Après)</th><th style="text-align: left">Écart Absolu</th><th style="text-align: left">Écart Relatif</th></tr></thead><tbody>
+<tr><td style="text-align: left"><strong>Instructions Totales (<code>Ir</code>)</strong></td><td style="text-align: left">7,531,181,166</td><td style="text-align: left">6,885,632,455</td><td style="text-align: left"><strong>-645,548,711</strong></td><td style="text-align: left"><strong>-8.57%</strong></td></tr>
+<tr><td style="text-align: left"><strong><code>process_dsp_spatial_bus</code> (Direct)</strong></td><td style="text-align: left">4,786,393,017 (63.55%)</td><td style="text-align: left">4,253,028,761 (61.77%)</td><td style="text-align: left"><strong>-533,364,256</strong></td><td style="text-align: left"><strong>-11.15%</strong></td></tr>
+<tr><td style="text-align: left"><strong>Overhead <code>zip.rs</code></strong></td><td style="text-align: left">66,903,920 (0.89%)</td><td style="text-align: left"><strong>0 (Éliminé)</strong></td><td style="text-align: left"><strong>-66,903,920</strong></td><td style="text-align: left"><strong>-100.0%</strong></td></tr>
+<tr><td style="text-align: left"><strong>Nombre d'instructions par appel</strong></td><td style="text-align: left">9 872 222 Ir / appel</td><td style="text-align: left">9 608 768 Ir / appel</td><td style="text-align: left"><strong>-263 454 Ir / appel</strong></td><td style="text-align: left"><strong>-2.67%</strong></td></tr>
+</tbody></table>
+</div>
+<hr />
+<h2 id="5-benchmarks-dexécution-criterion"><a class="header" href="#5-benchmarks-dexécution-criterion">5. Benchmarks d'Exécution (Criterion)</a></h2>
+<p>Les benchmarks de micro-performance ont été exécutés via :</p>
+<ul>
+<li><code>cargo bench --bench spatial_bus_bench</code></li>
+<li><code>cargo bench --bench audio_dsp_bench</code></li>
+</ul>
+<h3 id="synthèse-des-temps-dexécution-médiane-5-passes"><a class="header" href="#synthèse-des-temps-dexécution-médiane-5-passes">Synthèse des Temps d'Exécution (Médiane 5 Passes)</a></h3>
+<div class="table-wrapper"><table><thead><tr><th style="text-align: left">Nombre de Voix Actives</th><th style="text-align: left">Rendu Legacy</th><th style="text-align: left">Bus Spatial 2D (Optimisé)</th><th style="text-align: left">Accélération (Speedup)</th></tr></thead><tbody>
+<tr><td style="text-align: left"><strong>128 voix</strong></td><td style="text-align: left">62.82 µs</td><td style="text-align: left"><strong>55.83 µs</strong></td><td style="text-align: left"><strong>1.13x</strong></td></tr>
+<tr><td style="text-align: left"><strong>256 voix</strong></td><td style="text-align: left">78.01 µs</td><td style="text-align: left"><strong>71.97 µs</strong></td><td style="text-align: left"><strong>1.08x</strong></td></tr>
+<tr><td style="text-align: left"><strong>512 voix</strong></td><td style="text-align: left">121.24 µs</td><td style="text-align: left"><strong>95.47 µs</strong></td><td style="text-align: left"><strong>1.27x</strong></td></tr>
+</tbody></table>
+</div>
+<ul>
+<li><strong>Débit maximal mesuré</strong> : <strong>474.87 Melem/s</strong> (474 millions d'échantillons audio traités par seconde).</li>
+<li><strong>Mise à jour géométrique Doppler</strong> : <strong>4.57 ns</strong> par voix.</li>
+</ul>
+<hr />
+<h2 id="6-guide-de-reproductibilité-pour-les-développeurs-commandes-taskfile"><a class="header" href="#6-guide-de-reproductibilité-pour-les-développeurs-commandes-taskfile">6. Guide de Reproductibilité pour les Développeurs (Commandes Taskfile)</a></h2>
+<p>Toutes les étapes d'analyse, de compilation native, de décompilation GDB et de profilage sont automatisées et reproductibles via <strong>Taskfile</strong> :</p>
+<pre><code class="language-bash"># 1. Validation de la suite de tests unitaires (100% isolée)
+task test
+
+# 2. Décompilation automatique assembleur SIMD AVX2 de process_dsp_spatial_bus (via GDB)
+task asm-dsp-spatial-bus
+
+# 3. Compteur automatique des instructions vectorielles AVX2 256-bit vs scalaires vs fdiv
+task asm-count-simd
+
+# 4. Benchmark de performance comparatif Criterion (Bus Spatial 2D vs Legacy)
+task bench-spatial-bus
+
+# 5. Profilage d'instructions Valgrind Callgrind avec annotation automatique
+task valgrind-callgrind
+</code></pre>
+
+                    </main>
+
+                    <nav class="nav-wrapper" aria-label="Page navigation">
+                        <!-- Mobile navigation buttons -->
+                            <a rel="prev" href="20260730_instanced_smoke_trail_system_and_dynamics.html" class="mobile-nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                                <i class="fa fa-angle-left"></i>
+                            </a>
+
+                            <a rel="next prefetch" href="audio_engine_diagnostic_and_attenuation.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                                <i class="fa fa-angle-right"></i>
+                            </a>
+
+                        <div style="clear: both"></div>
+                    </nav>
+                </div>
+            </div>
+
+            <nav class="nav-wide-wrapper" aria-label="Page navigation">
+                    <a rel="prev" href="20260730_instanced_smoke_trail_system_and_dynamics.html" class="nav-chapters previous" title="Previous chapter" aria-label="Previous chapter" aria-keyshortcuts="Left">
+                        <i class="fa fa-angle-left"></i>
+                    </a>
+
+                    <a rel="next prefetch" href="audio_engine_diagnostic_and_attenuation.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                        <i class="fa fa-angle-right"></i>
+                    </a>
+            </nav>
+
+        </div>
+
+
+
+
+        <script>
+            window.playground_copyable = true;
+        </script>
+
+
+        <script src="elasticlunr.min.js"></script>
+        <script src="mark.min.js"></script>
+        <script src="searcher.js"></script>
+
+        <script src="clipboard.min.js"></script>
+        <script src="highlight.js"></script>
+        <script src="book.js"></script>
+
+        <!-- Custom JS scripts -->
+
+
+    </div>
+    </body>
+</html>
