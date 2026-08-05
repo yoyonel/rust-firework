@@ -1,0 +1,11 @@
+metric,value
+perc_physics,21.2922
+perc_renderer,78.5233
+perc_ui,0.1845
+perc_hdr,78.9099
+perc_bloom,20.0597
+perc_particles,76.7708
+perc_audio_doppler,1.6107
+r_phys_rend,0.2712
+r_bloom_hdr,0.2542
+r_doppler_audio,0.0161

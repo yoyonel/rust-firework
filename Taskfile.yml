@@ -514,27 +514,47 @@ tasks:
     cmds:
       - "{{.CARGO}} build --features tracy --release"
 
-  profile-tracy-headless:
-    desc: "Exécute le projet sous profilage Tracy en tâche de fond, enregistre une trace headless de 5s, et extrait les statistiques de render_frame en CSV"
+  capture-tracy-headless:
+    desc: "Exécute le simulateur en tâche de fond et capture une trace Tracy de 5s"
     env:
       RUSTFLAGS: "-C target-cpu=native"
     cmds:
       - echo "🔨 Compilation du binaire de profiling..."
       - "{{.CARGO}} build --features tracy --profile profiling"
-      - echo "🚀 Lancement du simulateur en tâche de fond..."
+      - echo "🚀 Lancement du simulateur en tâche de fond et capture Tracy (5s)..."
       - |
         bash -c '
           vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./target/profiling/fireworks_sim > /tmp/sim.log 2>&1 &
           SIM_PID=$!
           sleep 2
           echo "📊 Lancement de la capture Tracy (5s)..."
-          {{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture -f -o /tmp/fireworks.tracy -s 5
+          TRACY_CAP="${TRACY_CAPTURE_BIN:-{{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture}"
+          "$TRACY_CAP" -f -o /tmp/fireworks.tracy -s 5
           echo "🧹 Arrêt du simulateur..."
           kill $SIM_PID
           wait $SIM_PID 2>/dev/null || true
         '
+
+  bench-tracy-ratios:
+    desc: "Capture une trace Tracy et audite la dérive des ratios relatifs de temps de rendu par rapport à la baseline develop"
+    deps: [capture-tracy-headless]
+    cmds:
+      - ./scripts/analyze_tracy_ratios.sh /tmp/fireworks.tracy benches/baselines/tracy_ratios_develop.csv compare
+
+  generate-tracy-baseline:
+    desc: "Génère la baseline de référence des ratios Tracy (benches/baselines/tracy_ratios_develop.csv)"
+    deps: [capture-tracy-headless]
+    cmds:
+      - ./scripts/analyze_tracy_ratios.sh /tmp/fireworks.tracy benches/baselines/tracy_ratios_develop.csv generate
+
+  profile-tracy-headless:
+    desc: "Exécute le projet sous profilage Tracy en tâche de fond, enregistre une trace headless de 5s, et extrait les statistiques de render_frame en CSV"
+    deps: [capture-tracy-headless]
+    cmds:
       - echo "📊 Extraction des statistiques de Renderer::render_frame..."
-      - "{{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport -u -f 'Renderer::render_frame' /tmp/fireworks.tracy > /tmp/durations.csv"
+      - |
+        TRACY_CSV="${TRACY_CSVEXPORT_BIN:-{{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport}"
+        "$TRACY_CSV" -u -f 'Renderer::render_frame' /tmp/fireworks.tracy > /tmp/durations.csv
       - echo "📈 Statistiques de Renderer::render_frame (hors warmup) :"
       - |
         python3 -c "
