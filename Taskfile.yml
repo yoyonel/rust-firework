@@ -4,6 +4,8 @@ version: "3"
 
 vars:
   APP_NAME: fireworks_sim
+  RENDERDOC_CAP_DIR: "/tmp"
+  RENDERDOC_CAP_PREFIX: "{{.RENDERDOC_CAP_DIR}}/fireworks_renderdoc"
   DISTROBOX:
     sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev --"; else echo ""; fi'
   CARGO: '{{.DISTROBOX}} cargo'
@@ -14,6 +16,8 @@ vars:
   DOC_TEMPLATES_DIR: 'doc/ai_skills'
   VALE_BIN:
     sh: 'if command -v vale >/dev/null 2>&1; then echo "vale"; else echo "./bin/vale"; fi'
+  RUFF:
+    sh: 'if command -v ruff >/dev/null 2>&1; then echo "ruff"; elif command -v uvx >/dev/null 2>&1; then echo "uvx ruff"; elif command -v uv >/dev/null 2>&1; then echo "uv run ruff"; else echo ""; fi'
 
 tasks:
   default:
@@ -135,6 +139,27 @@ tasks:
     cmds:
       - heaptrack ./target/profiling/{{.APP_NAME}}
 
+  renderdoc-capture:
+    desc: "Exécute une capture GPU RenderDoc après un délai configurable (par défaut 5s), extrait la vignette et analyse le XML"
+    deps: [build-release]
+    env:
+      RENDERDOC_CAP_DIR: "{{.RENDERDOC_CAP_DIR}}"
+      RENDERDOC_CAP_PREFIX: "{{.RENDERDOC_CAP_PREFIX}}"
+    cmds:
+      - "./scripts/capture_renderdoc.sh {{.CLI_ARGS}}"
+
+  renderdoc-gui:
+    desc: "Ouvre la dernière capture RenderDoc (.rdc) dans l'interface graphique qrenderdoc"
+    cmds:
+      - |
+        RDC_FILE=$(ls -tr {{.RENDERDOC_CAP_PREFIX}}*.rdc {{.RENDERDOC_CAP_DIR}}/fireworks_*.rdc 2>/dev/null | tail -1)
+        if [ -z "$RDC_FILE" ]; then
+          echo "⚠️ Aucune capture .rdc trouvée. Lance d'abord : task renderdoc-capture"
+          exit 1
+        fi
+        echo "🚀 Ouverture de $RDC_FILE dans qrenderdoc GUI..."
+        exec qrenderdoc "$RDC_FILE"
+
   run-release-with-hud:
     desc: "Gallium HUD (Compatible Intel)"
     deps: [build-release]
@@ -254,10 +279,15 @@ tasks:
       - "{{.XVFB}} ./scripts/generate_golden_baselines.sh"
 
   fmt:
-    desc: "Vérification du formatage"
+    desc: "Vérification du formatage Rust & Python"
     cmds:
-      - echo "🎨 Vérification du formatage..."
+      - echo "🎨 Vérification du formatage Rust..."
       - "{{.CARGO}} fmt -- --check"
+      - |
+        if [ -n "{{.RUFF}}" ]; then
+          echo "🎨 Vérification du formatage Python avec Ruff..."
+          {{.RUFF}} format --check scripts/
+        fi
 
   clippy:
     desc: "Vérification statique avec Clippy"
@@ -265,9 +295,18 @@ tasks:
       - echo "🕵️  Vérification statique avec Clippy..."
       - "{{.CARGO}} clippy -- -D warnings"
 
+  python-lint:
+    desc: "Vérification statique Python avec Ruff (via uv/ruff)"
+    cmds:
+      - |
+        if [ -n "{{.RUFF}}" ]; then
+          echo "🕵️  Vérification statique Python avec Ruff..."
+          {{.RUFF}} check scripts/
+        fi
+
   lint:
-    desc: "Vérification complète du code (fmt + clippy + doc-lint)"
-    deps: [fmt, clippy, doc-lint]
+    desc: "Vérification complète du code (fmt + clippy + python-lint + doc-lint)"
+    deps: [fmt, clippy, python-lint, doc-lint]
 
   gui-persistence-check:
     desc: "Vérifie que l'inventaire GUI et les cibles de persistence restent synchronisés"

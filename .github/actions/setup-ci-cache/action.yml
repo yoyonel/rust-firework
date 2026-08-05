@@ -1,0 +1,69 @@
+name: "Setup Multi-Layer CI Cache"
+description: "Centralized multi-layer caching for Rust toolchain, Cargo, Target, sccache, and RenderDoc CLI"
+
+inputs:
+  rust_version:
+    description: "Rust toolchain version"
+    required: false
+    default: "1.90.0"
+
+outputs:
+  cache-hit-renderdoc:
+    description: "Indicates if RenderDoc CLI binary was restored from cache"
+    value: ${{ steps.cache-renderdoc.outputs.cache-hit }}
+
+runs:
+  using: "composite"
+  steps:
+    # 🧰 1. Cache Rustup + toolchain LLVM
+    - name: Cache Rustup and LLVM tools
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.rustup/toolchains
+          ~/.rustup/components
+        key: ${{ runner.os }}-rustup-${{ inputs.rust_version }}
+        restore-keys: |
+          ${{ runner.os }}-rustup-
+
+    # ⚡ 2. Cache Cargo registry & git & bin
+    - name: Cache Cargo registry & git & bin
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          ~/.cargo/bin
+        key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-registry-
+
+    # 🧱 3. Cache du répertoire target
+    - name: Cache Cargo target directory
+      uses: actions/cache@v4
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-target-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-target-${{ inputs.rust_version }}-
+          ${{ runner.os }}-cargo-target-
+
+    # 💾 4. Cache sccache binaries
+    - name: Cache sccache binaries
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/sccache
+        key: ${{ runner.os }}-sccache-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-sccache-${{ inputs.rust_version }}-
+          ${{ runner.os }}-sccache-
+
+    # 📷 5. Cache RenderDoc CLI binary
+    - name: Cache RenderDoc CLI binary
+      id: cache-renderdoc
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.local/opt/renderdoc_1.45
+          ~/.cargo/bin/renderdoccmd
+        key: ${{ runner.os }}-renderdoc-1.45
