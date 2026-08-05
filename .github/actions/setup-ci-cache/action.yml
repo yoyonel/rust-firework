@@ -11,6 +11,9 @@ outputs:
   cache-hit-renderdoc:
     description: "Indicates if RenderDoc CLI binary was restored from cache"
     value: ${{ steps.cache-renderdoc.outputs.cache-hit }}
+  cache-hit-tracy:
+    description: "Indicates if Tracy CLI binaries were restored from cache"
+    value: ${{ steps.cache-tracy.outputs.cache-hit }}
 
 runs:
   using: "composite"
@@ -67,3 +70,13 @@ runs:
           ~/.local/opt/renderdoc_1.45
           ~/.cargo/bin/renderdoccmd
         key: ${{ runner.os }}-renderdoc-1.45
+
+    # 🏎️ 6. Cache Tracy CLI Tools
+    - name: Cache Tracy CLI Tools
+      id: cache-tracy
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.local/bin/tracy-capture
+          ~/.local/bin/tracy-csvexport
+        key: ${{ runner.os }}-tracy-tools-v0.11.0
