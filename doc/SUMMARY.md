@@ -3,6 +3,7 @@
 [Introduction](introduction.md)
 [Langage Métier (Glossaire)](ubiquitous_language.md)
 [Guide des Tâches (Taskfile)](taskfile_guide.md)
+- [Audit & Validation d'Exécutabilité des Commandes (AGENTS.md)](20260805_agents_md_commands_audit_report.md)
 - [Guide des Tests Unitaires, Mocks & Couverture](20260730_unit_testing_and_coverage_guide.md)
 - [Refactoring SSOT & Éradication des Constantes Magiques](20260730_ssot_constants_structural_refactoring.md)
 - [Qualité & Linting de la Documentation (Vale)](20260724_documentation_linting_pipeline.md)
@@ -33,6 +34,7 @@
   - [Analyse Performances Audio](20260713_audio_performance_profile_analysis.md)
 
 - [Rendu Graphique]()
+  - [Guide d'Installation & Capture GPU RenderDoc](20260805_renderdoc_installation_and_capture_guide.md)
   - [Persistent Mapped Buffers (AZDO)](opengl_azdo_persistent_mapped_buffers.md)
   - [Manuel du Renderer](renderer_manual.md)
   - [Correctif Bascule Fullscreen & Stress Testing](20260731_fullscreen_toggle_fix_and_stress_testing.md)
