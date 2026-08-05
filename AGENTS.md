@@ -39,6 +39,9 @@ Tout contrôle ImGui réclame la mise à jour de sa configuration canonique, sa 
 * **Zéro Littéral Inline :** Interdiction d'inliner des littéraux numériques, tuples de couleur RGBA ou spécifications de presets dans la logique métier ou le rendu UI. Centralisation obligatoire dans les modules Single Source of Truth (SSOT) : `src/physic_engine/constants.rs`, `src/audio_engine/constants.rs`, `src/renderer_engine/constants.rs` ou `src/simulator/gui_settings/theme.rs`.
 * **Dynamic UI Item Width :** Interdiction de hardcoder des largeurs statiques en pixels (ex: `200.0`). Adapter dynamiquement la largeur en fonction de `ui.current_font_size()` (ex: `ui.current_font_size() * 14.0`).
 
+### Règle 8 : Validation Empirique d'Exécutabilité des Commandes & Tâches (Zero-Trust Command Gate)
+Interdiction formelle d'ajouter, de modifier ou de répertorier une commande CLI, un script shell, un outil tiers ou une tâche Taskfile dans `AGENTS.md` ou la documentation du projet sans avoir **explicitement exécuté et validé son bon fonctionnement sur l'environnement hôte actuel**. Toute référence à un outil non installé ou à un script défaillant doit être immédiatement réparée ou retirée.
+
 ---
 
 ## 3. LES 6 PILIERS D'INGÉNIERIE DE PRÉCISION
@@ -63,7 +66,7 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
   - Aucune optimisation/refactoring de performance ou d'architecture GPU/particules n'est accepté sans mesure comparative.
   - **Isolation CPU (Anti-Bruit) :** L'exécution des outils de profilage DOIT être strictement synchrone/bloquante. Interdiction absolue de lancer ces outils en arrière-plan (background task) pendant que l'agent réfléchit ou manipule d'autres fichiers.
   - **Workflow A/B :**
-    1. Capture Baseline CLI sur `develop` (`task valgrind-callgrind`, `task asm-count-simd`, `task heaptrack` ou capture RenderDoc `renderdoccmd capture --wait-for-exit --num-frames 5 ./target/release/fireworks_sim`).
+    1. Capture Baseline CLI sur `develop` (`task valgrind-callgrind`, `task asm-count-simd`, `task heaptrack` ou capture RenderDoc `task renderdoc-capture`).
     2. Capture Target CLI sur la branche du fix.
     3. Restitution obligatoire d'un diff textuel synthétique (% gain d'instructions, ratio d'instructions SIMD AVX2 vectorielles vs scalaires, réduction d'allocations mémoire, analyse des passes RenderDoc) avant la demande de validation humaine.
 
@@ -102,20 +105,28 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
   - **Constantes :** Proscription absolue des valeurs/tuples magiques inline. Centralisation SSOT obligatoire (`constants.rs` ou `theme.rs`).
   - **Blocs Unsafe :** Présence obligatoire de la clause `// SAFETY: <justification technique>` avant chaque bloc `unsafe` ou manipulation de pointeur brut.
   - **CLI & Transparence :** Interdiction d'exécuter des commandes Bash opaques. Explication synthétique des options et flags CLI clés exigée.
+  - **Outillage POSIX/Shell First (Pas de Scripts Python Parasites) :** Interdiction de créer des scripts d'outillage/automation personnalisés en Python (verbeux, complexes à maintenir, sujets aux variations d'environnement). Privilégier systématiquement les scripts Shell POSIX/Linux (`scripts/*.sh`) combinés nativement à `Taskfile.yml`.
 
 ### PILIER 6 : CI/CD, PRE-COMMITS & RUNNERS DISTANTS (SHIFT-LEFT)
 1. **Vérification Locale Prébail (Pre-CI Gate & Shift-Left) :**
-  - L'agent ne doit JAMAIS initier un Stop-Point de fin de tâche, ni ouvrir une PR (`gh pr create`), sans avoir d'abord simulé le pipeline CI en local.
-  - **Séquence obligatoire pre-PR :**
+  - L'agent ne doit JAMAIS initier un Stop-Point de fin de tâche, ni ouvrir une PR (`gh pr create`), sans d'abord exécuter la séquence locale obligatoire :
     1. Activation des hooks : `task hooks:install`.
     2. Linter exhaustif : `task lint` (fmt, clippy strict `-D warnings`, doc-lint).
     3. Validation architecturale UI : `task gui-persistence-check`.
-    4. Simulation Headless : `task test-opengl-mesa` (vérification du code sous GPU logiciel Mesa/Xvfb).
-2. **Gestion des Échecs CI Distants (Asymétrie Local/Runner) :**
-  - Interdiction du commit-spamming. En cas d'échec CI distant, diagnostic strict :
-    1. Extraction des logs distants : `gh run view --log-failed`.
-    2. Reproduction locale de l'environnement dégradé (émulation de la suppression des `[patch.crates-io]` locaux, isolement sous `MESA_GL_DEBUG=1` / `xvfb-run`).
-    3. Validation locale du correctif dans ces conditions dégradées avant mise à jour de la PR.
+    4. Simulation Headless : `task test-opengl-mesa` (vérification sous GPU logiciel Mesa/Xvfb).
+2. **Stratégie de Caching Multi-Niveau CI/CD (Zero Redundant Download) :**
+  - Obligation d'implémenter un cache strict via `actions/cache@v4` pour tout binaire tiers ou outil CLI (`renderdoccmd`, `sccache`, `cargo-llvm-cov`), registres Cargo et répertoires `target`.
+  - Conditionner les étapes de téléchargement réseau aux échecs de cache (`if: steps.cache-xxx.outputs.cache-hit != 'true'`).
+3. **Suivi Actif & Monitoring Post-Push (Active Workflow Monitoring) :**
+  - Interdiction formelle d'abandonner l'exécution ou de se mettre en attente passive après un `git push` ou une ouverture de PR sans avoir **activement suivi l'avancement des workflows GitHub Actions** jusqu'à leur terme via `gh run list` et `gh run view`.
+4. **Diagnostic & Résolution des Échecs CI Distants (Asymétrie Local/Runner) :**
+  - Interdiction du commit-spamming. En cas d'échec d'un job distant :
+    1. Extraction immédiate des logs d'erreur distants via `gh run view --log-failed`.
+    2. Reproduction locale de l'environnement dégradé (émulation de suppression des `[patch.crates-io]` locaux, isolement sous `MESA_GL_DEBUG=1` / `xvfb-run`).
+    3. Validation locale du correctif dans ces conditions dégradées avant soumission de la mise à jour jusqu'à l'obtention du statut 🟢 PASS.
+5. **Parité ISO Local/CI & Débogage Local Obligatoire (Local-First Zero-Speculation) :**
+  - **Zéro Push Spéculatif :** Interdiction formelle de pousser des commits d'essais-erreurs sur le dépôt distant. En cas d'échec CI, la reproduction et la correction DOIVENT être intégralement validées en local au préalable.
+  - **Outillage Local ISO Parfait :** Les tâches `Taskfile.yml` et scripts doivent garantir une parité à 100 % avec les runners distants (gestion dynamique de `$DISPLAY`, subshells non-interactifs, ciblage strict par ID de fenêtre X11 et suppression sans résidu des processus applicatifs).
 
 ---
 
