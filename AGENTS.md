@@ -61,6 +61,7 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
   - **Micro-instrumentation :** Marqueurs temporaires dans les boucles chaudes par particule/sample. Nettoyage strict et obligatoire avant le Stop-Point pre-commit pour éviter la pollution des mesures.
 2. **Protocole de Preuve CLI A/B (Zero-Trust Performance) :**
   - Aucune optimisation/refactoring de performance n'est accepté sans mesure comparative.
+  - **Isolation CPU (Anti-Bruit) :** L'exécution des outils de profilage DOIT être strictement synchrone/bloquante. Interdiction absolue de lancer ces outils en arrière-plan (background task) pendant que l'agent réfléchit ou manipule d'autres fichiers.
   - **Workflow A/B :**
     1. Capture Baseline CLI sur `develop` (`task valgrind-callgrind`, `task asm-count-simd` ou `task heaptrack`).
     2. Capture Target CLI sur la branche du fix.
@@ -71,6 +72,7 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
   - Interdiction formelle de modifier le code de production à des fins de performance sans métrique pré-existante.
   - En cas d'absence de benchmark : Création préalable obligatoire d'un benchmark dans `benches/` sur `develop`.
   - Exigences de code : Utilisation stricte de `criterion::black_box` (anti-inlining) et `iter_batched` (isolation des allocations de setup).
+  - **Isolation CPU (Anti-Bruit) :** Tout comme le profilage, l'exécution de `cargo bench` DOIT monopoliser l'agent de manière synchrone. L'exécution en arrière-plan est strictement interdite pour ne pas polluer le cache L1/L2 et fausser la baseline de Criterion.
   - Protocole A/B : Capture `--save-baseline legacy` sur `develop` $\rightarrow$ Implémentation sur branche isolée $\rightarrow$ Exécution comparative `--baseline legacy`.
 2. **Validation Statistique Strict (Zero-Trust) :**
   - Seul le rapport natif Criterion fait foi.
