@@ -43,7 +43,9 @@
   - [Validation OpenGL avec Mesa Debug Layer](opengl_debug_validation_guide.md)
 
 - [Profilage et Performance]()
+  - [Analyse Comparative : Gallium HUD vs MangoHud](20260805_gallium_hud_vs_mangohud_profiling_comparison.md)
   - [Bilan et Rapport Final (AZDO)](20260716_azdo_refactoring_final_report.md)
+  - [Benchmark des Ratios de Profilage Tracy (Zero-Timestamp)](20260805_tracy_ratio_benchmarking_report.md)
   - [Optimisations Sécurisées (Write-Combining, Culling, Cast-Copy)](20260716_safe_azdo_optimizations_report.md)
   - [Références Architecturales (Persistent Mapping & WC)](20260716_persistent_mapping_and_write_combining_references.md)
   - [Corrections de Revue de Code](20260716_code_review_fixes_results.md)
