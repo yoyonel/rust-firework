@@ -54,25 +54,26 @@ Tout contrôle ImGui réclame la mise à jour de sa configuration canonique, sa 
   - **Exception Unique (Refactoring Architectural majeur) :** Si un test devient techniquement obsolète (ex: migration AoS $\rightarrow$ SoA), l'agent doit effectuer un **Stop-Point immédiat** et
 soumettre une demande d'autorisation explicite et argumentée à l'humain.
 
-### PILIER 2 : PROFILING CPU & GPU (OBSERVABILITÉ & PREUVE CHIFFRÉE)
+### PILIER 2 : PROFILING CPU & GPU (OBSERVABILITÉ, RENDERDOC & PREUVE CHIFFRÉE)
 1. **Politique d'Instrumentation (Code Source) :**
-  - **Macro-instrumentation :** Traçage des passes de rendu majeures et boucles structurelles globales via `gpu_profile_zone!` (spans Tracy + marqueurs GL `push_debug_group!`). Conservation définitive
-  dans le code sous la feature Cargo `tracy`.
+  - **Macro-instrumentation CPU/GPU :** Traçage des passes de rendu majeures et boucles structurelles globales via `gpu_profile_zone!` (spans Tracy + marqueurs GL `push_debug_group!` pour RenderDoc). Conservation définitive dans le code sous la feature Cargo `tracy`.
+  - **Naming Ressources GPU (RenderDoc Visibility) :** Tagging systématique de chaque buffer (VBO/VAO/FBO), Texture et Shader via `glObjectLabel` pour garantir l'observabilité dans le *Pipeline State Viewer* et l'*Event Browser* de RenderDoc.
   - **Micro-instrumentation :** Marqueurs temporaires dans les boucles chaudes par particule/sample. Nettoyage strict et obligatoire avant le Stop-Point pre-commit pour éviter la pollution des mesures.
-2. **Protocole de Preuve CLI A/B (Zero-Trust Performance) :**
-  - Aucune optimisation/refactoring de performance n'est accepté sans mesure comparative.
+2. **Protocole de Preuve CLI A/B (Zero-Trust Performance & RenderDoc) :**
+  - Aucune optimisation/refactoring de performance ou d'architecture GPU/particules n'est accepté sans mesure comparative.
   - **Isolation CPU (Anti-Bruit) :** L'exécution des outils de profilage DOIT être strictement synchrone/bloquante. Interdiction absolue de lancer ces outils en arrière-plan (background task) pendant que l'agent réfléchit ou manipule d'autres fichiers.
   - **Workflow A/B :**
-    1. Capture Baseline CLI sur `develop` (`task valgrind-callgrind`, `task asm-count-simd` ou `task heaptrack`).
+    1. Capture Baseline CLI sur `develop` (`task valgrind-callgrind`, `task asm-count-simd`, `task heaptrack` ou capture RenderDoc `renderdoccmd capture --wait-for-exit --num-frames 5 ./target/release/fireworks_sim`).
     2. Capture Target CLI sur la branche du fix.
-    3. Restitution obligatoire d'un diff textuel synthétique (% gain d'instructions, ratio d'instructions SIMD AVX2 vectorielles vs scalaires, réduction d'allocations mémoire) avant la demande de validation humaine.
+    3. Restitution obligatoire d'un diff textuel synthétique (% gain d'instructions, ratio d'instructions SIMD AVX2 vectorielles vs scalaires, réduction d'allocations mémoire, analyse des passes RenderDoc) avant la demande de validation humaine.
 
-### PILIER 3 : BENCHMARKING & PREUVE STATISTIQUE (PERF-TDD)
-1. **Workflow Bench-First (Perf-TDD) :**
+### PILIER 3 : BENCHMARKING, PREUVE STATISTIQUE & INVARIANT HOLISTIQUE (PERF-TDD)
+1. **Workflow Bench-First & Invariant Holistique (Perf-TDD & No Local Optimum Trap) :**
   - Interdiction formelle de modifier le code de production à des fins de performance sans métrique pré-existante.
+  - **Invariant de Performance Holistique :** Interdiction de valider un refactoring sur la seule base d'un micro-benchmark isolé s'il dégrade ou neutralise le benchmark macro global (`simulator_full_bench` / FPS final). Tout refactoring de structure mémoire (AoS/SoA) DOIT valider une amélioration nette du temps de frame complet (`simulator/frame_step_scaling`).
   - En cas d'absence de benchmark : Création préalable obligatoire d'un benchmark dans `benches/` sur `develop`.
   - Exigences de code : Utilisation stricte de `criterion::black_box` (anti-inlining) et `iter_batched` (isolation des allocations de setup).
-  - **Isolation CPU (Anti-Bruit) :** Tout comme le profilage, l'exécution de `cargo bench` DOIT monopoliser l'agent de manière synchrone. L'exécution en arrière-plan est strictement interdite pour ne pas polluer le cache L1/L2 et fausser la baseline de Criterion.
+  - **Isolation CPU (Anti-Bruit) :** Tout comme le profilage, l'exécution de `cargo bench` DOIT monopoliser l'agent de manière synchrone. L'exécution en arrière-plan est strictly interdite pour ne pas polluer le cache L1/L2 et fausser la baseline de Criterion.
   - Protocole A/B : Capture `--save-baseline legacy` sur `develop` $\rightarrow$ Implémentation sur branche isolée $\rightarrow$ Exécution comparative `--baseline legacy`.
 2. **Validation Statistique Strict (Zero-Trust) :**
   - Seul le rapport natif Criterion fait foi.
