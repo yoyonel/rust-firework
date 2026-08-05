@@ -62,6 +62,7 @@ jobs:
             libxrandr-dev libxinerama-dev libglu1-mesa-dev \
             libasound2-dev alsa-utils alsa-oss \
             pulseaudio pulseaudio-utils \
+            libdbus-1-dev \
             xvfb xauth pkg-config make git ca-certificates curl \
             ffmpeg xdotool
 
@@ -122,6 +123,28 @@ jobs:
       - name: RenderDoc GPU Capture & OpenGL Spec Validation
         run: |
           task renderdoc-capture
+
+      # --- Étape 9 : Tracy CLI Tools Setup & Ratio Benchmark (PR Review) ---
+      - name: Setup Tracy CLI Tools
+        if: github.event_name == 'pull_request'
+        run: |
+          ./scripts/setup_tracy_tools.sh ~/.local/bin
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          echo "TRACY_CAPTURE_BIN=$HOME/.local/bin/tracy-capture" >> $GITHUB_ENV
+          echo "TRACY_CSVEXPORT_BIN=$HOME/.local/bin/tracy-csvexport" >> $GITHUB_ENV
+
+      - name: Run Tracy Profile Ratio Benchmark
+        if: github.event_name == 'pull_request'
+        run: |
+          xvfb-run -a task bench-tracy-ratios
+
+      - name: Post Tracy Ratio Comment on PR
+        if: always() && github.event_name == 'pull_request' && hashFiles('/tmp/tracy_pr_comment.md') != ''
+        uses: mshick/add-pr-comment@v3
+        with:
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          message-id: tracy-ratio-benchmark
+          message-path: /tmp/tracy_pr_comment.md
 
       - name: SCCache stop server
         run: |
