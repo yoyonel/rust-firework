@@ -208,7 +208,11 @@ impl SmokeRenderer {
     ///
     /// # Safety
     /// L'appelant doit s'assurer que le contexte OpenGL est valide et que le buffer GPU est mappé.
-    pub unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize {
+    pub unsafe fn fill_particle_data_direct(
+        &mut self,
+        physic: &dyn PhysicEngineIterator,
+        _alpha: f32,
+    ) -> usize {
         if let Some(sync) = self.fences[self.current_frame] {
             gl::ClientWaitSync(sync, gl::SYNC_FLUSH_COMMANDS_BIT, 10_000_000_000);
             gl::DeleteSync(sync);
@@ -614,8 +618,12 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
         self.recreate_buffers(new_max);
     }
 
-    unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize {
-        self.fill_particle_data_direct(physic)
+    unsafe fn fill_particle_data_direct(
+        &mut self,
+        physic: &dyn PhysicEngineIterator,
+        alpha: f32,
+    ) -> usize {
+        self.fill_particle_data_direct(physic, alpha)
     }
 
     unsafe fn render_particles_with_persistent_buffer(

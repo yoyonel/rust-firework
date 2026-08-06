@@ -15,7 +15,11 @@ pub trait ParticleGraphicsRenderer {
     ///
     /// # Safety
     /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
-    unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize;
+    unsafe fn fill_particle_data_direct(
+        &mut self,
+        physic: &dyn PhysicEngineIterator,
+        alpha: f32,
+    ) -> usize;
 
     /// Dessine les particules à l'écran.
     ///

@@ -4,6 +4,11 @@ use gl::types::*;
 use log::info;
 
 impl BloomPass {
+    /// Returns the handle to the HDR scene FBO
+    pub fn hdr_fbo(&self) -> GLuint {
+        self.hdr_fbo
+    }
+
     /// Begins rendering to the HDR framebuffer
     ///
     /// # Safety
