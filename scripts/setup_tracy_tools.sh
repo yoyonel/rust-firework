@@ -9,7 +9,7 @@
 set -euo pipefail
 
 TARGET_DIR="${1:-$HOME/.local/bin}"
-TRACY_VERSION="v0.11.0"
+TRACY_VERSION="v0.13.0"
 
 mkdir -p "$TARGET_DIR"
 

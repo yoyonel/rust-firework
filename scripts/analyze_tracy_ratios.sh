@@ -12,7 +12,7 @@
 set -euo pipefail
 
 TRACY_FILE="${1:-/tmp/fireworks.tracy}"
-BASELINE_FILE="${2:-benches/baselines/tracy_ratios_develop.csv}"
+BASELINE_INPUT="${2:-benches/baselines/tracy_ratios_develop.csv}"
 MODE="${3:-compare}" # "compare" ou "generate"
 MARKDOWN_OUTPUT="${4:-/tmp/tracy_pr_comment.md}"
 
@@ -20,19 +20,52 @@ MARKDOWN_OUTPUT="${4:-/tmp/tracy_pr_comment.md}"
 DRIFT_ABS_THRESHOLD="6.0"   # Max +/- 6.0% de derive sur la part relatif de la pass/frame
 RATIO_REL_THRESHOLD="1.25"  # Max 25% d'augmentation relative sur les ratios inter-zones
 
+# Détection dynamique du GPU/Driver GL pour sélection baseline multi-hardware
+RAW_GPU="${GL_RENDERER_DEVICE:-$(glxinfo 2>/dev/null | grep -i "OpenGL renderer string" | cut -d':' -f2 | xargs || echo "llvmpipe_mesa")}"
+RAW_VENDOR="${GL_VENDOR:-$(glxinfo 2>/dev/null | grep -i "OpenGL vendor string" | cut -d':' -f2 | xargs || echo "Mesa_Mesa")}"
+
+# Normalisation slug du GPU (ex: "nvidia_geforce_rtx_3080" ou "llvmpipe_mesa")
+GPU_SLUG=$(echo "$RAW_GPU" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '_' | sed 's/__*/_/g' | sed 's/^_//;s/_$//')
+if [ -z "$GPU_SLUG" ]; then
+    GPU_SLUG="llvmpipe_mesa"
+fi
+
+if [ -d "$BASELINE_INPUT" ]; then
+    BASE_DIR="$BASELINE_INPUT"
+else
+    BASE_DIR="$(dirname "$BASELINE_INPUT")"
+fi
+
+GPU_BASELINE_FILE="${BASE_DIR}/tracy_ratios_${GPU_SLUG}.csv"
+
+if [ "$MODE" = "compare" ]; then
+    if [ -f "$GPU_BASELINE_FILE" ]; then
+        BASELINE_FILE="$GPU_BASELINE_FILE"
+        echo "🎮 Baseline dédiée GPU trouvée ($RAW_GPU) : $BASELINE_FILE"
+    elif [ -f "$BASELINE_INPUT" ] && [ ! -d "$BASELINE_INPUT" ]; then
+        BASELINE_FILE="$BASELINE_INPUT"
+        echo "⚠️ Baseline spécifique GPU ($GPU_SLUG) non trouvée. Utilisation baseline fallback : $BASELINE_FILE"
+    else
+        BASELINE_FILE="$GPU_BASELINE_FILE"
+    fi
+else
+    # MODE generate : enregistrer spécifiquement pour le GPU courant
+    BASELINE_FILE="$GPU_BASELINE_FILE"
+fi
+
 TRACY_CSVEXPORT="${TRACY_CSVEXPORT_BIN:-${HOME}/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport}"
 
 if [ ! -f "$TRACY_FILE" ]; then
-    echo "⚠️ Warning: Fichier de trace Tracy introuvable sur : $TRACY_FILE" >&2
-    echo "Analyse des ratios Tracy ignorée pour cette exécution." >&2
+    echo "❌ Erreur: Fichier de trace Tracy introuvable sur : $TRACY_FILE" >&2
+    echo "L'enregistrement de la trace Tracy a échoué." >&2
     mkdir -p "$(dirname "$MARKDOWN_OUTPUT")"
     cat <<EOF > "$MARKDOWN_OUTPUT"
 ## 📊 Tracy Profiler Ratio Benchmark Report
 
-> [!WARNING]
-> **Status:** ⚠️ **NO TRACE GENERATED** — Trace file \`$TRACY_FILE\` was not produced during headless capture. Benchmark skipped.
+> [!CAUTION]
+> **Status:** ❌ **TRACE CAPTURE FAILED** — Trace file \`$TRACY_FILE\` was not produced during headless capture.
 EOF
-    exit 0
+    exit 1
 fi
 
 if [ ! -f "$TRACY_CSVEXPORT" ]; then
@@ -121,6 +154,8 @@ eval "$METRICS"
 if [ "$MODE" = "generate" ]; then
     mkdir -p "$(dirname "$BASELINE_FILE")"
     cat <<EOF > "$BASELINE_FILE"
+# gl_vendor: ${RAW_VENDOR}
+# gl_renderer: ${RAW_GPU}
 metric,value
 perc_physics,${perc_physics}
 perc_renderer,${perc_renderer}

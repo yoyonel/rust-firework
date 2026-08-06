@@ -79,4 +79,4 @@ runs:
         path: |
           ~/.local/bin/tracy-capture
           ~/.local/bin/tracy-csvexport
-        key: ${{ runner.os }}-tracy-tools-v0.11.0
+        key: ${{ runner.os }}-tracy-tools-v0.13.0-rev5
