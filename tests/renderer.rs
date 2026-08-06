@@ -24,7 +24,7 @@ fn test_renderer_render_frame() -> Result<(), Box<dyn std::error::Error>> {
 
     eprintln!("🔍 Step 4: Rendering frame");
     // 3. Render a frame
-    let particles_count = renderer.render_frame(&physic);
+    let particles_count = renderer.render_frame(&physic, 0.0);
     eprintln!("✅ Frame rendered, particles: {}", particles_count);
 
     // Check something?

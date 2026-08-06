@@ -28,7 +28,7 @@ fn test_renderer_step_frame() -> Result<(), Box<dyn std::error::Error>> {
     renderer.recreate_buffers(1000);
 
     // ✅ On appelle render_frame directement pour couvrir tout
-    renderer.render_frame(&physic);
+    renderer.render_frame(&physic, 0.0);
 
     // Vérifie qu'on peut fermer correctement
     renderer.close();

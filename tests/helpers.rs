@@ -241,7 +241,7 @@ impl Default for DummyRenderer {
 
 #[allow(dead_code)]
 impl RendererEngine for DummyRenderer {
-    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P) -> usize {
+    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P, _alpha: f32) -> usize {
         0
     }
     fn set_window_size(&mut self, _width: i32, _height: i32) {}
@@ -474,7 +474,7 @@ impl TestRenderer {
 }
 
 impl RendererEngine for TestRenderer {
-    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P) -> usize {
+    fn render_frame<P: PhysicEngineIterator>(&mut self, _physic: &P, _alpha: f32) -> usize {
         self.log.borrow_mut().push("renderer.render_frame".into());
         if self.fail_on_run_loop {
             panic!("RendererEngine simulated failure");
@@ -507,3 +507,42 @@ impl RendererEngine for TestRenderer {
 // We can alias them or reimplement them if we want to avoid breaking changes immediately,
 // but since we are refactoring, we will encourage using Test* structs.
 // For now, I'll remove the old Logging* structs to force migration and cleanliness.
+
+#[allow(dead_code)]
+pub fn capture_framebuffer_fbo(
+    fbo: gl::types::GLuint,
+    width: u32,
+    height: u32,
+) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> {
+    let mut pixels = vec![0u8; (width * height * 4) as usize];
+    unsafe {
+        gl::BindFramebuffer(gl::FRAMEBUFFER, fbo);
+        gl::ReadPixels(
+            0,
+            0,
+            width as i32,
+            height as i32,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            pixels.as_mut_ptr() as *mut _,
+        );
+        gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+    }
+
+    let mut img: image::ImageBuffer<image::Rgba<u8>, Vec<u8>> =
+        image::ImageBuffer::new(width, height);
+    for y in 0..height {
+        let gl_y = (height - 1 - y) as usize;
+        for x in 0..width {
+            let idx = (gl_y * width as usize + x as usize) * 4;
+            let pixel = image::Rgba([
+                pixels[idx],
+                pixels[idx + 1],
+                pixels[idx + 2],
+                pixels[idx + 3],
+            ]);
+            img.put_pixel(x, y, pixel);
+        }
+    }
+    img
+}

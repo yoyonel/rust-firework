@@ -120,3 +120,61 @@ fn test_call_order_in_simulator_run_and_close() {
         ]
     );
 }
+
+#[test]
+#[serial]
+fn test_fixed_timestep_substepping_execution() {
+    let log = Rc::new(RefCell::new(vec![]));
+    let renderer = DummyRenderer::default();
+    let audio = DummyAudio;
+    let physic = TestPhysic::new(log.clone());
+    let window_engine = DummyWindowEngine::default();
+
+    let mut sim = Simulator::new(renderer, physic, audio, window_engine);
+    sim.dt_accumulator = 0.0;
+    let initial_count = log.borrow().len();
+
+    // 1. Sub-threshold dt: 4ms (< 8.33ms) -> no new physics update
+    sim.step_custom_dt(0.004);
+    assert_eq!(log.borrow().len(), initial_count);
+
+    // 2. Accumulation reaches 9ms (> 8.33ms) -> exactly 1 new physics update
+    sim.step_custom_dt(0.005);
+    let update_count = log
+        .borrow()
+        .iter()
+        .skip(initial_count)
+        .filter(|s| *s == "physic.update")
+        .count();
+    assert_eq!(update_count, 1);
+
+    sim.close();
+}
+
+#[test]
+#[serial]
+fn test_fixed_timestep_spiral_of_death_clamp() {
+    let log = Rc::new(RefCell::new(vec![]));
+    let renderer = DummyRenderer::default();
+    let audio = DummyAudio;
+    let physic = TestPhysic::new(log.clone());
+    let window_engine = DummyWindowEngine::default();
+
+    let mut sim = Simulator::new(renderer, physic, audio, window_engine);
+    sim.dt_accumulator = 0.0;
+    let initial_count = log.borrow().len();
+
+    // Massive lag spike (1.0 sec) -> clamped to MAX_SUB_STEPS (4)
+    sim.step_custom_dt(1.0);
+
+    let update_count = log
+        .borrow()
+        .iter()
+        .skip(initial_count)
+        .filter(|s| *s == "physic.update")
+        .count();
+    assert_eq!(update_count, 4);
+    assert_eq!(sim.dt_accumulator, 0.0);
+
+    sim.close();
+}
