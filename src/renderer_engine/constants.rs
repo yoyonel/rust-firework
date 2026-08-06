@@ -56,6 +56,9 @@ pub const DEFAULT_BLOOM_BLUR_METHOD: BlurMethod = BlurMethod::Gaussian;
 /// - **System influence:** Modulates color contrast, highlight compression, and overall visual mood.
 pub const DEFAULT_TONE_MAPPING_MODE: ToneMappingMode = ToneMappingMode::KhronosPBR;
 
+/// Minimum float threshold epsilon to skip tiny render state position interpolation offsets.
+pub const RENDER_INTERPOLATION_EPSILON: f32 = 0.00001;
+
 /// Default camera vertical field of view (FOV).
 ///
 /// - **Unit:** degrees

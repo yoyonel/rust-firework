@@ -82,6 +82,8 @@ where
     window_last_size: (i32, i32),
 
     // Loop state
+    pub dt_accumulator: f32,
+    pub render_alpha: f32,
     profiler: Profiler,
     sampler: AdaptiveSampler,
     sampled_fps: Vec<f32>,
@@ -136,6 +138,12 @@ where
     pub audio_event_renderer: Option<crate::renderer_engine::AudioEventRenderer>,
     pub audio_event_pool: Vec<crate::renderer_engine::AudioEvent>,
     pub show_audio_visual_overlay: bool,
+
+    // Scratch persistent buffers for multi-substep event accumulation (0 heap allocs in update_simulation)
+    accumulated_new_rocket_ids: Vec<u64>,
+    accumulated_exploded_ids: Vec<u64>,
+    accumulated_anticipated_launches: Vec<(u64, glam::Vec2)>,
+    accumulated_anticipated_explosions: Vec<(u64, glam::Vec2)>,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -153,6 +161,7 @@ where
             crate::simulator::gui_settings::GuiSessionState::load_from_file(&session_path);
 
         let renderer_path = crate::utils::config_path::get_renderer_config_path();
+        let event_cap = crate::physic_engine::constants::INITIAL_EVENT_BUFFER_CAPACITY;
         let mut sim = Self {
             renderer_engine,
             physic_engine,
@@ -174,6 +183,8 @@ where
             window_size_f32: (window_size.0 as f32, window_size.1 as f32),
             window_last_pos: window_pos,
             window_last_size: window_size,
+            dt_accumulator: crate::physic_engine::constants::FIXED_TIMESTEP_DELTA,
+            render_alpha: 0.0,
             profiler: Profiler::new(200),
             sampler: AdaptiveSampler::new(std::time::Duration::from_secs(5), 200, 60.0),
             sampled_fps: Vec::with_capacity(200),
@@ -218,6 +229,10 @@ where
             audio_event_renderer: None,
             audio_event_pool: Vec::with_capacity(32),
             show_audio_visual_overlay: true,
+            accumulated_new_rocket_ids: Vec::with_capacity(event_cap),
+            accumulated_exploded_ids: Vec::with_capacity(event_cap),
+            accumulated_anticipated_launches: Vec::with_capacity(event_cap),
+            accumulated_anticipated_explosions: Vec::with_capacity(event_cap),
         };
 
         sim.gui_settings.apply_session_to_audio(
@@ -376,49 +391,104 @@ where
             );
             return;
         }
-        let update_result = self
-            .profiler
-            .profile_block("physic - update", || self.physic_engine.update(delta));
 
-        // Extraction des données de update_result pour libérer les borrows sur self.physic_engine
-        let new_rocket_id = update_result.new_rocket.as_ref().map(|r| r.id);
+        // Clamp large frame deltas to avoid spiral of death / sudden accumulator surge
+        let clamped_delta = delta.min(crate::physic_engine::constants::MAX_ACCUMULATOR_DELTA_CLAMP);
+        self.dt_accumulator += clamped_delta;
+
+        let fixed_dt = crate::physic_engine::constants::FIXED_TIMESTEP_DELTA;
+        let max_sub_steps = crate::physic_engine::constants::MAX_SUB_STEPS;
+
+        self.accumulated_new_rocket_ids.clear();
+        self.accumulated_exploded_ids.clear();
+        self.accumulated_anticipated_launches.clear();
+        self.accumulated_anticipated_explosions.clear();
+
+        let mut sub_steps = 0;
+        let mut ran_any_substep = false;
+
+        while self.dt_accumulator >= fixed_dt && sub_steps < max_sub_steps {
+            let update_result = self
+                .profiler
+                .profile_block("physic - update", || self.physic_engine.update(fixed_dt));
+
+            if let Some(r) = &update_result.new_rocket {
+                if !self.accumulated_new_rocket_ids.contains(&r.id) {
+                    self.accumulated_new_rocket_ids.push(r.id);
+                }
+            }
+            for &id in update_result.triggered_explosion_ids {
+                if !self.accumulated_exploded_ids.contains(&id) {
+                    self.accumulated_exploded_ids.push(id);
+                }
+            }
+            if let Some(launch) = update_result.anticipated_rocket_launch {
+                if !self
+                    .accumulated_anticipated_launches
+                    .iter()
+                    .any(|&(id, _)| id == launch.0)
+                {
+                    self.accumulated_anticipated_launches.push(launch);
+                }
+            }
+            for &item in update_result.anticipated_explosions {
+                if !self
+                    .accumulated_anticipated_explosions
+                    .iter()
+                    .any(|&(id, _)| id == item.0)
+                {
+                    self.accumulated_anticipated_explosions.push(item);
+                }
+            }
+
+            self.dt_accumulator -= fixed_dt;
+            sub_steps += 1;
+            ran_any_substep = true;
+        }
+
+        // Clamp safety guard against spiral of death
+        if sub_steps >= max_sub_steps {
+            self.dt_accumulator = 0.0;
+        }
+
+        self.render_alpha = (self.dt_accumulator / fixed_dt).clamp(0.0, 1.0);
+
+        if !ran_any_substep {
+            return;
+        }
+
+        // Copy event IDs to stack buffers (max 16 IDs) to release immutable borrow on self
+        let mut new_ids_buf = [0u64; 16];
+        let new_count = self.accumulated_new_rocket_ids.len().min(16);
+        new_ids_buf[..new_count].copy_from_slice(&self.accumulated_new_rocket_ids[..new_count]);
 
         let mut exploded_ids_buf = [0u64; 16];
-        let exploded_count = update_result.triggered_explosion_ids.len().min(16);
+        let exploded_count = self.accumulated_exploded_ids.len().min(16);
         exploded_ids_buf[..exploded_count]
-            .copy_from_slice(&update_result.triggered_explosion_ids[..exploded_count]);
-        let exploded_ids = &exploded_ids_buf[..exploded_count];
+            .copy_from_slice(&self.accumulated_exploded_ids[..exploded_count]);
 
-        let anticipated_rocket_launch = update_result.anticipated_rocket_launch;
-
-        let mut anticipated_explosions_buf = [(0u64, glam::Vec2::ZERO); 16];
-        let anticipated_count = update_result.anticipated_explosions.len().min(16);
-        anticipated_explosions_buf[..anticipated_count]
-            .copy_from_slice(&update_result.anticipated_explosions[..anticipated_count]);
-        let anticipated_explosions = &anticipated_explosions_buf[..anticipated_count];
-
-        // On a extrait toutes les valeurs nécessaires, on n'a plus besoin d'utiliser update_result
-        let _has_new_rocket = update_result.new_rocket.is_some();
-
-        // Maintenant, self n'est plus emprunté et on peut appeler des méthodes prenant &mut self
-        self.track_physical_events(new_rocket_id, exploded_ids);
+        // Dispatch events to tracking and audio engine
+        self.track_physical_events(
+            &new_ids_buf[..new_count],
+            &exploded_ids_buf[..exploded_count],
+        );
         Self::synch_audio_with_physic_extracted(
             &mut self.audio_engine,
-            anticipated_rocket_launch,
-            anticipated_explosions,
+            &self.accumulated_anticipated_launches[..],
+            &self.accumulated_anticipated_explosions[..],
         );
 
         // NOUVEAU: Alimenter le pool d'indicateurs visuels audio (mode debug F3)
         if self.show_audio_diagnostic && self.show_audio_visual_overlay {
             // Injection des évènements anticipés dans le pool d'animation
-            if let Some((_id, pos)) = anticipated_rocket_launch {
+            for &(_id, pos) in &self.accumulated_anticipated_launches {
                 self.audio_event_pool
                     .push(crate::renderer_engine::AudioEvent::new(
                         pos,
                         crate::renderer_engine::AudioEventKind::Launch,
                     ));
             }
-            for &(_id, pos) in anticipated_explosions {
+            for &(_id, pos) in &self.accumulated_anticipated_explosions {
                 self.audio_event_pool
                     .push(crate::renderer_engine::AudioEvent::new(
                         pos,
@@ -444,7 +514,11 @@ where
         tracy_zone_with_value!(
             "physics::update",
             0xAA00FF, // Violet
-            if _has_new_rocket { 1 } else { 0 }
+            if !self.accumulated_new_rocket_ids.is_empty() {
+                1
+            } else {
+                0
+            }
         );
     }
 
@@ -482,15 +556,11 @@ where
         }
     }
 
-    fn track_physical_events(
-        &mut self,
-        new_rocket_id: Option<u64>,
-        triggered_explosion_ids: &[u64],
-    ) {
+    fn track_physical_events(&mut self, new_rocket_ids: &[u64], triggered_explosion_ids: &[u64]) {
         let now = std::time::Instant::now();
 
         // 1. Lancement physique/visuel
-        if let Some(id) = new_rocket_id {
+        for &id in new_rocket_ids {
             if let Some(audio_start) = self.audio_start_launch_times.remove(&id) {
                 let diff_ms = if audio_start >= now {
                     audio_start.duration_since(now).as_secs_f32() * 1000.0
@@ -529,7 +599,9 @@ where
     }
 
     fn render_frame(&mut self) {
-        let particles_drawn = self.renderer_engine.render_frame(&self.physic_engine);
+        let particles_drawn = self
+            .renderer_engine
+            .render_frame(&self.physic_engine, self.render_alpha);
         self.profiler
             .record_metric("total particles drawn", particles_drawn);
 
@@ -636,10 +708,10 @@ where
 
     fn synch_audio_with_physic_extracted(
         audio_engine: &mut A,
-        anticipated_rocket_launch: Option<(u64, glam::Vec2)>,
+        anticipated_rocket_launches: &[(u64, glam::Vec2)],
         anticipated_explosions: &[(u64, glam::Vec2)],
     ) {
-        if let Some((id, pos)) = anticipated_rocket_launch {
+        for &(id, pos) in anticipated_rocket_launches {
             debug!(
                 "🚀 [Anticipated] Rocket launch audio triggered for ID {} at ({}, {})",
                 id, pos.x, pos.y
@@ -695,9 +767,22 @@ where
         self.process_audio_debug_events();
     }
 
+    /// Helper pour avancer la simulation ET le rendu GPU d'un pas de temps fixe (uniquement pour les tests d'intégration visuels)
+    pub fn step_full_frame_with_dt(&mut self, dt: f32) {
+        self.update_simulation(dt);
+        self.render_frame();
+        self.finalize_frame();
+    }
+
     /// Helper pour obtenir la configuration physique actuelle (uniquement pour les tests)
     pub fn get_physic_config(&self) -> &PhysicConfig {
         self.physic_engine.get_config()
+    }
+
+    /// Helper pour obtenir le renderer (réservé exclusivement aux tests d'intégration visuels)
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_renderer_engine(&self) -> &R {
+        &self.renderer_engine
     }
 
     /// Helper pour obtenir les moyennes de synchronisation de debug (uniquement pour les tests)
