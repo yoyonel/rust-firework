@@ -1,0 +1,13 @@
+# gl_vendor: Intel
+# gl_renderer: Mesa Intel(R) Iris(R) Xe Graphics (RPL-U)
+metric,value
+perc_physics,5.1539
+perc_renderer,94.7090
+perc_ui,0.1371
+perc_hdr,80.5709
+perc_bloom,18.4325
+perc_particles,78.5101
+perc_audio_doppler,1.5615
+r_phys_rend,0.0544
+r_bloom_hdr,0.2288
+r_doppler_audio,0.0156

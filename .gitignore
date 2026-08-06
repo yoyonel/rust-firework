@@ -282,3 +282,7 @@ assets/config/*.toml
 # Local downloaded binary tools (e.g. Vale)
 /bin/
 
+# Temporary visual test output candidates
+tests/visual_baselines/candidates/
+
+

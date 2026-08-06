@@ -1,0 +1,13 @@
+# gl_vendor: Mesa
+# gl_renderer: llvmpipe_mesa
+metric,value
+perc_physics,0.4805
+perc_renderer,99.5152
+perc_ui,0.0042
+perc_hdr,11.0382
+perc_bloom,89.6945
+perc_particles,10.9547
+perc_audio_doppler,2.5502
+r_phys_rend,0.0048
+r_bloom_hdr,8.1258
+r_doppler_audio,0.0255
