@@ -16,6 +16,7 @@ vars:
   DOC_TEMPLATES_DIR: 'doc/ai_skills'
   VALE_BIN:
     sh: 'if command -v vale >/dev/null 2>&1; then echo "vale"; else echo "./bin/vale"; fi'
+  RUN_GL: "./scripts/run_gl_smart.sh"
   RUFF:
     sh: 'if command -v ruff >/dev/null 2>&1; then echo "ruff"; elif command -v uvx >/dev/null 2>&1; then echo "uvx ruff"; elif command -v uv >/dev/null 2>&1; then echo "uv run ruff"; else echo ""; fi'
 
@@ -271,6 +272,12 @@ tasks:
       - echo "📹 Lancement du test de non-régression visuelle 120-frames..."
       - "{{.XVFB}} ./scripts/run_visual_regression_full.sh"
 
+  test-fix01-visual:
+    desc: "Exécute le test E2E de régression visuelle FIX-01 (GPU local / Mesa software en CI)"
+    cmds:
+      - echo "🎥 Test E2E régression visuelle & journalisation CSV (FIX-01)..."
+      - '{{.RUN_GL}} ${CARGO_TEST_CMD:-cargo test} --features interactive_tests --test visual_regression_fix_01_erratic_vs_golden_test -- --nocapture'
+
   visual-baselines-generate:
     desc: "Génère l'ensemble du jeu de baselines vidéo & images clés candidates pour validation humaine"
     deps: [build-release]
@@ -516,22 +523,22 @@ tasks:
 
   capture-tracy-headless:
     desc: "Exécute le simulateur en tâche de fond et capture une trace Tracy de 5s"
-    env:
-      RUSTFLAGS: "-C target-cpu=native"
     cmds:
       - echo "🔨 Compilation du binaire de profiling..."
-      - "{{.CARGO}} build --features tracy --profile profiling"
+      - "{{.CARGO}} build --features tracy --release"
       - echo "🚀 Lancement du simulateur en tâche de fond et capture Tracy (5s)..."
       - |
         bash -c '
-          vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./target/profiling/fireworks_sim > /tmp/sim.log 2>&1 &
+          vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim > /tmp/sim.log 2>&1 &
           SIM_PID=$!
           sleep 2
           echo "📊 Lancement de la capture Tracy (5s)..."
           TRACY_CAP="${TRACY_CAPTURE_BIN:-{{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture}"
           "$TRACY_CAP" -f -o /tmp/fireworks.tracy -s 5
           echo "🧹 Arrêt du simulateur..."
-          kill $SIM_PID
+          kill $SIM_PID 2>/dev/null || true
+          sleep 0.2
+          kill -9 $SIM_PID 2>/dev/null || true
           wait $SIM_PID 2>/dev/null || true
         '
 
