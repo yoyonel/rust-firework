@@ -1,7 +1,7 @@
 # 📂 MANIFESTE TECHNIQUE & CADRE COMPORTEMENTAL DU SYSTEM PROMPT V2
 # MOTEUR DE SIMULATION RUST (FIREWORKS SIMULATOR)
 
-Ce manifeste constitue le cadre comportemental absolu, universel et immuable ("DNA Agent") régissant toutes les interventions de l'agent IA. L'agent agit sous une méthodologie **Zero-Trust** et applique rigoureusement les directives architecturales, les 7 Règles d'Or et les 6 Piliers d'Ingénierie de Précision.
+Ce manifeste constitue le cadre comportemental absolu, universel et immuable ("DNA Agent") régissant toutes les interventions de l'agent IA. L'agent agit sous une méthodologie **Zero-Trust** et applique rigoureusement les directives architecturales, les 7 Règles d'Or et les 7 Piliers d'Ingénierie de Précision.
 
 ---
 
@@ -69,6 +69,8 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
     1. Capture Baseline CLI sur `develop` (`task valgrind-callgrind`, `task asm-count-simd`, `task heaptrack` ou capture RenderDoc `task renderdoc-capture`).
     2. Capture Target CLI sur la branche du fix.
     3. Restitution obligatoire d'un diff textuel synthétique (% gain d'instructions, ratio d'instructions SIMD AVX2 vectorielles vs scalaires, réduction d'allocations mémoire, analyse des passes RenderDoc) avant la demande de validation humaine.
+3. **Multi-Hardware & Dual-Baseline Tracy Benchmarking :**
+  - **Isolation Hardware / Software :** `scripts/analyze_tracy_ratios.sh` dérive dynamiquement la baseline de profilage d'après le processeur graphique actif (`GL_RENDERER_DEVICE`), garantissant que les baselines de rendu logiciel Mesa Headless en CI (`tracy_ratios_llvmpipe_mesa.csv`) et les GPU matériels locaux (`tracy_ratios_<gpu_slug>.csv`) ne polluent ni n'invalident mutuellement leurs métriques de répartition.
 
 ### PILIER 3 : BENCHMARKING, PREUVE STATISTIQUE & INVARIANT HOLISTIQUE (PERF-TDD)
 1. **Workflow Bench-First & Invariant Holistique (Perf-TDD & No Local Optimum Trap) :**
@@ -127,6 +129,13 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
 5. **Parité ISO Local/CI & Débogage Local Obligatoire (Local-First Zero-Speculation) :**
   - **Zéro Push Spéculatif :** Interdiction formelle de pousser des commits d'essais-erreurs sur le dépôt distant. En cas d'échec CI, la reproduction et la correction DOIVENT être intégralement validées en local au préalable.
   - **Outillage Local ISO Parfait :** Les tâches `Taskfile.yml` et scripts doivent garantir une parité à 100 % avec les runners distants (gestion dynamique de `$DISPLAY`, subshells non-interactifs, ciblage strict par ID de fenêtre X11 et suppression sans résidu des processus applicatifs).
+
+### PILIER 7 : INVIOLABILITÉ ET IMMUTABILITÉ DES RESSOURCES GOLDEN / RÉFÉRENCES (ZERO-MUTATION)
+1. **Interdiction Formelle et Absolue d'Altération :**
+  - Interdiction absolue d'altérer, écraser, régénérer ou supprimer toute ressource visuelle, audio ou de référence validée (fichiers images `.png`, vidéos `.mp4`, sons `.wav` dans `tests/visual_baselines/` ou `tests/goldens/`) sans d'abord soumettre une demande explicite et d'obtenir l'accord explicite et l'autorisation de l'humain.
+2. **Isolation Strict des Artéfacts Candidats :**
+  - Tous les tests de régression, stress-tests et générations intermédiaires DOIVENT exclusivement créer leurs fichiers dans le dossier temporaire `tests/visual_baselines/candidates/`.
+  - Une ressource de référence (Golden) validée par l'humain est totalement immuable.
 
 ---
 
