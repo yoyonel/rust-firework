@@ -438,7 +438,7 @@ tasks:
         if ! command -v vale &>/dev/null && [ ! -f bin/vale ]; then
           echo "📥 Téléchargement de Vale CLI..."
           mkdir -p bin
-          wget -qO- https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz | tar -xzC bin vale
+          curl -sSL https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz | tar -xzC bin vale
           echo "✅ Vale CLI installé dans ./bin/vale"
         fi
     status:
@@ -533,7 +533,7 @@ tasks:
           SIM_PID=$!
           sleep 2
           echo "📊 Lancement de la capture Tracy (5s)..."
-          TRACY_CAP="${TRACY_CAPTURE_BIN:-{{.HOME}}/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture}"
+          TRACY_CAP="${TRACY_CAPTURE_BIN:-$(command -v tracy-capture 2>/dev/null || echo /usr/local/bin/tracy-capture)}"
           "$TRACY_CAP" -f -o /tmp/fireworks.tracy -s 5
           echo "🧹 Arrêt du simulateur..."
           kill $SIM_PID 2>/dev/null || true
@@ -662,3 +662,67 @@ tasks:
         fi
       - echo ""
     silent: true
+
+  # =========================================
+  # 🐳 DEVOPS & LOCAL ISO CONTAINER RUNNER
+  # =========================================
+  devops:build-image:
+    desc: "Builds the Golden CI Docker Image locally using Docker or Podman"
+    vars:
+      IMAGE_NAME: 'ghcr.io/yoyonel/rust-firework-ci:latest'
+    cmds:
+      - |
+        RUNTIME=$(command -v podman || command -v docker)
+        if [ -z "$RUNTIME" ]; then
+          echo "❌ Neither podman nor docker found on host system."
+          exit 1
+        fi
+        echo "🔨 Building Golden Image with $RUNTIME ($IMAGE_NAME)..."
+        $RUNTIME build -t "{{.IMAGE_NAME}}" -f .github/docker/Dockerfile.ci .
+
+  devops:run:
+    desc: "Executes a Task command inside the ISO Golden Container (Usage: task devops:run -- task lint)"
+    vars:
+      IMAGE_NAME: 'ghcr.io/yoyonel/rust-firework-ci:latest'
+      CMD: '{{.CLI_ARGS | default "task test-opengl-mesa"}}'
+    cmds:
+      - |
+        if command -v podman >/dev/null 2>&1; then
+          RUNTIME="podman"
+          USER_FLAGS="--user 0:0"
+        elif command -v docker >/dev/null 2>&1; then
+          RUNTIME="docker"
+          USER_FLAGS="--user $(id -u):$(id -g)"
+        else
+          echo "❌ Neither podman nor docker found."
+          exit 1
+        fi
+        DRI_FLAGS=""
+        if [ -e /dev/dri ]; then
+          DRI_FLAGS="--device /dev/dri:/dev/dri:rw"
+        fi
+        mkdir -p "${HOME}/.cargo/registry" "${HOME}/.cargo/git" "${HOME}/.cache/sccache"
+        echo "🐳 Running in Golden Image ($RUNTIME): {{.CMD}}"
+        $RUNTIME run --rm \
+          $USER_FLAGS \
+          $DRI_FLAGS \
+          -e DISPLAY="${DISPLAY:-:99}" \
+          -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+          -v "${HOME}/.cargo/registry:/usr/local/cargo/registry:rw" \
+          -v "${HOME}/.cargo/git:/usr/local/cargo/git:rw" \
+          -v "${HOME}/.cache/sccache:/tmp/sccache_cache:rw" \
+          -v "$PWD:/workspace:rw" \
+          -w /workspace \
+          "{{.IMAGE_NAME}}" \
+          {{.CMD}}
+
+  devops:shell:
+    desc: "Spawns an interactive bash shell inside the ISO Golden Container for local debugging"
+    vars:
+      IMAGE_NAME: 'ghcr.io/yoyonel/rust-firework-ci:latest'
+    cmds:
+      - task: devops:run
+        vars:
+          CLI_ARGS: "bash"
+
+
