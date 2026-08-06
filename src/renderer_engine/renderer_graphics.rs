@@ -193,7 +193,11 @@ impl RendererGraphics {
     /// # Safety
     /// This function is unsafe because it directly manipulates GPU resources.
     /// The caller must ensure that the OpenGL context is valid.
-    pub unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize {
+    pub unsafe fn fill_particle_data_direct(
+        &mut self,
+        physic: &dyn PhysicEngineIterator,
+        alpha: f32,
+    ) -> usize {
         // Synchroniser : Attendre que le GPU ait fini de lire cette section
         if let Some(sync) = self.fences[self.current_frame] {
             gl::ClientWaitSync(sync, gl::SYNC_FLUSH_COMMANDS_BIT, 10_000_000_000); // 10s
@@ -208,6 +212,7 @@ impl RendererGraphics {
         let gpu_slice =
             std::slice::from_raw_parts_mut(self.mapped_ptr.add(offset), self.max_particles_on_gpu);
 
+        let factor = (1.0 - alpha) * crate::physic_engine::constants::FIXED_TIMESTEP_DELTA;
         let all_visible = self.render_trails && self.render_explosions;
         physic.for_each_active_particle(&mut |p| {
             let visible = if all_visible {
@@ -224,6 +229,12 @@ impl RendererGraphics {
                 let src_ptr =
                     p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
                 let mut gpu_p = *src_ptr;
+
+                if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
+                    gpu_p.pos_x -= p.vel.x * factor;
+                    gpu_p.pos_y -= p.vel.y * factor;
+                }
+
                 // Assigne la luminosité calculée (x^4 via multiplication rapide sans libm powi)
                 let l = p.life / p.max_life.max(0.0001);
                 let l2 = l * l;
@@ -382,8 +393,12 @@ impl ParticleGraphicsRenderer for RendererGraphics {
         self.recreate_buffers(new_max);
     }
 
-    unsafe fn fill_particle_data_direct(&mut self, physic: &dyn PhysicEngineIterator) -> usize {
-        self.fill_particle_data_direct(physic)
+    unsafe fn fill_particle_data_direct(
+        &mut self,
+        physic: &dyn PhysicEngineIterator,
+        alpha: f32,
+    ) -> usize {
+        self.fill_particle_data_direct(physic, alpha)
     }
 
     unsafe fn render_particles_with_persistent_buffer(

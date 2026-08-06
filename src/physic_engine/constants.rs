@@ -11,6 +11,21 @@
 /// - **System influence:** Determines memory footprint for rockets and particle pool arrays.
 pub const DEFAULT_MAX_ROCKETS: usize = 1024;
 
+/// Target physics simulation frequency in Hertz (Hz).
+pub const FIXED_TIMESTEP_HZ: f32 = 120.0;
+
+/// Fixed physics time step delta per sub-step in seconds (1/120s ≈ 8.33ms).
+pub const FIXED_TIMESTEP_DELTA: f32 = 1.0 / FIXED_TIMESTEP_HZ;
+
+/// Maximum number of physics sub-steps allowed per frame to prevent the spiral of death.
+pub const MAX_SUB_STEPS: usize = 4;
+
+/// Maximum frame delta allowed in the physics accumulator clamp (0.25s / 250ms).
+pub const MAX_ACCUMULATOR_DELTA_CLAMP: f32 = 0.25;
+
+/// Initial capacity preallocated for frame physics event buffers (explosions, launches).
+pub const INITIAL_EVENT_BUFFER_CAPACITY: usize = 16;
+
 /// Default number of explosion particles spawned per rocket explosion.
 ///
 /// - **Unit:** count (particles)

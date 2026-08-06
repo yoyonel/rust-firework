@@ -152,6 +152,7 @@ impl Renderer {
         profiler: &std::sync::Arc<
             std::sync::Mutex<crate::renderer_engine::utils::gpu_profiler::GpuProfiler>,
         >,
+        alpha: f32,
     ) -> usize {
         // 🟢 RAII unifié (GPU + CPU + RenderDoc). Englobe toute la fonction.
         gpu_profile_zone!(10, "Draw All Particles", palette::NBODY, profiler);
@@ -178,7 +179,7 @@ impl Renderer {
             // Remplit le buffer GPU (Opération purement CPU, on utilise uniquement tracy)
             {
                 tracy_zone!("Renderer::fill_buffer", palette::ENV);
-                nb = renderer.fill_particle_data_direct(physic);
+                nb = renderer.fill_particle_data_direct(physic, alpha);
             }
 
             // Dessine les particules (Opération hautement GPU, on utilise le profiler complet)
@@ -202,6 +203,12 @@ impl Renderer {
         total_particles
     } // ⬅️ Ici, Drop automatique de "Draw All Particles"
 
+    /// Returns an immutable reference to the bloom pass (reserved for visual integration tests)
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn bloom_pass(&self) -> &BloomPass {
+        &self.bloom_pass
+    }
+
     /// Returns a mutable reference to the bloom pass for configuration
     pub fn bloom_pass_mut(&mut self) -> &mut BloomPass {
         &mut self.bloom_pass
@@ -210,7 +217,7 @@ impl Renderer {
 
 // Trait implementation
 impl RendererEngine for Renderer {
-    fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P) -> usize {
+    fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P, alpha: f32) -> usize {
         // ⏱️ 0. Mettre à jour le UBO global
         unsafe {
             let ubo_data = GlobalDataUBO {
@@ -266,7 +273,7 @@ impl RendererEngine for Renderer {
                     gl::ClearColor(0.0, 0.0, 0.0, 1.0);
                     gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
-                    particle_count = self.render_particles(physic, &profiler);
+                    particle_count = self.render_particles(physic, &profiler, alpha);
                 } // ⬅️ Drop RAII (PopDebugGroup + fin de query GPU)
                 {
                     gpu_profile_zone!(2, "Pass: Bloom & Composite", palette::BLOOM, profiler);
@@ -281,7 +288,7 @@ impl RendererEngine for Renderer {
                 gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
                 gl::ClearColor(0.0, 0.0, 0.0, 1.0);
                 gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-                self.render_particles(physic, &profiler)
+                self.render_particles(physic, &profiler, alpha)
             } // ⬅️ Drop RAII
         }
     }
