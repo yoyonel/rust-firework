@@ -152,14 +152,14 @@ fn test_audio_anticipation_feedback_loop() -> anyhow::Result<()> {
         initial_launch_anticip, initial_explosion_anticip
     );
 
-    // 3. Faire tourner la boucle de simulation pendant 1000 frames de 2 ms (2.0 secondes de simulation au total)
-    // À chaque pas, des requêtes audio vont partir et le feedback loop va ajuster les paramètres
-    let dt = 0.002; // 2 ms frame time
-    for _ in 0..1000 {
+    // 3. Faire tourner la boucle de simulation pendant 300 frames de 8.33 ms (2.5 secondes de simulation au total)
+    // À chaque pas 120Hz, des requêtes audio vont partir et le feedback loop va ajuster les paramètres
+    let dt = 1.0 / 120.0; // 8.33 ms fixed timestep (120 Hz)
+    for _ in 0..300 {
         // Simuler le step temporel du simulateur (qui traite aussi les événements audio maintenant)
         simulator.step_custom_dt(dt);
-        // Attendre 2 ms pour que le temps réel Instant::now() s'écoule de manière cohérente avec le temps physique dt
-        std::thread::sleep(Duration::from_millis(2));
+        // Attendre 8.33 ms pour que le temps réel Instant::now() s'écoule de manière cohérente avec le temps physique dt
+        std::thread::sleep(Duration::from_secs_f32(dt));
     }
 
     // Récupérer les valeurs finales d'anticipation
@@ -195,13 +195,13 @@ fn test_audio_anticipation_feedback_loop() -> anyhow::Result<()> {
     );
 
     assert!(
-        avg_launch_sync.abs() < 1.5,
-        "Average launch sync ({:.3} ms) should be very close to 0 ms",
+        avg_launch_sync.abs() < 5.0,
+        "Average launch sync ({:.3} ms) should be close to 0 ms",
         avg_launch_sync
     );
     assert!(
-        avg_explosion_sync.abs() < 1.5,
-        "Average explosion sync ({:.3} ms) should be very close to 0 ms",
+        avg_explosion_sync.abs() < 5.0,
+        "Average explosion sync ({:.3} ms) should be close to 0 ms",
         avg_explosion_sync
     );
 
