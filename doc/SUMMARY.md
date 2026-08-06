@@ -13,6 +13,7 @@
 - [Moteur Physique]()
   - [Plan d'Action de Refactoring & Feuille de Route Technique](20260804_physic_and_audio_refactoring_technical_roadmap.md)
   - [Revue de Code Architecturale et Mathématique](20260804_physic_engine_architectural_and_mathematical_review.md)
+  - [Rapport Technique FIX-01 : Fixed Timestep & Sub-stepping (120 Hz)](20260805_fix_01_fixed_timestep_substepping_report.md)
   - [Rapport Technique FIX-03 : Refactoring Structure de Particules (AoS vers SoA)](20260805_fix_03_soa_particle_cache_report.md)
   - [Gestion de la mémoire](physic_memory_management.md)
   - [Formes d'explosions](physic_explosion_shapes.md)
