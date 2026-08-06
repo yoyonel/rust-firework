@@ -1,0 +1,36 @@
+# cargo-deny 0.20+ configuration for rust-firework DevSecOps pipeline
+# https://embarkstudios.github.io/cargo-deny/
+
+[advisories]
+yanked = "warn"
+ignore = [
+    # quick-xml 0.37.5 is pulled transitively by wayland-scanner 0.31.7 -> smithay-client-toolkit
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+    # generational-arena is archived upstream (legacy dependency)
+    "RUSTSEC-2024-0014",
+]
+
+[licenses]
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "BSL-1.0",
+    "MPL-2.0",
+]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn" # Temporary warning for 3D/Audio ecosystem duplicate crates
+highlight = "all"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "warn"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

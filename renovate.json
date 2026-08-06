@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended"
+  ],
+  "packageRules": [
+    {
+      "description": "Group all Cargo crate updates into a single PR",
+      "matchManagers": ["cargo"],
+      "groupName": "cargo dependencies",
+      "schedule": ["before 4am on Monday"]
+    },
+    {
+      "description": "Group Docker CI image and GitHub Actions updates",
+      "matchManagers": ["github-actions", "dockerfile"],
+      "groupName": "ci infrastructure",
+      "schedule": ["before 4am on Monday"]
+    }
+  ]
+}

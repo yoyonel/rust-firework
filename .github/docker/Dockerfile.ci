@@ -1,0 +1,126 @@
+# Multi-stage Golden Image Dockerfile for rust-firework CI & Local ISO Debugging
+# Base OS: Ubuntu 24.04 LTS
+
+# ==============================================================================
+# STAGE 1: Build Tracy CLI Tools (Hermetic Build)
+# ==============================================================================
+FROM ubuntu:24.04 AS tracy-builder
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    git \
+    ca-certificates \
+    libcapstone-dev \
+    libdbus-1-dev \
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --depth 1 --branch v0.13.0 https://github.com/wolfpld/tracy.git /tmp/tracy
+
+ENV CXXFLAGS="-Wno-error -Wno-stringop-overflow -Wno-attributes"
+ENV CFLAGS="-Wno-error -Wno-stringop-overflow -Wno-attributes"
+
+RUN echo "Building tracy-capture..." && \
+    cmake -B /tmp/tracy/capture/build -S /tmp/tracy/capture \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DNO_PARALLEL_STL=ON \
+        -DTBB_STRICT=OFF && \
+    cmake --build /tmp/tracy/capture/build --parallel $(nproc)
+
+RUN echo "Building tracy-csvexport..." && \
+    cmake -B /tmp/tracy/csvexport/build -S /tmp/tracy/csvexport \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DNO_PARALLEL_STL=ON \
+        -DTBB_STRICT=OFF && \
+    cmake --build /tmp/tracy/csvexport/build --parallel $(nproc)
+
+# ==============================================================================
+# STAGE 2: Golden Runtime CI Image
+# ==============================================================================
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV RUST_VERSION=1.90.0
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH="${CARGO_HOME}/bin:/usr/local/bin:${PATH}"
+ENV RUSTC_WRAPPER=sccache
+ENV SCCACHE_DIR=/tmp/sccache_cache
+
+# 1. Install system runtime & dev libraries + utility tools in single unified layer
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    g++ \
+    git \
+    curl \
+    wget \
+    ca-certificates \
+    pkg-config \
+    make \
+    ffmpeg \
+    xdotool \
+    libgl1-mesa-dev \
+    libgl1-mesa-dri \
+    mesa-vulkan-drivers \
+    mesa-utils \
+    libglu1-mesa-dev \
+    libasound2-dev \
+    alsa-utils \
+    alsa-oss \
+    pulseaudio \
+    pulseaudio-utils \
+    libdbus-1-dev \
+    libx11-dev \
+    libxcursor-dev \
+    libxi-dev \
+    libxrandr-dev \
+    libxinerama-dev \
+    libcapstone-dev \
+    xvfb \
+    xauth \
+    python3 \
+    python3-pip \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. Fast Python tooling (uv & ruff)
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+RUN uv pip install --system --break-system-packages --no-cache ruff && rm -rf /bin/uv
+
+# 3. Pre-install Rust Toolchain 1.90.0 & clean installer leftovers
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_VERSION} --profile minimal && \
+    rustup component add llvm-tools-preview clippy rustfmt && \
+    rm -rf "${RUSTUP_HOME}/downloads" "${RUSTUP_HOME}/tmp" "${CARGO_HOME}/registry/cache" "${CARGO_HOME}/registry/index" && \
+    chmod -R a+w "${RUSTUP_HOME}" "${CARGO_HOME}"
+
+# 4. Pre-install CLI tools (Task v3.50.0, sccache v0.7.4, cargo-llvm-cov v0.6.16, cargo-deny 0.20.2, mdBook v0.4.40, RenderDoc 1.45)
+RUN curl -sL https://github.com/go-task/task/releases/download/v3.50.0/task_linux_amd64.tar.gz | tar -xz -C /usr/local/bin task && \
+    curl -sL https://github.com/mozilla/sccache/releases/download/v0.7.4/sccache-v0.7.4-x86_64-unknown-linux-musl.tar.gz | tar -xz -C /tmp && \
+    mv /tmp/sccache-v0.7.4-x86_64-unknown-linux-musl/sccache /usr/local/bin/sccache && \
+    curl -sL https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.6.16/cargo-llvm-cov-x86_64-unknown-linux-musl.tar.gz | tar -xz -C /usr/local/bin && \
+    curl -sL https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz | tar -xz --strip-components=1 -C /usr/local/bin "cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny" && \
+    curl -sSL "https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C /usr/local/bin && \
+    mkdir -p /opt/renderdoc && \
+    curl -sSL https://renderdoc.org/stable/1.45/renderdoc_1.45.tar.gz | tar -xz -C /opt/renderdoc --strip-components=1 && \
+    ln -sf /opt/renderdoc/bin/renderdoccmd /usr/local/bin/renderdoccmd && \
+    chmod +x /usr/local/bin/task /usr/local/bin/sccache /usr/local/bin/cargo-llvm-cov /usr/local/bin/cargo-deny /usr/local/bin/mdbook && \
+    rm -rf /tmp/*
+
+# 5. Copy Tracy CLI tools from Stage 1
+COPY --from=tracy-builder /tmp/tracy/capture/build/tracy-capture /usr/local/bin/tracy-capture
+COPY --from=tracy-builder /tmp/tracy/csvexport/build/tracy-csvexport /usr/local/bin/tracy-csvexport
+
+# 6. Setup CI user & workspace permissions
+RUN (id -u ubuntu >/dev/null 2>&1 && userdel -r ubuntu || true) && \
+    useradd -m -u 1000 -s /bin/bash ciuser && \
+    mkdir -p /workspace /tmp/sccache_cache && \
+    chown -R ciuser:ciuser /workspace /tmp/sccache_cache
+
+WORKDIR /workspace
+
+CMD ["/bin/bash"]
