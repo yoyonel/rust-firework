@@ -1,152 +1,286 @@
-name: Rust CI with Coverage
+name: Rust CI/CD (DevSecOps DAG)
 
 on:
   push:
-    # sur chaque push
-    branches:
-      - "**"
-  pull_request:
-    # sur chaque pull request
     branches:
       - master
       - develop
-  workflow_dispatch: # permet le lancement manuellement du workflow
+  pull_request:
+    branches:
+      - master
+      - develop
+  workflow_dispatch:
   schedule:
-    - cron: "0 0 * * *" # tous les jours à minuit
+    - cron: "0 0 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
 
 jobs:
-  build-and-test:
-    # Ne s'exécute que si ce n'est pas un push vers une branche ayant une PR ouverte
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/master' || github.ref == 'refs/heads/develop'
+  # ============================================================================
+  # JOB 1: Fast-Fail Preflight (Lint & Security Scan)
+  # ============================================================================
+  lint-and-security:
     runs-on: ubuntu-latest
-    env:
-      DISPLAY: :99
-      RUST_VERSION: 1.90.0
-      RUSTC_WRAPPER: sccache
-      CARGO_TERM_COLOR: always
-
+    container:
+      image: ghcr.io/yoyonel/rust-firework-ci:latest
+      options: --user root
     steps:
-      # --- Étape 1 : Checkout du code ---
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          filter: blob:none
+          lfs: false
+          show-progress: false
+          sparse-checkout: |
+            .github
+            assets
+            benches
+            doc
+            scripts
+            src
+            tests/goldens
+            Cargo.toml
+            Cargo.lock
+            Taskfile.yml
+            deny.toml
 
-      # --- Étape 2 : Préparer Cargo.toml pour la CI (retirer patch tracy-client local) ---
       - name: Strip local patches in CI
         run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 
-      # 🦀 2. Installation de Rust toolchain
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: ${{ env.RUST_VERSION }}
-          components: llvm-tools-preview
+      - name: Run Linters (rustfmt, clippy, ruff, vale)
+        run: task lint
 
-      # 🚀 Installation de Taskfile
-      - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.50.0
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run DevSecOps Supply Chain Audit (cargo-deny)
+        run: cargo deny check advisories licenses bans
 
-      # 🧰 Configuration centralisée du Cache Multi-Couches (Composite Action)
-      - name: Setup Multi-Layer CI Cache
+  # ============================================================================
+  # JOB 2: Unit Tests & Code Coverage (Parallel)
+  # ============================================================================
+  unit-tests-coverage:
+    needs: lint-and-security
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/yoyonel/rust-firework-ci:latest
+      options: --user root
+    env:
+      DISPLAY: :99
+      SCCACHE_DIR: /tmp/sccache_cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          filter: blob:none
+          lfs: false
+          show-progress: false
+          sparse-checkout: |
+            .github
+            assets
+            benches
+            doc
+            scripts
+            src
+            tests
+            Cargo.toml
+            Cargo.lock
+            Taskfile.yml
+            deny.toml
+
+      - name: Strip local patches in CI
+        run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
+
+      - name: Setup CI Cache
         uses: ./.github/actions/setup-ci-cache
-        id: cache
+        with:
+          shared_key: "unit-cov"
 
-      # --- Étape 3 : Installer les outils système ---
-      - name: Install system dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            build-essential cmake g++ \
-            libgl1-mesa-dev libx11-dev libxcursor-dev libxi-dev \
-            libxrandr-dev libxinerama-dev libglu1-mesa-dev \
-            libasound2-dev alsa-utils alsa-oss \
-            pulseaudio pulseaudio-utils \
-            libdbus-1-dev \
-            xvfb xauth pkg-config make git ca-certificates curl \
-            ffmpeg xdotool
-
-      # --- Installation ultra rapide de sccache (binaire précompilé) ---
-      - name: Install sccache (binary)
-        run: |
-          SCCACHE_VERSION="0.7.4"
-          if ! command -v sccache &> /dev/null; then
-            curl -L "https://github.com/mozilla/sccache/releases/download/v${SCCACHE_VERSION}/sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o sccache.tar.gz
-            tar xzf sccache.tar.gz
-            sudo mv sccache-v${SCCACHE_VERSION}-x86_64-unknown-linux-musl/sccache /usr/local/bin/
-          fi
-          sccache --version
-          echo "SCCACHE_DIR=$HOME/.cache/sccache" >> $GITHUB_ENV
-
-      - name: SCCache start server
+      - name: Start sccache
         run: sccache --start-server
 
-      - name: Lint project
-        run: |
-          rustup component add rustfmt clippy
-          python3 -m pip install --quiet ruff || true
-          task lint
-
-      # --- Étape 4 : Installer cargo-llvm-cov et LLVM tools ---
-      - name: Install cargo-llvm-cov
-        run: |
-          if ! command -v cargo-llvm-cov &> /dev/null; then
-            cargo install cargo-llvm-cov --locked
-          else
-            echo "cargo-llvm-cov already installed, skipping..."
-          fi
-
-      # --- Étape 5 : Build du projet ---
-      - name: Build project
-        run: |
-          task build-release
-
-      # --- Étape 6 : Lancer les tests avec coverage (3 Keyframes) ---
-      - name: Run tests with coverage
+      - name: Run unit & integration tests with coverage
         run: task ci:coverage
 
-      # --- Étape 7 : Full 120-Frame Visual Non-Regression (Pre-Merge Master) ---
-      - name: Run Full 120-Frame Visual Non-Regression (Pre-Merge Master)
-        if: github.event_name == 'pull_request' && github.base_ref == 'master'
+      - name: Show sccache stats
+        run: sccache --show-stats
+
+  # ============================================================================
+  # JOB 3: Mesa OpenGL & 120-Frame Visual Regression (Parallel)
+  # ============================================================================
+  mesa-visual-regression:
+    needs: lint-and-security
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/yoyonel/rust-firework-ci:latest
+      options: --user root
+    env:
+      DISPLAY: :99
+      SCCACHE_DIR: /tmp/sccache_cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          filter: blob:none
+          lfs: false
+          show-progress: false
+          sparse-checkout: |
+            .github
+            assets
+            benches
+            doc
+            scripts
+            src
+            tests
+            Cargo.toml
+            Cargo.lock
+            Taskfile.yml
+            deny.toml
+
+      - name: Strip local patches in CI
+        run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
+
+      - name: Setup CI Cache
+        uses: ./.github/actions/setup-ci-cache
+        with:
+          shared_key: "visual-mesa"
+
+      - name: Start sccache
+        run: sccache --start-server
+
+      - name: OpenGL Headless Spec Validation
+        run: task test-opengl-mesa
+
+      - name: Run Full 120-Frame Visual Non-Regression
         run: task test-visual-full
 
-      # --- Installation de RenderDoc CLI (si non présent en cache) ---
-      - name: Install RenderDoc CLI
-        if: steps.cache.outputs.cache-hit-renderdoc != 'true'
-        run: |
-          mkdir -p ~/.local/opt ~/.cargo/bin
-          curl -sSL https://renderdoc.org/stable/1.45/renderdoc_1.45.tar.gz | tar -xz -C ~/.local/opt/
-          ln -sf ~/.local/opt/renderdoc_1.45/bin/renderdoccmd ~/.cargo/bin/renderdoccmd
-          renderdoccmd --version
+  # ============================================================================
+  # JOB 4: RenderDoc GPU Capture & Validation (Parallel)
+  # ============================================================================
+  renderdoc-validation:
+    needs: lint-and-security
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/yoyonel/rust-firework-ci:latest
+      options: --user root
+    env:
+      DISPLAY: :99
+      SCCACHE_DIR: /tmp/sccache_cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          filter: blob:none
+          lfs: false
+          show-progress: false
+          sparse-checkout: |
+            .github
+            assets
+            benches
+            doc
+            scripts
+            src
+            tests/goldens
+            Cargo.toml
+            Cargo.lock
+            Taskfile.yml
+            deny.toml
 
-      # --- Étape 8 : RenderDoc GPU Capture & OpenGL Spec Validation ---
-      - name: RenderDoc GPU Capture & OpenGL Spec Validation
-        run: |
-          task renderdoc-capture
+      - name: Strip local patches in CI
+        run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 
-      # --- Étape 9 : Tracy CLI Tools Setup & Ratio Benchmark (PR Review) ---
-      - name: Setup Tracy CLI Tools
-        if: github.event_name == 'pull_request'
-        run: |
-          ./scripts/setup_tracy_tools.sh ~/.local/bin
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          echo "TRACY_CAPTURE_BIN=$HOME/.local/bin/tracy-capture" >> $GITHUB_ENV
-          echo "TRACY_CSVEXPORT_BIN=$HOME/.local/bin/tracy-csvexport" >> $GITHUB_ENV
+      - name: Setup CI Cache
+        uses: ./.github/actions/setup-ci-cache
+        with:
+          shared_key: "renderdoc"
+
+      - name: RenderDoc GPU Capture Execution
+        run: task renderdoc-capture
+
+  # ============================================================================
+  # JOB 5: Tracy Profile Ratio Benchmark (PR Only, Parallel)
+  # ============================================================================
+  tracy-ratio-benchmark:
+    needs: lint-and-security
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/yoyonel/rust-firework-ci:latest
+      options: --user root
+    env:
+      DISPLAY: :99
+      SCCACHE_DIR: /tmp/sccache_cache
+      TRACY_CAPTURE_BIN: /usr/local/bin/tracy-capture
+      TRACY_CSVEXPORT_BIN: /usr/local/bin/tracy-csvexport
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+          filter: blob:none
+          lfs: false
+          show-progress: false
+          sparse-checkout: |
+            .github
+            assets
+            benches
+            doc
+            scripts
+            src
+            tests/goldens
+            Cargo.toml
+            Cargo.lock
+            Taskfile.yml
+            deny.toml
+
+      - name: Strip local patches in CI
+        run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
+
+      - name: Setup CI Cache
+        uses: ./.github/actions/setup-ci-cache
+        with:
+          shared_key: "tracy-bench"
 
       - name: Run Tracy Profile Ratio Benchmark
-        if: github.event_name == 'pull_request'
-        run: |
-          xvfb-run -a task bench-tracy-ratios
+        run: xvfb-run -a task bench-tracy-ratios
 
       - name: Post Tracy Ratio Comment on PR
-        if: always() && github.event_name == 'pull_request' && hashFiles('/tmp/tracy_pr_comment.md') != ''
+        if: always() && hashFiles('/tmp/tracy_pr_comment.md') != ''
         uses: mshick/add-pr-comment@v3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           message-id: tracy-ratio-benchmark
           message-path: /tmp/tracy_pr_comment.md
 
-      - name: SCCache stop server
+  # ============================================================================
+  # JOB 6: Observability DX Aggregator & Native Step Summary
+  # ============================================================================
+  ci-summary-report:
+    needs: [unit-tests-coverage, mesa-visual-regression, renderdoc-validation]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate GHA Step Summary Dashboard
         run: |
-          sccache --show-stats
-          sccache --stop-server
+          cat << 'EOF' >> $GITHUB_STEP_SUMMARY
+          # 🚀 DevSecOps Pipeline Execution Dashboard
+
+          ### 📊 Job Matrix Status
+
+          | Job Name | Status | Target |
+          | :--- | :--- | :--- |
+          | **Fast-Fail Preflight** | 🟢 PASS | `task lint` & `cargo-deny` |
+          | **Unit Tests & Coverage** | ${{ needs.unit-tests-coverage.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task ci:coverage` |
+          | **Mesa OpenGL & Visual 120-frame** | ${{ needs.mesa-visual-regression.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task test-opengl-mesa` |
+          | **RenderDoc GPU Capture** | ${{ needs.renderdoc-validation.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task renderdoc-capture` |
+
+          ---
+          *Report generated automatically by DevSecOps Containerized CI/CD*
+          EOF

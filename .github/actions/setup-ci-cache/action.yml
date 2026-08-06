@@ -1,82 +1,31 @@
-name: "Setup Multi-Layer CI Cache"
-description: "Centralized multi-layer caching for Rust toolchain, Cargo, Target, sccache, and RenderDoc CLI"
+name: "Setup Container CI Cache"
+description: "Optimized caching for Cargo registry, Target artifacts, and Sccache inside Golden Image container"
 
 inputs:
-  rust_version:
-    description: "Rust toolchain version"
+  shared_key:
+    description: "Shared cache key prefix"
     required: false
-    default: "1.90.0"
-
-outputs:
-  cache-hit-renderdoc:
-    description: "Indicates if RenderDoc CLI binary was restored from cache"
-    value: ${{ steps.cache-renderdoc.outputs.cache-hit }}
-  cache-hit-tracy:
-    description: "Indicates if Tracy CLI binaries were restored from cache"
-    value: ${{ steps.cache-tracy.outputs.cache-hit }}
+    default: "rust-firework-ci"
 
 runs:
   using: "composite"
   steps:
-    # 🧰 1. Cache Rustup + toolchain LLVM
-    - name: Cache Rustup and LLVM tools
+    - name: Cache Cargo registry & git
       uses: actions/cache@v4
       with:
         path: |
-          ~/.rustup/toolchains
-          ~/.rustup/components
-        key: ${{ runner.os }}-rustup-${{ inputs.rust_version }}
-        restore-keys: |
-          ${{ runner.os }}-rustup-
-
-    # ⚡ 2. Cache Cargo registry & git & bin
-    - name: Cache Cargo registry & git & bin
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-          ~/.cargo/bin
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/git/db
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-registry-
 
-    # 🧱 3. Cache du répertoire target
-    - name: Cache Cargo target directory
+    - name: Cache sccache compilation artifacts
       uses: actions/cache@v4
       with:
-        path: target
-        key: ${{ runner.os }}-cargo-target-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
+        path: /tmp/sccache_cache
+        key: ${{ runner.os }}-sccache-${{ inputs.shared_key }}-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ runner.os }}-cargo-target-${{ inputs.rust_version }}-
-          ${{ runner.os }}-cargo-target-
-
-    # 💾 4. Cache sccache binaries
-    - name: Cache sccache binaries
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/sccache
-        key: ${{ runner.os }}-sccache-${{ inputs.rust_version }}-${{ hashFiles('**/Cargo.lock') }}
-        restore-keys: |
-          ${{ runner.os }}-sccache-${{ inputs.rust_version }}-
+          ${{ runner.os }}-sccache-${{ inputs.shared_key }}-
           ${{ runner.os }}-sccache-
-
-    # 📷 5. Cache RenderDoc CLI binary
-    - name: Cache RenderDoc CLI binary
-      id: cache-renderdoc
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.local/opt/renderdoc_1.45
-          ~/.cargo/bin/renderdoccmd
-        key: ${{ runner.os }}-renderdoc-1.45
-
-    # 🏎️ 6. Cache Tracy CLI Tools
-    - name: Cache Tracy CLI Tools
-      id: cache-tracy
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.local/bin/tracy-capture
-          ~/.local/bin/tracy-csvexport
-        key: ${{ runner.os }}-tracy-tools-v0.13.0-rev5

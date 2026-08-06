@@ -25,7 +25,11 @@ RAW_GPU="${GL_RENDERER_DEVICE:-$(glxinfo 2>/dev/null | grep -i "OpenGL renderer 
 RAW_VENDOR="${GL_VENDOR:-$(glxinfo 2>/dev/null | grep -i "OpenGL vendor string" | cut -d':' -f2 | xargs || echo "Mesa_Mesa")}"
 
 # Normalisation slug du GPU (ex: "nvidia_geforce_rtx_3080" ou "llvmpipe_mesa")
-GPU_SLUG=$(echo "$RAW_GPU" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '_' | sed 's/__*/_/g' | sed 's/^_//;s/_$//')
+if echo "$RAW_GPU" | grep -q -i "llvmpipe"; then
+    GPU_SLUG="llvmpipe_mesa"
+else
+    GPU_SLUG=$(echo "$RAW_GPU" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9' '_' | sed 's/__*/_/g' | sed 's/^_//;s/_$//')
+fi
 if [ -z "$GPU_SLUG" ]; then
     GPU_SLUG="llvmpipe_mesa"
 fi
