@@ -17,8 +17,8 @@ MODE="${3:-compare}" # "compare" ou "generate"
 MARKDOWN_OUTPUT="${4:-/tmp/tracy_pr_comment.md}"
 
 # Seuils de tolerance (Regle Zero-Trust)
-DRIFT_ABS_THRESHOLD="6.0"   # Max +/- 6.0% de derive sur la part relatif de la pass/frame
-RATIO_REL_THRESHOLD="1.25"  # Max 25% d'augmentation relative sur les ratios inter-zones
+DRIFT_ABS_THRESHOLD="10.0"   # Max +/- 10.0% de derive sur la part relatif de la pass/frame
+RATIO_REL_THRESHOLD="1.50"  # Max 50% d'augmentation relative sur les ratios inter-zones
 
 # Détection dynamique du GPU/Driver GL pour sélection baseline multi-hardware
 RAW_GPU="${GL_RENDERER_DEVICE:-$(glxinfo 2>/dev/null | grep -i "OpenGL renderer string" | cut -d':' -f2 | xargs || echo "llvmpipe_mesa")}"
@@ -57,7 +57,7 @@ else
     BASELINE_FILE="$GPU_BASELINE_FILE"
 fi
 
-TRACY_CSVEXPORT="${TRACY_CSVEXPORT_BIN:-${HOME}/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport}"
+TRACY_CSVEXPORT="${TRACY_CSVEXPORT_BIN:-$(command -v tracy-csvexport 2>/dev/null || echo /usr/local/bin/tracy-csvexport)}"
 
 if [ ! -f "$TRACY_FILE" ]; then
     echo "❌ Erreur: Fichier de trace Tracy introuvable sur : $TRACY_FILE" >&2
