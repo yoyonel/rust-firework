@@ -139,11 +139,13 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
   - **Outillage Local ISO Parfait :** Les tâches `Taskfile.yml` et scripts doivent garantir une parité à 100 % avec les runners distants (gestion dynamique de `$DISPLAY`, subshells non-interactifs, ciblage strict par ID de fenêtre X11 et suppression sans résidu des processus applicatifs).
 
 ### PILIER 7 : INVIOLABILITÉ ET IMMUTABILITÉ DES RESSOURCES GOLDEN / RÉFÉRENCES (ZERO-MUTATION)
-1. **Interdiction Formelle et Absolue d'Altération :**
-  - Interdiction absolue d'altérer, écraser, régénérer ou supprimer toute ressource visuelle, audio ou de référence validée (fichiers images `.png`, vidéos `.mp4`, sons `.wav` dans `tests/visual_baselines/` ou `tests/goldens/`) sans d'abord soumettre une demande explicite et d'obtenir l'accord explicite et l'autorisation de l'humain.
-2. **Isolation Strict des Artéfacts Candidats :**
-  - Tous les tests de régression, stress-tests et générations intermédiaires DOIVENT exclusivement créer leurs fichiers dans le dossier temporaire `tests/visual_baselines/candidates/`.
-  - Une ressource de référence (Golden) validée par l'humain est totalement immuable.
+1. **Comportement des Tests et Protection Git (Rollback Obligatoire) :**
+  - Lors de leur exécution, les tests de régression réécrivent naturellement leurs résultats dans `tests/visual_baselines/` ou `tests/goldens/`.
+  - **Interdiction formelle de validation :** L'agent a l'interdiction absolue d'indexer (`git add`) ou de commiter ces modifications. 
+  - **Nettoyage immédiat :** L'agent DOIT systématiquement exécuter `git restore tests/visual_baselines/` (ou `tests/goldens/`) après chaque test pour purger les altérations du working tree.
+2. **Mise à Jour Exclusivement Humaine :**
+  - Une ressource de référence (Golden) validée est totalement immuable du point de vue de l'agent.
+  - Seul l'humain peut donner l'autorisation explicite d'accepter et de valider une nouvelle version d'une Golden Image.
 
 ---
 
