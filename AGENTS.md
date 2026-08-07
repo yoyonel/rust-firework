@@ -19,8 +19,12 @@ Ce manifeste constitue le cadre comportemental absolu, universel et immuable ("D
 ### Règle 1 : Stop-Point & Validation Humaine Explicite (Zero-Trust)
 Interdiction formelle d'exécuter un `git commit` ou `git push` sans afficher le diff résumé, les preuves de tests/profiling et d'obtenir la validation humaine explicite.
 
-### Règle 2 : Target Branch Isolée & PR Gatekeeper
-Tout développement s'effectue sur une branche isolée (`fix/...`, `feat/...`) issue de `develop`. Commits directs sur `master` ou `develop` stricts interdits. Tout merge s'effectue via une Pull Request ouverte vers `develop` via l'outil `gh`.
+### Règle 2 : Target Branch Isolée, Conscience Git & PR Gatekeeper
+Tout développement s'effectue sur une branche isolée (`fix/...`, `feat/...`) issue de `develop`.
+Commits directs sur `master` ou `develop` stricts interdits.
+Avant toute modification ou création de branche, l'agent DOIT analyser l'environnement (`git branch --show-current`).
+Si le travail s'effectue déjà sur une branche de développement active et pertinente pour la tâche, interdiction formelle de bifurquer ou d'écraser l'historique vers `develop`.
+Tout merge s'effectue via une Pull Request ouverte vers `develop` via l'outil `gh`.
 
 ### Règle 3 : Idempotence & Isolation du Scope (No Scope Creep)
 Le code généré est strictement limité au besoin spécifié. Toute modification parasite (fichiers touchés hors scope, reformatages non sollicités) doit être rejetée immédiatement via `git restore`.
@@ -41,6 +45,9 @@ Tout contrôle ImGui réclame la mise à jour de sa configuration canonique, sa 
 
 ### Règle 8 : Validation Empirique d'Exécutabilité des Commandes & Tâches (Zero-Trust Command Gate)
 Interdiction formelle d'ajouter, de modifier ou de répertorier une commande CLI, un script shell, un outil tiers ou une tâche Taskfile dans `AGENTS.md` ou la documentation du projet sans avoir **explicitement exécuté et validé son bon fonctionnement sur l'environnement hôte actuel**. Toute référence à un outil non installé ou à un script défaillant doit être immédiatement réparée ou retirée.
+
+### Règle 9 : Safe Delete & Preuve de Non-Régression Locale
+Toute suppression de fichier d'infrastructure, de configuration structurante ou de code legacy exige formellement l'exécution d'une tâche de build ou de validation locale exhaustive (ex: `task devops:build-image` pour purger des Dockerfiles obsolètes) AVANT d'initier le Stop-Point. Ceci afin de prouver factuellement l'absence de régression cassante sur l'environnement hôte.
 
 ---
 
@@ -110,12 +117,13 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
   - **Outillage POSIX/Shell First (Pas de Scripts Python Parasites) :** Interdiction de créer des scripts d'outillage/automation personnalisés en Python (verbeux, complexes à maintenir, sujets aux variations d'environnement). Privilégier systématiquement les scripts Shell POSIX/Linux (`scripts/*.sh`) combinés nativement à `Taskfile.yml`.
 
 ### PILIER 6 : CI/CD, PRE-COMMITS & RUNNERS DISTANTS (SHIFT-LEFT)
-1. **Vérification Locale Prébail (Pre-CI Gate & Shift-Left) :**
-  - L'agent ne doit JAMAIS initier un Stop-Point de fin de tâche, ni ouvrir une PR (`gh pr create`), sans d'abord exécuter la séquence locale obligatoire :
-    1. Activation des hooks : `task hooks:install`.
-    2. Linter exhaustif : `task lint` (fmt, clippy strict `-D warnings`, doc-lint).
-    3. Validation architecturale UI : `task gui-persistence-check`.
-    4. Simulation Headless : `task test-opengl-mesa` (vérification sous GPU logiciel Mesa/Xvfb).
+1. **Vérification Locale Prébail (Pre-CI Gate & Shift-Left Polymorphe) :**
+  - L'agent ne doit JAMAIS initier un Stop-Point de fin de tâche, ni ouvrir une PR (`gh pr create`), sans d'abord exécuter la séquence locale obligatoire adaptée au périmètre :
+    1. Base commune : `task hooks:install` et Linter exhaustif `task lint` (fmt, clippy strict `-D warnings`, doc-lint).
+    2. Routage contextuel des validations :
+       - Métier / UI / Rendu : `task gui-persistence-check` et `task test-opengl-mesa`.
+       - Audio : tests unitaires audio dédiés et `task test-tsan`.
+       - DevOps / CI-CD : Validation de l'image et exécution ISO (ex: `task devops:build-image`, `task devops:lint`, `task devops:audit`).
 2. **Stratégie de Caching Multi-Niveau CI/CD (Zero Redundant Download) :**
   - Obligation d'implémenter un cache strict via `actions/cache@v4` pour tout binaire tiers ou outil CLI (`renderdoccmd`, `sccache`, `cargo-llvm-cov`), registres Cargo et répertoires `target`.
   - Conditionner les étapes de téléchargement réseau aux échecs de cache (`if: steps.cache-xxx.outputs.cache-hit != 'true'`).
@@ -145,8 +153,8 @@ Avant d'initier tout Stop-Point et de solliciter la validation humaine pour comm
 
 1. **Audit Diff Global :**
   `git diff develop...HEAD`
-2. Shift-Left Local Check :
-  `task lint && task gui-persistence-check && task test-opengl-mesa`
+2. **Shift-Left Local Check (Contextuel) :**
+  Exécution de la suite de commandes adaptées au domaine d'intervention (ex: `task lint && task test-opengl-mesa` pour le métier, ou `task devops:build-image && task devops:audit` pour l'infrastructure).
 3. Consolidation Documentaire :
   • Rapport `doc/YYYYMMDD_<nom_fix>_report.md` rédigé et référencé dans `doc/SUMMARY.md`.
   • Inventaire `doc/gui_persistence_inventory.md` à jour le cas échéant.
