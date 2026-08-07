@@ -725,4 +725,24 @@ tasks:
         vars:
           CLI_ARGS: "bash"
 
+  devops:lint:
+    desc: "Executes the linting pipeline (task lint) inside the ISO Golden Container"
+    cmds:
+      - task: devops:run
+        vars:
+          CLI_ARGS: "task lint"
+
+  devops:test:
+    desc: "Executes the test pipeline (task test-opengl-mesa) inside the ISO Golden Container"
+    cmds:
+      - task: devops:run
+        vars:
+          CLI_ARGS: "task test-opengl-mesa"
+
+  devops:audit:
+    desc: "Executes cargo deny check for vulnerabilities and licenses inside the ISO Golden Container"
+    cmds:
+      - task: devops:run
+        vars:
+          CLI_ARGS: "cargo deny check advisories licenses bans"
 

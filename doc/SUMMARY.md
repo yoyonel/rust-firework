@@ -42,6 +42,7 @@
   - [Stratégie de Tests Visuels & Golden Videos](20260731_visual_regression_and_golden_video_testing_strategy.md)
   - [Protection CI/CD Pre-Merge GitHub Actions](20260731_github_actions_ci_pr_merge_protection.md)
   - [Refonte Architecturale DevSecOps & CI/CD DAG (Golden Image)](20260806_devsecops_cicd_architecture_refactoring_report.md)
+  - [Rapport d'Achèvement : Intégration CI/CD & Standards Locaux DevSecOps](20260807_devsecops_cicd_completion_report.md)
   - [Validation OpenGL avec Mesa Debug Layer](opengl_debug_validation_guide.md)
 
 - [Profilage et Performance]()
