@@ -1,6 +1,8 @@
 name: 🧨 Fireworks Integration Tests
 
 on:
+  pull_request:
+    branches: [ "develop" ]
   # 1️⃣ Déclenche automatiquement après le workflow CI
   workflow_run:
     workflows: [ "Rust CI/CD (DevSecOps DAG)" ] # remplace par le nom exact de ton workflow de build
@@ -13,11 +15,8 @@ on:
 
 jobs:
   integration-test:
-    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/yoyonel/rust-firework-ci:latest
-      options: --user root
 
     steps:
     # 1️⃣ Checkout du code source
@@ -26,6 +25,12 @@ jobs:
       with:
         ref: ${{ github.event.workflow_run.head_sha || github.ref }}
 
+    # 🚀 Installation de Taskfile
+    - name: Install Task
+      uses: arduino/setup-task@v2
+      with:
+        version: 3.50.0
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
 
     # 2️⃣ Setup Docker buildx (pour cache efficace)
     - name: 🧱 Set up Docker Buildx
@@ -40,6 +45,23 @@ jobs:
       env:
         GITHUB_WORKSPACE: ${{ github.workspace }}
       run: task ci:run-integration
+
+    # 5️⃣ Setup Python + cache UV (gestionnaire de dépendances)
+    - name: 🧩 Setup Python environment
+      run: |
+        pip install uv
+
+    - name: ♻️ Cache UV dependencies
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/uv
+        key: ${{ runner.os }}-uv-${{ hashFiles('pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-uv-
+
+    # 5.5️⃣ Setup FFmpeg
+    - name: 🎥 Set up FFmpeg
+      uses: FedericoCarboni/setup-ffmpeg@v3
 
     # 6️⃣ Run Fireworks Analysis (post-processing)
     - name: 📊 Run Fireworks Analysis
