@@ -29,7 +29,7 @@ fn create_test_simulator(
     };
     let renderer = DummyRenderer::default();
     let audio = DummyAudio;
-    let physic = PhysicEngineFireworks::new(&config, 1024.0);
+    let physic = PhysicEngineFireworks::new(&config, 1024.0, None);
     let window_engine = DummyWindowEngine::default();
 
     let mut sim = Simulator::new(renderer, physic, audio, window_engine);
@@ -144,7 +144,7 @@ fn test_trajectory_exact_determinism_under_erratic_deltas() {
 
     let renderer_a = DummyRenderer::default();
     let audio_a = DummyAudio;
-    let mut physic_a = PhysicEngineFireworks::new(&config, 800.0);
+    let mut physic_a = PhysicEngineFireworks::new(&config, 800.0, None);
     physic_a.force_next_launch();
     let window_engine_a = DummyWindowEngine::default();
     let mut sim_a = Simulator::new(renderer_a, physic_a, audio_a, window_engine_a);
@@ -152,7 +152,7 @@ fn test_trajectory_exact_determinism_under_erratic_deltas() {
 
     let renderer_b = DummyRenderer::default();
     let audio_b = DummyAudio;
-    let mut physic_b = PhysicEngineFireworks::new(&config, 800.0);
+    let mut physic_b = PhysicEngineFireworks::new(&config, 800.0, None);
     physic_b.force_next_launch();
     let window_engine_b = DummyWindowEngine::default();
     let mut sim_b = Simulator::new(renderer_b, physic_b, audio_b, window_engine_b);

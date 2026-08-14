@@ -24,7 +24,7 @@ fn generate_fix_01_golden_reference() {
         .expect("Failed to init GLFW window");
 
     let renderer_engine = Renderer::new(width, height, &config).expect("Failed to create Renderer");
-    let physic_engine = PhysicEngineFireworks::new(&config, width as f32);
+    let physic_engine = PhysicEngineFireworks::new(&config, width as f32, None);
     let audio_engine = DummyAudio;
 
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
@@ -39,16 +39,26 @@ fn generate_fix_01_golden_reference() {
     let img = helpers::capture_framebuffer_fbo(fbo, width as u32, height as u32);
     simulator.close();
 
-    let baselines_dir = Path::new("tests/visual_baselines");
-    if !baselines_dir.exists() {
-        let _ = fs::create_dir_all(baselines_dir);
-    }
+    let update_golden = std::env::var("UPDATE_GOLDEN").is_ok();
 
-    let golden_path = baselines_dir.join("fix_01_fixed_timestep_6s_golden.png");
+    let golden_path = if update_golden {
+        let baselines_dir = Path::new("tests/visual_baselines");
+        if !baselines_dir.exists() {
+            let _ = fs::create_dir_all(baselines_dir);
+        }
+        baselines_dir.join("fix_01_fixed_timestep_6s_golden.png")
+    } else {
+        std::env::temp_dir().join(format!("fix_01_golden_test_{}.png", std::process::id()))
+    };
+
     img.save(&golden_path).expect("Failed to save golden image");
 
     println!(
         "⭐ Golden reference image captured: {}",
         golden_path.display()
     );
+
+    if !update_golden {
+        let _ = fs::remove_file(golden_path);
+    }
 }

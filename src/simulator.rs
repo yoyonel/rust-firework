@@ -143,7 +143,13 @@ where
     accumulated_new_rocket_ids: Vec<u64>,
     accumulated_exploded_ids: Vec<u64>,
     accumulated_anticipated_launches: Vec<(u64, glam::Vec2)>,
-    accumulated_anticipated_explosions: Vec<(u64, glam::Vec2)>,
+    pub accumulated_anticipated_explosions: Vec<(u64, glam::Vec2)>,
+
+    pub max_frames: Option<u64>,
+    pub fixed_dt: Option<f32>,
+    pub timeout_secs: Option<u64>,
+    pub start_time: Instant,
+    pub disable_audio: bool,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -233,6 +239,11 @@ where
             accumulated_exploded_ids: Vec::with_capacity(event_cap),
             accumulated_anticipated_launches: Vec::with_capacity(event_cap),
             accumulated_anticipated_explosions: Vec::with_capacity(event_cap),
+            max_frames: None,
+            fixed_dt: None,
+            timeout_secs: None,
+            start_time: Instant::now(),
+            disable_audio: false,
         };
 
         sim.gui_settings.apply_session_to_audio(
@@ -289,7 +300,9 @@ where
     }
 
     pub fn run(&mut self, export_path: Option<String>) -> anyhow::Result<()> {
-        self.audio_engine.start_audio_thread(export_path.as_deref());
+        if !self.disable_audio {
+            self.audio_engine.start_audio_thread(export_path.as_deref());
+        }
         let listener_pos = if self.audio_stress_scene.enabled {
             glam::Vec2::new(self.window_size_f32.0 / 2.0, self.window_size_f32.1 / 2.0)
         } else {
@@ -315,6 +328,25 @@ where
             return false;
         }
 
+        if let Some(max_f) = self.max_frames {
+            if self.frames >= max_f {
+                info!("🏁 Max frames reached ({}), exiting.", max_f);
+                self.save_gui_session();
+                return false;
+            }
+        }
+
+        if let Some(t) = self.timeout_secs {
+            if self.start_time.elapsed().as_secs() >= t {
+                eprintln!(
+                    "\n=== [METRIC] TOTAL FRAMES GENERATED: {} ===\n",
+                    self.frames
+                );
+                self.save_gui_session();
+                return false;
+            }
+        }
+
         // 1. Gestion des événements
         let (reload_config, reload_shaders) = self.handle_window_events();
 
@@ -326,7 +358,13 @@ where
 
         // 4. Timing
         let _frame_guard = self.profiler.frame(); // RAII timing
-        let delta = self.update_frame_timing();
+        let delta = if let Some(dt) = self.fixed_dt {
+            // still need to call update_frame_timing to update last_time etc, but we discard its delta
+            let _ = self.update_frame_timing();
+            dt
+        } else {
+            self.update_frame_timing()
+        };
 
         // 5. Simulation physique + audio
         tracy_zone!(
@@ -472,11 +510,13 @@ where
             &new_ids_buf[..new_count],
             &exploded_ids_buf[..exploded_count],
         );
-        Self::synch_audio_with_physic_extracted(
-            &mut self.audio_engine,
-            &self.accumulated_anticipated_launches[..],
-            &self.accumulated_anticipated_explosions[..],
-        );
+        if !self.disable_audio {
+            Self::synch_audio_with_physic_extracted(
+                &mut self.audio_engine,
+                &self.accumulated_anticipated_launches[..],
+                &self.accumulated_anticipated_explosions[..],
+            );
+        }
 
         // NOUVEAU: Alimenter le pool d'indicateurs visuels audio (mode debug F3)
         if self.show_audio_diagnostic && self.show_audio_visual_overlay {

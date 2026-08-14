@@ -92,10 +92,14 @@ mod renderer_recreate_buffers_tests {
     fn test_renderer_graphics_instanced_recreate_buffers_ptr_invariant() {
         let mut window = init_headless_gl();
 
+        let texture_data =
+            fireworks_sim::renderer_engine::utils::texture::load_image_data_from_disk(
+                TEST_TEXTURE_PATH,
+            );
         let mut r = RendererGraphicsInstanced::new(
             64,
             fireworks_sim::physic_engine::ParticleType::Rocket,
-            TEST_TEXTURE_PATH,
+            &texture_data,
         );
 
         assert!(
@@ -120,10 +124,14 @@ mod renderer_recreate_buffers_tests {
     fn test_renderer_graphics_instanced_multiple_recreate_cycles() {
         let mut window = init_headless_gl();
 
+        let texture_data =
+            fireworks_sim::renderer_engine::utils::texture::load_image_data_from_disk(
+                TEST_TEXTURE_PATH,
+            );
         let mut r = RendererGraphicsInstanced::new(
             32,
             fireworks_sim::physic_engine::ParticleType::Rocket,
-            TEST_TEXTURE_PATH,
+            &texture_data,
         );
 
         for size in [64usize, 128, 64] {

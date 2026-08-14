@@ -123,25 +123,20 @@ impl SmokeParticle {
 #[derive(Debug)]
 pub struct SmokeSystem {
     pub particles: Vec<SmokeParticle>,
-    free_indices: Vec<usize>,
+    active_count: usize,
 }
 
 impl SmokeSystem {
     pub fn new(capacity: usize) -> Self {
         Self {
             particles: vec![SmokeParticle::default(); capacity],
-            free_indices: (0..capacity).rev().collect(),
+            active_count: 0,
         }
     }
 
     pub fn resize(&mut self, capacity: usize) {
         self.particles.resize(capacity, SmokeParticle::default());
-        self.free_indices.clear();
-        for (i, p) in self.particles.iter().enumerate() {
-            if !p.active {
-                self.free_indices.push(i);
-            }
-        }
+        self.active_count = self.active_count.min(capacity);
     }
 
     /// Shared particle initialization: color, sizing, opacity, rotation, lifecycle.
@@ -229,14 +224,15 @@ impl SmokeSystem {
         rng: &mut impl Rng,
     ) {
         crate::tracy_zone!("SmokeSystem::emit", 0x33AAFF);
-        if let Some(idx) = self.free_indices.pop() {
+        if self.active_count < self.particles.len() {
             let (offset, tail_dispersion) = Self::compute_emission_vectors(rng);
-            let p = &mut self.particles[idx];
+            let p = &mut self.particles[self.active_count];
             p.pos = rocket_pos + offset;
             p.vel = rocket_vel
                 * crate::physic_engine::constants::SMOKE_EMISSION_VELOCITY_INHERITANCE_FACTOR
                 + tail_dispersion;
             Self::init_particle_common(p, rocket_color, config, rng);
+            self.active_count += 1;
         }
     }
 
@@ -252,14 +248,15 @@ impl SmokeSystem {
         rng: &mut impl Rng,
     ) {
         crate::tracy_zone!("SmokeSystem::emit_preview", 0x33AAFF);
-        if let Some(idx) = self.free_indices.pop() {
+        if self.active_count < self.particles.len() {
             let (offset, tail_dispersion) = Self::compute_emission_vectors(rng);
-            let p = &mut self.particles[idx];
+            let p = &mut self.particles[self.active_count];
             p.pos = nozzle_pos + offset;
             p.vel = simulated_rocket_vel
                 * crate::physic_engine::constants::SMOKE_PREVIEW_RELATIVE_EXHAUST_SCALE
                 + tail_dispersion;
             Self::init_particle_common(p, rocket_color, config, rng);
+            self.active_count += 1;
         }
     }
 
@@ -271,12 +268,10 @@ impl SmokeSystem {
         }
 
         let custom_color = Color::from_array(config.smoke_custom_color);
+        let active_slice = &mut self.particles[..self.active_count];
 
-        for (i, p) in self.particles.iter_mut().enumerate() {
-            if !p.active {
-                continue;
-            }
-
+        // Phase 1: Vectorized math update
+        for p in active_slice.iter_mut() {
             p.sizing.growth_rate = config.smoke_growth_rate_multiplier;
             match config.smoke_color_mode {
                 crate::physic_engine::config::SmokeColorMode::Custom => {
@@ -288,33 +283,37 @@ impl SmokeSystem {
             }
 
             p.lifecycle.age += dt;
-            if p.lifecycle.is_expired() {
-                p.active = false;
-                self.free_indices.push(i);
-                continue;
-            }
-
             let progress = p.lifecycle.progress();
             p.sizing.update(progress);
             p.opacity.update(progress);
 
             p.pos += p.vel * dt;
         }
-    }
 
-    pub fn for_each_active(&self, f: &mut dyn FnMut(&SmokeParticle)) {
-        for p in self.particles.iter() {
-            if p.active {
-                f(p);
+        // Phase 2: Swap-and-Pop for expired particles
+        let mut i = 0;
+        while i < self.active_count {
+            if self.particles[i].lifecycle.is_expired() {
+                self.particles[i].active = false;
+                self.active_count -= 1;
+                let last = self.active_count;
+                self.particles.swap(i, last);
+            } else {
+                i += 1;
             }
         }
     }
 
-    pub fn clear(&mut self) {
-        self.free_indices.clear();
-        for (i, p) in self.particles.iter_mut().enumerate() {
-            p.active = false;
-            self.free_indices.push(i);
+    pub fn for_each_active(&self, f: &mut dyn FnMut(&SmokeParticle)) {
+        for p in &self.particles[..self.active_count] {
+            f(p);
         }
+    }
+
+    pub fn clear(&mut self) {
+        for p in &mut self.particles[..self.active_count] {
+            p.active = false;
+        }
+        self.active_count = 0;
     }
 }
