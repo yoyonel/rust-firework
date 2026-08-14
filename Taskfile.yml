@@ -513,7 +513,7 @@ tasks:
   ci:build-docker-integration:
     desc: "CI: Build de l'image Docker avec cache inline"
     cmds:
-      - docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg BUILDKIT_INLINE_CACHE=1 -t fireworks-ci_integration -f Dockerfile.ci .
+      - docker build --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g) --build-arg BUILDKIT_INLINE_CACHE=1 -t fireworks-ci_integration -f .github/docker/Dockerfile.ci .
 
   ci:run-integration:
     desc: "CI: Exécution du test d'intégration Docker"
