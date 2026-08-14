@@ -820,7 +820,7 @@ mod tests {
         use crate::physic_engine::PhysicEngine;
 
         let config = PhysicConfig::default();
-        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
         let weights = [2.0, 1.5, 1.0, 0.5, 3.0];
         let shape = PersistedExplosionShape::Spherical;
 
@@ -835,7 +835,7 @@ mod tests {
         use crate::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks;
 
         let config = PhysicConfig::default();
-        let engine = PhysicEngineFireworks::new(&config, 800.0);
+        let engine = PhysicEngineFireworks::new(&config, 800.0, None);
         let mut cmd_queue: Vec<EngineCommand> = Vec::with_capacity(16);
         let reinit = AtomicBool::new(false);
         let _guard = crate::simulator::gui_settings::IMGUI_TEST_MUTEX

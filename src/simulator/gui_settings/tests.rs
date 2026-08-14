@@ -71,7 +71,7 @@ impl SpyPhysicEngine {
         Self {
             inner:
                 crate::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks::new(
-                    &config, 800.0,
+                    &config, 800.0, None,
                 ),
             reload_count: 0,
         }

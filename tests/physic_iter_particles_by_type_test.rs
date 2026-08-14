@@ -37,7 +37,7 @@ fn collect_particles_by_type(
 #[test]
 fn test_iter_particles_by_type_returns_rocket_heads() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn 3 fusées
     for _ in 0..3 {
@@ -68,7 +68,7 @@ fn test_iter_particles_by_type_returns_rocket_heads() {
 #[test]
 fn test_iter_particles_by_type_rocket_equals_heads() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn plusieurs fusées
     for _ in 0..5 {
@@ -89,7 +89,7 @@ fn test_iter_particles_by_type_rocket_equals_heads() {
 #[test]
 fn test_iter_particles_by_type_returns_trails() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn une fusée
     engine.force_next_launch();
@@ -122,7 +122,7 @@ fn test_iter_particles_by_type_returns_trails() {
 #[test]
 fn test_iter_particles_by_type_returns_explosions() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn une fusée
     engine.force_next_launch();
@@ -155,7 +155,7 @@ fn test_iter_particles_by_type_returns_explosions() {
 #[test]
 fn test_iter_particles_by_type_emits_smoke_for_active_rocket() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Initial state: no smoke
     assert_eq!(count_particles_by_type(&engine, ParticleType::Smoke), 0);
@@ -178,7 +178,7 @@ fn test_iter_particles_by_type_emits_smoke_for_active_rocket() {
 #[test]
 fn test_iter_particles_by_type_filters_correctly() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn plusieurs fusées
     for _ in 0..3 {
@@ -209,7 +209,7 @@ fn test_iter_particles_by_type_filters_correctly() {
 #[test]
 fn test_regression_rocket_particles_visible() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn 5 fusées non explosées
     for _ in 0..5 {

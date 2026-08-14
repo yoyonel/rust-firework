@@ -9,7 +9,7 @@ use fireworks_sim::simulator::gui_settings::PersistedExplosionShape;
 #[test]
 fn test_shape_cumulativity_add_inactive_shape_with_zero_weight_slider() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
     // 1. Initial State: Set single Heart shape
     let heart = &PRESET_DEFINITIONS[0];
@@ -68,7 +68,7 @@ fn test_shape_cumulativity_add_inactive_shape_with_zero_weight_slider() {
 #[test]
 fn test_shape_cumulativity_batch_add_all_five_presets() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
     // Add all 5 presets cumulatively
     for (i, preset) in PRESET_DEFINITIONS.iter().enumerate() {
@@ -104,7 +104,7 @@ fn test_shape_cumulativity_batch_add_all_five_presets() {
 #[test]
 fn test_shape_weight_slider_removal_and_readdition() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
     // 1. Add Heart and Star
     let heart = &PRESET_DEFINITIONS[0];
@@ -161,7 +161,7 @@ fn test_shape_weight_slider_removal_and_readdition() {
 #[test]
 fn test_persisted_multi_image_shape_session_roundtrip() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
     // 1. Build multi-image shape: Heart (1.5) + Ring (2.5)
     let heart = &PRESET_DEFINITIONS[0];
@@ -192,7 +192,7 @@ fn test_persisted_multi_image_shape_session_roundtrip() {
     }
 
     // 3. Restore to clean engine using apply_session_to_physic
-    let mut restored_engine = PhysicEngineFireworks::new(&config, 800.0);
+    let mut restored_engine = PhysicEngineFireworks::new(&config, 800.0, None);
     let weights = preset_weights_from_shape(engine.get_explosion_shape());
     apply_session_to_physic(weights, &persisted, &mut restored_engine);
 

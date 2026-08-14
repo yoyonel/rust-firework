@@ -66,6 +66,63 @@ fn main() -> Result<()> {
     // 🎙️ MODE PROFILING : HEADLESS AUDIO STRESS TEST (PERF + HOTSPOT)
     // =========================================================================
     let args: Vec<String> = std::env::args().collect();
+    let mut deterministic_seed: Option<u64> = None;
+    let mut max_frames: Option<u64> = None;
+    let mut fixed_dt: Option<f32> = None;
+    let mut timeout_secs: Option<u64> = None;
+    let mut disable_audio = false;
+
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--deterministic-seed" if i + 1 < args.len() => {
+                if let Ok(val) = args[i + 1].parse() {
+                    deterministic_seed = Some(val);
+                }
+                i += 1;
+            }
+            "--max-frames" if i + 1 < args.len() => {
+                if let Ok(val) = args[i + 1].parse() {
+                    max_frames = Some(val);
+                }
+                i += 1;
+            }
+            "--timeout-secs" if i + 1 < args.len() => {
+                if let Ok(val) = args[i + 1].parse() {
+                    timeout_secs = Some(val);
+                }
+                i += 1;
+            }
+            "--fixed-dt" if i + 1 < args.len() => {
+                if let Ok(val) = args[i + 1].parse() {
+                    fixed_dt = Some(val);
+                }
+                i += 1;
+            }
+            "--disable-audio" => {
+                disable_audio = true;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+
+    if let Some(seed) = deterministic_seed {
+        info!("🔧 Deterministic mode activated. Seed: {}", seed);
+    }
+    if let Some(max_f) = max_frames {
+        info!("🔧 Max frames override: {}", max_f);
+    }
+    if let Some(to) = timeout_secs {
+        info!("🔧 Timeout override: {}s", to);
+    }
+    if let Some(dt) = fixed_dt {
+        info!("🔧 Fixed DT override: {}", dt);
+    }
+    if disable_audio {
+        info!("🔧 Audio disabled via CLI");
+    }
+
     if let Some(pos) = args.iter().position(|a| a == "--headless-audio-stress") {
         let duration_secs: u64 = args.get(pos + 1).and_then(|s| s.parse().ok()).unwrap_or(10); // 10 secondes par défaut
 
@@ -140,12 +197,17 @@ fn main() -> Result<()> {
     // 2. Init Renderer (now that GL context is ready)
     let renderer_engine = Renderer::new(window_width, window_height, &physic_config)?;
 
-    let mut physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
+    let mut physic_engine =
+        PhysicEngineFireworks::new(&physic_config, window_width as f32, deterministic_seed);
     physic_engine.set_doppler_sender(doppler_queue.sender.clone());
 
     // 3. Init Simulator
     info!("🚀 Starting Fireworks Simulator...");
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
+    simulator.max_frames = max_frames;
+    simulator.fixed_dt = fixed_dt;
+    simulator.timeout_secs = timeout_secs;
+    simulator.disable_audio = disable_audio;
 
     if let Some(n) = audio_stress_sources {
         simulator.set_doppler_sender(doppler_queue.sender.clone());

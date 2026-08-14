@@ -302,7 +302,7 @@ mod tests {
         let config = crate::physic_engine::config::PhysicConfig::default();
         let dummy_physic =
             crate::physic_engine::physic_engine_generational_arena::PhysicEngineFireworks::new(
-                &config, 800.0,
+                &config, 800.0, None,
             );
         let mut cmd_queue = Vec::new();
 

@@ -48,7 +48,8 @@ fn bench_simulator_scaling(c: &mut Criterion) {
                 .expect("Failed to init window");
         let renderer_engine = Renderer::new(window_width, window_height, &physic_config)
             .expect("Failed to init renderer");
-        let mut physic_engine = PhysicEngineFireworks::new(&physic_config, window_width as f32);
+        let mut physic_engine =
+            PhysicEngineFireworks::new(&physic_config, window_width as f32, None);
         physic_engine.set_doppler_sender(doppler_queue.sender.clone());
 
         // Pré-générer une charge de travail initiale stable (n_rockets fusées actives)
