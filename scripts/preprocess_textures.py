@@ -37,11 +37,19 @@ def process_image(filepath):
 
 
 if __name__ == "__main__":
-    assets_dir = "assets/textures"
-    if not os.path.exists(assets_dir):
-        print(f"Error: Directory {assets_dir} not found.")
-        sys.exit(1)
+    if len(sys.argv) > 1:
+        target = sys.argv[1]
+        if os.path.isfile(target):
+            process_image(target)
+        else:
+            print(f"Error: Target file {target} not found.")
+            sys.exit(1)
+    else:
+        assets_dir = "assets/textures"
+        if not os.path.exists(assets_dir):
+            print(f"Error: Directory {assets_dir} not found.")
+            sys.exit(1)
 
-    for root, dirs, files in os.walk(assets_dir):
-        for filename in files:
-            process_image(os.path.join(root, filename))
+        for root, dirs, files in os.walk(assets_dir):
+            for filename in files:
+                process_image(os.path.join(root, filename))

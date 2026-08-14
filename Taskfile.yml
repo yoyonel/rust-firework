@@ -618,10 +618,10 @@ tasks:
         - "{{.CARGO}} build --profile perf"
 
   assets:preprocess:
-    desc: "Pré-calcule les textures PNG en binaire brut (.raw_tex) pour un chargement Zero-Cost au démarrage"
+    desc: "Pré-calcule les textures PNG en binaire brut (.raw_tex). Peut cibler un fichier (usage: task assets:preprocess -- <fichier.png>)"
     cmds:
       - echo "🖼️  Génération des fichiers .raw_tex depuis les .png..."
-      - python3 scripts/preprocess_textures.py
+      - python3 scripts/preprocess_textures.py {{.CLI_ARGS}}
 
   record-perf-audio:
     desc: "Enregistre 10s de stress-test audio pur avec perf (sans rendu graphique)"
