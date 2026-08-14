@@ -11,16 +11,12 @@ mod visual_determinism_tests {
         window_engine::{GlfwWindowEngine, WindowEngine},
         PhysicEngine,
     };
-    use image::RgbaImage;
-    use std::fs;
-    use std::io::Cursor;
-    use std::path::Path;
 
     fn get_rendered_image_hash(seed: u64, frames: u64) -> u64 {
         let window_width = 800;
         let window_height = 600;
 
-        let mut window_engine =
+        let window_engine =
             GlfwWindowEngine::init(window_width, window_height, "visual-determinism")
                 .expect("Failed to create headless GL context");
 
@@ -47,8 +43,8 @@ mod visual_determinism_tests {
         let mut simulator =
             Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
         // Fixed dt
-        simulator.fixed_dt = Some(1.0 / 60.0);
-        simulator.max_frames = Some(frames);
+        simulator.config.fixed_dt = Some(1.0 / 60.0);
+        simulator.config.max_frames = Some(frames);
 
         simulator.run(None).expect("Simulator run failed");
 
