@@ -3,6 +3,7 @@
 [Introduction](introduction.md)
 [Langage Métier (Glossaire)](ubiquitous_language.md)
 [Guide des Tâches (Taskfile)](taskfile_guide.md)
+- [Rapport de Refactoring des Namespaces Taskfile](20260814_taskfile_namespaces_refactoring_report.md)
 - [Audit & Validation d'Exécutabilité des Commandes (AGENTS.md)](20260805_agents_md_commands_audit_report.md)
 - [Guide des Tests Unitaires, Mocks & Couverture](20260730_unit_testing_and_coverage_guide.md)
 - [Refactoring SSOT & Éradication des Constantes Magiques](20260730_ssot_constants_structural_refactoring.md)
