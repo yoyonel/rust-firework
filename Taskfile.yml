@@ -423,6 +423,33 @@ tasks:
 
 
   # =========================================
+  # 💾 PROFILING MEMOIRE (VTUNE, HEAPTRACK)
+  # =========================================
+  benchmark-vtune:
+    desc: "Run Intel VTune memory-access analysis (requires sudo permissions)"
+    deps: [build-release]
+    cmds:
+      - ./scripts/benchmark_vtune.sh
+
+  benchmark-heaptrack:
+    desc: "Run Heaptrack memory allocation analysis"
+    deps: [build-release]
+    cmds:
+      - ./scripts/benchmark_heaptrack.sh
+
+  benchmark-vtune-hotspots:
+    desc: "Run Intel VTune CPU Hotspots analysis (Top 15 time-consuming functions)"
+    deps: [build-profiling]
+    cmds:
+      - ./scripts/benchmark_vtune_hotspots.sh
+
+  benchmark-vtune-threading:
+    desc: "Run Intel VTune Threading analysis (Locks, Mutexes & Waits)"
+    deps: [build-profiling]
+    cmds:
+      - ./scripts/benchmark_vtune_threading.sh
+
+  # =========================================
   # 📖 DOCUMENTATION (mdBook)
   # =========================================
   doc-build:
@@ -589,6 +616,12 @@ tasks:
       cmds:
         - echo "🛠️ Compilation du profil Perf-Friendly..."
         - "{{.CARGO}} build --profile perf"
+
+  assets:preprocess:
+    desc: "Pré-calcule les textures PNG en binaire brut (.raw_tex) pour un chargement Zero-Cost au démarrage"
+    cmds:
+      - echo "🖼️  Génération des fichiers .raw_tex depuis les .png..."
+      - python3 scripts/preprocess_textures.py
 
   record-perf-audio:
     desc: "Enregistre 10s de stress-test audio pur avec perf (sans rendu graphique)"
