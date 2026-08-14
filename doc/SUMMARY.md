@@ -73,3 +73,4 @@
   - [Manuel des Commandes Console](console_commands.md)
   - [Panneau de Contrôle GUI ImGui & Session Persistante](20260729_imgui_control_panel_and_session_persistence.md)
   - [Analyse de Latence Init Frame ImGui sous X11 (9.83ms Stall)](20260801_imgui_x11_frame_init_latency_analysis.md)
+- [2026-08-14 Mutualisation Swap-and-Pop VTune Report](20260814_swap_and_pop_mutualisation_vtune_report.md)
