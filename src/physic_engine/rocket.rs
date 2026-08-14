@@ -293,17 +293,7 @@ impl Rocket {
         }
 
         // Phase 2 : Swap-and-Pop O(1) ultra-rapide (hors SIMD hotloop)
-        let mut i = 0;
-        while i < self.trail_active_count {
-            if slice[i].life <= 0.0 {
-                slice[i].active = false;
-                self.trail_active_count -= 1;
-                let last = self.trail_active_count;
-                slice.swap(i, last);
-            } else {
-                i += 1;
-            }
-        }
+        apply_swap_and_pop(slice, &mut self.trail_active_count);
     }
 
     #[inline(always)]
@@ -332,17 +322,7 @@ impl Rocket {
             }
 
             // Phase 2: Swap-and-Pop
-            let mut i = 0;
-            while i < self.explosion_active_count {
-                if slice[i].life <= 0.0 {
-                    slice[i].active = false;
-                    self.explosion_active_count -= 1;
-                    let last = self.explosion_active_count;
-                    slice.swap(i, last);
-                } else {
-                    i += 1;
-                }
-            }
+            apply_swap_and_pop(slice, &mut self.explosion_active_count);
         }
     }
 
@@ -584,5 +564,20 @@ mod tests {
             expected_boosted_displacement,
             diff
         );
+    }
+}
+
+#[inline(always)]
+fn apply_swap_and_pop(slice: &mut [Particle], active_count: &mut usize) {
+    let mut i = 0;
+    while i < *active_count {
+        if slice[i].life <= 0.0 {
+            slice[i].active = false;
+            *active_count -= 1;
+            let last = *active_count;
+            slice.swap(i, last);
+        } else {
+            i += 1;
+        }
     }
 }
