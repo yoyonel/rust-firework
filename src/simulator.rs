@@ -49,6 +49,14 @@ pub mod gui_settings;
 pub mod ui;
 pub use audio_stress_scene::{AudioStressScene, VirtualSource};
 
+#[derive(Debug, Default, Clone)]
+pub struct SimConfig {
+    pub max_frames: Option<u64>,
+    pub fixed_dt: Option<f32>,
+    pub timeout_secs: Option<u64>,
+    pub disable_audio: bool,
+}
+
 pub struct Simulator<R, P, A, W>
 where
     R: RendererEngine,
@@ -145,11 +153,8 @@ where
     accumulated_anticipated_launches: Vec<(u64, glam::Vec2)>,
     pub accumulated_anticipated_explosions: Vec<(u64, glam::Vec2)>,
 
-    pub max_frames: Option<u64>,
-    pub fixed_dt: Option<f32>,
-    pub timeout_secs: Option<u64>,
+    pub config: SimConfig,
     pub start_time: Instant,
-    pub disable_audio: bool,
 }
 
 impl<R, P, A, W> Simulator<R, P, A, W>
@@ -239,11 +244,8 @@ where
             accumulated_exploded_ids: Vec::with_capacity(event_cap),
             accumulated_anticipated_launches: Vec::with_capacity(event_cap),
             accumulated_anticipated_explosions: Vec::with_capacity(event_cap),
-            max_frames: None,
-            fixed_dt: None,
-            timeout_secs: None,
+            config: SimConfig::default(),
             start_time: Instant::now(),
-            disable_audio: false,
         };
 
         sim.gui_settings.apply_session_to_audio(
@@ -300,7 +302,7 @@ where
     }
 
     pub fn run(&mut self, export_path: Option<String>) -> anyhow::Result<()> {
-        if !self.disable_audio {
+        if !self.config.disable_audio {
             self.audio_engine.start_audio_thread(export_path.as_deref());
         }
         let listener_pos = if self.audio_stress_scene.enabled {
@@ -328,7 +330,7 @@ where
             return false;
         }
 
-        if let Some(max_f) = self.max_frames {
+        if let Some(max_f) = self.config.max_frames {
             if self.frames >= max_f {
                 info!("🏁 Max frames reached ({}), exiting.", max_f);
                 self.save_gui_session();
@@ -336,7 +338,7 @@ where
             }
         }
 
-        if let Some(t) = self.timeout_secs {
+        if let Some(t) = self.config.timeout_secs {
             if self.start_time.elapsed().as_secs() >= t {
                 eprintln!(
                     "\n=== [METRIC] TOTAL FRAMES GENERATED: {} ===\n",
@@ -358,7 +360,7 @@ where
 
         // 4. Timing
         let _frame_guard = self.profiler.frame(); // RAII timing
-        let delta = if let Some(dt) = self.fixed_dt {
+        let delta = if let Some(dt) = self.config.fixed_dt {
             // still need to call update_frame_timing to update last_time etc, but we discard its delta
             let _ = self.update_frame_timing();
             dt
@@ -510,7 +512,7 @@ where
             &new_ids_buf[..new_count],
             &exploded_ids_buf[..exploded_count],
         );
-        if !self.disable_audio {
+        if !self.config.disable_audio {
             Self::synch_audio_with_physic_extracted(
                 &mut self.audio_engine,
                 &self.accumulated_anticipated_launches[..],
