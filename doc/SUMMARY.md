@@ -75,3 +75,4 @@
   - [Analyse de Latence Init Frame ImGui sous X11 (9.83ms Stall)](20260801_imgui_x11_frame_init_latency_analysis.md)
 - [2026-08-14 Mutualisation Swap-and-Pop VTune Report](20260814_swap_and_pop_mutualisation_vtune_report.md)
 - [2026-08-14 SmokeSystem Swap-and-Pop Regression (Rejected)](20260814_smoke_swap_and_pop_vtune_report.md)
+- [2026-08-14 SmokeSystem Struct-of-Arrays Regression (Rejected)](20260814_smoke_system_soa_vtune_report.md)
