@@ -1,0 +1,79 @@
+# ========================
+# Dockerfile.ci
+# Multi-stage build with Cargo cache
+# ========================
+
+# ---------- STAGE 1: Build ----------
+FROM ubuntu:22.04 AS builder
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    curl git cmake pkg-config build-essential \
+    libglfw3-dev libgl1-mesa-dev libglu1-mesa-dev \
+    libasound2-dev alsa-utils alsa-oss \
+    pulseaudio pulseaudio-utils \
+    ffmpeg xvfb x11-apps x11-utils imagemagick \
+    libx11-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Rust (latest stable)
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Set working directory
+WORKDIR /app
+
+# --- CACHE DEPENDENCIES ---
+# Copy Cargo files only (so dependencies are cached)
+COPY Cargo.toml Cargo.lock ./
+RUN sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
+RUN mkdir -p src benches && \
+    echo "fn main() {}" > src/main.rs && \
+    echo "fn main() {}" > benches/audio_dsp_bench.rs && \
+    echo "fn main() {}" > benches/audio_binaural_bench.rs && \
+    echo "fn main() {}" > benches/simulator_full_bench.rs && \
+    echo "fn main() {}" > benches/spatial_bus_bench.rs && \
+    echo "fn main() {}" > benches/physic_pool_bench.rs && \
+    echo "fn main() {}" > benches/physic_pipeline_bench.rs
+RUN cargo build --release
+RUN rm -rf src benches
+
+# Copy full project now
+COPY . .
+RUN sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
+
+# Build final release binary
+RUN cargo build --release
+
+# ---------- STAGE 2: Runtime ----------
+FROM ubuntu:22.04 AS runtime
+
+# Install runtime dependencies (only what's needed to run/test)
+RUN apt-get update && apt-get install -y \
+    libglfw3 libgl1-mesa-glx libglu1-mesa \
+    libasound2 alsa-utils alsa-oss \
+    pulseaudio pulseaudio-utils \
+    ffmpeg xvfb x11-apps x11-utils imagemagick \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/target/release/fireworks_sim ./target/release/fireworks_sim
+
+# Copy scripts and assets
+COPY .github/scripts/test_integration.sh ./.github/scripts/test_integration.sh
+COPY assets ./assets
+
+# Ensure script executable
+RUN chmod +x .github/scripts/test_integration.sh
+
+# --- Create runtime user (mapped dynamically at runtime) ---
+ARG USER_ID=1000
+ARG GROUP_ID=1000
+RUN groupadd -g ${GROUP_ID} rustuser && \
+    useradd -m -u ${USER_ID} -g ${GROUP_ID} rustuser && \
+    chown -R rustuser:rustuser /app
+
+# Default command
+CMD [".github/scripts/test_integration.sh"]
