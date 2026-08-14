@@ -84,16 +84,48 @@ impl Renderer {
         let max_particles_on_gpu: usize = physic_config.max_rockets
             * (physic_config.particles_per_explosion + physic_config.particles_per_trail);
 
+        // Load textures in parallel
+        let (rocket_tex, smoke_tex, flow_tex, noise_tex) = std::thread::scope(|s| {
+            let r = s.spawn(|| {
+                crate::renderer_engine::utils::texture::load_image_data_from_disk(
+                    constants::TEXTURE_PRIMARY_PARTICLE_PATH,
+                )
+            });
+            let sm = s.spawn(|| {
+                crate::renderer_engine::utils::texture::load_image_data_from_disk(
+                    constants::TEXTURE_SMOKE_PARTICLE_PATH,
+                )
+            });
+            let f = s.spawn(|| {
+                crate::renderer_engine::utils::texture::load_image_data_from_disk(
+                    constants::TEXTURE_FLOW_MAP_PATH,
+                )
+            });
+            let n = s.spawn(|| {
+                crate::renderer_engine::utils::texture::load_image_data_from_disk(
+                    constants::TEXTURE_NOISE_PATH,
+                )
+            });
+            (
+                r.join().unwrap(),
+                sm.join().unwrap(),
+                f.join().unwrap(),
+                n.join().unwrap(),
+            )
+        });
+
         let mut renderers: Vec<Box<dyn ParticleGraphicsRenderer>> = vec![
             Box::new(RendererGraphics::new(max_particles_on_gpu)),
             Box::new(RendererGraphicsInstanced::new(
                 physic_config.max_rockets,
                 crate::physic_engine::ParticleType::Rocket,
-                constants::TEXTURE_PRIMARY_PARTICLE_PATH,
+                &rocket_tex,
             )),
             Box::new(crate::renderer_engine::smoke_renderer::SmokeRenderer::new(
                 physic_config.max_smoke_particles,
-                constants::TEXTURE_SMOKE_PARTICLE_PATH,
+                &smoke_tex,
+                &flow_tex,
+                &noise_tex,
             )),
         ];
 

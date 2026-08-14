@@ -6,7 +6,6 @@ use crate::cstr;
 use crate::physic_engine::PhysicEngineIterator;
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::shader::compile_shader_program_from_files;
-use crate::renderer_engine::utils::texture::load_texture;
 use crate::utils::human_bytes::HumanBytes;
 use crate::{label_gl_object, pop_debug_group, push_debug_group};
 
@@ -68,10 +67,12 @@ pub struct SmokeRenderer {
 }
 
 impl SmokeRenderer {
-    pub fn new(max_smoke_particles: usize, texture_path: &str) -> Self {
-        const NOISE_TEXTURE_PATH: &str = constants::TEXTURE_NOISE_PATH;
-        const FLOW_MAP_TEXTURE_PATH: &str = constants::TEXTURE_FLOW_MAP_PATH;
-
+    pub fn new(
+        max_smoke_particles: usize,
+        sprite_tex: &crate::renderer_engine::utils::texture::TextureData,
+        flow_tex: &crate::renderer_engine::utils::texture::TextureData,
+        noise_tex: &crate::renderer_engine::utils::texture::TextureData,
+    ) -> Self {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
@@ -93,9 +94,14 @@ impl SmokeRenderer {
         let loc_erosion_edge_color =
             unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeColor")) };
 
-        let (texture_id, tex_width, tex_height) = load_texture(texture_path);
-        let (flow_map_texture_id, _, _) = load_texture(FLOW_MAP_TEXTURE_PATH);
-        let (noise_texture_id, _, _) = load_texture(NOISE_TEXTURE_PATH);
+        let texture_id =
+            crate::renderer_engine::utils::texture::create_gl_texture_from_data(sprite_tex);
+        let tex_width = sprite_tex.width;
+        let tex_height = sprite_tex.height;
+        let flow_map_texture_id =
+            crate::renderer_engine::utils::texture::create_gl_texture_from_data(flow_tex);
+        let noise_texture_id =
+            crate::renderer_engine::utils::texture::create_gl_texture_from_data(noise_tex);
 
         unsafe {
             gl::UseProgram(shader_program);

@@ -3,7 +3,7 @@ use log::{debug, info};
 use crate::cstr;
 use crate::physic_engine::{ParticleType, PhysicEngineIterator};
 use crate::renderer_engine::shader::compile_shader_program_from_files;
-use crate::renderer_engine::{types::ParticleGPU, utils::texture::load_texture};
+use crate::renderer_engine::types::ParticleGPU;
 use crate::utils::human_bytes::HumanBytes;
 use crate::{label_gl_object, pop_debug_group, push_debug_group};
 
@@ -39,14 +39,17 @@ impl RendererGraphicsInstanced {
     pub fn new(
         max_particles_on_gpu: usize,
         particle_type: ParticleType,
-        texture_path: &str,
+        texture_data: &crate::renderer_engine::utils::texture::TextureData,
     ) -> Self {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
 
         let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
 
-        let (texture_id, tex_width, tex_height) = load_texture(texture_path);
+        let texture_id =
+            crate::renderer_engine::utils::texture::create_gl_texture_from_data(texture_data);
+        let tex_width = texture_data.width;
+        let tex_height = texture_data.height;
         unsafe {
             gl::UseProgram(shader_program);
 
