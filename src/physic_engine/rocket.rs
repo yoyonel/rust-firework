@@ -237,7 +237,7 @@ impl Rocket {
     /// des particules dans la fenêtre du pool.
     #[inline(always)]
     fn spawn_trail_particles(&mut self, slice: &mut [Particle], config: &PhysicConfig) {
-        const TRAIL_SPACING: f32 = 2.0;
+        const TRAIL_SPACING: f32 = crate::physic_engine::constants::TRAIL_PARTICLE_SPACING;
         let _nb_particles_per_trail = config.particles_per_trail;
 
         let movement = self.pos - self.last_trail_pos;
@@ -258,9 +258,9 @@ impl Rocket {
                     pos: new_pos,
                     vel: Vec2::ZERO,
                     color: self.color,
-                    life: 0.35,
-                    max_life: 0.35,
-                    size: 2.0,
+                    life: crate::physic_engine::constants::TRAIL_PARTICLE_LIFE,
+                    max_life: crate::physic_engine::constants::TRAIL_PARTICLE_LIFE,
+                    size: crate::physic_engine::constants::TRAIL_PARTICLE_SIZE,
                     active: true,
                     angle: 0.0,
                     particle_type: ParticleType::Trail,

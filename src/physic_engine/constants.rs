@@ -568,3 +568,11 @@ pub const SMOKE_PRESET_DEFINITIONS: &[SmokePresetSpec] = &[
     SMOKE_PRESET_VOLUMETRIC_CLOUD,
     SMOKE_PRESET_TOXIC_PLASMA,
 ];
+
+pub const TRAIL_PARTICLE_LIFE: f32 = 0.35;
+pub const TRAIL_PARTICLE_SIZE: f32 = 2.0;
+pub const TRAIL_PARTICLE_SPACING: f32 = 2.0;
+
+pub const LUMA_WEIGHT_R: f32 = 0.299;
+pub const LUMA_WEIGHT_G: f32 = 0.587;
+pub const LUMA_WEIGHT_B: f32 = 0.114;
