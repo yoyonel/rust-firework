@@ -56,7 +56,7 @@ fn test_visual_regression_fix_01_erratic_vs_golden() {
         .expect("Failed to init GLFW window");
 
     let renderer_engine = Renderer::new(width, height, &config).expect("Failed to create Renderer");
-    let physic_engine = PhysicEngineFireworks::new(&config, width as f32);
+    let physic_engine = PhysicEngineFireworks::new(&config, width as f32, None);
     let audio_engine = DummyAudio;
 
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);

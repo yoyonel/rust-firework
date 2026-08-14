@@ -83,23 +83,37 @@ impl FireworksAudio3D {
     ///
     /// # Errors
     /// Returns error if audio files cannot be loaded or sample rates cannot be determined
+    #[allow(clippy::type_complexity)]
     pub fn new(config: FireworksAudioConfig) -> anyhow::Result<Self> {
-        // Load WAV data
-        let mut rocket_data = load_audio(&config.rocket_path)?;
-        let mut explosion_data = load_audio(&config.explosion_path)?;
+        // Load and resample WAV data in parallel to reduce startup overhead
+        let (rocket_data, explosion_data) =
+            std::thread::scope(|s| -> anyhow::Result<(Vec<[f32; 2]>, Vec<[f32; 2]>)> {
+                let rocket_handle = s.spawn(|| -> anyhow::Result<Vec<[f32; 2]>> {
+                    let data = load_audio(&config.rocket_path)?;
+                    let sr = WavReader::open(&config.rocket_path)
+                        .map_err(|e| anyhow::anyhow!("Failed to read rocket audio spec: {}", e))?
+                        .spec()
+                        .sample_rate;
+                    Ok(resample_linear(&data, sr, config.sample_rate))
+                });
 
-        // Resample to target sample rate
-        let rocket_sr = WavReader::open(&config.rocket_path)
-            .map_err(|e| anyhow::anyhow!("Failed to read rocket audio spec: {}", e))?
-            .spec()
-            .sample_rate;
-        let explosion_sr = WavReader::open(&config.explosion_path)
-            .map_err(|e| anyhow::anyhow!("Failed to read explosion audio spec: {}", e))?
-            .spec()
-            .sample_rate;
+                let explosion_handle = s.spawn(|| -> anyhow::Result<Vec<[f32; 2]>> {
+                    let data = load_audio(&config.explosion_path)?;
+                    let sr = WavReader::open(&config.explosion_path)
+                        .map_err(|e| anyhow::anyhow!("Failed to read explosion audio spec: {}", e))?
+                        .spec()
+                        .sample_rate;
+                    Ok(resample_linear(&data, sr, config.sample_rate))
+                });
 
-        rocket_data = resample_linear(&rocket_data, rocket_sr, config.sample_rate);
-        explosion_data = resample_linear(&explosion_data, explosion_sr, config.sample_rate);
+                let r_data = rocket_handle
+                    .join()
+                    .map_err(|_| anyhow::anyhow!("Rocket audio thread panicked"))??;
+                let e_data = explosion_handle
+                    .join()
+                    .map_err(|_| anyhow::anyhow!("Explosion audio thread panicked"))??;
+                Ok((r_data, e_data))
+            })?;
 
         let rocket_arc = Arc::new(rocket_data);
         let explosion_arc = Arc::new(explosion_data);
