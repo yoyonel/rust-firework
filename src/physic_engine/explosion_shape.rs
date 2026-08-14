@@ -113,7 +113,10 @@ impl ImageShape {
                             let r = pixels[idx] as f32;
                             let g = pixels[idx + 1] as f32;
                             let b = pixels[idx + 2] as f32;
-                            let intensity = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+                            let intensity = (crate::physic_engine::constants::LUMA_WEIGHT_R * r
+                                + crate::physic_engine::constants::LUMA_WEIGHT_G * g
+                                + crate::physic_engine::constants::LUMA_WEIGHT_B * b)
+                                as u8;
 
                             // Note: raw_tex is already flipped vertically for OpenGL.
                             // However, we want the original coordinates for the explosion shape (bottom-left vs top-left).

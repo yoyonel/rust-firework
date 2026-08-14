@@ -204,10 +204,12 @@ fn main() -> Result<()> {
     // 3. Init Simulator
     info!("🚀 Starting Fireworks Simulator...");
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
-    simulator.max_frames = max_frames;
-    simulator.fixed_dt = fixed_dt;
-    simulator.timeout_secs = timeout_secs;
-    simulator.disable_audio = disable_audio;
+    simulator.config = fireworks_sim::simulator::SimConfig {
+        max_frames,
+        fixed_dt,
+        timeout_secs,
+        disable_audio,
+    };
 
     if let Some(n) = audio_stress_sources {
         simulator.set_doppler_sender(doppler_queue.sender.clone());
