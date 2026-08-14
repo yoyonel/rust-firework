@@ -285,4 +285,10 @@ assets/config/*.toml
 # Temporary visual test output candidates
 tests/visual_baselines/candidates/
 
+# Profiling outputs
+heaptrack_results/
+vtune_results/
+vtune_hotspots_results/
+vtune_threading_results/
+
 
