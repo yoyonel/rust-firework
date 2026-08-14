@@ -125,7 +125,7 @@ fn test_audio_anticipation_feedback_loop() -> anyhow::Result<()> {
         ..Default::default()
     };
 
-    let physic_engine = PhysicEngineFireworks::new(&config, 800.0);
+    let physic_engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
     // 2. Simuler un retard audio matériel fixe de 15 ms
     let simulated_transit = 15.0; // ms

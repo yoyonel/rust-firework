@@ -5,7 +5,7 @@
 //! - `Image` : distribution basée sur un sampling de pixels blancs d'une image N&B
 
 use glam::Vec2;
-use image::Luma;
+
 use rand::Rng;
 use std::path::Path;
 
@@ -90,22 +90,58 @@ impl ImageShape {
         flight_time: f32,
     ) -> anyhow::Result<Self> {
         let path_to_img = Path::new(path);
-        let img = image::open(path_to_img)
-            .map_err(|e| anyhow::anyhow!("Échec du chargement de l'image '{}': {}", path, e))?;
+        let raw_path = format!("{}.raw_tex", path);
 
-        let gray = img.to_luma8();
-        let (width, height) = gray.dimensions();
-
-        // Seuil pour considérer un pixel comme "blanc" (non-noir)
-        let threshold = crate::physic_engine::constants::IMAGE_SHAPE_THRESHOLD;
-
-        // Collecte tous les pixels blancs
         let mut white_pixels: Vec<(u32, u32)> = Vec::new();
-        for y in 0..height {
-            for x in 0..width {
-                let Luma([intensity]) = gray.get_pixel(x, y);
-                if *intensity >= threshold {
-                    white_pixels.push((x, y));
+        let threshold = crate::physic_engine::constants::IMAGE_SHAPE_THRESHOLD;
+        let mut width = 0;
+        let mut height = 0;
+
+        if std::path::Path::new(&raw_path).exists() {
+            let bytes = std::fs::read(&raw_path)
+                .map_err(|e| anyhow::anyhow!("Échec du chargement raw de '{}': {}", raw_path, e))?;
+            if bytes.len() >= 8 {
+                width = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
+                height = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
+                let pixels = &bytes[8..];
+
+                for y in 0..height {
+                    for x in 0..width {
+                        let idx = ((y * width + x) * 4) as usize;
+                        if idx + 2 < pixels.len() {
+                            // Luma approximation: 0.299*R + 0.587*G + 0.114*B
+                            let r = pixels[idx] as f32;
+                            let g = pixels[idx + 1] as f32;
+                            let b = pixels[idx + 2] as f32;
+                            let intensity = (0.299 * r + 0.587 * g + 0.114 * b) as u8;
+
+                            // Note: raw_tex is already flipped vertically for OpenGL.
+                            // However, we want the original coordinates for the explosion shape (bottom-left vs top-left).
+                            // If we need the original orientation, we should flip Y back:
+                            let original_y = height - 1 - y;
+
+                            if intensity >= threshold {
+                                white_pixels.push((x, original_y));
+                            }
+                        }
+                    }
+                }
+            }
+        } else {
+            let img = image::open(path_to_img)
+                .map_err(|e| anyhow::anyhow!("Échec du chargement de l'image '{}': {}", path, e))?;
+
+            let gray = img.to_luma8();
+            let dims = gray.dimensions();
+            width = dims.0;
+            height = dims.1;
+
+            for y in 0..height {
+                for x in 0..width {
+                    let image::Luma([intensity]) = gray.get_pixel(x, y);
+                    if *intensity >= threshold {
+                        white_pixels.push((x, y));
+                    }
                 }
             }
         }

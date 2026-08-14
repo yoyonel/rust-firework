@@ -41,12 +41,12 @@ pub struct Rocket {
     /// Indique si l'explosion audio a déjà été anticipée et déclenchée
     pub audio_explosion_triggered: bool,
 
-    /// Indices dans le pool des particules d'explosions
     pub explosion_particle_indices: Option<Range<usize>>,
+    pub explosion_active_count: usize,
 
     /// Indices dans le pool des particules de trails
     pub trail_particle_indices: Option<Range<usize>>,
-    pub trail_index: usize,
+    pub trail_active_count: usize,
     pub last_trail_pos: Vec2,
 
     head: Particle,
@@ -73,8 +73,9 @@ impl Rocket {
             active: false,
             audio_explosion_triggered: false,
             explosion_particle_indices: None,
+            explosion_active_count: 0,
             trail_particle_indices: None,
-            trail_index: 0,
+            trail_active_count: 0,
             last_trail_pos: Vec2::default(),
             head: Particle::default(),
         };
@@ -97,23 +98,19 @@ impl Rocket {
         &'a self,
         pools: &'a ParticlesPoolsForRockets,
     ) -> impl Iterator<Item = &'a Particle> + 'a {
-        // `trail_particle_indices` contient les indices/ranges des particules de trainée
-        // associées à cette fusée.
-        let trails = self
-            .trail_particle_indices
-            .iter()
-            // Pour chaque "range", on récupère un itérateur sur les particules
-            // correspondantes dans le pool, puis `flat_map` fusionne tout cela
-            // en un flux unique.
-            .flat_map(move |range| pools.access(PoolKind::Trails, range))
-            // On filtre pour ne garder que les particules actives.
-            // Aucun coût mémoire : le filtrage est lazy et ne construit pas de collections.
-            .filter(|p| p.active);
+        let trails = self.trail_particle_indices.iter().flat_map(move |range| {
+            let slice = pools.access(PoolKind::Trails, range);
+            &slice[..self.trail_active_count]
+        });
+
         let explosions = self
             .explosion_particle_indices
             .iter()
-            .flat_map(move |range| pools.access(PoolKind::Explosions, range))
-            .filter(|p| p.active);
+            .flat_map(move |range| {
+                let slice = pools.access(PoolKind::Explosions, range);
+                &slice[..self.explosion_active_count]
+            });
+
         trails.chain(explosions)
     }
 
@@ -170,26 +167,16 @@ impl Rocket {
         self.update_head_particle();
     }
 
-    fn remove_inactive_rockets(&mut self, particles_pools: &ParticlesPoolsForRockets) {
+    fn remove_inactive_rockets(&mut self, _particles_pools: &ParticlesPoolsForRockets) {
         let exploded_done = self
             .explosion_particle_indices
             .as_ref()
-            .map(|range| {
-                particles_pools
-                    .access(PoolKind::Explosions, range)
-                    .iter()
-                    .all(|p| !p.active)
-            })
+            .map(|_| self.explosion_active_count == 0)
             .unwrap_or(true);
         let trail_done = self
             .trail_particle_indices
             .as_ref()
-            .map(|range| {
-                particles_pools
-                    .access(PoolKind::Trails, range)
-                    .iter()
-                    .all(|p| !p.active)
-            })
+            .map(|_| self.trail_active_count == 0)
             .unwrap_or(true);
 
         if self.exploded && exploded_done && trail_done {
@@ -251,7 +238,7 @@ impl Rocket {
     #[inline(always)]
     fn spawn_trail_particles(&mut self, slice: &mut [Particle], config: &PhysicConfig) {
         const TRAIL_SPACING: f32 = 2.0;
-        let nb_particles_per_trail = config.particles_per_trail;
+        let _nb_particles_per_trail = config.particles_per_trail;
 
         let movement = self.pos - self.last_trail_pos;
         let dist = movement.length();
@@ -266,21 +253,20 @@ impl Rocket {
 
         for _ in 0..count {
             let new_pos = self.last_trail_pos * (1.0 - t_step) + self.pos * t_step;
-            let i = self.trail_index % nb_particles_per_trail;
-
-            slice[i] = Particle {
-                pos: new_pos,
-                vel: Vec2::ZERO,
-                color: self.color,
-                life: 0.35,
-                max_life: 0.35,
-                size: 2.0,
-                active: true,
-                angle: 0.0,
-                particle_type: ParticleType::Trail,
-            };
-
-            self.trail_index = (self.trail_index + 1) % nb_particles_per_trail;
+            if self.trail_active_count < slice.len() {
+                slice[self.trail_active_count] = Particle {
+                    pos: new_pos,
+                    vel: Vec2::ZERO,
+                    color: self.color,
+                    life: 0.35,
+                    max_life: 0.35,
+                    size: 2.0,
+                    active: true,
+                    angle: 0.0,
+                    particle_type: ParticleType::Trail,
+                };
+                self.trail_active_count += 1;
+            }
             self.last_trail_pos = new_pos;
         }
     }
@@ -296,17 +282,27 @@ impl Rocket {
     /// Aucun spawn, aucune écriture dans les indices de la rocket.
     /// Optimale pour l’inlining.
     #[inline(always)]
-    fn integrate_trail_particles(&self, slice: &mut [Particle], dt: f32, gravity: Vec2) {
-        // Update trails
-        for p in slice {
-            if !p.active {
-                continue;
-            }
-
+    fn integrate_trail_particles(&mut self, slice: &mut [Particle], dt: f32, gravity: Vec2) {
+        // Phase 1 : Mathématiques inconditionnelles vectorisées (SIMD)
+        let active_count = self.trail_active_count;
+        let active_slice = &mut slice[..active_count];
+        for p in active_slice.iter_mut() {
             p.vel.y += gravity.y * dt;
             p.pos.y += p.vel.y * dt;
             p.life -= dt;
-            p.active = p.life > 0.0;
+        }
+
+        // Phase 2 : Swap-and-Pop O(1) ultra-rapide (hors SIMD hotloop)
+        let mut i = 0;
+        while i < self.trail_active_count {
+            if slice[i].life <= 0.0 {
+                slice[i].active = false;
+                self.trail_active_count -= 1;
+                let last = self.trail_active_count;
+                slice.swap(i, last);
+            } else {
+                i += 1;
+            }
         }
     }
 
@@ -325,14 +321,27 @@ impl Rocket {
 
         if let Some(range) = &self.explosion_particle_indices {
             let slice = particles_pool.get_particles_mut(range);
-            for p in &mut slice[..] {
-                if !p.active {
-                    continue;
-                }
+
+            // Phase 1: Vectorized math
+            let active_count = self.explosion_active_count;
+            let active_slice = &mut slice[..active_count];
+            for p in active_slice.iter_mut() {
                 p.vel.y += gravity.y * dt;
                 p.pos += p.vel * dt;
                 p.life -= dt;
-                p.active = p.life > 0.0;
+            }
+
+            // Phase 2: Swap-and-Pop
+            let mut i = 0;
+            while i < self.explosion_active_count {
+                if slice[i].life <= 0.0 {
+                    slice[i].active = false;
+                    self.explosion_active_count -= 1;
+                    let last = self.explosion_active_count;
+                    slice.swap(i, last);
+                } else {
+                    i += 1;
+                }
             }
         }
     }
@@ -364,6 +373,7 @@ impl Rocket {
             } else {
                 self.trigger_spherical_explosion(slice, config);
             }
+            self.explosion_active_count = slice.len();
         }
     }
 
@@ -486,12 +496,13 @@ impl Rocket {
         self.last_trail_pos = pos;
         self.vel = self.random_vel(cfg);
         self.color = self.random_color();
-        self.trail_index = 0;
         self.active = true;
         self.exploded = false;
         self.audio_explosion_triggered = false;
         self.explosion_particle_indices = None;
+        self.explosion_active_count = 0;
         self.trail_particle_indices = None;
+        self.trail_active_count = 0;
     }
 }
 

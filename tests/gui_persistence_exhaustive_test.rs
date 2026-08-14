@@ -62,7 +62,7 @@ fn test_exhaustive_physic_config_all_fields_persistence() -> anyhow::Result<()> 
 
     // Load into PhysicEngine
     let loaded_cfg = PhysicConfig::from_file(path_str)?;
-    let engine = PhysicEngineFireworks::new(&loaded_cfg, 1024.0);
+    let engine = PhysicEngineFireworks::new(&loaded_cfg, 1024.0, None);
 
     let engine_cfg = engine.get_config();
 
@@ -151,7 +151,7 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
 
     // 1. Create live AudioEngine and PhysicEngine
     let audio_engine = FireworksAudio3D::new(AudioConfig::default().to_engine_config(64))?;
-    let mut physic_engine = PhysicEngineFireworks::new(&PhysicConfig::default(), 1024.0);
+    let mut physic_engine = PhysicEngineFireworks::new(&PhysicConfig::default(), 1024.0, None);
 
     // 2. Set live non-default engine states
     audio_engine.set_master_volume(0.45);
@@ -225,7 +225,7 @@ fn test_exhaustive_gui_session_and_live_engines_synchronization() -> anyhow::Res
 
     // 3. Instantiate fresh AudioEngine and PhysicEngine and restore session
     let mut fresh_audio = FireworksAudio3D::new(AudioConfig::default().to_engine_config(64))?;
-    let mut fresh_physic = PhysicEngineFireworks::new(&PhysicConfig::default(), 1024.0);
+    let mut fresh_physic = PhysicEngineFireworks::new(&PhysicConfig::default(), 1024.0, None);
 
     let loaded_session = GuiSessionState::load_from_file(path_str);
 

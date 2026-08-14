@@ -91,7 +91,7 @@ fn test_multi_image_shape_addition_and_deletion() {
     use fireworks_sim::physic_engine::PhysicEngine;
 
     let config = fireworks_sim::physic_engine::config::PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
     // Initialement Spherical
     match engine.get_explosion_shape() {

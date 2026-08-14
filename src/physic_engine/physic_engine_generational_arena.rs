@@ -1,7 +1,7 @@
 use generational_arena::{Arena, Index};
 use itertools::Itertools;
 use log::{debug, info};
-use rand::Rng;
+use rand::{Rng, SeedableRng};
 use std::sync::atomic::Ordering;
 
 use crate::physic_engine::{
@@ -34,7 +34,7 @@ pub struct PhysicEngineFireworks {
     time_since_last_rocket: f32,
     next_rocket_interval: f32,
     window_width: f32,
-    rng: rand::rngs::ThreadRng,
+    rng: rand::rngs::StdRng,
 
     config: PhysicConfig,
     pending_config: PhysicConfig,
@@ -55,11 +55,15 @@ pub struct PhysicEngineFireworks {
 }
 
 impl PhysicEngineFireworks {
-    pub fn new(config: &PhysicConfig, window_width: f32) -> Self {
+    pub fn new(config: &PhysicConfig, window_width: f32, seed: Option<u64>) -> Self {
         let mut rockets = Arena::with_capacity(config.max_rockets);
         let mut free_indices = Vec::with_capacity(config.max_rockets);
 
-        let mut rng = rand::rng();
+        let mut rng = if let Some(s) = seed {
+            rand::rngs::StdRng::seed_from_u64(s)
+        } else {
+            rand::rngs::StdRng::from_os_rng()
+        };
         // Pré-remplissage des slots dans l’arena et free_indices
         for _ in 0..config.max_rockets {
             let idx = rockets.insert(Rocket::new(&mut rng));
@@ -702,7 +706,7 @@ mod tests {
     #[test]
     fn test_physic_engine_creation_and_defaults() {
         let config = PhysicConfig::default();
-        let engine = PhysicEngineFireworks::new(&config, 800.0);
+        let engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
         assert_eq!(engine.rockets_count(), 0);
         assert_eq!(engine.get_config().max_rockets, config.max_rockets);
@@ -716,7 +720,7 @@ mod tests {
             rocket_interval_mean: 0.1,
             ..PhysicConfig::default()
         };
-        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
         engine.force_next_launch();
         let res = engine.update(0.05);
@@ -731,7 +735,7 @@ mod tests {
             max_rockets: 10,
             ..PhysicConfig::default()
         };
-        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
         let mut new_config = config.clone();
         new_config.max_rockets = 20;
@@ -744,7 +748,7 @@ mod tests {
     #[test]
     fn test_physic_engine_explosion_shape_removal() {
         let config = PhysicConfig::default();
-        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
 
         assert!(engine.remove_explosion_image("nonexistent").is_err());
 
@@ -755,7 +759,7 @@ mod tests {
     #[test]
     fn test_physic_engine_doppler_channel() {
         let config = PhysicConfig::default();
-        let mut engine = PhysicEngineFireworks::new(&config, 800.0);
+        let mut engine = PhysicEngineFireworks::new(&config, 800.0, None);
         let (tx, rx) = crossbeam_channel::unbounded();
 
         engine.set_doppler_sender(tx);

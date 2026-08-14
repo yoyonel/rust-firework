@@ -147,7 +147,7 @@ fn test_physic_engine_smoke_emission_at_rocket_base() {
     config.smoke_spawn_rate = 60.0;
     config.smoke_intensity = 0.8;
 
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
     assert_eq!(engine.get_smoke_intensity(), 0.8);
 
     engine.force_next_launch();
@@ -174,7 +174,7 @@ fn test_physic_engine_smoke_emission_at_rocket_base() {
 #[test]
 fn test_physic_engine_smoke_config_reload() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     let mut new_config = config.clone();
     new_config.max_smoke_particles = 1024;
@@ -229,7 +229,7 @@ fn test_physic_engine_smoke_erosion_params_and_toggle() {
     config.smoke_erosion_edge_width = 0.25;
     config.smoke_erosion_edge_color = [0.1, 0.8, 0.9];
 
-    let engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let engine = PhysicEngineFireworks::new(&config, 1920.0, None);
     let (enabled, scale, edge_width, edge_color) = engine.get_smoke_erosion_params();
 
     assert!(!enabled);
@@ -244,7 +244,7 @@ fn test_physic_engine_smoke_flow_params() {
     config.flow_distortion_strength = 0.28;
     config.flow_animation_speed = 1.75;
 
-    let engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let engine = PhysicEngineFireworks::new(&config, 1920.0, None);
     let (strength, speed) = engine.get_smoke_flow_params();
 
     assert_eq!(strength, 0.28);

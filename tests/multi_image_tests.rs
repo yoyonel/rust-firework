@@ -6,7 +6,7 @@ mod tests {
     #[test]
     fn test_load_and_weight_management() {
         // Assuming default window width 800.0 or similar; exact value doesn't matter for this test
-        let mut engine = PhysicEngineFireworks::new(&PhysicConfig::default(), 800.0);
+        let mut engine = PhysicEngineFireworks::new(&PhysicConfig::default(), 800.0, None);
         let dummy_path_1 = "assets/textures/explosion_shapes/heart.png";
         let dummy_path_2 = "assets/textures/explosion_shapes/star.png";
 

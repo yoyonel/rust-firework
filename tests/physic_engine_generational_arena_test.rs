@@ -12,7 +12,7 @@ use fireworks_sim::physic_engine::{
 fn test_new_engine_initialization() {
     let config = PhysicConfig::default();
     let window_width = 1920.0;
-    let engine = PhysicEngineFireworks::new(&config, window_width);
+    let engine = PhysicEngineFireworks::new(&config, window_width, None);
 
     // Vérifications
     assert_eq!(engine.rockets_count(), 0); // Aucune fusée active
@@ -27,11 +27,11 @@ fn test_spawn_rocket_margin_calculation() {
     };
 
     // Cas 1: Fenêtre normale
-    let _engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let _engine = PhysicEngineFireworks::new(&config, 1920.0, None);
     // Les marges sont privées, on vérifie indirectement via le comportement
 
     // Cas 2: Fenêtre plus petite que 2*margin
-    let engine_small = PhysicEngineFireworks::new(&config, 150.0);
+    let engine_small = PhysicEngineFireworks::new(&config, 150.0, None);
     // Le moteur devrait gérer ce cas sans paniquer
     assert_eq!(engine_small.rockets_count(), 0);
 }
@@ -43,7 +43,7 @@ fn test_spawn_rocket_margin_calculation() {
 #[test]
 fn test_spawn_rocket_success() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Forcer le spawn via update avec intervalle dépassé
     engine.force_next_launch();
@@ -66,7 +66,7 @@ fn test_spawn_rocket_exhaustion() {
         ..Default::default()
     };
 
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn 3 fusées
     for _ in 0..3 {
@@ -91,7 +91,7 @@ fn test_rocket_deactivation_after_lifecycle() {
         ..Default::default()
     };
 
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn une fusée
     engine.force_next_launch();
@@ -123,7 +123,7 @@ fn test_compute_next_interval_respects_bounds() {
         ..Default::default()
     };
 
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Tester plusieurs fois pour vérifier la distribution
     for _ in 0..50 {
@@ -145,7 +145,7 @@ fn test_update_spawns_rocket_after_interval() {
         rocket_max_next_interval: 0.01,
         ..Default::default()
     };
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Update avec dt < intervalle
     let result = engine.update(0.05);
@@ -165,7 +165,7 @@ fn test_update_spawns_rocket_after_interval() {
 #[test]
 fn test_reload_config_no_change() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn quelques fusées
     engine.force_next_launch();
@@ -190,7 +190,7 @@ fn test_reload_config_with_max_rockets_change() {
         max_rockets: 10,
         ..Default::default()
     };
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn quelques fusées
     engine.force_next_launch();
@@ -214,7 +214,7 @@ fn test_reload_config_with_max_rockets_change() {
 #[test]
 fn test_update_returns_valid_result() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     let result = engine.update(0.016);
 
@@ -229,7 +229,7 @@ fn test_update_with_multiple_rockets() {
         rocket_interval_mean: 100.0, // Empêcher le spawn automatique
         ..Default::default()
     };
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn plusieurs fusées
     for _ in 0..10 {
@@ -252,7 +252,7 @@ fn test_update_with_multiple_rockets() {
 #[test]
 fn test_update_triggered_explosions() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn une fusée
     engine.force_next_launch();
@@ -280,7 +280,7 @@ fn test_update_triggered_explosions() {
 #[test]
 fn test_set_window_width() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     engine.set_window_width(2560.0);
 
@@ -293,7 +293,7 @@ fn test_set_window_width() {
 #[test]
 fn test_close_clears_all_data() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn quelques fusées
     engine.force_next_launch();
@@ -311,7 +311,7 @@ fn test_close_clears_all_data() {
 #[test]
 fn test_get_config() {
     let config = PhysicConfig::default();
-    let engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     let retrieved = engine.get_config();
     assert_eq!(retrieved.max_rockets, config.max_rockets);
@@ -340,7 +340,7 @@ fn count_active_heads(engine: &PhysicEngineFireworks) -> usize {
 #[test]
 fn test_iter_active_particles_empty() {
     let config = PhysicConfig::default();
-    let engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     let count = count_active_particles(&engine);
     assert_eq!(count, 0);
@@ -349,7 +349,7 @@ fn test_iter_active_particles_empty() {
 #[test]
 fn test_iter_active_particles_with_rockets() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn 2 fusées
     engine.force_next_launch();
@@ -365,7 +365,7 @@ fn test_iter_active_particles_with_rockets() {
 #[test]
 fn test_iter_active_particles_increases_with_trails() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn une fusée
     engine.force_next_launch();
@@ -393,7 +393,7 @@ fn test_iter_active_heads_not_exploded() {
         rocket_interval_mean: 100.0, // Empêcher le spawn automatique
         ..Default::default()
     };
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn 3 fusées
     for _ in 0..3 {
@@ -422,7 +422,7 @@ fn test_iter_active_heads_not_exploded() {
 #[test]
 fn test_iter_active_heads_filters_correctly() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Spawn plusieurs fusées
     for _ in 0..5 {
@@ -444,7 +444,7 @@ fn test_iter_active_heads_filters_correctly() {
 #[test]
 fn test_zero_dt_update() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Update avec dt = 0 ne devrait pas paniquer
     let result = engine.update(0.0);
@@ -454,7 +454,7 @@ fn test_zero_dt_update() {
 #[test]
 fn test_very_large_dt_update() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Update avec dt très grand
     let result = engine.update(10.0);
@@ -465,7 +465,7 @@ fn test_very_large_dt_update() {
 #[test]
 fn test_multiple_close_calls() {
     let config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     engine.close();
     engine.close(); // Deuxième appel ne devrait pas paniquer
@@ -475,7 +475,7 @@ fn test_multiple_close_calls() {
 #[test]
 fn test_reload_config_multiple_times() {
     let mut config = PhysicConfig::default();
-    let mut engine = PhysicEngineFireworks::new(&config, 1920.0);
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
 
     // Recharger plusieurs fois
     for i in 1..5 {
