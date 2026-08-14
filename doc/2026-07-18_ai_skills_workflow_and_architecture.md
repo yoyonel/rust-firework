@@ -71,7 +71,7 @@ La régénération et l'application des overlays sont entièrement automatisées
 À lancer après chaque modification majeure de l'architecture, ajout de module, ou mise à jour de spécification technique dans `doc/` :
 
 ```bash
-task update-ai-skills
+task ai:update-skills
 ```
 
 ### Comportement interne du Taskfile.yml

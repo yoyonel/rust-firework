@@ -47,7 +47,7 @@ tests/visual_baselines/
 Human maintainers regenerate and sign off on reference baselines using Taskfile:
 ```bash
 # Capture full matrix of golden snapshots for human validation
-task visual-baselines-generate
+task test:visual-baselines-generate
 ```
 
 Each generated snapshot is logged in `tests/visual_baselines/manifests/golden_index.json` along with its SHA-256 checksum and timestamp.
@@ -56,7 +56,7 @@ Each generated snapshot is logged in `tests/visual_baselines/manifests/golden_in
 
 ## 4. E2E Non-Regression Automated Verification
 
-The integration test suite (`tests/visual_regression_test.rs`) runs during `cargo test --features interactive_tests` or `task test`:
+The integration test suite (`tests/visual_regression_test.rs`) runs during `cargo test --features interactive_tests` or `task test:all`:
 
 ```rust
 #[test]

@@ -23,4 +23,4 @@ Disparition totale de `png::decoder` du Top 15 VTune.
 
 ## 3. Runbook de Reproductibilité
 - **Générer les raw_tex :** `python3 scripts/preprocess_textures.py` (ou `task assets:preprocess`).
-- **Benchmarking VTune :** `task benchmark-vtune-hotspots`. Le rapport CLI synthétisera les 15 appels les plus lourds. L'absence de la stack `image` valide le Zero-Cost.
+- **Benchmarking VTune :** `task profile:vtune-hotspots`. Le rapport CLI synthétisera les 15 appels les plus lourds. L'absence de la stack `image` valide le Zero-Cost.

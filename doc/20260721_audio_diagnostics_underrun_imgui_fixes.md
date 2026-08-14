@@ -104,7 +104,7 @@ Afin d'éviter que le fichier `src/simulator.rs` ne devienne trop volumineux et 
 * **Filtrage des arguments d'export** : Ajout d'un contrôle pour empêcher le programme de confondre des flags de ligne de commande (comme `--audio-stress-scene`) avec des noms de fichiers d'export WAV à créer.
 
 ### C. Intégration de la tâche Taskfile
-* **Nouveau raccourci `task run-audio-stress`** : Ajout d'une tâche dédiée dans [**`Taskfile.yml`**](../Taskfile.yml) qui pré-configure toutes les variables d'environnement optimales (VSync désactivée, HUD de performance graphique activé) et lance la simulation interactive. Le nombre de sources peut être passé en paramètre (ex: `task run-audio-stress -- 256`, 128 par défaut).
+* **Nouveau raccourci `task run:audio-stress`** : Ajout d'une tâche dédiée dans [**`Taskfile.yml`**](../Taskfile.yml) qui pré-configure toutes les variables d'environnement optimales (VSync désactivée, HUD de performance graphique activé) et lance la simulation interactive. Le nombre de sources peut être passé en paramètre (ex: `task run:audio-stress -- 256`, 128 par défaut).
 
 
 

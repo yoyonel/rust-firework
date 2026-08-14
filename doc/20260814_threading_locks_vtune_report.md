@@ -3,7 +3,7 @@
 Ce rapport consigne l'exécution d'un profilage de synchronisation (Locks & Waits) sur la branche optimisée via VTune. L'objectif était de vérifier l'absence de goulots d'étranglement ou de conflits majeurs entre les threads lors d'une simulation rapide (Fast-Forward).
 
 ## Méthodologie
-- **Commande** : `task benchmark-vtune-threading`
+- **Commande** : `task profile:vtune-threading`
 - **Configuration** : `--deterministic-seed 42 --timeout-secs 5 --fixed-dt 0.016666 --disable-audio`
 - **Profil mesuré** : Utilisation du processeur (Wait Time vs Spin Time), et identification des objets de synchronisation bloquants.
 

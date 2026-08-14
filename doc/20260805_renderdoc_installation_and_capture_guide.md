@@ -40,16 +40,16 @@ renderdoccmd --version
 
 Conformément au **Pilier 5**, toute exécution passe par des tâches Taskfile dédiées. Aucune modification du code source de l'application (`src/`) n'est requise : la temporisation et la capture sont gérées au niveau du Shell.
 
-### 3.1. Capture GPU & Analyse Automatique (`task renderdoc-capture`)
+### 3.1. Capture GPU & Analyse Automatique (`task renderdoc:capture`)
 
 Lance la simulation sous `renderdoccmd capture` avec validation de l'API OpenGL activée. Après un délai d'attente (par défaut 5s pour capturer l'explosion de fusées et de particules), le signal `F12` est envoyé à la fenêtre OpenGL sous Xvfb.
 
 ```bash
 # Capture GPU standard à t=5 secondes (explosion de particules)
-task renderdoc-capture
+task renderdoc:capture
 
 # Capture temporisée à t=8 secondes
-task renderdoc-capture -- 8
+task renderdoc:capture -- 8
 ```
 
 #### Enchaînement Interne Déclenché :
@@ -61,19 +61,19 @@ task renderdoc-capture -- 8
 6. Extraction de la vignette PNG (`renderdoccmd thumb`).
 7. **Analyse automatique de la structure GPU** via [`scripts/analyze_renderdoc_capture.sh`](file:///home/latty/Prog/__PERSO__/rust-firework/scripts/analyze_renderdoc_capture.sh).
 
-### 3.2. Exploration Graphique Replay (`task renderdoc-gui`)
+### 3.2. Exploration Graphique Replay (`task renderdoc:gui`)
 
 Ouvre la dernière capture GPU (`.rdc`) dans le GUI officiel `qrenderdoc` pour l'inspection interactive des shaders et du Pipeline State :
 
 ```bash
-task renderdoc-gui
+task renderdoc:gui
 ```
 
 ---
 
 ## 4. Analyse et Validation des Artefacts (Preuve Empirique)
 
-Lors de l'exécution de `task renderdoc-capture`, le rapport d'analyse suivant est automatiquement extrait du fichier `.rdc` :
+Lors de l'exécution de `task renderdoc:capture`, le rapport d'analyse suivant est automatiquement extrait du fichier `.rdc` :
 
 ```text
 ============================================================

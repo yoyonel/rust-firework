@@ -39,12 +39,12 @@ Une règle de détection basée sur des expressions régulières (Regex) analyse
 Le linter s'exécute de deux façons :
 
 ### A. Tâche Taskfile (Vérification Globale)
-* **Installation à la volée :** Si `vale` n'est pas installé sur l'OS, la tâche `task doc-setup-vale` télécharge automatiquement le binaire officiel Linux 64-bit et l'installe localement dans `./bin/vale`.
+* **Installation à la volée :** Si `vale` n'est pas installé sur l'OS, la tâche `task doc:setup-vale` télécharge automatiquement le binaire officiel Linux 64-bit et l'installe localement dans `./bin/vale`.
 * **Lancement du Linter :**
   ```bash
-  task doc-lint
+  task doc:lint
   ```
-* **Chaînage de Qualité :** La commande globale `task lint` intègre automatiquement la vérification des documents en plus de `cargo fmt` et `cargo clippy`.
+* **Chaînage de Qualité :** La commande globale `task lint:all` intègre automatiquement la vérification des documents en plus de `cargo fmt` et `cargo clippy`.
 
 ### B. Crochet Git de validation (Git Pre-Commit Hook)
 Un script de crochet a été déployé sous `.git/hooks/pre-commit`.

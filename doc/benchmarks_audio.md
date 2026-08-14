@@ -308,7 +308,7 @@ Sauvegarder les performances actuelles _sans_ la feature `simd` comme référenc
 
 ```sh
 # Via Task (recommandé)
-task bench-save-baseline -- scalar
+task bench:save-baseline -- scalar
 
 # Ou directement via cargo
 cargo bench --no-default-features -- --save-baseline scalar
@@ -316,7 +316,7 @@ cargo bench --no-default-features -- --save-baseline scalar
 
 Les résultats sont persistés dans `target/criterion/` sous le nom `scalar`. Ils survivent aux recompilations.
 
-> **Attention** : effectuer cette mesure dans des conditions stables (machine non chargée, pas de mises à jour en arrière-plan, préférer un cœur dédié avec `taskset -c 0 task bench-save-baseline -- scalar`).
+> **Attention** : effectuer cette mesure dans des conditions stables (machine non chargée, pas de mises à jour en arrière-plan, préférer un cœur dédié avec `taskset -c 0 task bench:save-baseline -- scalar`).
 
 ---
 
@@ -395,7 +395,7 @@ unsafe fn binauralize_mono_simd(mono: &[f32], ...) -> Vec<[f32; 2]> {
 
 ```sh
 # Via Task (recommandé)
-task bench-compare -- scalar
+task bench:compare -- scalar
 
 # Ou directement via cargo
 cargo bench --no-default-features --features simd -- --baseline scalar
@@ -421,10 +421,10 @@ La ligne `change` donne :
 
 ```sh
 # Sauvegarder l'implémentation SIMD v1 comme nouvelle baseline
-task bench-save-baseline -- simd_v1
+task bench:save-baseline -- simd_v1
 
 # Après optimisation v2, comparer contre v1
-task bench-compare -- simd_v1
+task bench:compare -- simd_v1
 ```
 
 Il est recommandé de nommer les baselines de façon sémantique : `scalar`, `avx2_v1`, `avx2_v2_prefetch`, etc.
@@ -437,10 +437,10 @@ Un gain de performance n'a de valeur que si le résultat reste correct. Après c
 
 ```sh
 # Tests unitaires (vérifie la correction fonctionnelle)
-task test
+task test:all
 
 # Benchmarks (vérifie la performance)
-task bench-compare -- <baseline>
+task bench:compare -- <baseline>
 ```
 
 Le groupe `binaural/positions` vérifie implicitement la correction : si le canal gauche est soudainement plus fort pour une source à droite, les tests de `audio_dsp_test.rs` le détecteront.
@@ -450,21 +450,21 @@ Le groupe `binaural/positions` vérifie implicitement la correction : si le cana
 ### Récapitulatif du workflow complet
 
 ```
-1. task bench-save-baseline -- scalar          ← snapshot de référence
+1. task bench:save-baseline -- scalar          ← snapshot de référence
 
 2. Implémenter SIMD derrière #[cfg(feature="simd")]
 
-3. task test                                   ← vérifier la correction
+3. task test:all                                   ← vérifier la correction
 
-4. task bench-compare -- scalar                ← mesurer le gain
+4. task bench:compare -- scalar                ← mesurer le gain
 
 5. Si gain satisfaisant :
-   task bench-save-baseline -- simd_v1         ← nouvelle baseline
+   task bench:save-baseline -- simd_v1         ← nouvelle baseline
 
 6. Itérer sur l'implémentation
-   task bench-compare -- simd_v1              ← comparer v2 vs v1
+   task bench:compare -- simd_v1              ← comparer v2 vs v1
 
-7. task bench-open-report                      ← rapport HTML complet
+7. task bench:open-report                      ← rapport HTML complet
 ```
 
 ---
@@ -475,21 +475,21 @@ Toutes les commandes passent par [Taskfile.yml](../Taskfile.yml) — ne pas util
 
 | Tâche | Équivalent cargo | Description |
 |---|---|---|
-| `task bench` | `cargo bench --no-default-features --features simd` | Tous les benchmarks |
-| `task bench-dsp` | `... --bench audio_dsp_bench` | DSP uniquement |
-| `task bench-binaural` | `... --bench audio_binaural_bench` | Binaural uniquement |
-| `task bench-save-baseline -- <nom>` | `... -- --save-baseline <nom>` | Snapshot nommé |
-| `task bench-compare -- <nom>` | `... -- --baseline <nom>` | Comparaison vs snapshot |
-| `task bench-open-report` | *(ouvre le navigateur)* | Rapport HTML Criterion |
+| `task bench:all` | `cargo bench --no-default-features --features simd` | Tous les benchmarks |
+| `task bench:dsp` | `... --bench audio_dsp_bench` | DSP uniquement |
+| `task bench:binaural` | `... --bench audio_binaural_bench` | Binaural uniquement |
+| `task bench:save-baseline -- <nom>` | `... -- --save-baseline <nom>` | Snapshot nommé |
+| `task bench:compare -- <nom>` | `... -- --baseline <nom>` | Comparaison vs snapshot |
+| `task bench:open-report` | *(ouvre le navigateur)* | Rapport HTML Criterion |
 
-### `bench-open-report` — serveur HTTP local
+### `bench:open-report` — serveur HTTP local
 
 Les rapports Criterion utilisent des **liens relatifs** entre pages HTML. Ouvrir le fichier directement via `file://` échoue avec les navigateurs sandboxés (Flatpak/Snap) car ils copient le fichier dans `/run/user/1000/doc/<hash>/` — les chemins relatifs ne se résolvent plus.
 
 La tâche démarre donc un **serveur HTTP Python local** (`python3 -m http.server`) servant depuis `target/criterion/`. Le navigateur navigue sur `http://localhost:17380/` où tous les liens relatifs fonctionnent.
 
 ```sh
-task bench-open-report
+task bench:open-report
 # 📊 Démarrage du serveur HTTP sur http://localhost:17380/report/index.html
 #    (Ctrl+C pour arrêter)
 ```
@@ -524,7 +524,7 @@ target/criterion/
 ```
 
 ```sh
-task bench-open-report
+task bench:open-report
 ```
 
 ---

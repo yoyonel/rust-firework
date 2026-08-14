@@ -33,7 +33,7 @@ Le code généré est strictement limité au besoin spécifié. Toute modificati
 Ne jamais inventer de nouveau pattern de conception si un pattern legacy fonctionnel existe dans le codebase. L'agent doit inspecter l'existant et reproduire la structure canonique.
 
 ### Règle 5 : Standards de Persistance UI
-Tout contrôle ImGui réclame la mise à jour de sa configuration canonique, sa sauvegarde à l'arrêt et sa restauration au démarrage/reload. Obligation de taguer le code avec `// GUI_PERSIST: <module>`, d'enregistrer la ligne dans `doc/gui_persistence_inventory.md`, et de valider via `task gui-persistence-check`.
+Tout contrôle ImGui réclame la mise à jour de sa configuration canonique, sa sauvegarde à l'arrêt et sa restauration au démarrage/reload. Obligation de taguer le code avec `// GUI_PERSIST: <module>`, d'enregistrer la ligne dans `doc/gui_persistence_inventory.md`, et de valider via `task test:gui-persistence-check`.
 
 ### Règle 6 : Respect des Intentions Mathématiques & Stratégies de Mutation UI
 * **Intentions mathématiques :** Toujours analyser les commentaires et invariants pré-existants (ex: usage explicite d'un `Vec2::ZERO` ou constante physique) avant tout refactoring.
@@ -55,9 +55,9 @@ Toute suppression de fichier d'infrastructure, de configuration structurante ou 
 
 ### PILIER 1 : PROTOCOLES DE VALIDATION & TESTS (FAIL-FAST PYRAMID & ZERO-TRUST)
 1. **Pyramide d'Exécution Strict (Fail-Fast) :**
-  - **Boucle Dev :** Exécuter le test unitaire ciblé (`task test-one -- <nom_test>`).
-  - **Validation Globale :** Exécuter `task test` (`--test-threads=1`).
-  - **Pre-Commit / Render Pipeline Mod :** Exécuter `task test-opengl-mesa` (validation des spécifications OpenGL headless Mesa) et `task test-visual-full` (non-régression visuelle 120-frames).
+  - **Boucle Dev :** Exécuter le test unitaire ciblé (`task test:one -- <nom_test>`).
+  - **Validation Globale :** Exécuter `task test:all` (`--test-threads=1`).
+  - **Pre-Commit / Render Pipeline Mod :** Exécuter `task test:opengl-mesa` (validation des spécifications OpenGL headless Mesa) et `task test:visual-full` (non-régression visuelle 120-frames).
 2. **Anti-Triche & Zero-Trust :**
   - Interdiction formelle de modifier, assouplir, supprimer une assertion ou d'ajouter `#[ignore]` pour forcer le succès d'un test. Le code de production s'adapte au test.
   - En cas d'échec : Débogage obligatoire avec `--nocapture` et `--test-threads=1`.
@@ -73,7 +73,7 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
   - Aucune optimisation/refactoring de performance ou d'architecture GPU/particules n'est accepté sans mesure comparative.
   - **Isolation CPU (Anti-Bruit) :** L'exécution des outils de profilage DOIT être strictement synchrone/bloquante. Interdiction absolue de lancer ces outils en arrière-plan (background task) pendant que l'agent réfléchit ou manipule d'autres fichiers.
   - **Workflow A/B :**
-    1. Capture Baseline CLI sur `develop` (`task valgrind-callgrind`, `task asm-count-simd`, `task heaptrack` ou capture RenderDoc `task renderdoc-capture`).
+    1. Capture Baseline CLI sur `develop` (`task profile:valgrind-callgrind`, `task asm:count-simd`, `task profile:heaptrack` ou capture RenderDoc `task renderdoc:capture`).
     2. Capture Target CLI sur la branche du fix.
     3. Restitution obligatoire d'un diff textuel synthétique (% gain d'instructions, ratio d'instructions SIMD AVX2 vectorielles vs scalaires, réduction d'allocations mémoire, analyse des passes RenderDoc) avant la demande de validation humaine.
 3. **Multi-Hardware & Dual-Baseline Tracy Benchmarking :**
@@ -94,7 +94,7 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
 
 ### PILIER 4 : SANITIZERS & SÛRETÉ CONCURRENTE (FAIL-SAFE)
 1. **Périmètre Déclencheur (Targeted Sanitizing) :**
-  - **Concurrence & Multithread :** Toute modification touchant le thread audio CPal, les canaux lock-free (`crossbeam`), les atomiques ou la queue CQRS exige un succès préalable à `task test-tsan` (`-
+  - **Concurrence & Multithread :** Toute modification touchant le thread audio CPal, les canaux lock-free (`crossbeam`), les atomiques ou la queue CQRS exige un succès préalable à `task test:tsan` (`-
   Zsanitizer=thread`).
   - **Mémoire Bas-Niveau & Unsafe :** Tout refactoring de mémoire brute (AoS/SoA, pointeurs bruts, buffers persistant OpenGL AZDO) requiert un passage propre sous Valgrind Memcheck (ou ASan).
   - **Exemption :** Code logique pur, UI ImGui et mathématiques scalaires sans concurrence/unsafe.
@@ -119,10 +119,10 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
 ### PILIER 6 : CI/CD, PRE-COMMITS & RUNNERS DISTANTS (SHIFT-LEFT)
 1. **Vérification Locale Prébail (Pre-CI Gate & Shift-Left Polymorphe) :**
   - L'agent ne doit JAMAIS initier un Stop-Point de fin de tâche, ni ouvrir une PR (`gh pr create`), sans d'abord exécuter la séquence locale obligatoire adaptée au périmètre :
-    1. Base commune : `task hooks:install` et Linter exhaustif `task lint` (fmt, clippy strict `-D warnings`, doc-lint).
+    1. Base commune : `task hooks:install` et Linter exhaustif `task lint:all` (fmt, clippy strict `-D warnings`, doc-lint).
     2. Routage contextuel des validations :
-       - Métier / UI / Rendu : `task gui-persistence-check` et `task test-opengl-mesa`.
-       - Audio : tests unitaires audio dédiés et `task test-tsan`.
+       - Métier / UI / Rendu : `task test:gui-persistence-check` et `task test:opengl-mesa`.
+       - Audio : tests unitaires audio dédiés et `task test:tsan`.
        - DevOps / CI-CD : Validation de l'image et exécution ISO (ex: `task devops:build-image`, `task devops:lint`, `task devops:audit`).
 2. **Stratégie de Caching Multi-Niveau CI/CD (Zero Redundant Download) :**
   - Obligation d'implémenter un cache strict via `actions/cache@v4` pour tout binaire tiers ou outil CLI (`renderdoccmd`, `sccache`, `cargo-llvm-cov`), registres Cargo et répertoires `target`.
@@ -156,7 +156,7 @@ Avant d'initier tout Stop-Point et de solliciter la validation humaine pour comm
 1. **Audit Diff Global :**
   `git diff develop...HEAD`
 2. **Shift-Left Local Check (Contextuel) :**
-  Exécution de la suite de commandes adaptées au domaine d'intervention (ex: `task lint && task test-opengl-mesa` pour le métier, ou `task devops:build-image && task devops:audit` pour l'infrastructure).
+  Exécution de la suite de commandes adaptées au domaine d'intervention (ex: `task lint:all && task test:opengl-mesa` pour le métier, ou `task devops:build-image && task devops:audit` pour l'infrastructure).
 3. Consolidation Documentaire :
   • Rapport `doc/YYYYMMDD_<nom_fix>_report.md` rédigé et référencé dans `doc/SUMMARY.md`.
   • Inventaire `doc/gui_persistence_inventory.md` à jour le cas échéant.

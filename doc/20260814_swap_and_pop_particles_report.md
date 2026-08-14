@@ -35,11 +35,11 @@ Le runbook suivant permet d'auditer et de vérifier localement ces gains via ins
 
 ```bash
 # Compilation du binaire avec symboles de débogage et optimisations agressives
-task build-profiling
+task build:profiling
 
 # Lancement de l'échantillonneur Intel VTune (Hotspots) - Requiert privilèges sudo
 # La session collecte les évènements PMU pendant la durée de vie du script d'automatisation
-task benchmark-vtune-hotspots
+task profile:vtune-hotspots
 
 # Analyse du rapport
 # Le temps CPU alloué aux fonctions de mise à jour physique doit être comparé à la trace historique

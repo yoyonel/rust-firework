@@ -100,10 +100,10 @@ Dans la version actuelle, la boucle principale du simulateur ([`Simulator::updat
 
 ## 5. Recette QA (Shift-Left) & Parité CI
 
-1. **Tests Unitaires & Stress Tests (`task test`) :** 🟢 **PASS**
+1. **Tests Unitaires & Stress Tests (`task test:all`) :** 🟢 **PASS**
 2. **Tests d'Intégration Audio (`cargo test audio`) :** 🟢 **PASS**
-3. **Linter & SSOT Rule 7 (`task lint`) :** 🟢 **0 erreurs / 0 warnings**
-4. **Mesa OpenGL Headless (`task test-opengl-mesa`) :** 🟢 **0 violation GL**
+3. **Linter & SSOT Rule 7 (`task lint:all`) :** 🟢 **0 erreurs / 0 warnings**
+4. **Mesa OpenGL Headless (`task test:opengl-mesa`) :** 🟢 **0 violation GL**
 
 ---
 
