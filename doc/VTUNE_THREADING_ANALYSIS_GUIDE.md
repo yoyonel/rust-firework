@@ -1,6 +1,6 @@
 # Guide d'Analyse VTune : Threading & Synchronisation (Locks & Waits)
 
-La commande `task benchmark-vtune-threading` exécute un profilage matériel centré sur la manière dont les threads se partagent l'exécution et interagissent. L'objectif est d'identifier les goulets d'étranglement de synchronisation (Lock Contention) et l'inefficacité multi-core.
+La commande `task profile:vtune-threading` exécute un profilage matériel centré sur la manière dont les threads se partagent l'exécution et interagissent. L'objectif est d'identifier les goulets d'étranglement de synchronisation (Lock Contention) et l'inefficacité multi-core.
 
 ## 1. Glossaire et Terminologie
 
@@ -29,6 +29,6 @@ Si l'`Effective CPU Utilization` est très bas et que le `Wait Time` n'est imput
 * *Solution :* Diviser la charge physique via des frameworks comme `Rayon`.
 
 ## 3. Comportement Idéal (Architecture Saine)
-Un moteur bien optimisé lors de l'exécution de `task benchmark-vtune-threading` affichera :
+Un moteur bien optimisé lors de l'exécution de `task profile:vtune-threading` affichera :
 1. **Spin Time = 0s** (Aucun gaspillage d'énergie, pas de bagarre sur les locks).
 2. **Top Waiting Objects = Condition Variable / poll** (Les threads inactifs sont sagement endormis par le Kernel et ne consomment pas de CPU).

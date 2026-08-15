@@ -9,7 +9,7 @@ Les rapports sont horodatés et standardisés pour faciliter la détection de r�
 ### 📝 [YYYY-MM-DD] Bilan Profiling Mémoire
 
 **Objectif** : Validation X, Optimisation Y.
-**Commandes Exécutées** : `task benchmark-heaptrack`, `task benchmark-vtune`
+**Commandes Exécutées** : `task profile:heaptrack-cli`, `task profile:vtune`
 
 #### 1. Heaptrack (Allocations Tas)
 - **Peak heap memory consumption** : X MB

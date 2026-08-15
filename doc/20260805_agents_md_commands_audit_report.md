@@ -16,17 +16,17 @@ Conformément au cadre comportemental du projet, une vérification empirique et 
 
 | Catégorie | Outil / Commande / Tâche | Statut Initial | Statut Final | Preuve d'Exécution & Notes |
 | :--- | :--- | :---: | :---: | :--- |
-| **Persistance & UI** | `task gui-persistence-check` | ✅ OK | ✅ OK | Executed `./scripts/check_gui_persistence.sh` (11/11 rows OK). |
-| **Linting & Code Quality** | `task lint` | ✅ OK | ✅ OK | Executed `cargo fmt`, `cargo clippy -D warnings`, `vale` (0 error). |
-| **Pyramide de Tests** | `task test-one -- <test>` | ✅ OK | ✅ OK | Executed `task test-one -- rocket` (2 passed). |
-| **Pyramide de Tests** | `task test` | ✅ OK | ✅ OK | Executed `cargo test --all --test-threads=1` (180+ tests passed). |
-| **Rendu & Mesa Software** | `task test-opengl-mesa` | ✅ OK | ✅ OK | Executed `LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_DEBUG=1` (0 violation GL). |
-| **Régression Visuelle** | `task test-visual-full` | ✅ OK | ✅ OK | Executed `./scripts/run_visual_regression_full.sh` (4/4 baselines OK). |
-| **Profilage CPU** | `task valgrind-callgrind` | ✅ OK | ✅ OK | Executed `valgrind --tool=callgrind` (135M instructions analysées). |
-| **Décompilation SIMD** | `task asm-count-simd` | ✅ OK | ✅ OK | Executed GDB 16.2 + `nm` (40 instructions AVX2 256-bit comptées). |
-| **Profilage Mémoire** | `task heaptrack` | ✅ OK | ✅ OK | Executed `heaptrack` 1.5.0 (fichier `.zst` généré). |
-| **Micro-Benchmarks** | `task bench` / `task bench-pool-ops` | ✅ OK | ✅ OK | Executed `cargo bench` via Criterion 0.5.1 (4 benches validés). |
-| **Sûreté Concurrente** | `task test-tsan` | ✅ OK | ✅ OK | Executed `cargo +nightly test -Zsanitizer=thread -Z build-std` (0 race). |
+| **Persistance & UI** | `task test:gui-persistence-check` | ✅ OK | ✅ OK | Executed `./scripts/check_gui_persistence.sh` (11/11 rows OK). |
+| **Linting & Code Quality** | `task lint:all` | ✅ OK | ✅ OK | Executed `cargo fmt`, `cargo clippy -D warnings`, `vale` (0 error). |
+| **Pyramide de Tests** | `task test:one -- <test>` | ✅ OK | ✅ OK | Executed `task test:one -- rocket` (2 passed). |
+| **Pyramide de Tests** | `task test:all` | ✅ OK | ✅ OK | Executed `cargo test --all --test-threads=1` (180+ tests passed). |
+| **Rendu & Mesa Software** | `task test:opengl-mesa` | ✅ OK | ✅ OK | Executed `LIBGL_ALWAYS_SOFTWARE=1 MESA_GL_DEBUG=1` (0 violation GL). |
+| **Régression Visuelle** | `task test:visual-full` | ✅ OK | ✅ OK | Executed `./scripts/run_visual_regression_full.sh` (4/4 baselines OK). |
+| **Profilage CPU** | `task profile:valgrind-callgrind` | ✅ OK | ✅ OK | Executed `valgrind --tool=callgrind` (135M instructions analysées). |
+| **Décompilation SIMD** | `task asm:count-simd` | ✅ OK | ✅ OK | Executed GDB 16.2 + `nm` (40 instructions AVX2 256-bit comptées). |
+| **Profilage Mémoire** | `task profile:heaptrack` | ✅ OK | ✅ OK | Executed `heaptrack` 1.5.0 (fichier `.zst` généré). |
+| **Micro-Benchmarks** | `task bench:all` / `task bench:pool-ops` | ✅ OK | ✅ OK | Executed `cargo bench` via Criterion 0.5.1 (4 benches validés). |
+| **Sûreté Concurrente** | `task test:tsan` | ✅ OK | ✅ OK | Executed `cargo +nightly test -Zsanitizer=thread -Z build-std` (0 race). |
 | **Pre-Commit Hooks** | `task hooks:install` | ✅ OK | ✅ OK | Executed `git config core.hooksPath .githooks`. |
 | **Toolchains Rust** | `rustup` (`nightly` + `rust-src`) | ✅ OK | ✅ OK | `nightly-x86_64-unknown-linux-gnu` disponible et testé. |
 | **Intégration GitHub** | `gh` (`gh pr create`, `gh run view`) | ✅ OK | ✅ OK | GitHub CLI 2.46.0 authentifié (`yoyonel`). |

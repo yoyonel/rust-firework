@@ -24,12 +24,12 @@ on:
    - The job runs in the background while the PR remains open.
    - **3-Keyframe Fast Test**: `task ci:coverage` runs `cargo test` including `tests/visual_regression_test.rs` (< 1 second runtime).
 
-2. **Pre-Merge Master Validation (`task test-visual-full`)**:
+2. **Pre-Merge Master Validation (`task test:visual-full`)**:
    - When a Pull Request targets `master` (`github.event_name == 'pull_request' && github.base_ref == 'master'`), Step 7 invokes:
      ```yaml
      - name: Run Full 120-Frame Visual Non-Regression (Pre-Merge Master)
        if: github.event_name == 'pull_request' && github.base_ref == 'master'
-       run: task test-visual-full
+       run: task test:visual-full
      ```
    - This step executes `scripts/run_visual_regression_full.sh` under `xvfb-run -a` and verifies all 120 frames per reference video.
 

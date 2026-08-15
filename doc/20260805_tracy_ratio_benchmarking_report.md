@@ -52,13 +52,13 @@ En cas de dépassement sur une quelconque métrique, le script retourne un exit 
 
 ### Génération de la Baseline de Référence (`develop`)
 ```bash
-task generate-tracy-baseline
+task tracy:generate-baseline
 ```
 Enregistre la baseline dans [`benches/baselines/tracy_ratios_develop.csv`](file:///home/latty/Prog/__PERSO__/rust-firework/benches/baselines/tracy_ratios_develop.csv).
 
 ### Audit Comparatif des Ratios
 ```bash
-task bench-tracy-ratios
+task bench:tracy-ratios
 ```
 Exécute une capture headless Tracy de 5s et produit le rapport comparatif ANSI :
 
@@ -88,13 +88,13 @@ r_doppler_audio      | 0.0161       | 0.0193       |              1.20x | OK
 
 ### 5.1 Tâches Taskfile
 Trois nouvelles tâches sont configurées dans [`Taskfile.yml`](file:///home/latty/Prog/__PERSO__/rust-firework/Taskfile.yml) :
-* `capture-tracy-headless` : Lancement du simulateur et capture de 5 secondes avec `tracy-capture`.
-* `bench-tracy-ratios` : Audit comparatif des proportions relatives contre la baseline `develop` et génération du rapport `/tmp/tracy_pr_comment.md`.
-* `generate-tracy-baseline` : Génération et écriture du fichier CSV de référence `benches/baselines/tracy_ratios_develop.csv`.
+* `tracy:capture-headless` : Lancement du simulateur et capture de 5 secondes avec `tracy-capture`.
+* `bench:tracy-ratios` : Audit comparatif des proportions relatives contre la baseline `develop` et génération du rapport `/tmp/tracy_pr_comment.md`.
+* `tracy:generate-baseline` : Génération et écriture du fichier CSV de référence `benches/baselines/tracy_ratios_develop.csv`.
 
 ### 5.2 Workflow GitHub Actions ([`.github/workflows/ci.yml`](file:///home/latty/Prog/__PERSO__/rust-firework/.github/workflows/ci.yml))
 À chaque ouverture ou modification de Pull Request :
 1. **Compilation des outils CLI Tracy** : Les binarisés `tracy-capture` et `tracy-csvexport` sont compilés depuis les sources (version v0.11.1) et mis en cache via `actions/cache@v4`.
-2. **Exécution du Benchmark Headless** : La commande `xvfb-run -a task bench-tracy-ratios` est exécutée sous Xvfb.
+2. **Exécution du Benchmark Headless** : La commande `xvfb-run -a task bench:tracy-ratios` est exécutée sous Xvfb.
 3. **Publication du Rapport sur la PR** : L'action `mshick/add-pr-comment@v3` publie ou met à jour dynamiquement un commentaire Markdown structuré (`message-id: tracy-ratio-benchmark`) sans spamer le fil de discussion.
 
