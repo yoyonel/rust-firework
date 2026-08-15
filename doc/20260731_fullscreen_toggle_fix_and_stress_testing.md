@@ -56,7 +56,7 @@ Un script dédié a été intégré pour valider la stabilité sous des cycles a
 
 * **Script Shell** : `scripts/test_stress_fullscreen_rust.sh`
 * **Sauvegarde Atomique** : Le script journalise en temps réel la progression dans `stress_progress.log` après chaque itération afin d'assurer la persistance des données sur disque même en cas d'interruption brutale.
-* **Tâche Taskfile** : Ajout de la cible `task stress-fullscreen` exécutant 50 cycles de basculement avec un intervalle de 100 ms.
+* **Tâche Taskfile** : Ajout de la cible `task test:stress-fullscreen` exécutant 50 cycles de basculement avec un intervalle de 100 ms.
 
 ### Résultats de Validation
 - **Cycles exécutés** : 50 / 50

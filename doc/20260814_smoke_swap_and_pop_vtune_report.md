@@ -6,7 +6,7 @@
 ## 1. Protocole et Commandes
 **Commande d'exécution stricte (Fast-Forward) :**
 ```bash
-task benchmark-vtune -- --deterministic-seed 42 --fixed-dt 0.016666 --timeout-secs 10 --disable-audio
+task profile:vtune -- --deterministic-seed 42 --fixed-dt 0.016666 --timeout-secs 10 --disable-audio
 ```
 *(Note: La Baseline inclut l'optimisation préalable de `rocket.rs` pour isoler uniquement le delta de `smoke_system.rs`)*
 

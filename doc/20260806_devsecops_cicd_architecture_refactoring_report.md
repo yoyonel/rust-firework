@@ -18,12 +18,12 @@ La nouvelle architecture adopte la stratégie "Golden Image + Containerized DAG"
    * Contient nativement l'intégralité des dépendances système, Rust toolchain 1.90.0, CLI pre-compilés (`sccache`, `task`, `cargo-llvm-cov`, `cargo-deny`, `renderdoccmd`, `tracy-capture`, `tracy-csvexport`).
 
 2. **Graphe DAG Parallèle** (`.github/workflows/ci.yml`) :
-   * **Job Fast-Fail (`lint-and-security`)** : Exécute `task lint` et `cargo deny check` en premier.
+   * **Job Fast-Fail (`lint-and-security`)** : Exécute `task lint:all` et `cargo deny check` en premier.
    * **Jobs Parallèles (`needs: lint-and-security`)** :
      - `unit-tests-coverage` (`task ci:coverage`)
-     - `mesa-visual-regression` (`task test-opengl-mesa` & `task test-visual-full`)
-     - `renderdoc-validation` (`task renderdoc-capture`)
-     - `tracy-ratio-benchmark` (`xvfb-run -a task bench-tracy-ratios`)
+     - `mesa-visual-regression` (`task test:opengl-mesa` & `task test:visual-full`)
+     - `renderdoc-validation` (`task renderdoc:capture`)
+     - `tracy-ratio-benchmark` (`xvfb-run -a task bench:tracy-ratios`)
    * **Job Aggregator (`ci-summary-report`)** : Génère le tableau de bord Markdown nativement dans `$GITHUB_STEP_SUMMARY`.
 
 3. **Reproductibilité ISO Locale (`Taskfile.yml`)** :
@@ -52,7 +52,7 @@ cargo deny check advisories licenses bans
 task devops:build-image
 
 # Exécution ISO d'un test OpenGL Mesa
-task devops:run -- task test-opengl-mesa
+task devops:run -- task test:opengl-mesa
 
 # Shell interactif pour débogage local
 task devops:shell

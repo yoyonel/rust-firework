@@ -71,11 +71,11 @@ La régénération et l'application des overlays sont entièrement automatisées
 À lancer après chaque modification majeure de l'architecture, ajout de module, ou mise à jour de spécification technique dans `doc/` :
 
 ```bash
-task update-ai-skills
+task ai:update-skills
 ```
 
 ### Comportement interne du Taskfile.yml
-La tâche s'exécute en séquence pour chaque module via une tâche interne factorisée (_generate-overlay-skill) :
+La tâche s'exécute en séquence pour chaque module via une tâche interne factorisée (`_ai:generate-overlay-skill`) :
 
 1. Appel de npx repomix@latest avec le filtre --include approprié.
 2. Export du résultat dans ~/.agents/skills/firework-<module>.

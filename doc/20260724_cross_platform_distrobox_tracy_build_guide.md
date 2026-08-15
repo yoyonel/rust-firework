@@ -25,9 +25,9 @@ vars:
 ```
 
 ### Séparation Responsabilité Build vs Run
-- **Cibles de compilation** (`build-release`, `build-tracy`, `test`, `clippy`, etc.) :  
+- **Cibles de compilation** (`build:release`, `build:tracy`, `test`, `clippy`, etc.) :  
   Utilisent `{{.CARGO}}` (`distrobox enter clang-dev -- cargo ...`) pour exécuter la chaîne de compilation Rust et les compilations de dépendances système C dans le conteneur `clang-dev`.
-- **Cibles d'exécution** (`run-release`, `run-prime-with-hud`, `run-tracy`, etc.) :  
+- **Cibles d'exécution** (`run:release`, `run:prime-hud`, `run:tracy`, etc.) :  
   Dépendent de la cible de build (`deps: [build-release]`), puis exécutent le binaire produit (`./target/release/fireworks_sim`) **directement sur l'hôte**.
 
 ### Pourquoi cette séparation ?
@@ -113,11 +113,11 @@ export LD_PRELOAD=/usr/lib64/mangohud/libMangoHud_shim.so
 
 ```sh
 # Compilation et exécution standard avec GPU NVIDIA & MangoHud
-task run-release
+task run:release
 
 # Compilation et exécution avec profilage Tracy activé
-task run-tracy
+task run:tracy
 
 # Exécution des tests unitaires (automatiquement sous Virtual Framebuffer et Distrobox)
-task test
+task test:all
 ```
