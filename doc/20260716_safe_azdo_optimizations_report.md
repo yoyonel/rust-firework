@@ -60,7 +60,7 @@ Criterion a été exécuté en faisant varier le nombre maximum de fusées physi
 | **4000 fusées** | 5.16 ms | **4.53 ms** | **+12.3% de vitesse** |
 
 ### 2. Retours du Tracy Profiler Headless
-L'analyse de trace générée via `task profile-tracy-headless` donne les métriques suivantes pour `Renderer::render_frame` :
+L'analyse de trace générée via `task profile:tracy-headless` donne les métriques suivantes pour `Renderer::render_frame` :
 - **Nombre total de frames analysées :** 4809
 - **Durée médiane (Median) :** **558.54 us**
 - **Durée minimale (Min) :** **119.06 us**

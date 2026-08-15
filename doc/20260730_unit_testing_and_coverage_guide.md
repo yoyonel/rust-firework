@@ -84,7 +84,7 @@ let lifecycle_calls: Vec<&str> = calls
 La bibliothèque C GLFW sous-jacente gère des gestionnaires d'erreurs globaux non thread-safe sous X11 (`_glfwGrabErrorHandlerX11`). Lors du lancement parallèle des tests unitaires Rust par `cargo test`, l'initialisation simultanée de contextes GLFW sur plusieurs threads peut provoquer une assertion échec C (`Assertion _glfw.x11.errorHandler == NULL failed`) ou un segfault.
 
 ### 3.2 Solution Intégrée au `Taskfile.yml`
-Toutes les tâches de test (`task test`, `task coverage`, `task ci:coverage`) sérialisent l'exécution via l'option Cargo `-- --test-threads=1` :
+Toutes les tâches de test (`task test:all`, `task test:coverage`, `task ci:coverage`) sérialisent l'exécution via l'option Cargo `-- --test-threads=1` :
 
 ```yaml
   test:
@@ -104,7 +104,7 @@ Le projet utilise `cargo-llvm-cov` pour mesurer la couverture de code par régio
 Pour calculer la couverture de code locale et générer le rapport HTML :
 
 ```bash
-task coverage
+task test:coverage
 ```
 
 Le rapport est généré dans le répertoire `coverage/html/index.html`.

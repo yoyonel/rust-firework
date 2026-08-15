@@ -33,7 +33,7 @@ L'implémentation *Swap-and-Pop* (O(1) suppression par échange avec le dernier 
 git checkout feat/memory-profiling-tooling
 
 # Lancer la mesure Memory Access
-task benchmark-vtune
+task profile:vtune
 # Lancer la mesure Hotspots
-task benchmark-vtune-hotspots
+task profile:vtune-hotspots
 ```

@@ -47,6 +47,6 @@ Before adding or changing an ImGui setting:
 2. Update the canonical value, shutdown save, startup restoration, and Reload
    Session restoration together.
 3. Add a round-trip test when the value is stored in `GuiSessionState`.
-4. Run `task gui-persistence-check` before committing.
+4. Run `task test:gui-persistence-check` before committing.
 
 The marker/inventory consistency is enforced by the task and pre-commit hook.

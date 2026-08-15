@@ -99,7 +99,7 @@ Dump of assembler code from 0x2feda0 to 0x2fee06 (Kernel Vectoriel AVX2 256-bit)
 
 ## 4. Résultats & Profilage Comparatif Callgrind
 
-Le profilage a été exécuté via la commande du Taskfile : `task valgrind-callgrind`.
+Le profilage a été exécuté via la commande du Taskfile : `task profile:valgrind-callgrind`.
 
 ### Tableau Comparatif des Traces Callgrind
 
@@ -137,17 +137,17 @@ Toutes les étapes d'analyse, de compilation native, de décompilation GDB et de
 
 ```bash
 # 1. Validation de la suite de tests unitaires (100% isolée)
-task test
+task test:all
 
 # 2. Décompilation automatique assembleur SIMD AVX2 de process_dsp_spatial_bus (via GDB)
-task asm-dsp-spatial-bus
+task asm:dsp-spatial-bus
 
 # 3. Compteur automatique des instructions vectorielles AVX2 256-bit vs scalaires vs fdiv
-task asm-count-simd
+task asm:count-simd
 
 # 4. Benchmark de performance comparatif Criterion (Bus Spatial 2D vs Legacy)
-task bench-spatial-bus
+task bench:spatial-bus
 
 # 5. Profilage d'instructions Valgrind Callgrind avec annotation automatique
-task valgrind-callgrind
+task profile:valgrind-callgrind
 ```

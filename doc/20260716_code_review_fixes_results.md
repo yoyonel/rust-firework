@@ -33,7 +33,7 @@ Ce rapport documente les corrections apportées aux 12 findings soulevés lors d
 ## 📈 2. Analyse Métrologique Post-Optimisation
 
 ### A. Profilage Tracy Headless (Mesures précises de la Render Loop)
-L'exécution de la tâche automatique `task profile-tracy-headless` sur **4 720 frames** montre des gains exceptionnels en éliminant l'overhead des reconfigurations VAO :
+L'exécution de la tâche automatique `task profile:tracy-headless` sur **4 720 frames** montre des gains exceptionnels en éliminant l'overhead des reconfigurations VAO :
 
 | Métrique Rendu | Relevé Phase 4 (Initial) | Relevé Après Fixes Review | Amélioration |
 | :--- | :--- | :--- | :---: |

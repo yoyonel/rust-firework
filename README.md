@@ -66,7 +66,7 @@ cargo run --release
 Exécuter la scène de stress-test audio (128+ sources virtuelles) :
 
 ``` bash
-task run-audio-stress -- 256
+task run:audio-stress -- 256
 ```
 
 Via Docker :

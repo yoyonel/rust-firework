@@ -13,7 +13,7 @@ Le test de performance a été effectué sur les deux branches au moyen de la co
 ```bash
 env vblank_mode=0 __GL_SYNC_TO_VBLANK=0 RUST_LOG=fireworks_sim=WARM \
 MANGOHUD_CONFIG="autostart_log=1,log_duration=30,output_folder=/tmp/mangologs/..." \
-mangohud gamemoderun task run-release
+mangohud gamemoderun task run:release
 ```
 
 ---

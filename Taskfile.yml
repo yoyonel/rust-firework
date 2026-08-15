@@ -24,62 +24,62 @@ tasks:
   default:
     desc: "Cible par défaut : Lancement des tests unitaires"
     cmds:
-      - task: test
+      - task: test:all
 
   # =========================================
   # 🦀 DEV / DEBUG
   # =========================================
-  build-debug:
+  build:debug:
     desc: "Compile le projet en mode debug (développement)"
     cmds:
       - "{{.CARGO}} build"
 
-  run-debug:
+  run:debug:
     desc: "Exécute le projet en mode debug"
-    deps: [build-debug]
+    deps: [build:debug]
     cmds:
       - "./target/debug/{{.APP_NAME}}"
 
   # =========================================
   # 🚀 RELEASE STANDARD
   # =========================================
-  build-release:
+  build:release:
     desc: "Compile le projet en mode release standard"
     cmds:
       - echo "⚙️  Compilation en mode release standard..."
       - "{{.CARGO}} build --release"
 
-  run-release:
+  run:release:
     desc: "Exécute le projet en mode release standard"
-    deps: [build-release]
+    deps: [build:release]
     cmds:
       - "./target/release/{{.APP_NAME}}"
 
   # =========================================
   # ⚡ ULTRA-SPEED (FPS MAX)
   # =========================================
-  build-ultra-speed:
+  build:ultra-speed:
     desc: "Compile pour la VITESSE maximale (LTO fat, codegen=1)"
     cmds:
       - echo "🏎️ Compilation en mode ULTRA-SPEED..."
       - "{{.CARGO}} build --profile ultra-speed"
 
-  run-ultra-speed:
+  run:ultra-speed:
     desc: "Exécute le projet avec les performances maximales"
-    deps: [build-ultra-speed]
+    deps: [build:ultra-speed]
     cmds:
       - "./target/ultra-speed/{{.APP_NAME}}"
 
-  run-ultra-speed-with-gamemoderun-and-tracy:
+  run:ultra-speed-gamemode-tracy:
     desc: "Lancement en mode performance maximale absolue sous X11"
-    deps: [build-ultra-speed]
+    deps: [build:ultra-speed]
     cmds:
       - echo "🏎️ Run en mode ULTRA-SPEED + MangoHud + GameModeRun + Tracy ..."
       - mangohud vblank_mode=0 mesa_glthread=true gamemoderun ./target/ultra-speed/{{.APP_NAME}}
   # =========================================
   # 📦 ULTRA-SIZE (TAILLE MIN)
   # =========================================
-  build-ultra-size:
+  build:ultra-size:
     desc: "Compile pour la TAILLE minimale (opt-level z)"
     cmds:
       - echo "🗜️ Compilation en mode ULTRA-SIZE..."
@@ -88,28 +88,28 @@ tasks:
   # =========================================
   # 🔬 PROFILING & DEBUG GRAPHIQUE
   # =========================================
-  build-profiling:
+  build:profiling:
     internal: true # Ne s'affiche pas dans `task -l`
     cmds:
       - "{{.CARGO}} build --profile profiling"
 
-  build-profiling-native:
+  build:profiling-native:
     desc: "Compile en mode profiling avec RUSTFLAGS natifs (AVX2 SIMD activé)"
     cmds:
       - RUSTFLAGS="-C target-cpu=native" {{.CARGO}} build --profile profiling
 
-  asm-dsp-spatial-bus:
+  asm:dsp-spatial-bus:
     desc: "Décompile la fonction DspProcessor::process_dsp_spatial_bus via GDB (avec recherche auto d'adresse)"
-    deps: [build-profiling-native]
+    deps: [build:profiling-native]
     cmds:
       - |
         ADDR=$(nm -C ./target/profiling/{{.APP_NAME}} | grep "process_dsp_spatial_bus" | awk '{print $1}')
         echo "🔍 Décompilation assembleur SIMD AVX2 de process_dsp_spatial_bus (0x$ADDR) :"
         gdb -batch -ex "file ./target/profiling/{{.APP_NAME}}" -ex "disassemble 0x$ADDR, +3500" | grep -A 22 -B 3 "vbroadcastss"
 
-  asm-count-simd:
+  asm:count-simd:
     desc: "Compte automatiquement les instructions SIMD AVX2 256-bit vs scalaires dans process_dsp_spatial_bus"
-    deps: [build-profiling-native]
+    deps: [build:profiling-native]
     cmds:
       - |
         ADDR=$(nm -C ./target/profiling/{{.APP_NAME}} | grep "process_dsp_spatial_bus" | awk '{print $1}')
@@ -127,43 +127,43 @@ tasks:
           print "--------------------------------------------------------"
         }'
 
-  valgrind-callgrind:
+  profile:valgrind-callgrind:
     desc: "Profiling avec Valgrind"
-    deps: [build-profiling]
+    deps: [build:profiling]
     cmds:
       - valgrind --tool=callgrind ./target/profiling/{{.APP_NAME}}
       - sh -c 'callgrind_annotate $(ls -tr | grep callgrind.out | tail -1) | grep -e "{{.APP_NAME}}::"'
 
-  heaptrack:
+  profile:heaptrack:gui:
     desc: "Profiling avec Heaptrack"
-    deps: [build-profiling]
+    deps: [build:profiling]
     cmds:
       - heaptrack ./target/profiling/{{.APP_NAME}}
 
-  renderdoc-capture:
+  renderdoc:capture:
     desc: "Exécute une capture GPU RenderDoc après un délai configurable (par défaut 5s), extrait la vignette et analyse le XML"
-    deps: [build-release]
+    deps: [build:release]
     env:
       RENDERDOC_CAP_DIR: "{{.RENDERDOC_CAP_DIR}}"
       RENDERDOC_CAP_PREFIX: "{{.RENDERDOC_CAP_PREFIX}}"
     cmds:
       - "./scripts/capture_renderdoc.sh {{.CLI_ARGS}}"
 
-  renderdoc-gui:
+  renderdoc:gui:
     desc: "Ouvre la dernière capture RenderDoc (.rdc) dans l'interface graphique qrenderdoc"
     cmds:
       - |
         RDC_FILE=$(ls -tr {{.RENDERDOC_CAP_PREFIX}}*.rdc {{.RENDERDOC_CAP_DIR}}/fireworks_*.rdc 2>/dev/null | tail -1)
         if [ -z "$RDC_FILE" ]; then
-          echo "⚠️ Aucune capture .rdc trouvée. Lance d'abord : task renderdoc-capture"
+          echo "⚠️ Aucune capture .rdc trouvée. Lance d'abord : task renderdoc:capture"
           exit 1
         fi
         echo "🚀 Ouverture de $RDC_FILE dans qrenderdoc GUI..."
         exec qrenderdoc "$RDC_FILE"
 
-  run-release-with-hud:
+  run:release-hud:
     desc: "Gallium HUD (Compatible Intel)"
-    deps: [build-release]
+    deps: [build:release]
     env:
       vblank_mode: "0"
       __GL_SYNC_TO_VBLANK: "0"
@@ -172,9 +172,9 @@ tasks:
     cmds:
       - "./target/release/{{.APP_NAME}} 2>&1"
 
-  run-audio-stress:
+  run:audio-stress:
     desc: "Lancement du stress test audio interactif avec Gallium HUD (VSync désactivée)"
-    deps: [build-release]
+    deps: [build:release]
     env:
       vblank_mode: "0"
       __GL_SYNC_TO_VBLANK: "0"
@@ -184,16 +184,16 @@ tasks:
     cmds:
       - "./target/release/{{.APP_NAME}} --audio-stress-scene {{.CLI_ARGS | default \"128\"}}"
 
-  stress-fullscreen:
+  test:stress-fullscreen:
     desc: "Stress test de bascule rapide Fullscreen ↔ Window (détection deadlocks / session logout)"
-    deps: [build]
+    deps: [build:debug]
     cmds:
       - "./scripts/test_stress_fullscreen_rust.sh ./target/debug/{{.APP_NAME}} {{.CLI_ARGS | default \"50 100\"}}"
 
 
-  run-prime-with-hud:
+  run:prime-hud:
     desc: "MangoHud (Compatible NVidia) Raccourci: RIGHT-SHIFT+F10"
-    deps: [build-release]
+    deps: [build:release]
     env:
       __NV_PRIME_RENDER_OFFLOAD: "1"
       __GLX_VENDOR_LIBRARY_NAME: nvidia
@@ -208,26 +208,26 @@ tasks:
   # =========================================
   # 🧪 TESTS & QUALITÉ
   # =========================================
-  test:
+  test:all:
     desc: "Lancement des tests unitaires"
     cmds:
       - echo "▶️  Lancement des tests unitaires..."
       - "{{.XVFB}} cargo test --all --quiet -- --test-threads=1"
 
-  test-one:
+  test:one:
     desc: "Lance un test unitaire (lib) spécifique avec affichage"
     cmds:
       - echo "▶️ Lancement du test ciblé '{{.CLI_ARGS}}'..."
       - "{{.XVFB}} cargo test --lib {{.CLI_ARGS}} -- --nocapture"
 
-  test-integration:
+  test:integration:
     desc: "Lancement du test d'intégration complet (vidéo + audio)"
-    deps: [build-release]
+    deps: [build:release]
     cmds:
       - echo "▶️  Lancement du test d'intégration (capture Xvfb + ALSA)..."
       - "{{.DISTROBOX}} ./.github/scripts/test_integration.sh"
 
-  coverage:
+  test:coverage:
     desc: "Génération du rapport de couverture de code (résumé console + HTML)"
     cmds:
       - echo "📊 Génération du rapport de couverture (résumé console)..."
@@ -240,7 +240,7 @@ tasks:
     cmds:
       - '{{.XVFB}} cargo llvm-cov --ignore-filename-regex "tests/" --features interactive_tests -- --test-threads=1'
 
-  test-opengl-mesa:
+  test:opengl-mesa:
     desc: "Tests OpenGL headless avec Mesa llvmpipe + debug validation (détecte les violations de spec OpenGL)"
     summary: |
       Exécute les tests interactive_tests avec le renderer logiciel Mesa (llvmpipe, OpenGL 4.5)
@@ -265,27 +265,27 @@ tasks:
         fi
         echo "✅ Aucune violation OpenGL détectée"
 
-  test-visual-full:
+  test:visual-full:
     desc: "Exécute le test de non-régression visuelle complet à 120 frames sur toutes les vidéos de référence"
-    deps: [build-release]
+    deps: [build:release]
     cmds:
       - echo "📹 Lancement du test de non-régression visuelle 120-frames..."
       - "{{.XVFB}} ./scripts/run_visual_regression_full.sh"
 
-  test-fix01-visual:
+  test:fix01-visual:
     desc: "Exécute le test E2E de régression visuelle FIX-01 (GPU local / Mesa software en CI)"
     cmds:
       - echo "🎥 Test E2E régression visuelle & journalisation CSV (FIX-01)..."
       - '{{.RUN_GL}} ${CARGO_TEST_CMD:-cargo test} --features interactive_tests --test visual_regression_fix_01_erratic_vs_golden_test -- --nocapture'
 
-  visual-baselines-generate:
+  test:visual-baselines-generate:
     desc: "Génère l'ensemble du jeu de baselines vidéo & images clés candidates pour validation humaine"
-    deps: [build-release]
+    deps: [build:release]
     cmds:
       - echo "🎥 Génération des candidats de baselines visuelles..."
       - "{{.XVFB}} ./scripts/generate_golden_baselines.sh"
 
-  fmt:
+  lint:fmt:
     desc: "Vérification du formatage Rust & Python"
     cmds:
       - echo "🎨 Vérification du formatage Rust..."
@@ -296,13 +296,13 @@ tasks:
           {{.RUFF}} format --check scripts/
         fi
 
-  clippy:
+  lint:clippy:
     desc: "Vérification statique avec Clippy"
     cmds:
       - echo "🕵️  Vérification statique avec Clippy..."
       - "{{.CARGO}} clippy -- -D warnings"
 
-  python-lint:
+  lint:python:
     desc: "Vérification statique Python avec Ruff (via uv/ruff)"
     cmds:
       - |
@@ -311,11 +311,11 @@ tasks:
           {{.RUFF}} check scripts/
         fi
 
-  lint:
+  lint:all:
     desc: "Vérification complète du code (fmt + clippy + python-lint + doc-lint)"
-    deps: [fmt, clippy, python-lint, doc-lint]
+    deps: [lint:fmt, lint:clippy, lint:python, doc:lint]
 
-  gui-persistence-check:
+  test:gui-persistence-check:
     desc: "Vérifie que l'inventaire GUI et les cibles de persistence restent synchronisés"
     cmds:
       - "./scripts/check_gui_persistence.sh"
@@ -328,25 +328,25 @@ tasks:
   # =========================================
   # ⏱️ BENCHMARKS (Criterion.rs)
   # =========================================
-  bench:
+  bench:all:
     desc: "Lance tous les benchmarks Criterion (DSP + Binaural)"
     cmds:
       - echo "⏱️  Lancement de tous les benchmarks..."
       - "{{.CARGO}} bench --no-default-features --features simd,test_helpers"
 
-  bench-dsp:
+  bench:dsp:
     desc: "Benchmarks DSP audio : resample_linear_mono (upsample, downsample, identity, throughput)"
     cmds:
       - echo "⏱️  Benchmarks DSP (resample)..."
       - "{{.CARGO}} bench --no-default-features --features simd --bench audio_dsp_bench"
 
-  bench-binaural:
+  bench:binaural:
     desc: "Benchmarks traitement binaural 3D : binauralize_mono (positions, distances, blocs, multi-voix)"
     cmds:
       - echo "⏱️  Benchmarks binaural 3D..."
       - "{{.CARGO}} bench --no-default-features --features simd --bench audio_binaural_bench"
 
-  bench-spatial-bus:
+  bench:spatial-bus:
     desc: "Benchmarks comparatifs du Bus Spatial 2D (Ambisonics 2D) vs rendu Legacy direct (1 à 512 voix)"
     cmds:
       - echo "⏱️  Benchmarks comparatifs Bus Spatial 2D vs Legacy..."
@@ -356,23 +356,23 @@ tasks:
   # 🔬 BENCHMARK & PROFILING DU POOL DE PARTICULES (FIX-04)
   # =========================================================================
   # Méthodologie :
-  # 1. `task bench-pool-ops` mesure la latence d'allocation/libération avec Criterion.rs
+  # 1. `task bench:pool-ops` mesure la latence d'allocation/libération avec Criterion.rs
   #    Le pool est instancié HORS de la boucle chaude via `iter_batched` pour n'isoler
   #    que le coût réel de allocate_block() et free_block_by_start().
-  # 2. `task profile-pool-callgrind` génère la trace Callgrind sur le BINAIRE Criterion
+  # 2. `task profile:pool-callgrind` génère la trace Callgrind sur le BINAIRE Criterion
   #    (pas sur le binaire GUI complet) et ouvre KCachegrind.
-  # 3. `task test-tsan` valide l'absence de data races cross-threads sous ThreadSanitizer.
+  # 3. `task test:tsan` valide l'absence de data races cross-threads sous ThreadSanitizer.
   #    Nécessite Rust Nightly. Cible uniquement le harness physic_pool_test.
   # =========================================================================
-  bench-pool-ops:
+  bench:pool-ops:
     desc: "Micro-benchmarks Criterion isolés sur allocate_block et free_block du ParticlesPool"
     cmds:
       - echo "⏱️  Lancement des micro-benchmarks Criterion ParticlesPool..."
       - "{{.CARGO}} bench --bench physic_pool_bench"
 
-  profile-pool-callgrind:
+  profile:pool-callgrind:
     desc: "Profilage Valgrind/Callgrind sur le binaire Criterion du pool physique (pas l'app GUI)"
-    deps: [build-profiling]
+    deps: [build:profiling]
     cmds:
       - echo "🔬 Compilation du benchmark Criterion en mode profiling..."
       - "{{.CARGO}} build --profile profiling --bench physic_pool_bench"
@@ -383,25 +383,25 @@ tasks:
           --callgrind-out-file=callgrind.out.pool "$BENCH_BIN" --bench
       - kcachegrind callgrind.out.pool 2>/dev/null || callgrind_annotate callgrind.out.pool | head -n 30
 
-  test-tsan:
+  test:tsan:
     desc: "Tests du pool physique sous ThreadSanitizer (-Zsanitizer=thread). Requiert Rust Nightly."
     cmds:
       - echo "🛡️  Execution de physic_pool_test sous ThreadSanitizer (Rust Nightly requis)..."
       - RUSTFLAGS="-Zsanitizer=thread" {{.CARGO}} +nightly test -Z build-std --test physic_pool_test --target x86_64-unknown-linux-gnu
 
-  bench-save-baseline:
-    desc: "Sauvegarde une baseline de performance (usage: task bench-save-baseline -- my_baseline)"
+  bench:save-baseline:
+    desc: "Sauvegarde une baseline de performance (usage: task bench:save-baseline -- my_baseline)"
     cmds:
       - echo "💾 Sauvegarde de la baseline '{{.CLI_ARGS}}'..."
       - "{{.CARGO}} bench --no-default-features --features simd -- --save-baseline {{.CLI_ARGS}}"
 
-  bench-compare:
-    desc: "Compare les performances contre une baseline (usage: task bench-compare -- my_baseline)"
+  bench:compare:
+    desc: "Compare les performances contre une baseline (usage: task bench:compare -- my_baseline)"
     cmds:
       - echo "🔍 Comparaison contre la baseline '{{.CLI_ARGS}}'..."
       - "{{.CARGO}} bench --no-default-features --features simd -- --baseline {{.CLI_ARGS}}"
 
-  bench-open-report:
+  bench:open-report:
     desc: "Sert le rapport Criterion via HTTP local et ouvre le navigateur (Ctrl+C pour arrêter)"
     vars:
       CRITERION_DIR: "{{.ROOT_DIR}}/target/criterion"
@@ -410,7 +410,7 @@ tasks:
     cmds:
       - |
         if [ ! -f "{{.CRITERION_DIR}}/report/index.html" ]; then
-          echo "⚠️  Rapport non trouvé. Lance d'abord : task bench"
+          echo "⚠️  Rapport non trouvé. Lance d'abord : task bench:all"
           exit 1
         fi
         echo "📊 Démarrage du serveur HTTP sur {{.URL}}"
@@ -425,40 +425,40 @@ tasks:
   # =========================================
   # 💾 PROFILING MEMOIRE (VTUNE, HEAPTRACK)
   # =========================================
-  benchmark-vtune:
+  profile:vtune:
     desc: "Run Intel VTune memory-access analysis (requires sudo permissions)"
-    deps: [build-release]
+    deps: [build:release]
     cmds:
       - ./scripts/benchmark_vtune.sh
 
-  benchmark-heaptrack:
+  profile:heaptrack:cli:
     desc: "Run Heaptrack memory allocation analysis"
-    deps: [build-release]
+    deps: [build:release]
     cmds:
       - ./scripts/benchmark_heaptrack.sh
 
-  benchmark-vtune-hotspots:
+  profile:vtune-hotspots:
     desc: "Run Intel VTune CPU Hotspots analysis (Top 15 time-consuming functions)"
-    deps: [build-profiling]
+    deps: [build:profiling]
     cmds:
       - ./scripts/benchmark_vtune_hotspots.sh
 
-  benchmark-vtune-threading:
+  profile:vtune-threading:
     desc: "Run Intel VTune Threading analysis (Locks, Mutexes & Waits)"
-    deps: [build-profiling]
+    deps: [build:profiling]
     cmds:
       - ./scripts/benchmark_vtune_threading.sh
 
   # =========================================
   # 📖 DOCUMENTATION (mdBook)
   # =========================================
-  doc-build:
+  doc:build:
     desc: "Compile le livre de documentation en HTML"
     cmds:
       - echo "📖 Compilation de la documentation mdBook..."
       - mdbook build
 
-  doc-setup-vale:
+  doc:setup-vale:
     desc: "Installe Vale localement dans le projet si non présent"
     cmds:
       - |
@@ -471,14 +471,14 @@ tasks:
     status:
       - "test -f bin/vale || command -v vale"
 
-  doc-lint:
+  doc:lint:
     desc: "Vérifie les formules LaTeX et la syntaxe mathématique de la documentation avec Vale"
-    deps: [doc-setup-vale]
+    deps: [doc:setup-vale]
     cmds:
       - echo "🕵️  Vérification de la syntaxe mathématique de la documentation..."
       - "find doc -maxdepth 2 -name \"*.md\" | xargs {{.VALE_BIN}}"
 
-  doc-serve:
+  doc:serve:
     desc: "Lance un serveur web local de documentation avec rechargement automatique (Ctrl+C pour arrêter)"
     vars:
       PORT: "3000"
@@ -487,7 +487,7 @@ tasks:
       - echo "📊 Démarrage du serveur mdBook sur {{.URL}}..."
       - mdbook serve --port {{.PORT}} --open
 
-  doc-clean:
+  doc:clean:
     desc: "Nettoie les fichiers de documentation compilés"
     cmds:
       - echo "🧹 Nettoyage du livre de documentation..."
@@ -496,13 +496,13 @@ tasks:
   # =========================================
   # 🧹 MAINTENANCE
   # =========================================
-  clean:
+  clean:all:
     desc: "Nettoyage des artefacts"
     cmds:
       - echo "🧹 Nettoyage des artefacts..."
       - "{{.CARGO}} clean"
 
-  remove-unused-dependencies:
+  clean:deps:
     desc: "Exécute cargo-shear pour retirer les dépendances inutilisées"
     cmds:
       - "{{.CARGO}} shear --fix"
@@ -533,9 +533,9 @@ tasks:
   # =========================================
   # 📊 PROFILING AVEC TRACY
   # =========================================
-  run-tracy:
+  run:tracy:
     desc: "Exécute le projet avec Tracy activé (nécessite le serveur Tracy en arrière-plan)"
-    deps: [build-tracy]
+    deps: [build:tracy]
     env:
       RUSTFLAGS: "-C target-cpu=native" # Optimisations pour un profiling précis
     cmds:
@@ -543,12 +543,12 @@ tasks:
       - 'echo "    Exemple: tracy &"'
       - "./target/release/{{.APP_NAME}}"
 
-  build-tracy:
+  build:tracy:
     desc: "Compile avec Tracy activé"
     cmds:
       - "{{.CARGO}} build --features tracy --release"
 
-  capture-tracy-headless:
+  tracy:capture-headless:
     desc: "Exécute le simulateur en tâche de fond et capture une trace Tracy de 5s"
     cmds:
       - echo "🔨 Compilation du binaire de profiling..."
@@ -569,21 +569,21 @@ tasks:
           wait $SIM_PID 2>/dev/null || true
         '
 
-  bench-tracy-ratios:
+  bench:tracy-ratios:
     desc: "Capture une trace Tracy et audite la dérive des ratios relatifs de temps de rendu par rapport à la baseline develop"
-    deps: [capture-tracy-headless]
+    deps: [tracy:capture-headless]
     cmds:
       - ./scripts/analyze_tracy_ratios.sh /tmp/fireworks.tracy benches/baselines/tracy_ratios_develop.csv compare
 
-  generate-tracy-baseline:
+  tracy:generate-baseline:
     desc: "Génère la baseline de référence des ratios Tracy (benches/baselines/tracy_ratios_develop.csv)"
-    deps: [capture-tracy-headless]
+    deps: [tracy:capture-headless]
     cmds:
       - ./scripts/analyze_tracy_ratios.sh /tmp/fireworks.tracy benches/baselines/tracy_ratios_develop.csv generate
 
-  profile-tracy-headless:
+  profile:tracy-headless:
     desc: "Exécute le projet sous profilage Tracy en tâche de fond, enregistre une trace headless de 5s, et extrait les statistiques de render_frame en CSV"
-    deps: [capture-tracy-headless]
+    deps: [tracy:capture-headless]
     cmds:
       - echo "📊 Extraction des statistiques de Renderer::render_frame..."
       - |
@@ -609,7 +609,7 @@ tasks:
   # =========================================
   # 🎧 PROFILING PERF + HOTSPOT (AUDIO DOPPLER)
   # =========================================
-  build-perf:
+  build:perf:
       desc: "Compile avec les symboles et Frame Pointers pour Linux perf"
       env:
         RUSTFLAGS: "-C force-frame-pointers=yes" # Compatible Cargo stable !
@@ -623,9 +623,9 @@ tasks:
       - echo "🖼️  Génération des fichiers .raw_tex depuis les .png..."
       - python3 scripts/preprocess_textures.py {{.CLI_ARGS}}
 
-  record-perf-audio:
+  profile:record-perf-audio:
     desc: "Enregistre 10s de stress-test audio pur avec perf (sans rendu graphique)"
-    deps: [build-perf]
+    deps: [build:perf]
     vars:
       PERF_DATA: "target/perf_audio_doppler.data"
     cmds:
@@ -635,7 +635,7 @@ tasks:
       # --sample-cpu : enregistre sur quel cœur CPU le thread tourne (visible dans Hotspot)
       - perf record -F 997 --call-graph fp --sample-cpu -o {{.PERF_DATA}} ./target/perf/{{.APP_NAME}} --headless-audio-stress 10
 
-  hotspot-audio:
+  profile:hotspot-audio:
       desc: "Ouvre l'enregistrement audio directement dans l'interface graphique Hotspot"
       vars:
         PERF_DATA: "target/perf_audio_doppler.data"
@@ -643,7 +643,7 @@ tasks:
         - |
           if [ ! -f "{{.PERF_DATA}}" ]; then
             echo "⚠️ Aucun fichier perf.data trouvé ! Lancement de l'enregistrement..."
-            task record-perf-audio
+            task profile:record-perf-audio
           fi
         - echo "🚀 Lancement de Hotspot GUI..."
         # Lancement au PREMIER PLAN sans masquer les erreurs.
@@ -653,26 +653,26 @@ tasks:
   # =========================================
   # 🧠 IA + Skills
   # =========================================
-  update-ai-skills:
+  ai:update-skills:
       desc: 'Régénère et configure toutes les compétences IA locales pour Antigravity / agy'
       summary: |
         Analyse la codebase avec Repomix par sous-système (Audio, Renderer, Physic, ImGui),
         génère le contexte d'indexation dans ~/.agents/skills/, puis applique automatiquement
         les overlays personnalisés (SKILL.md) depuis le dossier doc/ai_skills/.
       cmds:
-        - task: _generate-overlay-skill
+        - task: _ai:generate-overlay-skill
           vars:
             NAME: 'firework-audio'
             INCLUDE: 'src/audio_engine/**,doc/*audio*,doc/*doppler*'
-        - task: _generate-overlay-skill
+        - task: _ai:generate-overlay-skill
           vars:
             NAME: 'firework-renderer'
             INCLUDE: 'src/renderer_engine/**,assets/shaders/**,doc/*azdo*,doc/*opengl*,doc/*tracy*,doc/*gpu*'
-        - task: _generate-overlay-skill
+        - task: _ai:generate-overlay-skill
           vars:
             NAME: 'firework-physic'
             INCLUDE: 'src/physic_engine/**,src/simulator.rs,doc/*physic*,doc/*memory*'
-        - task: _generate-overlay-skill
+        - task: _ai:generate-overlay-skill
           vars:
             NAME: 'firework-imgui'
             INCLUDE: 'src/window_engine/**,src/utils/command_console.rs,src/utils/glfw_window.rs,src/profiler.rs,src/renderer_engine/tools.rs,doc/console_commands.md,doc/*profiling*'
@@ -680,7 +680,7 @@ tasks:
       silent: false
 
   # Tâche interne (masquée du CLI 'task --list') qui sert de template réutilisable (DRY)
-  _generate-overlay-skill:
+  _ai:generate-overlay-skill:
     internal: true
     desc: 'Tâche template : Génère un skill spécifique via Repomix et écrase son SKILL.md'
     cmds:
@@ -714,10 +714,10 @@ tasks:
         $RUNTIME build -t "{{.IMAGE_NAME}}" -f .github/docker/Dockerfile.ci .
 
   devops:run:
-    desc: "Executes a Task command inside the ISO Golden Container (Usage: task devops:run -- task lint)"
+    desc: "Executes a Task command inside the ISO Golden Container (Usage: task devops:run -- task lint:all)"
     vars:
       IMAGE_NAME: 'ghcr.io/yoyonel/rust-firework-ci:latest'
-      CMD: '{{.CLI_ARGS | default "task test-opengl-mesa"}}'
+      CMD: '{{.CLI_ARGS | default "task test:opengl-mesa"}}'
     cmds:
       - |
         if command -v podman >/dev/null 2>&1; then
@@ -759,18 +759,18 @@ tasks:
           CLI_ARGS: "bash"
 
   devops:lint:
-    desc: "Executes the linting pipeline (task lint) inside the ISO Golden Container"
+    desc: "Executes the linting pipeline (task lint:all) inside the ISO Golden Container"
     cmds:
       - task: devops:run
         vars:
-          CLI_ARGS: "task lint"
+          CLI_ARGS: "task lint:all"
 
   devops:test:
-    desc: "Executes the test pipeline (task test-opengl-mesa) inside the ISO Golden Container"
+    desc: "Executes the test pipeline (task test:opengl-mesa) inside the ISO Golden Container"
     cmds:
       - task: devops:run
         vars:
-          CLI_ARGS: "task test-opengl-mesa"
+          CLI_ARGS: "task test:opengl-mesa"
 
   devops:audit:
     desc: "Executes cargo deny check for vulnerabilities and licenses inside the ISO Golden Container"

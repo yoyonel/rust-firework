@@ -2,7 +2,7 @@
 
 ## 1. Executive Summary & Profiling Baseline
 
-During performance profiling using Valgrind Callgrind (`task valgrind-callgrind`), the audio engine's 2D Spatial Bus processing (`process_dsp_spatial_bus`) was identified as the primary CPU hotspot of `rust-firework`.
+During performance profiling using Valgrind Callgrind (`task profile:valgrind-callgrind`), the audio engine's 2D Spatial Bus processing (`process_dsp_spatial_bus`) was identified as the primary CPU hotspot of `rust-firework`.
 
 ### Callgrind Instruction Cost Breakdown
 - Total application instruction footprint: `4,196,094,627` instructions (`Ir`).
@@ -79,13 +79,13 @@ While the 2D Ambisonics $(W, X)$ spatial bus algorithm is mathematically optimal
 ### Performance Benchmark Suite
 1. **Criterion Micro-benchmarks**:
    ```bash
-   task bench-save-baseline -- audio_v1_baseline
-   task bench-compare -- audio_v1_baseline
+   task bench:save-baseline -- audio_v1_baseline
+   task bench:compare -- audio_v1_baseline
    ```
    Measures throughput in microseconds per 256-sample audio block across 1 to 512 active voices.
 2. **Instruction Count Reduction**:
    ```bash
-   task valgrind-callgrind
+   task profile:valgrind-callgrind
    ```
    Verifies that total instruction count (`Ir`) and `slice::index.rs` bounds check overhead decrease.
 

@@ -41,7 +41,7 @@ Pour auditer ce comportement et vérifier la santé de l'optimisation (ou détec
 
 ```bash
 # Lancer une capture VTune Hotspots (requiert les droits perf_event)
-task benchmark-vtune-hotspots
+task profile:vtune-hotspots
 
 # Analyser les résultats graphiquement pour cibler les fonctions de fireworks_sim
 vtune-gui ./vtune_hotspots_results

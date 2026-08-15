@@ -159,5 +159,5 @@ L'onget ImGui `"Smoke & Erosion"` ([`src/simulator/gui_settings/smoke.rs`](file:
 
 - **Tests d'Intégration** ([`tests/smoke_system_integration_test.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/tests/smoke_system_integration_test.rs)) :
   - `test_physic_engine_smoke_erosion_params_and_toggle` : Validation des paramètres d'érosion et du basculement ON/OFF.
-- **Vérification de Persistance GUI** : Script automatisé `task gui-persistence-check` validé.
-- **Vérification Qualité** : `task lint` et `cargo test -- --test-threads=1` validés (221/221 passés).
+- **Vérification de Persistance GUI** : Script automatisé `task test:gui-persistence-check` validé.
+- **Vérification Qualité** : `task lint:all` et `cargo test -- --test-threads=1` validés (221/221 passés).

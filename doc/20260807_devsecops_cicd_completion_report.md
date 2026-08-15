@@ -18,8 +18,8 @@
 
 ## 3. STANDARDISATION DE L'OUTILLAGE LOCAL (`Taskfile.yml`)
 Ajout des blocs de commandes simplifiant l'exécution reproductible ISO via la Golden Image :
-* `devops:lint` : Exécute le pipeline de linting (`task lint`) dans le Golden Container.
-* `devops:test` : Exécute les tests de non-régression visuelle (`task test-opengl-mesa`) dans le Golden Container.
+* `devops:lint` : Exécute le pipeline de linting (`task lint:all`) dans le Golden Container.
+* `devops:test` : Exécute les tests de non-régression visuelle (`task test:opengl-mesa`) dans le Golden Container.
 * `devops:audit` : Exécute la vérification de conformité et de sécurité (`cargo deny check advisories licenses bans`) dans le Golden Container.
 
 ---

@@ -55,7 +55,7 @@ jobs:
         run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 
       - name: Run Linters (rustfmt, clippy, ruff, vale)
-        run: task lint
+        run: task lint:all
 
       - name: Run DevSecOps Supply Chain Audit (cargo-deny)
         run: cargo deny check advisories licenses bans
@@ -155,10 +155,10 @@ jobs:
         run: sccache --start-server
 
       - name: OpenGL Headless Spec Validation
-        run: task test-opengl-mesa
+        run: task test:opengl-mesa
 
       - name: Run Full 120-Frame Visual Non-Regression
-        run: task test-visual-full
+        run: task test:visual-full
 
   # ============================================================================
   # JOB 4: RenderDoc GPU Capture & Validation (Parallel)
@@ -202,7 +202,7 @@ jobs:
           shared_key: "renderdoc"
 
       - name: RenderDoc GPU Capture Execution
-        run: task renderdoc-capture
+        run: task renderdoc:capture
 
   # ============================================================================
   # JOB 5: Tracy Profile Ratio Benchmark (PR Only, Parallel)
@@ -249,7 +249,7 @@ jobs:
           shared_key: "tracy-bench"
 
       - name: Run Tracy Profile Ratio Benchmark
-        run: xvfb-run -a task bench-tracy-ratios
+        run: xvfb-run -a task bench:tracy-ratios
 
       - name: Post Tracy Ratio Comment on PR
         if: always() && hashFiles('/tmp/tracy_pr_comment.md') != ''
@@ -276,10 +276,10 @@ jobs:
 
           | Job Name | Status | Target |
           | :--- | :--- | :--- |
-          | **Fast-Fail Preflight** | 🟢 PASS | `task lint` & `cargo-deny` |
+          | **Fast-Fail Preflight** | 🟢 PASS | `task lint:all` & `cargo-deny` |
           | **Unit Tests & Coverage** | ${{ needs.unit-tests-coverage.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task ci:coverage` |
-          | **Mesa OpenGL & Visual 120-frame** | ${{ needs.mesa-visual-regression.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task test-opengl-mesa` |
-          | **RenderDoc GPU Capture** | ${{ needs.renderdoc-validation.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task renderdoc-capture` |
+          | **Mesa OpenGL & Visual 120-frame** | ${{ needs.mesa-visual-regression.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task test:opengl-mesa` |
+          | **RenderDoc GPU Capture** | ${{ needs.renderdoc-validation.result == 'success' && '🟢 PASS' || '🔴 FAIL' }} | `task renderdoc:capture` |
 
           ---
           *Report generated automatically by DevSecOps Containerized CI/CD*

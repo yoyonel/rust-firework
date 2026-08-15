@@ -84,7 +84,7 @@ cat /tmp/mesa_gl_debug.log
 ### Via Task
 
 ```bash
-task test-opengl-mesa
+task test:opengl-mesa
 
 # Description détaillée
 task --summary test-opengl-mesa
