@@ -6,6 +6,22 @@ pub trait AudioEngine {
     fn play_rocket_with_id(&self, id: u64, pos: Vec2, gain: f32);
     fn play_explosion(&self, pos: Vec2, gain: f32);
     fn play_explosion_with_id(&self, id: u64, pos: Vec2, gain: f32);
+
+    /// Planifie le son d'une fusée avec un délai précis en millisecondes (Sample-Accurate Scheduling).
+    fn play_rocket_scheduled(&self, id: u64, pos: Vec2, gain: f32, _delay_ms: f32) {
+        self.play_rocket_with_id(id, pos, gain);
+    }
+
+    /// Planifie le son d'une explosion avec un délai précis en millisecondes (Sample-Accurate Scheduling).
+    fn play_explosion_scheduled(&self, id: u64, pos: Vec2, gain: f32, _delay_ms: f32) {
+        self.play_explosion_with_id(id, pos, gain);
+    }
+
+    /// Horloge courante en nombre d'échantillons audio traités depuis le lancement du moteur.
+    fn current_sample_clock(&self) -> u64 {
+        0
+    }
+
     fn start_audio_thread(&mut self, export_path: Option<&str>);
     fn stop_audio_thread(&mut self);
 

@@ -72,6 +72,9 @@ pub struct FireworksAudio3D {
     master_volume: Arc<std::sync::atomic::AtomicU32>,
     saved_master_volume: Arc<std::sync::atomic::AtomicU32>,
 
+    /// Horloge atomique d'échantillons audio pour la synchronisation précise
+    sample_clock: Arc<std::sync::atomic::AtomicU64>,
+
     // NOUVEAU : Tracking et debug des événements audio
     debug_rx: crossbeam_channel::Receiver<crate::audio_engine::types::AudioDebugEvent>,
     debug_tx: crossbeam_channel::Sender<crate::audio_engine::types::AudioDebugEvent>,
@@ -135,6 +138,8 @@ impl FireworksAudio3D {
             crate::audio_engine::constants::DEBUG_EVENT_CHANNEL_CAPACITY,
         );
 
+        let sample_clock = Arc::new(std::sync::atomic::AtomicU64::new(0));
+
         Ok(Self {
             rocket_data: rocket_arc,
             explosion_data: explosion_arc,
@@ -160,22 +165,29 @@ impl FireworksAudio3D {
             saved_master_volume: Arc::new(std::sync::atomic::AtomicU32::new(
                 crate::audio_engine::constants::DEFAULT_GLOBAL_GAIN.to_bits(),
             )),
+            sample_clock,
             debug_tx,
             debug_rx,
             next_request_id: std::sync::atomic::AtomicU64::new(1),
         })
     }
 
+    /// Horloge courante en nombre d'échantillons audio traités depuis le lancement du moteur.
+    pub fn current_sample_clock(&self) -> u64 {
+        self.sample_clock.load(std::sync::atomic::Ordering::Relaxed)
+    }
+
     /// Queue a sound for playback — 100% Zero-Heap Allocation !
     #[allow(clippy::too_many_arguments)]
-    fn enqueue_sound(
+    fn enqueue_sound_scheduled(
         &self,
         id: u64,
-        data: &Arc<Vec<[f32; 2]>>, // 🎯 MODIFICATION : On reçoit la référence vers l'Arc d'origine !
+        data: &Arc<Vec<[f32; 2]>>,
         pos: Vec2,
         gain: f32,
         is_dynamic: bool,
         sound_type: crate::audio_engine::types::AudioSoundType,
+        target_sample: u64,
     ) {
         if self.global_gain == 0.0 {
             return;
@@ -217,6 +229,7 @@ impl FireworksAudio3D {
             gain: global_gain,
             filter_a: 0.05, // Valeur initiale, recalculée au 1er bloc par DspProcessor
             sent_at,
+            target_sample,
             request_id,
             id,
             pos,
@@ -234,6 +247,18 @@ impl FireworksAudio3D {
                     reason: "Play queue full",
                 });
         }
+    }
+
+    fn enqueue_sound(
+        &self,
+        id: u64,
+        data: &Arc<Vec<[f32; 2]>>,
+        pos: Vec2,
+        gain: f32,
+        is_dynamic: bool,
+        sound_type: crate::audio_engine::types::AudioSoundType,
+    ) {
+        self.enqueue_sound_scheduled(id, data, pos, gain, is_dynamic, sound_type, 0);
     }
 
     pub fn play_rocket(&self, pos: Vec2, gain: f32) {
@@ -255,6 +280,24 @@ impl FireworksAudio3D {
             gain,
             true,
             crate::audio_engine::types::AudioSoundType::Rocket,
+        );
+    }
+
+    pub fn play_rocket_scheduled(&self, id: u64, pos: Vec2, gain: f32, delay_ms: f32) {
+        let sample_delay = (self.sample_rate as f32 * (delay_ms.max(0.0) / 1000.0)) as u64;
+        let target_sample = if sample_delay > 0 {
+            self.current_sample_clock() + sample_delay
+        } else {
+            0
+        };
+        self.enqueue_sound_scheduled(
+            id,
+            &self.rocket_data,
+            pos,
+            gain,
+            id != 0,
+            crate::audio_engine::types::AudioSoundType::Rocket,
+            target_sample,
         );
     }
 
@@ -280,6 +323,24 @@ impl FireworksAudio3D {
         );
     }
 
+    pub fn play_explosion_scheduled(&self, id: u64, pos: Vec2, gain: f32, delay_ms: f32) {
+        let sample_delay = (self.sample_rate as f32 * (delay_ms.max(0.0) / 1000.0)) as u64;
+        let target_sample = if sample_delay > 0 {
+            self.current_sample_clock() + sample_delay
+        } else {
+            0
+        };
+        self.enqueue_sound_scheduled(
+            id,
+            &self.explosion_data,
+            pos,
+            gain,
+            id != 0,
+            crate::audio_engine::types::AudioSoundType::Explosion,
+            target_sample,
+        );
+    }
+
     pub fn start_audio_thread(&mut self, export_path: Option<&str>) {
         info!("🚀 Starting Audio Engine ...");
 
@@ -302,6 +363,7 @@ impl FireworksAudio3D {
 
         let garbage_tx = self.garbage_tx.clone();
         let debug_tx_clone = self.debug_tx.clone();
+        let sample_clock_clone = self.sample_clock.clone();
 
         thread::spawn(move || {
             let audio_result: Result<(), AudioThreadError> = (|| {
@@ -344,6 +406,11 @@ impl FireworksAudio3D {
                     ),
                     hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sr, block_size),
                     debug_tx: Some(debug_tx_clone),
+                    current_sample_clock: 0,
+                    sample_clock: sample_clock_clone,
+                    pending_requests: Vec::with_capacity(
+                        crate::audio_engine::constants::PLAY_REQUEST_CHANNEL_CAPACITY,
+                    ),
                 };
 
                 // 3. Lancement du Flux Audio
@@ -444,12 +511,24 @@ impl AudioEngine for FireworksAudio3D {
         self.play_rocket_with_id(id, pos, gain)
     }
 
+    fn play_rocket_scheduled(&self, id: u64, pos: Vec2, gain: f32, delay_ms: f32) {
+        self.play_rocket_scheduled(id, pos, gain, delay_ms)
+    }
+
     fn play_explosion(&self, pos: Vec2, gain: f32) {
         self.play_explosion(pos, gain)
     }
 
     fn play_explosion_with_id(&self, id: u64, pos: Vec2, gain: f32) {
         self.play_explosion_with_id(id, pos, gain)
+    }
+
+    fn play_explosion_scheduled(&self, id: u64, pos: Vec2, gain: f32, delay_ms: f32) {
+        self.play_explosion_scheduled(id, pos, gain, delay_ms)
+    }
+
+    fn current_sample_clock(&self) -> u64 {
+        self.current_sample_clock()
     }
 
     fn start_audio_thread(&mut self, _export_path: Option<&str>) {

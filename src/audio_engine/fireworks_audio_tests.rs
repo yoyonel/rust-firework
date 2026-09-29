@@ -31,6 +31,7 @@ fn enqueue_sound_test(engine: &FireworksAudio3D, pos: glam::Vec2, gain: f32) -> 
         gain,
         filter_a: 0.0025,
         sent_at: Instant::now(),
+        target_sample: 0,
         // --- NOUVEAUX CHAMPS REQUIS ---
         request_id: 1,
         id: 0,

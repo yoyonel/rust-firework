@@ -56,6 +56,7 @@ fn test_phase_continuity_across_block_boundaries() {
             target_itd: [0.0, 0.0],
             request_id: 1,
             sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            start_offset: 0,
         }],
         play_rx: play_rx.clone(),
         doppler_rx: None,
@@ -77,6 +78,9 @@ fn test_phase_continuity_across_block_boundaries() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, total_samples),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     let profiler = Profiler::new(1000);
@@ -106,6 +110,7 @@ fn test_phase_continuity_across_block_boundaries() {
             target_itd: [0.0, 0.0],
             request_id: 1,
             sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            start_offset: 0,
         }],
         play_rx,
         doppler_rx: None,
@@ -127,6 +132,9 @@ fn test_phase_continuity_across_block_boundaries() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     let mut chunked_output = Vec::with_capacity(total_samples);
@@ -255,6 +263,7 @@ fn test_dsp_bypass_doppler() {
             target_itd: [0.0, 0.0],
             request_id: 1,
             sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            start_offset: 0,
         }],
         play_rx,
         doppler_rx: None,
@@ -276,6 +285,9 @@ fn test_dsp_bypass_doppler() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     // Disable Doppler
@@ -322,6 +334,9 @@ fn test_dsp_bypass_normalization() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     let mut output_data = vec![0.0; block_size * 2];
@@ -404,6 +419,9 @@ fn test_strict_event_tracking_and_latency() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
         debug_tx: Some(debug_tx.clone()),
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     // 1. Send first play request
@@ -414,6 +432,7 @@ fn test_strict_event_tracking_and_latency() {
         gain: 1.0,
         filter_a: 0.05,
         sent_at: Instant::now(),
+        target_sample: 0,
         request_id: 101,
         id: 10,
         pos: glam::Vec2::ZERO,
@@ -424,7 +443,7 @@ fn test_strict_event_tracking_and_latency() {
 
     // 2. Consume request
     let profiler = Profiler::new(100);
-    dsp.consume_requests(&profiler);
+    dsp.consume_requests(block_size, &profiler);
 
     // Check events popped from debug_rx
     let mut events = Vec::new();
@@ -460,6 +479,7 @@ fn test_strict_event_tracking_and_latency() {
         gain: 0.5,
         filter_a: 0.05,
         sent_at: Instant::now(),
+        target_sample: 0,
         request_id: 102,
         id: 20,
         pos: glam::Vec2::ZERO,
@@ -468,7 +488,7 @@ fn test_strict_event_tracking_and_latency() {
     };
     play_tx.send(req2).unwrap();
 
-    dsp.consume_requests(&profiler);
+    dsp.consume_requests(block_size, &profiler);
 
     events.clear();
     while let Ok(evt) = debug_rx.try_recv() {
@@ -527,6 +547,7 @@ fn test_spatial_bus_rendering() {
             target_itd: [0.0, 0.0],
             request_id: 1,
             sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            start_offset: 0,
         }],
         play_rx,
         doppler_rx: None,
@@ -548,6 +569,9 @@ fn test_spatial_bus_rendering() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     // Enable SpatialBus effect
@@ -602,6 +626,7 @@ fn test_spatial_bus_hrtf_rendering_left_right() {
             target_itd: [0.0, 0.0],
             request_id: 1,
             sound_type: crate::audio_engine::types::AudioSoundType::Rocket,
+            start_offset: 0,
         }],
         play_rx,
         doppler_rx: None,
@@ -623,6 +648,9 @@ fn test_spatial_bus_hrtf_rendering_left_right() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     // Enable SpatialBus AND HrtfBus
@@ -685,6 +713,7 @@ fn test_spatial_bus_snr_quality() {
                 target_itd: [0.0, 0.0],
                 request_id: i as u64 + 1,
                 sound_type: crate::audio_engine::types::AudioSoundType::Explosion,
+                start_offset: 0,
             }
         })
         .collect();
@@ -715,6 +744,9 @@ fn test_spatial_bus_snr_quality() {
         spatial_reverb: SpatialReverb::new(sample_rate),
         hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     let profiler = Profiler::new(100);
@@ -750,4 +782,260 @@ fn test_spatial_bus_snr_quality() {
         "Signal-to-Noise Ratio (SNR) must be > 100 dB, got {:.2} dB",
         snr_db
     );
+}
+
+#[test]
+fn test_sample_accurate_audio_scheduling() {
+    use crate::audio_engine::effect_flags::AudioEffectFlags;
+    use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType, Voice};
+    use crate::profiler::Profiler;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let sample_rate = 48_000;
+    let block_size = 256;
+    let sound_len = 512;
+    // Constant signal with amplitude 0.5 across both channels
+    let source_audio = vec![[0.5, 0.5]; sound_len];
+    let source_arc = Arc::new(source_audio);
+
+    let (play_tx, play_rx) = crossbeam_channel::unbounded();
+    let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+    let (debug_tx, debug_rx) = crossbeam_channel::unbounded();
+
+    let sample_clock = Arc::new(std::sync::atomic::AtomicU64::new(0));
+
+    let mut dsp = super::DspProcessor {
+        voices: vec![Voice::new(), Voice::new()],
+        play_rx,
+        doppler_rx: None,
+        garbage_tx,
+        settings: crate::AudioEngineSettings::default(),
+        listener_pos: Arc::new(crate::audio_engine::types::AtomicVec2::new(
+            glam::Vec2::ZERO,
+        )),
+        sample_rate,
+        export_writer: None,
+        block_index: 0,
+        acc: vec![[0.0; 2]; block_size],
+        bus_w: vec![0.0; block_size],
+        bus_x: vec![0.0; block_size],
+        export_buffer: Vec::new(),
+        last_log: Instant::now(),
+        log_interval: Duration::from_secs(1),
+        effect_flags: AudioEffectFlags::new_all_enabled(),
+        spatial_reverb: SpatialReverb::new(sample_rate),
+        hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+        debug_tx: Some(debug_tx),
+        current_sample_clock: 0,
+        sample_clock: sample_clock.clone(),
+        pending_requests: Vec::with_capacity(64),
+    };
+
+    // Disable spatial reverb & binaural for exact amplitude assertions
+    dsp.effect_flags.set(
+        crate::audio_engine::effect_flags::AudioEffect::SpatialReverb,
+        false,
+    );
+    dsp.effect_flags.set(
+        crate::audio_engine::effect_flags::AudioEffect::FadeInOut,
+        false,
+    );
+    dsp.effect_flags.set(
+        crate::audio_engine::effect_flags::AudioEffect::LowPassFilter,
+        false,
+    );
+    dsp.effect_flags.set(
+        crate::audio_engine::effect_flags::AudioEffect::HrtfBus,
+        false,
+    );
+
+    // Schedule sound at target_sample = 300
+    // Block 0 covers [0, 256). The sound is in the future (not due).
+    // Block 1 covers [256, 512). The sound is due at intra-block offset = 300 - 256 = 44.
+    let target_sample = 300u64;
+    let req = crate::audio_engine::types::PlayRequest {
+        data: source_arc,
+        fade_in: 0,
+        fade_out: 0,
+        gain: 1.0,
+        filter_a: 0.05,
+        sent_at: Instant::now(),
+        target_sample,
+        request_id: 42,
+        id: 100,
+        pos: glam::Vec2::ZERO,
+        is_dynamic: false,
+        sound_type: AudioSoundType::Rocket,
+    };
+    play_tx.send(req).unwrap();
+
+    let profiler = Profiler::new(10);
+
+    // --- BLOC 0 : samples 0 à 256 ---
+    let mut out_block_0 = vec![0.0f32; block_size * 2];
+    dsp.process_block(&mut out_block_0, 1.0, &profiler);
+
+    // Verify clock advanced
+    assert_eq!(dsp.current_sample_clock, 256);
+    assert_eq!(sample_clock.load(std::sync::atomic::Ordering::Relaxed), 256);
+
+    // Verify block 0 is 100% silent
+    for frame in out_block_0.chunks_exact(2) {
+        assert_eq!(
+            frame[0], 0.0,
+            "Block 0 must be completely silent before target_sample"
+        );
+        assert_eq!(
+            frame[1], 0.0,
+            "Block 0 must be completely silent before target_sample"
+        );
+    }
+
+    // Verify no Started event received yet
+    let mut events = Vec::new();
+    while let Ok(evt) = debug_rx.try_recv() {
+        events.push(evt);
+    }
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AudioDebugEvent::Received { request_id: 42, .. })));
+    assert!(!events
+        .iter()
+        .any(|e| matches!(e, AudioDebugEvent::Started { request_id: 42, .. })));
+
+    // --- BLOC 1 : samples 256 à 512 ---
+    let mut out_block_1 = vec![0.0f32; block_size * 2];
+    dsp.process_block(&mut out_block_1, 1.0, &profiler);
+
+    assert_eq!(dsp.current_sample_clock, 512);
+
+    // Samples 0..44 in block 1 (global 256..300) must be silent
+    let frames_1: Vec<[f32; 2]> = out_block_1.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
+    for i in 0..44 {
+        assert_eq!(
+            frames_1[i][0], 0.0,
+            "Sample {} in block 1 must be silent before target_sample offset 44",
+            i
+        );
+        assert_eq!(
+            frames_1[i][1], 0.0,
+            "Sample {} in block 1 must be silent before target_sample offset 44",
+            i
+        );
+    }
+
+    // Samples 44..256 in block 1 must contain the sound
+    for i in 44..block_size {
+        assert!(
+            frames_1[i][0].abs() > 0.1,
+            "Sample {} in block 1 must play sound starting at intra-block offset 44",
+            i
+        );
+    }
+
+    // Verify Started event was received in block 1
+    events.clear();
+    while let Ok(evt) = debug_rx.try_recv() {
+        events.push(evt);
+    }
+    assert!(events
+        .iter()
+        .any(|e| matches!(e, AudioDebugEvent::Started { request_id: 42, .. })));
+
+    // --- BLOC 2 : samples 512 à 768 ---
+    // The voice should continue playing seamlessly from sample 0 of block 2
+    let mut out_block_2 = vec![0.0f32; block_size * 2];
+    dsp.process_block(&mut out_block_2, 1.0, &profiler);
+
+    let frames_2: Vec<[f32; 2]> = out_block_2.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
+    assert!(
+        frames_2[0][0].abs() > 0.1,
+        "Block 2 must continue sound playback from sample 0"
+    );
+}
+
+#[test]
+fn test_overdue_scheduled_audio_discarded() {
+    use crate::audio_engine::effect_flags::AudioEffectFlags;
+    use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType, Voice};
+    use crate::profiler::Profiler;
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    let sample_rate = 48_000;
+    let block_size = 256;
+    let source_audio = vec![[0.5, 0.5]; 128];
+    let source_arc = Arc::new(source_audio);
+
+    let (play_tx, play_rx) = crossbeam_channel::unbounded();
+    let (garbage_tx, _garbage_rx) = crossbeam_channel::unbounded();
+    let (debug_tx, debug_rx) = crossbeam_channel::unbounded();
+
+    let mut dsp = super::DspProcessor {
+        voices: vec![Voice::new()],
+        play_rx,
+        doppler_rx: None,
+        garbage_tx,
+        settings: crate::AudioEngineSettings::default(),
+        listener_pos: Arc::new(crate::audio_engine::types::AtomicVec2::new(
+            glam::Vec2::ZERO,
+        )),
+        sample_rate,
+        export_writer: None,
+        block_index: 0,
+        acc: vec![[0.0; 2]; block_size],
+        bus_w: vec![0.0; block_size],
+        bus_x: vec![0.0; block_size],
+        export_buffer: Vec::new(),
+        last_log: Instant::now(),
+        log_interval: Duration::from_secs(1),
+        effect_flags: AudioEffectFlags::new_all_enabled(),
+        spatial_reverb: SpatialReverb::new(sample_rate),
+        hrtf_convolver: crate::audio_engine::HrtfConvolver::new_default(sample_rate, block_size),
+        debug_tx: Some(debug_tx),
+        current_sample_clock: 50_000, // Clock is already at 50 000 samples (~1 second in)
+        sample_clock: Arc::new(std::sync::atomic::AtomicU64::new(50_000)),
+        pending_requests: Vec::with_capacity(64),
+    };
+
+    // Sound scheduled for sample 10 (overdue by > 49 000 samples, well beyond MAX_SCHEDULED_SOUND_LATENESS_MS = 200 ms ~ 9600 samples)
+    let req = crate::audio_engine::types::PlayRequest {
+        data: source_arc,
+        fade_in: 0,
+        fade_out: 0,
+        gain: 1.0,
+        filter_a: 0.05,
+        sent_at: Instant::now() - Duration::from_millis(500),
+        target_sample: 10,
+        request_id: 999,
+        id: 1,
+        pos: glam::Vec2::ZERO,
+        is_dynamic: false,
+        sound_type: AudioSoundType::Rocket,
+    };
+    play_tx.send(req).unwrap();
+
+    let profiler = Profiler::new(10);
+    let mut out_buffer = vec![0.0f32; block_size * 2];
+    dsp.process_block(&mut out_buffer, 1.0, &profiler);
+
+    // Verify overdue request was dropped gracefully
+    let mut events = Vec::new();
+    while let Ok(evt) = debug_rx.try_recv() {
+        events.push(evt);
+    }
+
+    assert!(
+        events.iter().any(|e| matches!(
+            e,
+            AudioDebugEvent::Dropped {
+                request_id: 999,
+                reason: "Scheduled sound overdue",
+                ..
+            }
+        )),
+        "Overdue sound must be dropped with 'Scheduled sound overdue'"
+    );
+    assert!(!dsp.voices[0].active, "Voice must remain inactive");
 }
