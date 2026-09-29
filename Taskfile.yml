@@ -498,8 +498,14 @@ tasks:
       - rm -rf book/
 
   # =========================================
-  # 🧹 MAINTENANCE
+  # 🧹 MAINTENANCE & SETUP
   # =========================================
+  setup:deps:
+    desc: "Installe les dépendances système C/C++ natives (Fedora/Ubuntu) sur l'hôte ou le conteneur"
+    cmds:
+      - '{{.DISTROBOX}} ./scripts/install_native_deps.sh'
+
+
   clean:all:
     desc: "Nettoyage des artefacts"
     cmds:
