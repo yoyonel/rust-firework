@@ -515,6 +515,8 @@ pub fn capture_framebuffer_fbo(
     height: u32,
 ) -> image::ImageBuffer<image::Rgba<u8>, Vec<u8>> {
     let mut pixels = vec![0u8; (width * height * 4) as usize];
+    // SAFETY: The pixel buffer is pre-allocated with exactly `width * height * 4` bytes matching RGBA8 format.
+    // OpenGL context is active, and ReadPixels transfers `width * height` 4-byte pixels into valid memory.
     unsafe {
         gl::BindFramebuffer(gl::FRAMEBUFFER, fbo);
         gl::ReadPixels(

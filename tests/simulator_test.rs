@@ -93,6 +93,8 @@ fn test_call_order_in_simulator_run_and_close() {
     let window_engine = DummyWindowEngine::default();
 
     let mut sim = Simulator::new(renderer, physic, audio, window_engine);
+    sim.config.fixed_dt = Some(fireworks_sim::physic_engine::constants::FIXED_TIMESTEP_DELTA);
+    sim.dt_accumulator = 0.0;
     sim.step();
     sim.close();
 

@@ -31,8 +31,8 @@ Lorsqu'on profile sur un temps fixe (5 secondes), la branche "Baseline" et la br
 Les scripts d'encapsulation gèrent les spécificités de VTune. **Attention : VTune s'exécute en root (`sudo`)** pour accéder aux compteurs matériels (PMU). Les scripts doivent assurer un output propre vers `/tmp/` pour éviter les conflits de permission (ex: `RES_DIR="/tmp/vtune_results_memory_$(date +%s)"`).
 
 * **Memory Access** (`task profile:vtune`) : Identifie les saturations de la bande passante (DRAM Bound), le nombre d'instructions (Loads/Stores) et les défauts de cache (LLC Miss).
-* **Hotspots** (`task profile:vtune-hotspots`) : Évalue le temps de calcul brut par fonction. (Note: induit plus d'overhead d'échantillonnage que Memory Access).
-* **Threading** (`task profile:vtune-threading`) : Analyse les verrous (Mutex/RwLock) et les files d'attente inter-threads (Channels).
+* **Hotspots** (`task profile:vtune:hotspots`) : Évalue le temps de calcul brut par fonction. (Note: induit plus d'overhead d'échantillonnage que Memory Access).
+* **Threading** (`task profile:vtune:threading`) : Analyse les verrous (Mutex/RwLock) et les files d'attente inter-threads (Channels).
 
 ## 5. Formalisation du Rapport A/B (Livrable)
 Toute Pull Request liée à la performance doit comporter dans `doc/` un fichier de rapport (ex: `doc/YYYYMMDD_feature_name_vtune_report.md`) contenant :

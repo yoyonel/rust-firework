@@ -303,10 +303,10 @@ tasks:
       - "{{.CARGO}} clippy -- -D warnings"
 
   lint:python:
-    desc: "Vérification statique Python avec Ruff (via uv/ruff)"
+    desc: "Vérification statique Python avec Ruff (via uv/ruff) si des scripts Python existent"
     cmds:
       - |
-        if [ -n "{{.RUFF}}" ]; then
+        if [ -n "{{.RUFF}}" ] && find scripts/ -name "*.py" -print -quit | grep -q .; then
           echo "🕵️  Vérification statique Python avec Ruff..."
           {{.RUFF}} check scripts/
         fi
@@ -356,22 +356,24 @@ tasks:
   # 🔬 BENCHMARK & PROFILING DU POOL DE PARTICULES (FIX-04)
   # =========================================================================
   # Méthodologie :
-  # 1. `task bench:pool-ops` mesure la latence d'allocation/libération avec Criterion.rs
+  # 1. `task bench:pool:ops` mesure la latence d'allocation/libération avec Criterion.rs
   #    Le pool est instancié HORS de la boucle chaude via `iter_batched` pour n'isoler
-  #    que le coût réel de allocate_block() et free_block_by_start().
-  # 2. `task profile:pool-callgrind` génère la trace Callgrind sur le BINAIRE Criterion
+  #    que le coût réel de allocate_block() et free_block().
+  # 2. `task profile:callgrind:pool` génère la trace Callgrind sur le BINAIRE Criterion
   #    (pas sur le binaire GUI complet) et ouvre KCachegrind.
   # 3. `task test:tsan` valide l'absence de data races cross-threads sous ThreadSanitizer.
   #    Nécessite Rust Nightly. Cible uniquement le harness physic_pool_test.
   # =========================================================================
-  bench:pool-ops:
+  bench:pool:ops:
     desc: "Micro-benchmarks Criterion isolés sur allocate_block et free_block du ParticlesPool"
+    aliases: [bench:pool-ops]
     cmds:
       - echo "⏱️  Lancement des micro-benchmarks Criterion ParticlesPool..."
       - "{{.CARGO}} bench --bench physic_pool_bench"
 
-  profile:pool-callgrind:
+  profile:callgrind:pool:
     desc: "Profilage Valgrind/Callgrind sur le binaire Criterion du pool physique (pas l'app GUI)"
+    aliases: [profile:pool-callgrind]
     deps: [build:profiling]
     cmds:
       - echo "🔬 Compilation du benchmark Criterion en mode profiling..."
@@ -437,14 +439,16 @@ tasks:
     cmds:
       - ./scripts/benchmark_heaptrack.sh
 
-  profile:vtune-hotspots:
+  profile:vtune:hotspots:
     desc: "Run Intel VTune CPU Hotspots analysis (Top 15 time-consuming functions)"
+    aliases: [profile:vtune-hotspots]
     deps: [build:profiling]
     cmds:
       - ./scripts/benchmark_vtune_hotspots.sh
 
-  profile:vtune-threading:
+  profile:vtune:threading:
     desc: "Run Intel VTune Threading analysis (Locks, Mutexes & Waits)"
+    aliases: [profile:vtune-threading]
     deps: [build:profiling]
     cmds:
       - ./scripts/benchmark_vtune_threading.sh
@@ -621,7 +625,7 @@ tasks:
     desc: "Pré-calcule les textures PNG en binaire brut (.raw_tex). Peut cibler un fichier (usage: task assets:preprocess -- <fichier.png>)"
     cmds:
       - echo "🖼️  Génération des fichiers .raw_tex depuis les .png..."
-      - python3 scripts/preprocess_textures.py {{.CLI_ARGS}}
+      - "{{.CARGO}} run --bin preprocess_textures -- {{.CLI_ARGS}}"
 
   profile:record-perf-audio:
     desc: "Enregistre 10s de stress-test audio pur avec perf (sans rendu graphique)"

@@ -18,7 +18,7 @@ Un script d'analyse et de remplacement a été déployé pour garantir une couve
 - `bench` -> `bench:all`
 - `bench-*` -> `bench:*`
 - `doc-*` -> `doc:*`
-- `profile-*`, `benchmark-*`, `valgrind-*`, `heaptrack`, `record-perf-audio`, `hotspot-audio` -> `profile:*` (ex: `profile:heaptrack:gui`, `profile:heaptrack:cli`, `profile:vtune`)
+- `profile-*`, `benchmark-*`, `valgrind-*`, `heaptrack`, `record-perf-audio`, `hotspot-audio` -> `profile:*` (ex: `profile:heaptrack:gui`, `profile:heaptrack:cli`, `profile:vtune`, `profile:vtune:hotspots`, `profile:vtune:threading`, `profile:callgrind:pool`)
 - `renderdoc-*` -> `renderdoc:*`
 - `asm-*` -> `asm:*`
 - `fmt`, `clippy`, `python-lint`, `lint` -> `lint:*`

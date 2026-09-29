@@ -511,6 +511,21 @@ impl Rocket {
     }
 }
 
+#[inline(always)]
+fn apply_swap_and_pop(slice: &mut [Particle], active_count: &mut usize) {
+    let mut i = 0;
+    while i < *active_count {
+        if slice[i].life <= 0.0 {
+            slice[i].active = false;
+            *active_count -= 1;
+            let last = *active_count;
+            slice.swap(i, last);
+        } else {
+            i += 1;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -564,20 +579,5 @@ mod tests {
             expected_boosted_displacement,
             diff
         );
-    }
-}
-
-#[inline(always)]
-fn apply_swap_and_pop(slice: &mut [Particle], active_count: &mut usize) {
-    let mut i = 0;
-    while i < *active_count {
-        if slice[i].life <= 0.0 {
-            slice[i].active = false;
-            *active_count -= 1;
-            let last = *active_count;
-            slice.swap(i, last);
-        } else {
-            i += 1;
-        }
     }
 }

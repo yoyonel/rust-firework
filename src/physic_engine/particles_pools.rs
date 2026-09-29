@@ -120,16 +120,10 @@ impl ParticlesPool {
     /// * `start_index` – indice de début du bloc (seule donnée nécessaire ; la taille est connue via `per_block`)
     ///
     /// Complexité : **O(1)**.
-    fn free_block(&mut self, start_index: usize) {
+    pub fn free_block(&mut self, start_index: usize) {
         self.free_blocks.push(start_index);
         #[cfg(debug_assertions)]
         debug!("Freed particle block starting at {}", start_index);
-    }
-
-    /// Variante publique de `free_block`, exposée pour les benchmarks et tests.
-    #[inline(always)]
-    pub fn free_block_by_start(&mut self, start_index: usize) {
-        self.free_block(start_index);
     }
 
     /// Accès immuable à un bloc de particules.
