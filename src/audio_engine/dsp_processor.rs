@@ -37,6 +37,12 @@ pub struct DspProcessor {
     pub hrtf_convolver: crate::audio_engine::HrtfConvolver,
     /// Canal de debug pour notifier le thread principal des événements audio
     pub debug_tx: Option<Sender<crate::audio_engine::types::AudioDebugEvent>>,
+    /// Compteur d'échantillons audio absolu (Sample Clock)
+    pub current_sample_clock: u64,
+    /// Pointeur atomique partagé vers l'horloge d'échantillons
+    pub sample_clock: Arc<std::sync::atomic::AtomicU64>,
+    /// File d'attente bornée pour les requêtes de son planifiées (Sample-Accurate Scheduling)
+    pub pending_requests: Vec<PlayRequest>,
 }
 
 #[inline(always)]
@@ -162,7 +168,7 @@ impl DspProcessor {
         self.acc[..frames].fill([0.0; 2]);
 
         // 2. Traitements Lock-Free
-        self.consume_requests(profiler);
+        self.consume_requests(frames, profiler);
         self.process_doppler(fx_mask, profiler);
 
         // 3. Rendu DSP (Isolé dans Hotspot via #[inline(never)])
@@ -178,6 +184,12 @@ impl DspProcessor {
         self.write_cpal_buffer(data, frames, global_gain, fx_mask, profiler);
         self.export_wav(data, frames);
         self.log_metrics(profiler);
+
+        self.current_sample_clock += frames as u64;
+        self.sample_clock.store(
+            self.current_sample_clock,
+            std::sync::atomic::Ordering::Relaxed,
+        );
 
         let elapsed_us = start_time.elapsed().as_micros() as u64;
         let budget_us = ((frames as f64 / self.sample_rate as f64) * 1_000_000.0) as u64;
@@ -211,12 +223,18 @@ impl DspProcessor {
     }
 
     #[inline(always)]
-    fn consume_requests(&mut self, profiler: &Profiler) {
+    pub fn consume_requests(&mut self, frames: usize, profiler: &Profiler) {
         crate::tracy_zone!("audio::consume_requests", 0x00FF00);
 
         let fx_mask = self.effect_flags.load();
         let listener_pos = self.listener_pos.load();
+        let block_start_sample = self.current_sample_clock;
+        let block_end_sample = block_start_sample + frames as u64;
+        let max_lateness_samples = (self.sample_rate as f32
+            * (constants::MAX_SCHEDULED_SOUND_LATENESS_MS / 1000.0))
+            as u64;
 
+        // 1. Récupération des nouvelles requêtes depuis le ring-buffer lock-free
         while let Ok(req) = self.play_rx.try_recv() {
             if let Some(debug_tx) = &self.debug_tx {
                 let _ = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Received {
@@ -225,109 +243,185 @@ impl DspProcessor {
                 });
             }
 
-            let mut selected_voice_idx = None;
-            let mut steal_reason = None;
-
-            // 1. Chercher une voix inactive
-            if let Some((idx, _)) = self.voices.iter().enumerate().find(|(_, v)| !v.active) {
-                selected_voice_idx = Some(idx);
+            let max_capacity = self
+                .pending_requests
+                .capacity()
+                .max(constants::PLAY_REQUEST_CHANNEL_CAPACITY);
+            if self.pending_requests.len() < max_capacity {
+                self.pending_requests.push(req);
             } else {
-                // 2. Stratégie de Voice Stealing (vol de voix)
-                // Calculer l'atténuation spatiale pour la nouvelle requête (pre-attenuation fix)
-                let d = req.pos - listener_pos;
-                let distance = d.length().max(1e-6);
-                let att = compute_distance_attenuation(&self.settings, distance, fx_mask);
-
-                let req_priority = match req.sound_type {
-                    crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
-                    crate::audio_engine::types::AudioSoundType::Rocket => 1.0,
-                };
-                let req_volume = req.gain * att * req_priority;
-
-                // Trouver la voix active la plus silencieuse (gain et atténuation spatiale pondérés par priorité de son)
-                let mut min_volume = f32::MAX;
-                let mut quietest_idx = None;
-
-                for (idx, v) in self.voices.iter().enumerate() {
-                    let v_priority = match v.sound_type {
-                        crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
-                        crate::audio_engine::types::AudioSoundType::Rocket => 1.0,
-                    };
-                    let v_d = v.world_pos - listener_pos;
-                    let v_distance = v_d.length().max(1e-6);
-                    let v_att = compute_distance_attenuation(&self.settings, v_distance, fx_mask);
-                    let v_gain = if v.current_gains == [0.0, 0.0] {
-                        v.user_gain
-                    } else {
-                        v.current_gains[0].abs().max(v.current_gains[1].abs())
-                    }
-                    .max(0.001);
-                    let volume = v_gain * v_att * v_priority;
-                    if volume < min_volume {
-                        min_volume = volume;
-                        quietest_idx = Some(idx);
-                    }
-                }
-
-                if let Some(idx) = quietest_idx {
-                    // On ne vole la voix que si le nouveau son demandé est plus fort que le son actif le plus silencieux
-                    if req_volume > min_volume {
-                        let stolen_req_id = self.voices[idx].request_id;
-                        selected_voice_idx = Some(idx);
-                        steal_reason = Some(stolen_req_id);
-                    }
-                }
-            }
-
-            if let Some(voice_idx) = selected_voice_idx {
-                // Si on a volé une voix active, on notifie son drop avec le motif approprié
-                if let Some(stolen_id) = steal_reason {
-                    if let Some(debug_tx) = &self.debug_tx {
-                        let _ = debug_tx.try_send(
-                            crate::audio_engine::types::AudioDebugEvent::Dropped {
-                                request_id: stolen_id,
-                                dropped_at: std::time::Instant::now(),
-                                reason: "Voice stolen (quieter)",
-                            },
-                        );
-                    }
-                }
-
-                let v = &mut self.voices[voice_idx];
-                // Éviter tout drop d'Arc dans le thread CPAL lors du vol d'une voix active
-                if let Some(dead_arc) = v.data.take() {
-                    let _ = self.garbage_tx.try_send(dead_arc);
-                }
-                v.reset_from_request(&req);
-                let now = Instant::now();
-                let latency = now.duration_since(req.sent_at);
-                profiler.record_metric("audio latency", latency);
-                crate::tracy_plot!("Audio: Latency (ms)", latency.as_secs_f64() * 1000.0);
-
-                if let Some(debug_tx) = &self.debug_tx {
-                    let _ =
-                        debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Started {
-                            request_id: req.request_id,
-                            started_at: now,
-                            voice_index: voice_idx,
-                        });
-                }
-            } else {
-                // Pas de voix libre et aucune voix active plus silencieuse que le nouveau son
+                let dead_arc = Arc::clone(&req.data);
+                let _ = self.garbage_tx.try_send(dead_arc);
                 if let Some(debug_tx) = &self.debug_tx {
                     let _ =
                         debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Dropped {
                             request_id: req.request_id,
                             dropped_at: Instant::now(),
-                            reason: "No inactive voice available",
+                            reason: "Scheduled queue full",
                         });
                 }
             }
         }
 
+        // 2. Ordonnancement temporel : trier les requêtes planifiées par échantillon cible
+        self.pending_requests
+            .sort_unstable_by_key(|r| r.target_sample);
+
+        // 3. Détecter le nombre de requêtes à démarrer dans ce bloc
+        let mut due_count = 0;
+        while due_count < self.pending_requests.len()
+            && self.pending_requests[due_count].target_sample < block_end_sample
+        {
+            due_count += 1;
+        }
+
+        // 4. Activer les requêtes échues dans les voix libres ou par Voice Stealing
+        for req in self.pending_requests.drain(..due_count) {
+            if req.target_sample > 0
+                && req.target_sample + max_lateness_samples < block_start_sample
+            {
+                let dead_arc = Arc::clone(&req.data);
+                let _ = self.garbage_tx.try_send(dead_arc);
+                if let Some(debug_tx) = &self.debug_tx {
+                    let _ =
+                        debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                            request_id: req.request_id,
+                            dropped_at: Instant::now(),
+                            reason: "Scheduled sound overdue",
+                        });
+                }
+                continue;
+            }
+
+            let start_offset = if req.target_sample <= block_start_sample {
+                0
+            } else {
+                ((req.target_sample - block_start_sample) as usize).min(frames.saturating_sub(1))
+            };
+
+            Self::activate_voice(
+                &mut self.voices,
+                &self.settings,
+                &self.garbage_tx,
+                &self.debug_tx,
+                req,
+                start_offset,
+                fx_mask,
+                listener_pos,
+                profiler,
+            );
+        }
+
         let nb_actives_voices = self.voices.iter().filter(|v| v.active).count();
         profiler.record_metric("nb_actives_voices", nb_actives_voices);
         crate::tracy_plot!("Audio: Active Voices", nb_actives_voices as f64);
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    #[inline(always)]
+    fn activate_voice(
+        voices: &mut [Voice],
+        settings: &AudioEngineSettings,
+        garbage_tx: &Sender<Arc<Vec<[f32; 2]>>>,
+        debug_tx: &Option<Sender<crate::audio_engine::types::AudioDebugEvent>>,
+        req: PlayRequest,
+        start_offset: usize,
+        fx_mask: u32,
+        listener_pos: glam::Vec2,
+        profiler: &Profiler,
+    ) {
+        let mut selected_voice_idx = None;
+        let mut steal_reason = None;
+
+        // 1. Chercher une voix inactive
+        if let Some((idx, _)) = voices.iter().enumerate().find(|(_, v)| !v.active) {
+            selected_voice_idx = Some(idx);
+        } else {
+            // 2. Stratégie de Voice Stealing (vol de voix)
+            let d = req.pos - listener_pos;
+            let distance = d.length().max(1e-6);
+            let att = compute_distance_attenuation(settings, distance, fx_mask);
+
+            let req_priority = match req.sound_type {
+                crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
+                crate::audio_engine::types::AudioSoundType::Rocket => 1.0,
+            };
+            let req_volume = req.gain * att * req_priority;
+
+            let mut min_volume = f32::MAX;
+            let mut quietest_idx = None;
+
+            for (idx, v) in voices.iter().enumerate() {
+                let v_priority = match v.sound_type {
+                    crate::audio_engine::types::AudioSoundType::Explosion => 2.0,
+                    crate::audio_engine::types::AudioSoundType::Rocket => 1.0,
+                };
+                let v_d = v.world_pos - listener_pos;
+                let v_distance = v_d.length().max(1e-6);
+                let v_att = compute_distance_attenuation(settings, v_distance, fx_mask);
+                let v_gain = if v.current_gains == [0.0, 0.0] {
+                    v.user_gain
+                } else {
+                    v.current_gains[0].abs().max(v.current_gains[1].abs())
+                }
+                .max(0.001);
+                let volume = v_gain * v_att * v_priority;
+                if volume < min_volume {
+                    min_volume = volume;
+                    quietest_idx = Some(idx);
+                }
+            }
+
+            if let Some(idx) = quietest_idx {
+                if req_volume > min_volume {
+                    let stolen_req_id = voices[idx].request_id;
+                    selected_voice_idx = Some(idx);
+                    steal_reason = Some(stolen_req_id);
+                }
+            }
+        }
+
+        if let Some(voice_idx) = selected_voice_idx {
+            if let Some(stolen_id) = steal_reason {
+                if let Some(debug_tx) = debug_tx {
+                    let _ =
+                        debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                            request_id: stolen_id,
+                            dropped_at: std::time::Instant::now(),
+                            reason: "Voice stolen (quieter)",
+                        });
+                }
+            }
+
+            let v = &mut voices[voice_idx];
+            if let Some(dead_arc) = v.data.take() {
+                let _ = garbage_tx.try_send(dead_arc);
+            }
+            v.reset_from_request(&req);
+            v.start_offset = start_offset;
+            let now = Instant::now();
+            let latency = now.duration_since(req.sent_at);
+            profiler.record_metric("audio latency", latency);
+            crate::tracy_plot!("Audio: Latency (ms)", latency.as_secs_f64() * 1000.0);
+
+            if let Some(debug_tx) = debug_tx {
+                let _ = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Started {
+                    request_id: req.request_id,
+                    started_at: now,
+                    voice_index: voice_idx,
+                });
+            }
+        } else {
+            let dead_arc = Arc::clone(&req.data);
+            let _ = garbage_tx.try_send(dead_arc);
+            if let Some(debug_tx) = debug_tx {
+                let _ = debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Dropped {
+                    request_id: req.request_id,
+                    dropped_at: Instant::now(),
+                    reason: "No inactive voice available",
+                });
+            }
+        }
     }
 
     #[inline(always)]
@@ -446,19 +540,22 @@ impl DspProcessor {
             let active_fade = use_fade && (fade_in > 0 || fade_out > 0);
             let apply_lpf = filter_a < 0.9999;
 
+            let start_offset = v.start_offset.min(frames);
+            let available_frames = frames - start_offset;
+
             if (rate - 1.0).abs() < 1e-6 {
                 // 🚀 Fast Path (rate == 1.0) : Pas de LERP fractionnaire
                 let start_idx = v.pos as usize;
                 let count = if start_idx >= total_len {
                     0
                 } else {
-                    (total_len - start_idx).min(frames)
+                    (total_len - start_idx).min(available_frames)
                 };
 
                 if count > 0 {
                     let sample_slice = &slice_ref[start_idx..start_idx + count];
-                    let w_out = &mut bus_w_slice[..count];
-                    let x_out = &mut bus_x_slice[..count];
+                    let w_out = &mut bus_w_slice[start_offset..start_offset + count];
+                    let x_out = &mut bus_x_slice[start_offset..start_offset + count];
 
                     let inv_fade_in = constants::compute_fade_reciprocal(fade_in);
                     let inv_fade_out = constants::compute_fade_reciprocal(fade_out);
@@ -502,7 +599,7 @@ impl DspProcessor {
                 let inv_fade_in = constants::compute_fade_reciprocal(fade_in);
                 let inv_fade_out = constants::compute_fade_reciprocal(fade_out);
 
-                for i in 0..frames {
+                for i in start_offset..frames {
                     let current_pos = v.pos;
                     let index = current_pos as usize;
 
@@ -536,6 +633,7 @@ impl DspProcessor {
                 }
             }
 
+            v.start_offset = 0;
             v.filter_state[0] = prev_mono;
             v.current_gains[0] = voice_gain;
             v.current_gains[1] = voice_gain;
@@ -639,9 +737,11 @@ impl DspProcessor {
 
             let inv_fade_in = constants::compute_fade_reciprocal(v.fade_in_samples);
             let inv_fade_out = constants::compute_fade_reciprocal(v.fade_out_samples);
+            let start_offset = v.start_offset.min(frames);
 
             // 3. Boucle de Mixage : Lecture spatiale directe (Zéro Buffer Intermédiaire)
-            for (i, frame) in self.acc[..frames].iter_mut().enumerate() {
+            for (i, frame) in self.acc[start_offset..frames].iter_mut().enumerate() {
+                let sample_idx = start_offset + i;
                 let current_pos = v.pos;
                 let index = current_pos as usize;
 
@@ -649,8 +749,8 @@ impl DspProcessor {
                     break;
                 }
 
-                let current_itd_l = start_itd_l + itd_step_l * i as f32;
-                let current_itd_r = start_itd_r + itd_step_r * i as f32;
+                let current_itd_l = start_itd_l + itd_step_l * sample_idx as f32;
+                let current_itd_r = start_itd_r + itd_step_r * sample_idx as f32;
 
                 let mut l = interpolate_mono_sample(slice_ref, current_pos - current_itd_l as f64);
                 let mut r = interpolate_mono_sample(slice_ref, current_pos - current_itd_r as f64);
@@ -682,14 +782,15 @@ impl DspProcessor {
                 prev_l = l;
                 prev_r = r;
 
-                let current_g_l = start_gain_l + gain_step_l * i as f32;
-                let current_g_r = start_gain_r + gain_step_r * i as f32;
+                let current_g_l = start_gain_l + gain_step_l * sample_idx as f32;
+                let current_g_r = start_gain_r + gain_step_r * sample_idx as f32;
                 frame[0] += l * current_g_l;
                 frame[1] += r * current_g_r;
 
                 v.pos += rate;
             }
 
+            v.start_offset = 0;
             v.filter_state[0] = prev_l;
             v.filter_state[1] = prev_r;
             v.current_gains[0] = target_gain_l;

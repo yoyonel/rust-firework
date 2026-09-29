@@ -74,6 +74,9 @@ fn test_dsp_no_glitches_under_normal_play() {
             block_size,
         ),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     // Joue un son simple avec fondu d'entrée/sortie pour éviter tout clic de coupure
@@ -84,6 +87,7 @@ fn test_dsp_no_glitches_under_normal_play() {
         gain: 0.8,
         filter_a: 0.05,
         sent_at: Instant::now(),
+        target_sample: 0,
         request_id: 1,
         id: 10,
         pos: glam::Vec2::ZERO,
@@ -153,6 +157,9 @@ fn test_dsp_voice_stealing_glitch_limit() {
             block_size,
         ),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     // Lance le 1er son (avec fondu pour éviter un pop initial)
@@ -164,6 +171,7 @@ fn test_dsp_voice_stealing_glitch_limit() {
             gain: 0.8,
             filter_a: 0.05,
             sent_at: Instant::now(),
+            target_sample: 0,
             request_id: 1,
             id: 10,
             pos: glam::Vec2::ZERO,
@@ -191,6 +199,7 @@ fn test_dsp_voice_stealing_glitch_limit() {
             gain: 1.0,
             filter_a: 0.05,
             sent_at: Instant::now(),
+            target_sample: 0,
             request_id: 2,
             id: 11,
             pos: glam::Vec2::ZERO,
@@ -264,6 +273,9 @@ fn test_block_processing_budget() {
             block_size,
         ),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     };
 
     let profiler = Profiler::new(10);

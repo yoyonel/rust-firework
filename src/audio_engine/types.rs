@@ -78,8 +78,9 @@ pub struct Voice {
     pub current_itd: [f32; 2],   // ITD actuel gauche/droite (en échantillons)
     pub target_itd: [f32; 2],    // ITD cible gauche/droite à la fin du bloc
 
-    pub request_id: u64,            // NOUVEAU : ID de la requête de playback
-    pub sound_type: AudioSoundType, // NOUVEAU : Type de son joué par cette voix
+    pub start_offset: usize, // Intra-block start offset in samples (0 = start of block)
+    pub request_id: u64,     // ID de la requête de playback
+    pub sound_type: AudioSoundType, // Type de son joué par cette voix
 }
 
 impl Voice {
@@ -103,6 +104,7 @@ impl Voice {
             target_gains: [1.0, 1.0],  // NOUVEAU
             current_itd: [0.0, 0.0],
             target_itd: [0.0, 0.0],
+            start_offset: 0,
             request_id: 0,
             sound_type: AudioSoundType::Rocket,
         }
@@ -124,6 +126,7 @@ impl Voice {
             user_gain: req.gain,
             filter_state: [0.0; 2],
             id: req.id, // MODIFIÉ : Relie la voix à l'ID physique (renommer _id -> id)
+            start_offset: 0,
             request_id: req.request_id,
             sound_type: req.sound_type,
             // NOUVEAU : On initialise les gains à 0 pour forcer une rampe d'apparition
@@ -148,11 +151,12 @@ impl Voice {
 pub struct PlayRequest {
     // pub data: Vec<[f32; 2]>, // Stereo audio data
     pub data: Arc<Vec<[f32; 2]>>,
-    pub fade_in: usize,   // Fade-in samples
-    pub fade_out: usize,  // Fade-out samples
-    pub gain: f32,        // Per-sound gain
-    pub filter_a: f32,    // Low-pass coefficient
-    pub sent_at: Instant, // Timestamp of request
+    pub fade_in: usize,     // Fade-in samples
+    pub fade_out: usize,    // Fade-out samples
+    pub gain: f32,          // Per-sound gain
+    pub filter_a: f32,      // Low-pass coefficient
+    pub sent_at: Instant,   // Timestamp of request
+    pub target_sample: u64, // Horloge échantillon cible pour la planification précise (0 = immédiat)
 
     pub request_id: u64,            // NOUVEAU : ID de la requête de playback
     pub id: u64,                    // ID de la entité physique (0 si statique)

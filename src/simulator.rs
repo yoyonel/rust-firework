@@ -539,10 +539,17 @@ where
             &exploded_ids_buf[..exploded_count],
         );
         if !self.config.disable_audio {
+            let launch_delay = self.physic_engine.get_config().audio_launch_anticipation_ms;
+            let explosion_delay = self
+                .physic_engine
+                .get_config()
+                .audio_explosion_anticipation_ms;
             Self::synch_audio_with_physic_extracted(
                 &mut self.audio_engine,
                 &self.accumulated_events.anticipated_launches[..],
                 &self.accumulated_events.anticipated_explosions[..],
+                launch_delay,
+                explosion_delay,
             );
         }
 
@@ -778,21 +785,23 @@ where
         audio_engine: &mut A,
         anticipated_rocket_launches: &[(u64, glam::Vec2)],
         anticipated_explosions: &[(u64, glam::Vec2)],
+        launch_delay_ms: f32,
+        explosion_delay_ms: f32,
     ) {
         for &(id, pos) in anticipated_rocket_launches {
             debug!(
-                "🚀 [Anticipated] Rocket launch audio triggered for ID {} at ({}, {})",
-                id, pos.x, pos.y
+                "🚀 [Anticipated] Rocket launch audio triggered for ID {} at ({}, {}) in {:.1} ms",
+                id, pos.x, pos.y, launch_delay_ms
             );
-            audio_engine.play_rocket_with_id(id, pos, 0.8);
+            audio_engine.play_rocket_scheduled(id, pos, 0.8, launch_delay_ms);
         }
 
         for (i, &(id, pos)) in anticipated_explosions.iter().enumerate() {
             debug!(
-                "💥 [Anticipated] Explosion audio triggered: {} for ID {} at ({}, {})",
-                i, id, pos.x, pos.y
+                "💥 [Anticipated] Explosion audio triggered: {} for ID {} at ({}, {}) in {:.1} ms",
+                i, id, pos.x, pos.y, explosion_delay_ms
             );
-            audio_engine.play_explosion_with_id(id, pos, 1.0);
+            audio_engine.play_explosion_scheduled(id, pos, 1.0, explosion_delay_ms);
         }
     }
 

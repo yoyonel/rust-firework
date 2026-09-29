@@ -155,6 +155,14 @@ pub const DEFAULT_FADE_IN_MS: f32 = 20.0;
 /// - **System influence:** Eliminates abrupt clipping clicks when voices are stopped or reused.
 pub const DEFAULT_FADE_OUT_MS: f32 = 50.0;
 
+/// Maximum allowable scheduled sound lateness before dropping.
+///
+/// - **Unit:** ms (milliseconds)
+/// - **Technical meaning:** Maximum time a scheduled sound can be overdue before being discarded as obsolete.
+/// - **Bounds:** `50.0` to `1000.0` ms.
+/// - **System influence:** Prevents a backlog of old sounds from bursting simultaneously after a long frame freeze.
+pub const MAX_SCHEDULED_SOUND_LATENESS_MS: f32 = 200.0;
+
 /// Minimum cutoff frequency for distance low-pass filter.
 ///
 /// - **Unit:** Hz
