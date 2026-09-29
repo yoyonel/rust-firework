@@ -4,12 +4,14 @@ use fireworks_sim::physic_engine::{
 };
 
 fn run_simulation(seed: u64, frames: u64, dt: f32) -> f32 {
-    let mut config = PhysicConfig::default();
-    config.max_rockets = 50;
-    config.rocket_interval_mean = 0.05;
-    config.rocket_interval_variation = 0.0;
-    config.particles_per_explosion = 100;
-    config.particles_per_trail = 50;
+    let config = PhysicConfig {
+        max_rockets: 50,
+        rocket_interval_mean: 0.05,
+        rocket_interval_variation: 0.0,
+        particles_per_explosion: 100,
+        particles_per_trail: 50,
+        ..PhysicConfig::default()
+    };
 
     let mut engine = PhysicEngineFireworks::new(&config, 800.0, Some(seed));
 

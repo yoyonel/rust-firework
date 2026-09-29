@@ -57,6 +57,67 @@ pub struct SimConfig {
     pub disable_audio: bool,
 }
 
+/// Persistent scratch buffers for multi-substep event accumulation across physics ticks (zero allocation per frame).
+#[derive(Debug, Default)]
+pub struct AccumulatedPhysicsEvents {
+    pub new_rocket_ids: Vec<u64>,
+    pub exploded_ids: Vec<u64>,
+    pub anticipated_launches: Vec<(u64, glam::Vec2)>,
+    pub anticipated_explosions: Vec<(u64, glam::Vec2)>,
+}
+
+impl AccumulatedPhysicsEvents {
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            new_rocket_ids: Vec::with_capacity(capacity),
+            exploded_ids: Vec::with_capacity(capacity),
+            anticipated_launches: Vec::with_capacity(capacity),
+            anticipated_explosions: Vec::with_capacity(capacity),
+        }
+    }
+
+    pub fn clear(&mut self) {
+        self.new_rocket_ids.clear();
+        self.exploded_ids.clear();
+        self.anticipated_launches.clear();
+        self.anticipated_explosions.clear();
+    }
+
+    pub fn collect_from_substep(
+        &mut self,
+        update_result: &crate::physic_engine::types::UpdateResult,
+    ) {
+        if let Some(r) = &update_result.new_rocket {
+            if !self.new_rocket_ids.contains(&r.id) {
+                self.new_rocket_ids.push(r.id);
+            }
+        }
+        for &id in update_result.triggered_explosion_ids {
+            if !self.exploded_ids.contains(&id) {
+                self.exploded_ids.push(id);
+            }
+        }
+        if let Some(launch) = update_result.anticipated_rocket_launch {
+            if !self
+                .anticipated_launches
+                .iter()
+                .any(|&(id, _)| id == launch.0)
+            {
+                self.anticipated_launches.push(launch);
+            }
+        }
+        for &item in update_result.anticipated_explosions {
+            if !self
+                .anticipated_explosions
+                .iter()
+                .any(|&(id, _)| id == item.0)
+            {
+                self.anticipated_explosions.push(item);
+            }
+        }
+    }
+}
+
 pub struct Simulator<R, P, A, W>
 where
     R: RendererEngine,
@@ -148,10 +209,7 @@ where
     pub show_audio_visual_overlay: bool,
 
     // Scratch persistent buffers for multi-substep event accumulation (0 heap allocs in update_simulation)
-    accumulated_new_rocket_ids: Vec<u64>,
-    accumulated_exploded_ids: Vec<u64>,
-    accumulated_anticipated_launches: Vec<(u64, glam::Vec2)>,
-    pub accumulated_anticipated_explosions: Vec<(u64, glam::Vec2)>,
+    pub accumulated_events: AccumulatedPhysicsEvents,
 
     pub config: SimConfig,
     pub start_time: Instant,
@@ -240,10 +298,7 @@ where
             audio_event_renderer: None,
             audio_event_pool: Vec::with_capacity(32),
             show_audio_visual_overlay: true,
-            accumulated_new_rocket_ids: Vec::with_capacity(event_cap),
-            accumulated_exploded_ids: Vec::with_capacity(event_cap),
-            accumulated_anticipated_launches: Vec::with_capacity(event_cap),
-            accumulated_anticipated_explosions: Vec::with_capacity(event_cap),
+            accumulated_events: AccumulatedPhysicsEvents::with_capacity(event_cap),
             config: SimConfig::default(),
             start_time: Instant::now(),
         };
@@ -439,10 +494,7 @@ where
         let fixed_dt = crate::physic_engine::constants::FIXED_TIMESTEP_DELTA;
         let max_sub_steps = crate::physic_engine::constants::MAX_SUB_STEPS;
 
-        self.accumulated_new_rocket_ids.clear();
-        self.accumulated_exploded_ids.clear();
-        self.accumulated_anticipated_launches.clear();
-        self.accumulated_anticipated_explosions.clear();
+        self.accumulated_events.clear();
 
         let mut sub_steps = 0;
         let mut ran_any_substep = false;
@@ -452,34 +504,7 @@ where
                 .profiler
                 .profile_block("physic - update", || self.physic_engine.update(fixed_dt));
 
-            if let Some(r) = &update_result.new_rocket {
-                if !self.accumulated_new_rocket_ids.contains(&r.id) {
-                    self.accumulated_new_rocket_ids.push(r.id);
-                }
-            }
-            for &id in update_result.triggered_explosion_ids {
-                if !self.accumulated_exploded_ids.contains(&id) {
-                    self.accumulated_exploded_ids.push(id);
-                }
-            }
-            if let Some(launch) = update_result.anticipated_rocket_launch {
-                if !self
-                    .accumulated_anticipated_launches
-                    .iter()
-                    .any(|&(id, _)| id == launch.0)
-                {
-                    self.accumulated_anticipated_launches.push(launch);
-                }
-            }
-            for &item in update_result.anticipated_explosions {
-                if !self
-                    .accumulated_anticipated_explosions
-                    .iter()
-                    .any(|&(id, _)| id == item.0)
-                {
-                    self.accumulated_anticipated_explosions.push(item);
-                }
-            }
+            self.accumulated_events.collect_from_substep(&update_result);
 
             self.dt_accumulator -= fixed_dt;
             sub_steps += 1;
@@ -499,13 +524,14 @@ where
 
         // Copy event IDs to stack buffers (max 16 IDs) to release immutable borrow on self
         let mut new_ids_buf = [0u64; 16];
-        let new_count = self.accumulated_new_rocket_ids.len().min(16);
-        new_ids_buf[..new_count].copy_from_slice(&self.accumulated_new_rocket_ids[..new_count]);
+        let new_count = self.accumulated_events.new_rocket_ids.len().min(16);
+        new_ids_buf[..new_count]
+            .copy_from_slice(&self.accumulated_events.new_rocket_ids[..new_count]);
 
         let mut exploded_ids_buf = [0u64; 16];
-        let exploded_count = self.accumulated_exploded_ids.len().min(16);
+        let exploded_count = self.accumulated_events.exploded_ids.len().min(16);
         exploded_ids_buf[..exploded_count]
-            .copy_from_slice(&self.accumulated_exploded_ids[..exploded_count]);
+            .copy_from_slice(&self.accumulated_events.exploded_ids[..exploded_count]);
 
         // Dispatch events to tracking and audio engine
         self.track_physical_events(
@@ -515,22 +541,22 @@ where
         if !self.config.disable_audio {
             Self::synch_audio_with_physic_extracted(
                 &mut self.audio_engine,
-                &self.accumulated_anticipated_launches[..],
-                &self.accumulated_anticipated_explosions[..],
+                &self.accumulated_events.anticipated_launches[..],
+                &self.accumulated_events.anticipated_explosions[..],
             );
         }
 
         // NOUVEAU: Alimenter le pool d'indicateurs visuels audio (mode debug F3)
         if self.show_audio_diagnostic && self.show_audio_visual_overlay {
             // Injection des évènements anticipés dans le pool d'animation
-            for &(_id, pos) in &self.accumulated_anticipated_launches {
+            for &(_id, pos) in &self.accumulated_events.anticipated_launches {
                 self.audio_event_pool
                     .push(crate::renderer_engine::AudioEvent::new(
                         pos,
                         crate::renderer_engine::AudioEventKind::Launch,
                     ));
             }
-            for &(_id, pos) in &self.accumulated_anticipated_explosions {
+            for &(_id, pos) in &self.accumulated_events.anticipated_explosions {
                 self.audio_event_pool
                     .push(crate::renderer_engine::AudioEvent::new(
                         pos,
@@ -556,7 +582,7 @@ where
         tracy_zone_with_value!(
             "physics::update",
             0xAA00FF, // Violet
-            if !self.accumulated_new_rocket_ids.is_empty() {
+            if !self.accumulated_events.new_rocket_ids.is_empty() {
                 1
             } else {
                 0

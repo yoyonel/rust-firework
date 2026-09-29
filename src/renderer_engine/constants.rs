@@ -214,6 +214,12 @@ pub const TEXTURE_FLOW_MAP_PATH: &str = "assets/textures/flowmap.png";
 pub const TEXTURE_PRIMARY_PARTICLE_PATH: &str =
     "assets/textures/04ddeae2-7367-45f1-87e0-361d1d242630_scaled.png";
 
+/// Header byte length for preprocessed `.raw_tex` binary files (width: u32, height: u32).
+pub const RAW_TEX_HEADER_SIZE: usize = 8;
+
+/// Bytes per pixel for `.raw_tex` uncompressed textures (RGBA8).
+pub const RAW_TEX_BYTES_PER_PIXEL: usize = 4;
+
 // Renderer GUI Control Bounds
 pub const SLIDER_BLOOM_INTENSITY_MIN: f32 = 0.0;
 pub const SLIDER_BLOOM_INTENSITY_MAX: f32 = 10.0;

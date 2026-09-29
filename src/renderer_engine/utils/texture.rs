@@ -1,5 +1,34 @@
+use crate::renderer_engine::constants::{RAW_TEX_BYTES_PER_PIXEL, RAW_TEX_HEADER_SIZE};
 use image::GenericImageView;
 use std::path::Path;
+
+/// Header metadata for `.raw_tex` binary texture cache.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RawTexHeader {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl RawTexHeader {
+    /// Attempts to parse a header from the first bytes of a raw texture file.
+    pub fn parse(bytes: &[u8]) -> Option<(Self, &[u8])> {
+        if bytes.len() < RAW_TEX_HEADER_SIZE {
+            return None;
+        }
+        let width = u32::from_le_bytes(bytes[0..4].try_into().ok()?);
+        let height = u32::from_le_bytes(bytes[4..8].try_into().ok()?);
+        let expected_payload = (width as usize)
+            .checked_mul(height as usize)?
+            .checked_mul(RAW_TEX_BYTES_PER_PIXEL)?;
+
+        let payload = &bytes[RAW_TEX_HEADER_SIZE..];
+        if payload.len() == expected_payload {
+            Some((Self { width, height }, payload))
+        } else {
+            None
+        }
+    }
+}
 
 pub struct TextureData {
     pub data: Vec<u8>,
@@ -12,16 +41,14 @@ pub fn load_image_data_from_disk(path: &str) -> TextureData {
 
     // Fast path: Chargement direct du binaire brut pré-calculé (Zero-Cost PNG Decoding)
     if std::path::Path::new(&raw_path).exists() {
-        let bytes = std::fs::read(&raw_path).expect("Failed to read raw texture");
-        if bytes.len() >= 8 {
-            let width = u32::from_le_bytes(bytes[0..4].try_into().unwrap());
-            let height = u32::from_le_bytes(bytes[4..8].try_into().unwrap());
-            let data = bytes[8..].to_vec();
-            return TextureData {
-                data,
-                width,
-                height,
-            };
+        if let Ok(bytes) = std::fs::read(&raw_path) {
+            if let Some((header, payload)) = RawTexHeader::parse(&bytes) {
+                return TextureData {
+                    data: payload.to_vec(),
+                    width: header.width,
+                    height: header.height,
+                };
+            }
         }
     }
 
@@ -40,6 +67,9 @@ pub fn load_image_data_from_disk(path: &str) -> TextureData {
 
 pub fn create_gl_texture_from_data(tex_data: &TextureData) -> u32 {
     let mut tex_id = 0;
+    // SAFETY: An active OpenGL context is guaranteed by the caller.
+    // `gl::GenTextures` initializes `tex_id`, and `gl::TexImage2D` is passed
+    // `tex_data.data` which holds exactly `width * height * 4` bytes matching RGBA8 format.
     unsafe {
         gl::GenTextures(1, &mut tex_id);
         gl::BindTexture(gl::TEXTURE_2D, tex_id);
