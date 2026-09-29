@@ -14,7 +14,6 @@ echo "🔍 Export XML de la capture RenderDoc $RDC_FILE..."
 renderdoccmd convert -f "$RDC_FILE" -c xml -o "$XML_TMP"
 
 echo "📊 Analyse de la structure OpenGL et des passes de rendu..."
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python3 "${SCRIPT_DIR}/analyze_renderdoc_xml.py" "$XML_TMP"
+cargo run --bin analyze_renderdoc_xml -- "$XML_TMP"
 
 rm -f "$XML_TMP"

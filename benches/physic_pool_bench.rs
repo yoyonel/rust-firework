@@ -46,7 +46,7 @@ fn bench_free_block(c: &mut Criterion) {
             |(mut pool, allocated)| {
                 // Mesure : libération de tous les blocs alloués
                 for start in allocated {
-                    pool.free_block_by_start(start);
+                    pool.free_block(start);
                 }
                 black_box(pool)
             },

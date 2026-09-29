@@ -24,15 +24,15 @@
 
 Estimation chiffrée pour un développeur Rust Senior spécialisé en Data-Oriented Design (1 j/h = 8h) :
 
-| ID Tâche | Description de l'intervention | Conception / Spéc. | Implémentation | Debug & Valid. | Total (j/h) | Total (h) |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
-| **FIX-01** | Implémenter l'accumulateur `Fixed Timestep` (120 Hz) avec clamp `max_sub_steps = 4` dans [`Simulator::update_simulation`](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs#L369). | 0.25 j | 0.50 j | 0.25 j | **1.00 j** | 8 h |
-| **FIX-02** | Supprimer le multiplicateur `4.0` et valider les équations balistiques exactes dans [`Rocket::trigger_image_explosion`](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/rocket.rs#L425). | 0.10 j | 0.10 j | 0.05 j | **0.25 j** | 2 h |
-| **FIX-03** | Refactoriser la mémoire en **SoA (Structure of Arrays)** (`ParticleSoA`) + adapteur de conversion contigu pour le VBO OpenGL AZDO. | 0.50 j | 1.50 j | 0.50 j | **2.50 j** | 20 h |
-| **FIX-04** | Remplacer `Arc<Mutex<VecDeque>>` par un stack direct `Vec<usize>` dans [`ParticlesPool`](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/particles_pools.rs#L75). | 0.10 j | 0.25 j | 0.15 j | **0.50 j** | 4 h |
-| **FIX-05** | Implémenter le **Sample-Accurate Audio Scheduling** (timestamping par numéro d'échantillon cible) dans CPal [`DspProcessor`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L339). | 0.50 j | 0.75 j | 0.50 j | **1.75 j** | 14 h |
-| **FIX-06** | Remplacer le callback virtuel `dyn FnMut` par une exposition de slices directes `&[Particle]` ou conversion `bytemuck::cast_slice`. | 0.25 j | 0.35 j | 0.15 j | **0.75 j** | 6 h |
-| **TOTAL** | **Chantier complet de refactoring** | **1.70 j** | **3.45 j** | **1.60 j** | **6.75 j** | **54 h** |
+| ID Tâche | Description de l'intervention | Statut / Décision | Total (j/h) |
+| :--- | :--- | :--- | :---: |
+| **FIX-01** | Implémenter l'accumulateur `Fixed Timestep` (120 Hz) avec clamp `max_sub_steps = 4` et interpolation linéaire dans [`Simulator::update_simulation`](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs#L450). | ✅ **Implémenté** (120 Hz + lerp `render_alpha`) | **1.00 j** |
+| **FIX-02** | Supprimer la constante magique inline `4.0` dans [`Rocket::trigger_image_explosion`](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/rocket.rs#L350). | ✅ **Implémenté (Converti en boost GUI dynamique `physic.explosion_velocity_boost`)** | **0.25 j** |
+| **FIX-03** | Refactoriser la mémoire en **SoA (Structure of Arrays)** (`ParticleSoA`). | ❌ **Rejeté empiriquement** (ADR `20260805_fix_03`) | **2.50 j** |
+| **FIX-04** | Remplacer `Arc<Mutex<VecDeque>>` par un stack direct `Vec<usize>` dans [`ParticlesPool`](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/particles_pools.rs#L75). | ✅ **Implémenté** (Zero-Mutex, gain 90-99%) | **0.50 j** |
+| **FIX-05** | Implémenter le **Sample-Accurate Audio Scheduling** dans CPal [`DspProcessor`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L339). | ⏳ **Découplé (Branche dédiée `feat/audio-sample-accurate-scheduling`)** | **1.75 j** |
+| **FIX-06** | Remplacer le callback virtuel `dyn FnMut` par une exposition de slices directes `&[Particle]`. | ⏳ **Découplé (Branche dédiée `perf/physic-devirtualize-particles`)** | **0.75 j** |
+| **TOTAL** | **Chantier complet de refactoring** | **Chantier socle livré, chantiers avancés isolés** | **6.75 j** |
 
 ---
 
@@ -41,7 +41,7 @@ Estimation chiffrée pour un développeur Rust Senior spécialisé en Data-Orien
 | Modification Majeure | Risques Potentiels de Rupture | Impact Système | Stratégie de Mitigation |
 | :--- | :--- | :--- | :--- |
 | **Passage en SoA (FIX-03)** | Rupture du layout mémoire GPU (`#[repr(C)]` direct). Désynchronisation entre les buffers CPU SoA et le buffer Persistent Mapped (AZDO) OpenGL. | **Élevé** (Corruption visuelle / Crash GPU) | Implémenter une passe de packing SIMD dédiée `SoA -> AoS` uniquement lors du flush vers le buffer GPU persistent. |
-| **Fixed Timestep (FIX-01)** | **Spiral of Death :** Si le calcul physique d'une sous-étape prend plus de temps que $dt_{\text{fixed}}$, le CPU sature indéfiniment. | **Critique** (Freeze complet de l'application) | Implémenter un garde-fou strict `max_sub_steps = 4` et de l'extrapolation visuelle inter-frames. |
+| **Fixed Timestep (FIX-01)** | **Spiral of Death :** Si le calcul physique d'une sous-étape prend plus de temps que $dt_{\text{fixed}}$, le CPU sature indéfiniment. | **Critique** (Freeze complet de l'application) | Implémenter un garde-fou strict `max_sub_steps = 4` et de l'interpolation linéaire visuelle inter-frames (`alpha = accumulator / fixed_dt`). |
 | **Sample Scheduling (FIX-05)** | Buffer Underruns / Craquements audio CPal si les requêtes horodatées s'accumulent sans nettoyage en cas de chute massive de FPS. | **Moyen** (Artefacts sonores / Craquements) | Ring buffer borné pour les voix en attente avec politique de drop élégante (Fade-out instantané). |
 | **Suppression Mutex (FIX-04)** | Violation des règles de possession (Borrow Checker) si `ParticlesPool` est accédé depuis plusieurs threads. | **Faible** (Rejet à la compilation par Rust) | Le type `ParticlesPool` est maintenu strictly `!Send` / `!Sync` pour garantir la possession mono-thread. |
 
@@ -77,10 +77,10 @@ graph LR
   Valider la condition de déclenchement $v_y \le \text{threshold}$ sur $N$ étapes d'intégration $120\text{Hz}$.
 
 ### 2. Tests d'Intégration Cross-Thread (Audio-Physique)
-- **Test de Non-Blocage du Ring Buffer ([`fireworks_audio.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs#L213)) :**
-  Saturer `play_tx` avec 1000 requêtes consécutives et vérifier que le thread principal ne bloque pas et que `try_send` retourne l'erreur de saturation sans panique.
 - **Validation du Feedback d'Anticipation ([`simulator.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/simulator.rs#L485)) :**
-  Simuler un décalage audio-visuel artificiel et vérifier que l'algorithme d'ajustement fait converger l'erreur vers 0.
+  Simuler un décalage audio-visuel artificiel et vérifier que l'algorithme d'ajustement fait converger l'erreur vers 0. (Validé dans [`tests/audio_anticipation_feedback_test.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/tests/audio_anticipation_feedback_test.rs)).
+- **Test de Non-Blocage du Ring Buffer ([`fireworks_audio.rs`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/fireworks_audio.rs#L213)) :**
+  Déplacé avec le chantier FIX-05 (Sample-Accurate Audio Scheduling) pour tester la nouvelle file bornée en conditions réelles.
 
 ### 3. Benchmarks de Micro-Performance (`benches/physics_bench.rs`)
 - Créer un benchmark Criterion comparant l'intégration de 50 000 particules entre la version AoS actuelle et la version SoA optimisée SIMD.
