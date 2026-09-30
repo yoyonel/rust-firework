@@ -201,23 +201,25 @@ impl RendererGraphicsInstanced {
 
         let factor = (1.0 - alpha) * crate::physic_engine::constants::FIXED_TIMESTEP_DELTA;
 
-        // Utilise for_each_particle_of_type pour filtrer les particules du bon type
-        physic.for_each_particle_of_type(self.particle_type, &mut |p| {
-            if count < self.max_particles_on_gpu {
-                // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
-                let src_ptr =
-                    p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
-                let mut gpu_p = *src_ptr;
+        // Utilise for_each_particle_slice_of_type pour filtrer les particules par tranches contiguës
+        physic.for_each_particle_slice_of_type(self.particle_type, &mut |slice| {
+            for p in slice {
+                if count < self.max_particles_on_gpu {
+                    // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
+                    let src_ptr =
+                        p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
+                    let mut gpu_p = *src_ptr;
 
-                if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
-                    gpu_p.pos_x -= p.vel.x * factor;
-                    gpu_p.pos_y -= p.vel.y * factor;
+                    if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
+                        gpu_p.pos_x -= p.vel.x * factor;
+                        gpu_p.pos_y -= p.vel.y * factor;
+                    }
+
+                    gpu_p.brightness = 0.0; // Bloom disabled for rockets
+
+                    gpu_slice[count] = gpu_p;
+                    count += 1;
                 }
-
-                gpu_p.brightness = 0.0; // Bloom disabled for rockets
-
-                gpu_slice[count] = gpu_p;
-                count += 1;
             }
         });
 

@@ -304,8 +304,13 @@ impl SmokeSystem {
         }
     }
 
+    #[inline(always)]
+    pub fn active_particles(&self) -> &[SmokeParticle] {
+        &self.particles[..self.active_count]
+    }
+
     pub fn for_each_active(&self, f: &mut dyn FnMut(&SmokeParticle)) {
-        for p in &self.particles[..self.active_count] {
+        for p in self.active_particles() {
             f(p);
         }
     }

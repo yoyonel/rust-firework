@@ -7,20 +7,51 @@ use crate::physic_engine::ParticleType;
 use crossbeam_channel::Sender;
 
 pub trait PhysicEngineIterator {
-    /// Applique une fonction sur chaque particule active.
-    fn for_each_active_particle(&self, f: &mut dyn FnMut(&Particle));
+    /// Applique une fonction sur chaque tranche contiguë (slice) de particules actives.
+    /// Élimine le coût d'un appel virtuel par particule et permet l'inlining et l'autovectorisation SIMD.
+    fn for_each_active_particle_slice(&self, f: &mut dyn FnMut(&[Particle]));
+
+    /// Applique une fonction sur chaque tranche contiguë de particules d'un type spécifique.
+    fn for_each_particle_slice_of_type(
+        &self,
+        particle_type: ParticleType,
+        f: &mut dyn FnMut(&[Particle]),
+    );
+
+    /// Retourne la tranche contiguë directe des particules de fumée actives.
+    fn active_smoke_slice(&self) -> &[crate::physic_engine::smoke_system::SmokeParticle] {
+        &[]
+    }
+
+    /// Applique une fonction sur chaque particule active (conservé pour rétrocompatibilité).
+    fn for_each_active_particle(&self, f: &mut dyn FnMut(&Particle)) {
+        self.for_each_active_particle_slice(&mut |slice| {
+            for p in slice {
+                f(p);
+            }
+        });
+    }
 
     /// Applique une fonction sur chaque tête de fusée active non explosée.
     fn for_each_active_head_not_exploded(&self, f: &mut dyn FnMut(&Particle));
 
     /// Applique une fonction sur chaque particule active d'un type spécifique.
-    fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle));
+    fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
+        self.for_each_particle_slice_of_type(particle_type, &mut |slice| {
+            for p in slice {
+                f(p);
+            }
+        });
+    }
 
     /// Applique une fonction sur chaque particule de fumée active directement.
     fn for_each_smoke_particle(
         &self,
-        _f: &mut dyn FnMut(&crate::physic_engine::smoke_system::SmokeParticle),
+        f: &mut dyn FnMut(&crate::physic_engine::smoke_system::SmokeParticle),
     ) {
+        for sp in self.active_smoke_slice() {
+            f(sp);
+        }
     }
 
     /// Retourne l'intensité globale de la fumée pour le rendu.

@@ -114,6 +114,44 @@ impl Rocket {
         trails.chain(explosions)
     }
 
+    /// Parcourt chaque tranche contiguë de particules de traînée (trail) actives de cette fusée.
+    #[inline(always)]
+    pub fn for_each_trail_slice<'a, F>(&'a self, pools: &'a ParticlesPoolsForRockets, mut f: F)
+    where
+        F: FnMut(&'a [Particle]),
+    {
+        if self.trail_active_count > 0 {
+            if let Some(range) = &self.trail_particle_indices {
+                let slice = pools.access(PoolKind::Trails, range);
+                f(&slice[..self.trail_active_count]);
+            }
+        }
+    }
+
+    /// Parcourt chaque tranche contiguë de particules d'explosion actives de cette fusée.
+    #[inline(always)]
+    pub fn for_each_explosion_slice<'a, F>(&'a self, pools: &'a ParticlesPoolsForRockets, mut f: F)
+    where
+        F: FnMut(&'a [Particle]),
+    {
+        if self.explosion_active_count > 0 {
+            if let Some(range) = &self.explosion_particle_indices {
+                let slice = pools.access(PoolKind::Explosions, range);
+                f(&slice[..self.explosion_active_count]);
+            }
+        }
+    }
+
+    /// Parcourt chaque tranche contiguë de particules actives (traînées puis explosions).
+    #[inline(always)]
+    pub fn for_each_particle_slice<'a, F>(&'a self, pools: &'a ParticlesPoolsForRockets, mut f: F)
+    where
+        F: FnMut(&'a [Particle]),
+    {
+        self.for_each_trail_slice(pools, &mut f);
+        self.for_each_explosion_slice(pools, &mut f);
+    }
+
     pub fn head_particle(&self) -> &Particle {
         &self.head
     }

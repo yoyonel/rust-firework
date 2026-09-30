@@ -30,8 +30,8 @@ Estimation chiffrée pour un développeur Rust Senior spécialisé en Data-Orien
 | **FIX-02** | Supprimer la constante magique inline `4.0` dans [`Rocket::trigger_image_explosion`](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/rocket.rs#L350). | ✅ **Implémenté (Converti en boost GUI dynamique `physic.explosion_velocity_boost`)** | **0.25 j** |
 | **FIX-03** | Refactoriser la mémoire en **SoA (Structure of Arrays)** (`ParticleSoA`). | ❌ **Rejeté empiriquement** (ADR `20260805_fix_03`) | **2.50 j** |
 | **FIX-04** | Remplacer `Arc<Mutex<VecDeque>>` par un stack direct `Vec<usize>` dans [`ParticlesPool`](file:///home/latty/Prog/__PERSO__/rust-firework/src/physic_engine/particles_pools.rs#L75). | ✅ **Implémenté** (Zero-Mutex, gain 90-99%) | **0.50 j** |
-| **FIX-05** | Implémenter le **Sample-Accurate Audio Scheduling** dans CPal [`DspProcessor`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L339). | ⏳ **Découplé (Branche dédiée `feat/audio-sample-accurate-scheduling`)** | **1.75 j** |
-| **FIX-06** | Remplacer le callback virtuel `dyn FnMut` par une exposition de slices directes `&[Particle]`. | ⏳ **Découplé (Branche dédiée `perf/physic-devirtualize-particles`)** | **0.75 j** |
+| **FIX-05** | Implémenter le **Sample-Accurate Audio Scheduling** dans CPal [`DspProcessor`](file:///home/latty/Prog/__PERSO__/rust-firework/src/audio_engine/dsp_processor.rs#L339). | ✅ **Implémenté** (PR #30) | **1.75 j** |
+| **FIX-06** | Remplacer le callback virtuel `dyn FnMut` par une exposition de slices directes `&[Particle]`. | ✅ **Implémenté** (PR #31) | **0.75 j** |
 | **TOTAL** | **Chantier complet de refactoring** | **Chantier socle livré, chantiers avancés isolés** | **6.75 j** |
 
 ---

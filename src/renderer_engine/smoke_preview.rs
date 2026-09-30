@@ -575,7 +575,7 @@ impl SmokePreviewRenderer {
             let mut instances = Vec::with_capacity(128);
             let preview_intensity = ctx.config.smoke_intensity;
 
-            self.smoke_system.for_each_active(&mut |p| {
+            for p in self.smoke_system.active_particles() {
                 if instances.len() < constants::SMOKE_PREVIEW_MAX_INSTANCES {
                     instances.push(SmokeInstanceGPU {
                         position: [p.pos.x, p.pos.y, 0.0],
@@ -587,7 +587,7 @@ impl SmokePreviewRenderer {
                         normalized_age: p.lifecycle.progress(),
                     });
                 }
-            });
+            }
 
             if !instances.is_empty() {
                 gl::BindBuffer(gl::ARRAY_BUFFER, self.smoke_inst_vbo);

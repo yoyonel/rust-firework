@@ -197,9 +197,9 @@ impl PhysicEngine for DummyPhysic {
 }
 
 impl PhysicEngineIterator for DummyPhysic {
-    fn for_each_active_particle(&self, f: &mut dyn FnMut(&Particle)) {
-        for p in &self.particles {
-            f(p);
+    fn for_each_active_particle_slice(&self, f: &mut dyn FnMut(&[Particle])) {
+        if !self.particles.is_empty() {
+            f(&self.particles);
         }
     }
     fn for_each_active_head_not_exploded(&self, f: &mut dyn FnMut(&Particle)) {
@@ -207,10 +207,14 @@ impl PhysicEngineIterator for DummyPhysic {
             f(p);
         }
     }
-    fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
+    fn for_each_particle_slice_of_type(
+        &self,
+        particle_type: ParticleType,
+        f: &mut dyn FnMut(&[Particle]),
+    ) {
         for p in &self.particles {
             if p.particle_type == particle_type {
-                f(p);
+                f(std::slice::from_ref(p));
             }
         }
     }
@@ -442,12 +446,12 @@ impl PhysicEngine for TestPhysic {
 }
 
 impl PhysicEngineIterator for TestPhysic {
-    fn for_each_active_particle(&self, _f: &mut dyn FnMut(&Particle)) {}
+    fn for_each_active_particle_slice(&self, _f: &mut dyn FnMut(&[Particle])) {}
     fn for_each_active_head_not_exploded(&self, _f: &mut dyn FnMut(&Particle)) {}
-    fn for_each_particle_of_type(
+    fn for_each_particle_slice_of_type(
         &self,
         _particle_type: ParticleType,
-        _f: &mut dyn FnMut(&Particle),
+        _f: &mut dyn FnMut(&[Particle]),
     ) {
     }
 }

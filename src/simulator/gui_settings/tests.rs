@@ -79,30 +79,27 @@ impl SpyPhysicEngine {
 }
 
 impl crate::physic_engine::PhysicEngineIterator for SpyPhysicEngine {
-    fn for_each_active_particle(
+    fn for_each_active_particle_slice(
         &self,
-        f: &mut dyn FnMut(&crate::physic_engine::particle::Particle),
+        f: &mut dyn FnMut(&[crate::physic_engine::particle::Particle]),
     ) {
-        self.inner.for_each_active_particle(f);
+        self.inner.for_each_active_particle_slice(f);
+    }
+    fn for_each_particle_slice_of_type(
+        &self,
+        particle_type: crate::physic_engine::ParticleType,
+        f: &mut dyn FnMut(&[crate::physic_engine::particle::Particle]),
+    ) {
+        self.inner.for_each_particle_slice_of_type(particle_type, f);
+    }
+    fn active_smoke_slice(&self) -> &[crate::physic_engine::smoke_system::SmokeParticle] {
+        self.inner.active_smoke_slice()
     }
     fn for_each_active_head_not_exploded(
         &self,
         f: &mut dyn FnMut(&crate::physic_engine::particle::Particle),
     ) {
         self.inner.for_each_active_head_not_exploded(f);
-    }
-    fn for_each_particle_of_type(
-        &self,
-        particle_type: crate::physic_engine::ParticleType,
-        f: &mut dyn FnMut(&crate::physic_engine::particle::Particle),
-    ) {
-        self.inner.for_each_particle_of_type(particle_type, f);
-    }
-    fn for_each_smoke_particle(
-        &self,
-        f: &mut dyn FnMut(&crate::physic_engine::smoke_system::SmokeParticle),
-    ) {
-        self.inner.for_each_smoke_particle(f);
     }
     fn get_smoke_intensity(&self) -> f32 {
         self.inner.get_smoke_intensity()

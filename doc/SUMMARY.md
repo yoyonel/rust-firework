@@ -17,6 +17,7 @@
   - [Plan d'Action de Refactoring & Feuille de Route Technique](20260804_physic_and_audio_refactoring_technical_roadmap.md)
   - [Revue de Code Architecturale et Mathématique](20260804_physic_engine_architectural_and_mathematical_review.md)
   - [Rapport Technique FIX-01 : Fixed Timestep & Sub-stepping (120 Hz)](20260805_fix_01_fixed_timestep_substepping_report.md)
+  - [Rapport Technique FIX-06 : Dévirtualisation de l'Itération des Particules](20260929_fix_06_devirtualize_particle_iteration_report.md)
   - [Rapport Technique FIX-03 : Refactoring Structure de Particules (AoS vers SoA)](20260805_fix_03_soa_particle_cache_report.md)
   - [Rapport Technique : Optimisation Branchless Pipeline Superscalaire (Rocket::update)](20260813_rocket_physics_branchless_optimization.md)
   - [Rapport Technique : Optimisation Swap-and-Pop Systèmes de Particules](20260814_swap_and_pop_particles_report.md)

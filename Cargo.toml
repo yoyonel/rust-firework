@@ -76,6 +76,10 @@ harness = false
 name = "physic_pool_bench"
 harness = false
 
+[[bench]]
+name = "particle_iteration_bench"
+harness = false
+
 [features]
 default = ["simd", "test_helpers"] # SIMD activé par défaut
 fft = []
