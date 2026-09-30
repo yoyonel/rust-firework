@@ -59,9 +59,13 @@ jobs:
         restore-keys: |
           ${{ runner.os }}-uv-
 
-    # 5.5️⃣ Setup FFmpeg
+    # 5.5️⃣ Setup FFmpeg (robuste, évite l'intermittence réseau de setup-ffmpeg)
     - name: 🎥 Set up FFmpeg
-      uses: FedericoCarboni/setup-ffmpeg@v3
+      run: |
+        if ! command -v ffmpeg &> /dev/null; then
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        fi
+        ffmpeg -version
 
     # 6️⃣ Run Fireworks Analysis (post-processing)
     - name: 📊 Run Fireworks Analysis
