@@ -265,3 +265,58 @@ fn test_visibility_toggles_independence() {
     assert!(!cfg.render_smoke);
     assert!(cfg.render_trails);
 }
+
+/// Test de non-régression et d'équivalence stricte entre l'itération slice directe et l'itération legacy
+#[test]
+fn test_slice_iteration_equivalence() {
+    let config = PhysicConfig::default();
+    let mut engine = PhysicEngineFireworks::new(&config, 1920.0, None);
+
+    for _ in 0..5 {
+        engine.force_next_launch();
+        engine.update(0.016);
+    }
+
+    // 1. Équivalence for_each_active_particle vs for_each_active_particle_slice
+    let mut legacy_particles = Vec::new();
+    engine.for_each_active_particle(&mut |p| legacy_particles.push(*p));
+
+    let mut slice_particles = Vec::new();
+    engine.for_each_active_particle_slice(&mut |slice| {
+        slice_particles.extend_from_slice(slice);
+    });
+
+    assert_eq!(legacy_particles.len(), slice_particles.len());
+    for (i, (p_leg, p_slice)) in legacy_particles.iter().zip(&slice_particles).enumerate() {
+        assert_eq!(
+            p_leg.pos, p_slice.pos,
+            "Position mismatch at particle {}",
+            i
+        );
+        assert_eq!(p_leg.particle_type, p_slice.particle_type);
+    }
+
+    // 2. Équivalence for_each_particle_of_type vs for_each_particle_slice_of_type
+    for pt in [
+        ParticleType::Rocket,
+        ParticleType::Trail,
+        ParticleType::Explosion,
+    ] {
+        let mut leg = Vec::new();
+        engine.for_each_particle_of_type(pt, &mut |p| leg.push(*p));
+
+        let mut slc = Vec::new();
+        engine.for_each_particle_slice_of_type(pt, &mut |slice| slc.extend_from_slice(slice));
+
+        assert_eq!(leg.len(), slc.len(), "Count mismatch for {:?}", pt);
+        for (i, (p1, p2)) in leg.iter().zip(&slc).enumerate() {
+            assert_eq!(p1.pos, p2.pos, "Pos mismatch for {:?} at index {}", pt, i);
+        }
+    }
+
+    // 3. Fumée directe
+    let smoke_slice = engine.active_smoke_slice();
+    let mut smoke_legacy = Vec::new();
+    engine.for_each_smoke_particle(&mut |sp| smoke_legacy.push(*sp));
+    assert_eq!(smoke_slice.len(), smoke_legacy.len());
+}
