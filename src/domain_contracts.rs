@@ -126,6 +126,7 @@ pub enum SmokeCommand {
 pub enum GuiCommand {
     SaveSession,
     ReloadSession,
+    SetRocketCursor(bool),
 }
 
 /// Unified domain command enum decoupling UI from core engines.

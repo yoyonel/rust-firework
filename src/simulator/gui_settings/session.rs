@@ -56,6 +56,9 @@ pub struct GuiSessionState {
     // GUI_PERSIST: gui.scale
     #[serde(default = "default_gui_scale")]
     pub gui_scale: f32,
+    // GUI_PERSIST: gui.rocket_cursor
+    #[serde(default = "default_rocket_cursor")]
+    pub rocket_cursor: bool,
     // GUI_PERSIST: gui.layout
     #[serde(default = "default_smoke_preview_max_zoom")]
     pub smoke_preview_max_zoom: f32,
@@ -83,6 +86,10 @@ pub struct GuiSessionState {
     // GUI_PERSIST: gui.layout
     #[serde(default = "default_smoke_preview_rot_z")]
     pub smoke_preview_rot_z: f32,
+}
+
+fn default_rocket_cursor() -> bool {
+    true
 }
 
 fn default_smoke_preview_max_zoom() -> f32 {
@@ -143,6 +150,7 @@ impl Default for GuiSessionState {
             fullscreen: false,
             theme: GuiTheme::default(),
             gui_scale: DEFAULT_GUI_SCALE,
+            rocket_cursor: true,
             smoke_preview_max_zoom: crate::physic_engine::constants::DEFAULT_SMOKE_PREVIEW_MAX_ZOOM,
             show_geometry_trimming: true,
             smoke_preview_rocket_color:

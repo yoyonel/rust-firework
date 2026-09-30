@@ -49,6 +49,7 @@ pub struct GuiSettings {
     pub theme: GuiTheme,
     pub pending_theme_change: Option<GuiTheme>,
     pub gui_scale: f32,
+    pub rocket_cursor: bool,
     pub smoke_preview_max_zoom: f32,
     pub smoke_preview_rocket_color: [f32; 3],
     pub smoke_preview_simulated_speed: f32,
@@ -78,6 +79,7 @@ impl GuiSettings {
             theme: session.theme,
             pending_theme_change: None,
             gui_scale: session.gui_scale,
+            rocket_cursor: session.rocket_cursor,
             smoke_preview_max_zoom: session.smoke_preview_max_zoom,
             smoke_preview_rocket_color: session.smoke_preview_rocket_color,
             smoke_preview_simulated_speed: session.smoke_preview_simulated_speed,
@@ -194,6 +196,7 @@ impl GuiSettings {
             fullscreen,
             theme: self.theme,
             gui_scale: self.gui_scale,
+            rocket_cursor: self.rocket_cursor,
             smoke_preview_max_zoom: self.smoke_preview_max_zoom,
             show_geometry_trimming: smoke::SHOW_GEOMETRY_TRIMMING
                 .load(std::sync::atomic::Ordering::Relaxed),
@@ -489,6 +492,7 @@ impl GuiSettings {
                                     cmd_queue,
                                     reload_shaders_requested,
                                     tonemapping_comparison_mode,
+                                    &mut self.rocket_cursor,
                                 );
                             }
                         });
