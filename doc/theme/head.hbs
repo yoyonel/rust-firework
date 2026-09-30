@@ -311,6 +311,21 @@
     }
   }
 
+  function ensureSyntaxHighlighting() {
+    if (window.hljs) {
+      document.querySelectorAll("pre code").forEach((block) => {
+        if (!block.classList.contains("language-mermaid")) {
+          if (typeof hljs.highlightBlock === "function") {
+            hljs.highlightBlock(block);
+          } else if (typeof hljs.highlightElement === "function") {
+            hljs.highlightElement(block);
+          }
+          block.classList.add("hljs");
+        }
+      });
+    }
+  }
+
   function initPage() {
     renderMermaid();
     setupImageZoom();
@@ -321,6 +336,8 @@
   } else {
     initPage();
   }
+
+  window.addEventListener("load", ensureSyntaxHighlighting);
 </script>
 
 <!-- MathJax Dynamic Loader -->
