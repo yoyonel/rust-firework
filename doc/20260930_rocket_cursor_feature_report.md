@@ -86,3 +86,23 @@ Pour tester et manipuler le curseur fusée :
    ```
 4. Basculer via le panneau ImGui (touche `F4`) :
    - Onglet *Renderer & Post-FX* $\rightarrow$ Section *MOUSE CURSOR* $\rightarrow$ Case à cocher *Custom Rocket Cursor*.
+
+---
+
+## 5. Captures d'Écran & Démonstration Visuelle
+
+### 5.1 En Pleine Simulation (Rendu Temps Réel)
+Le curseur fusée personnalisé survole les explosions de feux d'artifice avec sa pointe ogivale servant de hotspot de visée :
+
+![Curseur fusée en simulation](images/rocket_cursor_in_game.png)
+
+### 5.2 Panneau de Contrôle ImGui (Touche F4)
+Le curseur pointe sur la case à cocher *Custom Rocket Cursor* dans l'onglet *Renderer & Post-FX* :
+
+![Bascule curseur dans les paramètres](images/rocket_cursor_gui_toggle.png)
+
+### 5.3 Sprite Pixel-Art Agrandi
+Sprite 32x32 transparent (hotspot $x=16, y=1$ à la pointe rouge) :
+
+![Sprite fusée agrandi](images/rocket_cursor_preview_zoom.png)
+
