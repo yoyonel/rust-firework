@@ -113,10 +113,12 @@ physic.explosion.stats
 | :--- | :--- | :--- |
 | `renderer.tonemapping` | `<method>` | Set tone mapping operator.<br>Methods: `reinhard`, `reinhard_extended`, `aces`, `uncharted2`, `agx`, `khronos`. |
 
-### Graphical Elements Visibility
-| Command | Description |
-| :--- | :--- |
-| `renderer.rockets.enable` / `disable` | Toggle rendering of ascending rocket body quads. |
-| `renderer.smoke.enable` / `disable` | Toggle rendering of instanced volumetric smoke trails. |
-| `renderer.trails.enable` / `disable` | Toggle rendering of rocket spark trails (points). |
-| `renderer.explosions.enable` / `disable` | Toggle rendering of explosion particles (points). |
+### Graphical Elements Visibility & Window Interaction
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `renderer.rockets.enable` / `disable` | | Toggle rendering of ascending rocket body quads. |
+| `renderer.smoke.enable` / `disable` | | Toggle rendering of instanced volumetric smoke trails. |
+| `renderer.trails.enable` / `disable` | | Toggle rendering of rocket spark trails (points). |
+| `renderer.explosions.enable` / `disable` | | Toggle rendering of explosion particles (points). |
+| `renderer.rocket_cursor` | `[true\|false\|1\|0]` | Toggle custom transparent rocket mouse cursor. |
+

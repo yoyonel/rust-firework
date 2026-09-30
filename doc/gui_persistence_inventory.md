@@ -9,6 +9,7 @@ restored on startup and through **Reload Session**, and be listed here.
 | `gui.layout` | Panel visibility, selected tab, search, position, size, scroll, show geometry trimming, smoke preview max zoom, rocket color, simulated speed, simulated angle offset, live viewport zoom, pan X/Y, rotation Z | `GuiSessionState` / `gui_session.toml` | `GuiSettings::new` and Reload Session |
 | `gui.fullscreen` | Fullscreen toggle (F11) | `GuiSessionState.fullscreen` / `gui_session.toml` | `Simulator::new` startup restoration |
 | `gui.scale` | Global UI Zoom / Font Scale Slider | `GuiSessionState.gui_scale` / `gui_session.toml` | `Simulator::render_ui` frame scaling |
+| `gui.rocket_cursor` | Custom rocket cursor toggle | `GuiSessionState.rocket_cursor` / `gui_session.toml` | `Simulator::new` startup restoration and `GuiSettings` toggle |
 | `gui.theme` | Theme selector | `GuiSessionState` / `gui_session.toml` | `GuiSettings::new` and pending theme application |
 | `audio.output` | Master volume, mute, reverb wet mix, DSP matrix | `GuiSessionState` / `gui_session.toml` | `apply_session_to_audio` |
 | `audio.diagnostics` | Diagnostic monitor and visual overlay | `GuiSessionState` / `gui_session.toml` | `apply_session_to_audio` |
