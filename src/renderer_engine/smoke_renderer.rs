@@ -242,7 +242,7 @@ impl SmokeRenderer {
 
         crate::tracy_zone!("SmokeRenderer::fill_particle_data_direct", 0x888888);
 
-        physic.for_each_smoke_particle(&mut |sp| {
+        for sp in physic.active_smoke_slice() {
             if count < self.max_smoke_particles {
                 gpu_slice[count] = SmokeInstanceGPU {
                     position: [sp.pos.x, sp.pos.y, 0.0],
@@ -255,7 +255,7 @@ impl SmokeRenderer {
                 };
                 count += 1;
             }
-        });
+        }
 
         if count > 0 {
             let write_size = (count * mem::size_of::<SmokeInstanceGPU>()) as isize;

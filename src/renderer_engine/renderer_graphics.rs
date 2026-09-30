@@ -214,34 +214,36 @@ impl RendererGraphics {
 
         let factor = (1.0 - alpha) * crate::physic_engine::constants::FIXED_TIMESTEP_DELTA;
         let all_visible = self.render_trails && self.render_explosions;
-        physic.for_each_active_particle(&mut |p| {
-            let visible = if all_visible {
-                true
-            } else {
-                match p.particle_type {
-                    crate::physic_engine::ParticleType::Trail => self.render_trails,
-                    crate::physic_engine::ParticleType::Explosion => self.render_explosions,
-                    _ => true,
+        physic.for_each_active_particle_slice(&mut |slice| {
+            for p in slice {
+                let visible = if all_visible {
+                    true
+                } else {
+                    match p.particle_type {
+                        crate::physic_engine::ParticleType::Trail => self.render_trails,
+                        crate::physic_engine::ParticleType::Explosion => self.render_explosions,
+                        _ => true,
+                    }
+                };
+                if visible && count < self.max_particles_on_gpu {
+                    // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
+                    let src_ptr =
+                        p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
+                    let mut gpu_p = *src_ptr;
+
+                    if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
+                        gpu_p.pos_x -= p.vel.x * factor;
+                        gpu_p.pos_y -= p.vel.y * factor;
+                    }
+
+                    // Assigne la luminosité calculée (x^4 via multiplication rapide sans libm powi)
+                    let l = p.life / p.max_life.max(0.0001);
+                    let l2 = l * l;
+                    gpu_p.brightness = l2 * l2;
+
+                    gpu_slice[count] = gpu_p;
+                    count += 1;
                 }
-            };
-            if visible && count < self.max_particles_on_gpu {
-                // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
-                let src_ptr =
-                    p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
-                let mut gpu_p = *src_ptr;
-
-                if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
-                    gpu_p.pos_x -= p.vel.x * factor;
-                    gpu_p.pos_y -= p.vel.y * factor;
-                }
-
-                // Assigne la luminosité calculée (x^4 via multiplication rapide sans libm powi)
-                let l = p.life / p.max_life.max(0.0001);
-                let l2 = l * l;
-                gpu_p.brightness = l2 * l2;
-
-                gpu_slice[count] = gpu_p;
-                count += 1;
             }
         });
 

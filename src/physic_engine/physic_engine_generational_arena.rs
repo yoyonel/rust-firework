@@ -380,13 +380,59 @@ impl PhysicEngineFireworks {
 // Trait PhysicEngine
 // ==================================
 impl PhysicEngineIterator for PhysicEngineFireworks {
-    /// Applique une fonction sur chaque particule active de toutes les fusées actives.
-    fn for_each_active_particle(&self, f: &mut dyn FnMut(&Particle)) {
+    /// Applique une fonction sur chaque tranche contiguë de particules actives de toutes les fusées actives.
+    fn for_each_active_particle_slice(&self, f: &mut dyn FnMut(&[Particle])) {
         for &idx in &self.active_indices {
-            for p in self.rockets[idx].iter_active_particles(&self.particles_pools_for_rockets) {
-                f(p);
+            self.rockets[idx].for_each_particle_slice(&self.particles_pools_for_rockets, |slice| {
+                f(slice);
+            });
+        }
+    }
+
+    /// Applique une fonction sur chaque tranche contiguë de particules d'un type spécifique.
+    fn for_each_particle_slice_of_type(
+        &self,
+        particle_type: ParticleType,
+        f: &mut dyn FnMut(&[Particle]),
+    ) {
+        match particle_type {
+            ParticleType::Rocket => {
+                for &idx in &self.active_indices {
+                    let rocket = &self.rockets[idx];
+                    if !rocket.exploded {
+                        f(std::slice::from_ref(rocket.head_particle()));
+                    }
+                }
+            }
+            ParticleType::Trail => {
+                for &idx in &self.active_indices {
+                    self.rockets[idx].for_each_trail_slice(
+                        &self.particles_pools_for_rockets,
+                        |slice| {
+                            f(slice);
+                        },
+                    );
+                }
+            }
+            ParticleType::Explosion => {
+                for &idx in &self.active_indices {
+                    self.rockets[idx].for_each_explosion_slice(
+                        &self.particles_pools_for_rockets,
+                        |slice| {
+                            f(slice);
+                        },
+                    );
+                }
+            }
+            ParticleType::Smoke => {
+                // Smoke utilise directement active_smoke_slice()
             }
         }
+    }
+
+    /// Accès direct O(1) sans copie à la tranche contiguë de toutes les particules de fumée actives.
+    fn active_smoke_slice(&self) -> &[crate::physic_engine::smoke_system::SmokeParticle] {
+        self.smoke_system.active_particles()
     }
 
     /// Applique une fonction sur chaque tête de fusée active non explosée.
@@ -399,28 +445,19 @@ impl PhysicEngineIterator for PhysicEngineFireworks {
         }
     }
 
-    /// Applique une fonction sur chaque particule active d'un type spécifique.
+    /// Applique une fonction sur chaque particule active d'un type spécifique (avec conversion fumée si demandée).
     fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
-        if particle_type == ParticleType::Rocket {
-            self.for_each_active_head_not_exploded(f);
-        } else if particle_type == ParticleType::Smoke {
+        if particle_type == ParticleType::Smoke {
             self.smoke_system.for_each_active(&mut |sp| {
                 f(&sp.to_particle());
             });
         } else {
-            self.for_each_active_particle(&mut |p| {
-                if p.particle_type == particle_type {
+            self.for_each_particle_slice_of_type(particle_type, &mut |slice| {
+                for p in slice {
                     f(p);
                 }
             });
         }
-    }
-
-    fn for_each_smoke_particle(
-        &self,
-        f: &mut dyn FnMut(&crate::physic_engine::smoke_system::SmokeParticle),
-    ) {
-        self.smoke_system.for_each_active(f);
     }
 
     fn get_smoke_intensity(&self) -> f32 {
