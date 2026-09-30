@@ -55,6 +55,7 @@
   - [Spécification : Éclairage Volumétrique de la Fumée (Média Participatif)](20260930_volumetric_smoke_lighting_spec.md)
 
 - [Profilage et Performance]()
+  - [Rapport de Profiling GPU Matériel : Éclairage Volumétrique (Intel Iris Xe)](20260930_volumetric_lighting_hardware_profiling_report.md)
   - [Guide d'Analyse VTune : Threading & Synchronisation (Locks & Waits)](VTUNE_THREADING_ANALYSIS_GUIDE.md)
   - [Rapport de Profiling VTune : Analyse Threading & Locks (14 Août 2026)](20260814_threading_locks_vtune_report.md)
   - [Framework et Guidelines de Profiling A/B avec VTune](VTUNE_PROFILING_GUIDELINES.md)

@@ -166,9 +166,17 @@ if (luminance > 1.0) {
 - **Zero Allocations CPU** : L'extraction des lumières utilise un buffer statique stack-alloué `[PointLightGPU; 16]`.
 - **Coût Shader GPU** : 16 itérations de calcul arithmétique simple ($MAD$). Les fragments de coins de quads et transparents sont déjà élagués par les clauses `early discard` existantes aux étapes 1, 2 et 3 du shader avant la boucle d'éclairage.
 
-### 4.2 Invariant Holistique (Perf-TDD)
-- **Objectif** : Zéro régression sur le framerate global ($FPS \ge 60$ constant à 50 000 particules sous `simulator_full_bench`).
-- **Benchmark cible** : `benches/simulator_full_bench.rs` sous Criterion avec validation formelle ($p < 0.05$).
+### 4.2 Mesures Empiriques Matérielles (Hardware Profiling Intel Iris Xe)
+- **Environnement Hôte** : Mesa Intel(R) Iris(R) Xe Graphics (RPL-U) / OpenGL 4.6 (Core Profile)
+- **Résolution Cible** : 1920x1080 (Full HD natif, 100 fusées actives, 1 000 frames réelles synchronisées par `glFinish()`)
+
+| Configuration | Frame Time GPU | Framerate Réel | Surcoût Net | Surcoût Relatif |
+| :--- | :--- | :--- | :--- | :--- |
+| **Baseline OFF (Zero-Cost ISO develop)** | **1.206 ms** | **829.3 FPS** | Référence (0 µs) | Baseline |
+| **Smoke Lighting seul (In-Scattering)** | **1.313 ms** | **761.4 FPS** | **+0.108 ms** (+108 µs) | **+8.92 %** |
+| **FULL Volumetric (Smoke + Sky Haze)** | **1.727 ms** | **579.0 FPS** | **+0.521 ms** (+521 µs) | **+43.24 %** |
+
+> 📑 **Rapport complet dédié** : [Rapport de Profiling GPU Matériel : Éclairage Volumétrique (Intel Iris Xe)](20260930_volumetric_lighting_hardware_profiling_report.md) détaillant l'architecture mémoire, le profilage des draw calls et le runbook de reproductibilité.
 
 ---
 
