@@ -97,6 +97,10 @@ impl WindowEngine for DummyWindowEngine {
     fn get_window_and_imgui_mut(&mut self) -> (&mut glfw::PWindow, &mut ImguiSystem) {
         panic!("DummyWindowEngine does not have real window/imgui")
     }
+    fn set_rocket_cursor(&mut self, _enabled: bool) {}
+    fn is_rocket_cursor_enabled(&self) -> bool {
+        false
+    }
 }
 
 use glam::Vec2;
