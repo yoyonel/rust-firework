@@ -38,4 +38,10 @@ pub trait WindowEngine {
 
     // Helper method to get both window and imgui system for rendering
     fn get_window_and_imgui_mut(&mut self) -> (&mut glfw::PWindow, &mut ImguiSystem);
+
+    /// Enables or disables the custom rocket mouse cursor.
+    fn set_rocket_cursor(&mut self, enabled: bool);
+
+    /// Checks if the custom rocket mouse cursor is currently active.
+    fn is_rocket_cursor_enabled(&self) -> bool;
 }

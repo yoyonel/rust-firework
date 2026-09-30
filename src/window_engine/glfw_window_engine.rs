@@ -15,6 +15,8 @@ pub struct GlfwWindowEngine {
     window: glfw::PWindow,
     events: WindowEvents,
     imgui_system: Option<ImguiSystem>,
+    cursor_pixels: Option<Vec<u32>>,
+    rocket_cursor_enabled: bool,
 }
 
 impl WindowEngine for GlfwWindowEngine {
@@ -95,7 +97,26 @@ impl WindowEngine for GlfwWindowEngine {
         // Remplace le backend GLFW (cause d'un panic sur clipboard vide `xsel -bc`)
         imgui.set_clipboard_backend(make_clipboard_backend());
 
-        Ok(Self {
+        let cursor_pixels = match crate::window_engine::cursor::load_cursor_pixel_data(
+            crate::window_engine::constants::ROCKET_CURSOR_TEXTURE_PATH,
+        ) {
+            Ok((w, h, pixels)) => {
+                if w == crate::window_engine::constants::ROCKET_CURSOR_WIDTH
+                    && h == crate::window_engine::constants::ROCKET_CURSOR_HEIGHT
+                {
+                    Some(pixels)
+                } else {
+                    log::warn!("⚠️ Invalid rocket cursor dimensions {}x{}", w, h);
+                    None
+                }
+            }
+            Err(e) => {
+                log::warn!("⚠️ Could not load rocket cursor pixels: {}", e);
+                None
+            }
+        };
+
+        let mut engine = Self {
             glfw,
             window,
             events,
@@ -103,7 +124,15 @@ impl WindowEngine for GlfwWindowEngine {
                 context: imgui,
                 glfw: imgui_glfw,
             }),
-        })
+            cursor_pixels,
+            rocket_cursor_enabled: false,
+        };
+
+        if engine.cursor_pixels.is_some() {
+            engine.set_rocket_cursor(true);
+        }
+
+        Ok(engine)
     }
 
     fn poll_events(&mut self) {
@@ -180,6 +209,31 @@ impl WindowEngine for GlfwWindowEngine {
                 .as_mut()
                 .expect("ImguiSystem has been closed or not initialized"),
         )
+    }
+
+    fn set_rocket_cursor(&mut self, enabled: bool) {
+        self.rocket_cursor_enabled = enabled;
+        if enabled {
+            if let Some(pixels) = &self.cursor_pixels {
+                let pixel_image = glfw::PixelImage {
+                    width: crate::window_engine::constants::ROCKET_CURSOR_WIDTH,
+                    height: crate::window_engine::constants::ROCKET_CURSOR_HEIGHT,
+                    pixels: pixels.clone(),
+                };
+                let cursor = glfw::Cursor::create_from_pixels(
+                    pixel_image,
+                    crate::window_engine::constants::ROCKET_CURSOR_HOTSPOT_X,
+                    crate::window_engine::constants::ROCKET_CURSOR_HOTSPOT_Y,
+                );
+                self.window.set_cursor(Some(cursor));
+            }
+        } else {
+            self.window.set_cursor(None);
+        }
+    }
+
+    fn is_rocket_cursor_enabled(&self) -> bool {
+        self.rocket_cursor_enabled
     }
 }
 
