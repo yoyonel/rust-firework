@@ -212,7 +212,8 @@ tasks:
     desc: "Lancement des tests unitaires"
     cmds:
       - echo "▶️  Lancement des tests unitaires..."
-      - "{{.XVFB}} cargo test --all --quiet -- --test-threads=1"
+      # -j 1 sérialise l'exécution des binaires de test d'intégration pour éviter la contention concurrente sur le socket X11 Xvfb
+      - "{{.XVFB}} cargo test --all -j 1 --quiet -- --test-threads=1"
 
   test:one:
     desc: "Lance un test unitaire (lib) spécifique avec affichage"
@@ -231,8 +232,8 @@ tasks:
     desc: "Génération du rapport de couverture de code (résumé console + HTML)"
     cmds:
       - echo "📊 Génération du rapport de couverture (résumé console)..."
-      - '{{.XVFB}} cargo llvm-cov --lib --tests --features interactive_tests --ignore-filename-regex "tests/" -- --test-threads=1'
-      - '{{.XVFB}} cargo llvm-cov --lib --tests --features interactive_tests --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/" --no-report -- --test-threads=1'
+      - '{{.XVFB}} cargo llvm-cov --lib --tests -j 1 --features interactive_tests --ignore-filename-regex "tests/" -- --test-threads=1'
+      - '{{.XVFB}} cargo llvm-cov --lib --tests -j 1 --features interactive_tests --html --output-dir {{.COVERAGE_DIR}} --ignore-filename-regex "tests/" --no-report -- --test-threads=1'
       - 'echo "✅ Rapport HTML mis à jour : {{.COVERAGE_DIR}}/index.html"'
 
   ci:coverage:

@@ -31,12 +31,11 @@ pub struct DummyWindowEngine {
 
 impl Default for DummyWindowEngine {
     fn default() -> Self {
-        let mut glfw = glfw::init(glfw::fail_on_errors)
-            .ok()
-            .or_else(|| glfw::init(glfw::log_errors).ok())
+        let mut glfw = glfw::init(glfw::log_errors)
             .expect("DummyWindowEngine requires GLFW context for WindowEvents");
 
         glfw.window_hint(glfw::WindowHint::Visible(false));
+        glfw.window_hint(glfw::WindowHint::AutoIconify(false));
         let (mut window, events) = glfw
             .create_window(1, 1, "dummy", glfw::WindowMode::Windowed)
             .expect("DummyWindowEngine requires window creation");
