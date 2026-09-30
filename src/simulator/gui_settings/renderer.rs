@@ -250,6 +250,133 @@ pub fn render_renderer_settings_tab(
             RendererCommand::SetBloomBlurMethod(methods[sel_method].1),
         ));
     }
+
+    ui.spacing();
+    ui.separator();
+    ui.text_colored(
+        COLOR_HEADER,
+        "=== VOLUMETRIC LIGHTING SYSTEM (PARTICIPATING MEDIA) ===",
+    );
+
+    // GUI_PERSIST: renderer.config
+    let mut vol_lighting = cfg.volumetric_lighting_enabled;
+    if ui.checkbox(
+        "Enable Volumetric Lighting (Master Switch) (`renderer.lighting`)",
+        &mut vol_lighting,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingEnabled(vol_lighting),
+        ));
+    }
+
+    if !vol_lighting {
+        ui.text_colored(
+            COLOR_TEXT_MUTED,
+            "All volumetric lighting is disabled (0 cost / 100% ISO develop).",
+        );
+    }
+
+    ui.spacing();
+    ui.text_colored(COLOR_HEADER, "--- Volumetric Smoke In-Scattering ---");
+    ui.same_line();
+    if ui.small_button("Reset Lighting Defaults##reset_smoke_lighting") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetSmokeLightingDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut smoke_lighting = cfg.smoke_lighting_enabled;
+    if ui.checkbox(
+        "Enable Volumetric Smoke Lighting (`renderer.smoke_lighting`)",
+        &mut smoke_lighting,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeLightingEnabled(smoke_lighting),
+        ));
+    }
+
+    let item_w = ui.current_font_size() * 14.0;
+
+    // GUI_PERSIST: renderer.config
+    let mut scattering = cfg.smoke_scattering_intensity;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "In-Scattering Intensity (`renderer.smoke_scattering`)",
+        0.0,
+        5.0,
+        &mut scattering,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeScatteringIntensity(scattering),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut flash = cfg.smoke_ambient_flash;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Ambient Flash Intensity (`renderer.smoke_ambient_flash`)",
+        0.0,
+        1.5,
+        &mut flash,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeAmbientFlash(flash),
+        ));
+    }
+
+    ui.spacing();
+    ui.separator();
+    ui.text_colored(
+        COLOR_HEADER,
+        "=== ATMOSPHERIC SKY HAZE (GLOBAL PARTICIPATING MEDIA) ===",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Sky Haze Defaults##reset_sky_haze") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetSkyHazeDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut sky_haze = cfg.sky_haze_enabled;
+    if ui.checkbox(
+        "Enable Atmospheric Sky Haze (`renderer.sky_haze`)",
+        &mut sky_haze,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetSkyHazeEnabled(
+            sky_haze,
+        )));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut haze_intensity = cfg.sky_haze_intensity;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Sky Haze Intensity (`renderer.sky_haze_intensity`)",
+        0.0,
+        3.0,
+        &mut haze_intensity,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSkyHazeIntensity(haze_intensity),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut haze_flash = cfg.sky_haze_ambient_flash;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Sky Ambient Flash (`renderer.sky_haze_ambient_flash`)",
+        0.0,
+        1.5,
+        &mut haze_flash,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSkyHazeAmbientFlash(haze_flash),
+        ));
+    }
 }
 
 pub fn render_commands_overview_tab<A: AudioEngine, P: PhysicEngineFull>(

@@ -379,6 +379,160 @@ where
                 "-> Explosions rendering disabled".into()
             },
         );
+
+        // Master volumetric lighting toggle
+        for name in ["renderer.lighting", "renderer.volumetric_lighting"] {
+            self.commands_registry
+                .register_for_renderer(name, move |args, cmd_queue| {
+                    let trimmed = args.trim().to_lowercase();
+                    if trimmed.is_empty() {
+                        return "Usage: renderer.lighting [true|false|1|0|on|off]".into();
+                    }
+                    let enable = match trimmed.as_str() {
+                        "true" | "1" | "on" => true,
+                        "false" | "0" | "off" => false,
+                        other => {
+                            return format!("Unknown argument '{}', expected true or false", other);
+                        }
+                    };
+                    cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                        crate::domain_contracts::RendererCommand::SetVolumetricLightingEnabled(
+                            enable,
+                        ),
+                    ));
+                    format!("-> Volumetric lighting (master): {}", enable)
+                });
+        }
+
+        // Volumetric smoke lighting
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke_lighting",
+            move |args, cmd_queue| {
+                let trimmed = args.trim().to_lowercase();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.smoke_lighting [true|false|1|0]".into();
+                }
+                let enable = match trimmed.as_str() {
+                    "true" | "1" | "on" => true,
+                    "false" | "0" | "off" => false,
+                    other => {
+                        return format!("Unknown argument '{}', expected true or false", other);
+                    }
+                };
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetSmokeLightingEnabled(enable),
+                ));
+                format!("-> Volumetric smoke lighting: {}", enable)
+            },
+        );
+
+        // Volumetric smoke scattering intensity
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke_scattering",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.smoke_scattering [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(0.0, 10.0);
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetSmokeScatteringIntensity(
+                                clamped,
+                            ),
+                        ));
+                        format!("-> Smoke scattering intensity set to: {}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+
+        // Volumetric smoke ambient flash
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke_ambient_flash",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.smoke_ambient_flash [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(0.0, 2.0);
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetSmokeAmbientFlash(clamped),
+                        ));
+                        format!("-> Smoke ambient flash intensity set to: {}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+
+        // Atmospheric sky haze enabled
+        self.commands_registry.register_for_renderer(
+            "renderer.sky_haze",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                let enable = match trimmed {
+                    "" => true,
+                    "1" | "true" | "on" => true,
+                    "0" | "false" | "off" => false,
+                    other => {
+                        return format!("Unknown argument '{}', expected true or false", other);
+                    }
+                };
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetSkyHazeEnabled(enable),
+                ));
+                format!("-> Atmospheric sky haze: {}", enable)
+            },
+        );
+
+        // Atmospheric sky haze intensity
+        self.commands_registry.register_for_renderer(
+            "renderer.sky_haze_intensity",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.sky_haze_intensity [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(0.0, 5.0);
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetSkyHazeIntensity(clamped),
+                        ));
+                        format!("-> Sky haze intensity set to: {}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+
+        // Atmospheric sky haze ambient flash
+        self.commands_registry.register_for_renderer(
+            "renderer.sky_haze_ambient_flash",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.sky_haze_ambient_flash [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(0.0, 2.0);
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetSkyHazeAmbientFlash(
+                                clamped,
+                            ),
+                        ));
+                        format!("-> Sky haze ambient flash set to: {}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
     }
 
     // Helper pur pour le parsing (peut être statique ou hors de la classe)

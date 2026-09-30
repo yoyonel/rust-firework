@@ -122,3 +122,14 @@ physic.explosion.stats
 | `renderer.explosions.enable` / `disable` | | Toggle rendering of explosion particles (points). |
 | `renderer.rocket_cursor` | `[true\|false\|1\|0]` | Toggle custom transparent rocket mouse cursor. |
 
+### Volumetric Smoke Lighting & Atmospheric Sky Haze (Participating Media)
+| Command | Usage | Description |
+| :--- | :--- | :--- |
+| `renderer.lighting` / `renderer.volumetric_lighting` | `[true\|false\|1\|0\|on\|off]` | Master toggle for all volumetric lighting (smoke in-scattering + sky haze). 0 overhead when disabled. |
+| `renderer.smoke_lighting` | `[true\|false\|1\|0]` | Toggle dynamic in-scattering lighting on smoke particles. |
+| `renderer.smoke_scattering` | `[0.0-5.0]` | View or set point light in-scattering intensity multiplier. |
+| `renderer.smoke_ambient_flash` | `[0.0-1.5]` | View or set global ambient flash intensity on detonations. |
+| `renderer.sky_haze` | `[true\|false\|1\|0]` | Toggle global atmospheric sky haze participating media. |
+| `renderer.sky_haze_intensity` | `[0.0-5.0]` | View or set atmospheric sky haze in-scattering intensity. |
+| `renderer.sky_haze_ambient_flash` | `[0.0-2.0]` | View or set global atmospheric sky haze ambient flash intensity. |
+
