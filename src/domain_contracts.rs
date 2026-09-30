@@ -94,6 +94,15 @@ pub enum RendererCommand {
     SetBloomIterations(u32),
     SetBloomDownsample(u32),
     SetBloomBlurMethod(BlurMethod),
+    SetVolumetricLightingEnabled(bool),
+    SetSmokeLightingEnabled(bool),
+    SetSmokeScatteringIntensity(f32),
+    SetSmokeAmbientFlash(f32),
+    ResetSmokeLightingDefaults,
+    SetSkyHazeEnabled(bool),
+    SetSkyHazeIntensity(f32),
+    SetSkyHazeAmbientFlash(f32),
+    ResetSkyHazeDefaults,
 }
 
 /// Commands sent from UI to Smoke simulation engine without dynamic allocations.

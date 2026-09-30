@@ -42,6 +42,7 @@ pub struct SmokePreviewRenderer {
     dummy_vao: u32,
     dummy_black_tex: u32,
     ubo_global: u32,
+    ubo_lighting: u32,
     smoke_program: u32,
     loc_smoke_tex: i32,
     loc_flow_map: i32,
@@ -209,6 +210,36 @@ impl SmokePreviewRenderer {
                     constants::GLOBAL_UBO_BINDING_INDEX,
                 );
             }
+
+            let lighting_block_idx =
+                gl::GetUniformBlockIndex(smoke_program, cstr!("LightingBlock"));
+            if lighting_block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(
+                    smoke_program,
+                    lighting_block_idx,
+                    constants::LIGHTING_UBO_BINDING_INDEX,
+                );
+            }
+
+            let mut ubo_lighting = 0;
+            gl::GenBuffers(1, &mut ubo_lighting);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_lighting);
+            let default_lighting = crate::renderer_engine::types::VolumetricLightingBlockGPU {
+                scattering_intensity: 0.0,
+                ..Default::default()
+            };
+            gl::BufferData(
+                gl::UNIFORM_BUFFER,
+                std::mem::size_of::<crate::renderer_engine::types::VolumetricLightingBlockGPU>()
+                    as isize,
+                &default_lighting as *const _ as *const std::ffi::c_void,
+                gl::STATIC_DRAW,
+            );
+            gl::BindBufferBase(
+                gl::UNIFORM_BUFFER,
+                constants::LIGHTING_UBO_BINDING_INDEX,
+                ubo_lighting,
+            );
 
             let loc_smoke_tex = gl::GetUniformLocation(smoke_program, cstr!("u_SmokeTexture"));
             let loc_flow_map = gl::GetUniformLocation(smoke_program, cstr!("u_FlowMap"));
@@ -408,6 +439,7 @@ impl SmokePreviewRenderer {
                 dummy_vao,
                 dummy_black_tex,
                 ubo_global,
+                ubo_lighting,
                 smoke_program,
                 loc_smoke_tex,
                 loc_flow_map,
@@ -512,6 +544,11 @@ impl SmokePreviewRenderer {
             let ubo_data: [f32; 4] = [sim_w, sim_h, 399.0 / 385.0, 1.5];
             gl::BufferSubData(gl::UNIFORM_BUFFER, 0, 16, ubo_data.as_ptr() as *const _);
             gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global);
+            gl::BindBufferBase(
+                gl::UNIFORM_BUFFER,
+                constants::LIGHTING_UBO_BINDING_INDEX,
+                self.ubo_lighting,
+            );
 
             gl::UseProgram(self.smoke_program);
 

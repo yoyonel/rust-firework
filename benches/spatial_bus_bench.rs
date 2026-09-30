@@ -37,6 +37,7 @@ fn create_bench_dsp(n_voices: usize, block_size: usize, enable_spatial_bus: bool
         .enumerate()
         .map(|(i, pos)| Voice {
             id: i as u64 + 1,
+            start_offset: 0,
             active: true,
             data: Some(source_arc.clone()),
             pos: (i * 37) as f64 % 40000.0,
@@ -90,6 +91,9 @@ fn create_bench_dsp(n_voices: usize, block_size: usize, enable_spatial_bus: bool
             block_size,
         ),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     }
 }
 

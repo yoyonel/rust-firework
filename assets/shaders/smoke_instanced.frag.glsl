@@ -5,6 +5,7 @@ in float vAlpha;
 in float vIntensity;
 in vec3 vColor;
 in float vNormalizedAge;
+in vec2 vWorldPos;
 
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 BrightColor;
@@ -20,6 +21,18 @@ uniform bool u_ErosionEnabled;
 uniform float u_ErosionScale;
 uniform float u_ErosionEdgeWidth;
 uniform vec3 u_ErosionEdgeColor;
+
+struct PointLight {
+    vec4 position_radius; // xyz = world pos, w = radius
+    vec4 color_intensity; // rgb = color, w = intensity
+};
+
+layout (std140) uniform LightingBlock {
+    PointLight u_Lights[16];
+    vec4 u_AmbientLight; // rgb = ambient tint, a = global flash intensity
+    int u_NumActiveLights;
+    float u_ScatteringIntensity;
+};
 
 void main() {
     // 1. Early discard for transparent or unlit instances
@@ -89,7 +102,37 @@ void main() {
         }
     }
 
+    // 7. Volumetric In-Scattering (Participating Media Lighting)
+    if (u_ScatteringIntensity > 0.001) {
+        vec3 scatteredLight = u_AmbientLight.rgb + vec3(u_AmbientLight.a);
+        for (int i = 0; i < u_NumActiveLights; ++i) {
+            vec2 lightPos = u_Lights[i].position_radius.xy;
+            float radius = u_Lights[i].position_radius.w;
+            vec2 toLight = lightPos - vWorldPos;
+            float distSq = dot(toLight, toLight);
+            float radiusSq = radius * radius;
+
+            if (distSq < radiusSq) {
+                float dist = sqrt(distSq);
+                float atten = 1.0 - (dist / radius);
+                atten = atten * atten; // Smooth quadratic falloff
+
+                vec3 lightCol = u_Lights[i].color_intensity.rgb;
+                float intensity = u_Lights[i].color_intensity.w;
+
+                // Anisotropic forward scattering approximation (Schlick/Mie phase)
+                float cosTheta = dot(normalize(toLight), vec2(0.0, 1.0));
+                float phase = 1.0 + 0.3 * cosTheta;
+
+                scatteredLight += lightCol * (intensity * atten * phase * u_ScatteringIntensity);
+            }
+        }
+        // Balanced in-scattering boost: illuminates smoke realistically without blowing out highlights
+        finalColor += finalColor * clamp(scatteredLight * 0.25, vec3(0.0), vec3(1.2));
+    }
+
     FragColor = vec4(finalColor * vIntensity, finalAlpha * vIntensity);
-    // Smoke is non-emissive volumetric dust; bright bloom attachment is zero
+
+    // Smoke is non-emissive volumetric dust; keep bright bloom attachment zero to avoid blinding wash-out
     BrightColor = vec4(0.0, 0.0, 0.0, 0.0);
 }

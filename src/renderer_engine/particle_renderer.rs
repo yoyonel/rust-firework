@@ -49,6 +49,9 @@ pub trait ParticleGraphicsRenderer {
     /// Définit les bascules de visibilité pour les sous-types de particules (ex: trails, explosions).
     fn set_visibility(&mut self, _render_trails: bool, _render_explosions: bool) {}
 
+    /// Définit les paramètres d'éclairage volumétrique pour la fumée.
+    fn set_smoke_lighting(&mut self, _enabled: bool, _intensity: f32, _ambient_flash: f32) {}
+
     /// Retourne l'ordre de priorité de rendu (pass order) pour trier les passes.
     fn render_order(&self) -> u32 {
         0

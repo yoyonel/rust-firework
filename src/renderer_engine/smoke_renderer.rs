@@ -61,6 +61,10 @@ pub struct SmokeRenderer {
 
     max_smoke_particles: usize,
 
+    smoke_lighting_enabled: bool,
+    smoke_scattering_intensity: f32,
+    smoke_ambient_flash: f32,
+
     // Triple buffering
     current_frame: usize,
     fences: [Option<gl::types::GLsync>; 3],
@@ -111,6 +115,16 @@ impl SmokeRenderer {
                 gl::UniformBlockBinding(shader_program, block_idx, 0);
             }
 
+            let lighting_block_idx =
+                gl::GetUniformBlockIndex(shader_program, cstr!("LightingBlock"));
+            if lighting_block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(
+                    shader_program,
+                    lighting_block_idx,
+                    constants::LIGHTING_UBO_BINDING_INDEX,
+                );
+            }
+
             if loc_smoke_tex != -1 {
                 gl::Uniform1i(loc_smoke_tex, 0);
             }
@@ -125,9 +139,7 @@ impl SmokeRenderer {
             label_gl_object!(gl::TEXTURE, texture_id, "Tex_Smoke_Sprite");
             label_gl_object!(gl::TEXTURE, flow_map_texture_id, "Tex_Smoke_FlowMap");
             label_gl_object!(gl::TEXTURE, noise_texture_id, "Tex_Noise_Dissolve");
-        }
 
-        unsafe {
             let (vaos, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
                 Self::setup_gpu_buffers(max_smoke_particles);
 
@@ -160,6 +172,9 @@ impl SmokeRenderer {
                 noise_texture_id,
                 tex_ratio: tex_width as f32 / tex_height as f32,
                 max_smoke_particles,
+                smoke_lighting_enabled: constants::DEFAULT_SMOKE_LIGHTING_ENABLED,
+                smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
+                smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -293,9 +308,9 @@ impl SmokeRenderer {
         // 2. Disable Depth Writing to prevent Z-fighting and quad intersection artifacts
         gl::DepthMask(gl::FALSE);
 
-        // 3. Only write to Color Attachment 0 (Scene), disable writes to Attachment 1 (Bloom)
+        // 3. Write to Color Attachment 0 (Scene) and Attachment 1 (Bloom)
         gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
-        gl::ColorMaski(1, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+        gl::ColorMaski(1, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
 
         if *active_shader != self.shader_program {
             gl::UseProgram(self.shader_program);
@@ -431,6 +446,15 @@ impl SmokeRenderer {
                 let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
                 if block_idx != gl::INVALID_INDEX {
                     gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                }
+                let lighting_block_idx =
+                    gl::GetUniformBlockIndex(self.shader_program, cstr!("LightingBlock"));
+                if lighting_block_idx != gl::INVALID_INDEX {
+                    gl::UniformBlockBinding(
+                        self.shader_program,
+                        lighting_block_idx,
+                        constants::LIGHTING_UBO_BINDING_INDEX,
+                    );
                 }
                 if self.loc_smoke_tex != -1 {
                     gl::Uniform1i(self.loc_smoke_tex, 0);
@@ -659,6 +683,12 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
 
     fn render_order(&self) -> u32 {
         10
+    }
+
+    fn set_smoke_lighting(&mut self, enabled: bool, intensity: f32, ambient_flash: f32) {
+        self.smoke_lighting_enabled = enabled;
+        self.smoke_scattering_intensity = intensity;
+        self.smoke_ambient_flash = ambient_flash;
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {

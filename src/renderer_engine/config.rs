@@ -34,10 +34,46 @@ pub struct RendererConfig {
     pub render_trails: bool,
     #[serde(default = "default_true")]
     pub render_explosions: bool,
+
+    // Master Volumetric Lighting Toggle
+    #[serde(default = "default_true")]
+    pub volumetric_lighting_enabled: bool,
+
+    // Volumetric Smoke Lighting (Participating Media)
+    #[serde(default = "default_true")]
+    pub smoke_lighting_enabled: bool,
+    #[serde(default = "default_smoke_scattering_intensity")]
+    pub smoke_scattering_intensity: f32,
+    #[serde(default = "default_smoke_ambient_flash")]
+    pub smoke_ambient_flash: f32,
+
+    // Atmospheric Sky Haze (Background Participating Media)
+    #[serde(default = "default_true")]
+    pub sky_haze_enabled: bool,
+    #[serde(default = "default_sky_haze_intensity")]
+    pub sky_haze_intensity: f32,
+    #[serde(default = "default_sky_haze_ambient_flash")]
+    pub sky_haze_ambient_flash: f32,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_smoke_scattering_intensity() -> f32 {
+    constants::DEFAULT_SMOKE_SCATTERING_INTENSITY
+}
+
+fn default_smoke_ambient_flash() -> f32 {
+    constants::DEFAULT_SMOKE_AMBIENT_FLASH
+}
+
+fn default_sky_haze_intensity() -> f32 {
+    constants::DEFAULT_SKY_HAZE_INTENSITY
+}
+
+fn default_sky_haze_ambient_flash() -> f32 {
+    constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH
 }
 
 use crate::renderer_engine::constants;
@@ -55,6 +91,13 @@ impl Default for RendererConfig {
             render_smoke: true,
             render_trails: true,
             render_explosions: true,
+            volumetric_lighting_enabled: constants::DEFAULT_VOLUMETRIC_LIGHTING_ENABLED,
+            smoke_lighting_enabled: constants::DEFAULT_SMOKE_LIGHTING_ENABLED,
+            smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
+            smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
+            sky_haze_enabled: constants::DEFAULT_SKY_HAZE_ENABLED,
+            sky_haze_intensity: constants::DEFAULT_SKY_HAZE_INTENSITY,
+            sky_haze_ambient_flash: constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH,
         }
     }
 }
@@ -94,6 +137,25 @@ mod tests {
         assert!(config.render_smoke);
         assert!(config.render_trails);
         assert!(config.render_explosions);
+        assert!(config.volumetric_lighting_enabled);
+        assert!(config.smoke_lighting_enabled);
+        assert_eq!(
+            config.smoke_scattering_intensity,
+            constants::DEFAULT_SMOKE_SCATTERING_INTENSITY
+        );
+        assert_eq!(
+            config.smoke_ambient_flash,
+            constants::DEFAULT_SMOKE_AMBIENT_FLASH
+        );
+        assert!(config.sky_haze_enabled);
+        assert_eq!(
+            config.sky_haze_intensity,
+            constants::DEFAULT_SKY_HAZE_INTENSITY
+        );
+        assert_eq!(
+            config.sky_haze_ambient_flash,
+            constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH
+        );
     }
 
     #[test]
@@ -112,6 +174,13 @@ mod tests {
             render_smoke: true,
             render_trails: false,
             render_explosions: true,
+            volumetric_lighting_enabled: false,
+            smoke_lighting_enabled: false,
+            smoke_scattering_intensity: 2.5,
+            smoke_ambient_flash: 0.8,
+            sky_haze_enabled: false,
+            sky_haze_intensity: 1.2,
+            sky_haze_ambient_flash: 0.5,
         };
 
         config.save_to_file(file_path)?;
@@ -127,7 +196,16 @@ mod tests {
         assert!(loaded.render_smoke);
         assert!(!loaded.render_trails);
         assert!(loaded.render_explosions);
-
+        assert!(!loaded.volumetric_lighting_enabled);
+        assert!(!loaded.smoke_lighting_enabled);
+        assert_eq!(
+            loaded.smoke_scattering_intensity,
+            config.smoke_scattering_intensity
+        );
+        assert_eq!(loaded.smoke_ambient_flash, config.smoke_ambient_flash);
+        assert!(!loaded.sky_haze_enabled);
+        assert_eq!(loaded.sky_haze_intensity, config.sky_haze_intensity);
+        assert_eq!(loaded.sky_haze_ambient_flash, config.sky_haze_ambient_flash);
         Ok(())
     }
 

@@ -445,6 +445,13 @@ impl PhysicEngineIterator for PhysicEngineFireworks {
         }
     }
 
+    /// Applique une fonction sur chaque fusée active (en vol ou en cours d'explosion).
+    fn for_each_active_rocket(&self, f: &mut dyn FnMut(&crate::physic_engine::rocket::Rocket)) {
+        for &idx in &self.active_indices {
+            f(&self.rockets[idx]);
+        }
+    }
+
     /// Applique une fonction sur chaque particule active d'un type spécifique (avec conversion fumée si demandée).
     fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
         if particle_type == ParticleType::Smoke {

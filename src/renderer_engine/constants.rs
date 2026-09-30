@@ -276,6 +276,63 @@ pub const TEXTURE_SMOKE_PARTICLE_PATH: &str =
 /// Global UBO binding index for OpenGL shaders.
 pub const GLOBAL_UBO_BINDING_INDEX: u32 = 0;
 
+/// Volumetric lighting UBO binding index for smoke shaders.
+pub const LIGHTING_UBO_BINDING_INDEX: u32 = 1;
+
+/// Maximum number of volumetric point light sources processed per frame.
+pub const MAX_VOLUMETRIC_LIGHTS: usize = 16;
+
+/// Default master toggle enabling volumetric lighting system.
+pub const DEFAULT_VOLUMETRIC_LIGHTING_ENABLED: bool = true;
+
+/// Default volumetric smoke in-scattering intensity multiplier.
+pub const DEFAULT_SMOKE_SCATTERING_INTENSITY: f32 = 1.0;
+
+/// Default global ambient flash intensity for volumetric smoke.
+pub const DEFAULT_SMOKE_AMBIENT_FLASH: f32 = 0.25;
+
+/// Default flag enabling volumetric smoke lighting.
+pub const DEFAULT_SMOKE_LIGHTING_ENABLED: bool = true;
+
+/// Path to the atmospheric sky haze fullscreen vertex shader.
+pub const SHADER_SKY_HAZE_VERTEX_PATH: &str = "assets/shaders/bloom/fullscreen_quad.vert.glsl";
+
+/// Path to the atmospheric sky haze fragment shader.
+pub const SHADER_SKY_HAZE_FRAGMENT_PATH: &str = "assets/shaders/sky_haze.frag.glsl";
+
+/// Default flag enabling atmospheric sky haze participating media.
+pub const DEFAULT_SKY_HAZE_ENABLED: bool = true;
+
+/// Default atmospheric sky haze intensity multiplier.
+pub const DEFAULT_SKY_HAZE_INTENSITY: f32 = 0.6;
+
+/// Default ambient detonation flash intensity for atmospheric sky haze.
+pub const DEFAULT_SKY_HAZE_AMBIENT_FLASH: f32 = 0.35;
+
+/// Volumetric point light decay rate per frame (~0.8s smooth dissipation).
+pub const VOLUMETRIC_LIGHT_DECAY_RATE: f32 = 0.94;
+
+/// Volumetric point light minimum intensity threshold for deactivation.
+pub const VOLUMETRIC_LIGHT_MIN_INTENSITY: f32 = 0.001;
+
+/// Volumetric point light initial radius in simulation space.
+pub const VOLUMETRIC_LIGHT_INITIAL_RADIUS: f32 = 450.0;
+
+/// Volumetric point light radial expansion factor per frame.
+pub const VOLUMETRIC_LIGHT_RADIUS_EXPANSION: f32 = 1.003;
+
+/// Flash ambient energy multiplier per unit of active light intensity.
+pub const VOLUMETRIC_FLASH_ENERGY_SCALE: f32 = 0.015;
+
+/// Maximum cap for ambient detonation flash intensity.
+pub const VOLUMETRIC_FLASH_MAX_CAP: f32 = 0.40;
+
+/// Exponential moving average persistence for detonation flash ambient glow.
+pub const VOLUMETRIC_FLASH_EMA_DECAY: f32 = 0.90;
+
+/// Exponential moving average target blend weight for detonation flash ambient glow.
+pub const VOLUMETRIC_FLASH_EMA_WEIGHT: f32 = 0.10;
+
 // ── Smoke Preview Viewport Rendering ─────────────────────────────────
 /// Smoke preview FBO width (pixels).
 pub const SMOKE_PREVIEW_FBO_WIDTH: i32 = 480;

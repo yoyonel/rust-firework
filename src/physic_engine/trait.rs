@@ -35,6 +35,9 @@ pub trait PhysicEngineIterator {
     /// Applique une fonction sur chaque tête de fusée active non explosée.
     fn for_each_active_head_not_exploded(&self, f: &mut dyn FnMut(&Particle));
 
+    /// Applique une fonction sur chaque fusée active (en vol ou en cours d'explosion).
+    fn for_each_active_rocket(&self, _f: &mut dyn FnMut(&crate::physic_engine::rocket::Rocket)) {}
+
     /// Applique une fonction sur chaque particule active d'un type spécifique.
     fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
         self.for_each_particle_slice_of_type(particle_type, &mut |slice| {
