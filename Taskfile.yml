@@ -486,11 +486,18 @@ tasks:
   doc:serve:
     desc: "Lance un serveur web local de documentation avec rechargement automatique (Ctrl+C pour arrêter)"
     vars:
-      PORT: "3000"
-      URL: "http://localhost:3000"
+      PORT: '{{.PORT | default ""}}'
     cmds:
-      - echo "📊 Démarrage du serveur mdBook sur {{.URL}}..."
-      - mdbook serve --port {{.PORT}} --open
+      - |
+        PORT="{{.PORT}}"
+        if [ -z "$PORT" ]; then
+          PORT=3000
+          while ss -tlpn 2>/dev/null | grep -q ":$PORT "; do
+            PORT=$((PORT + 1))
+          done
+        fi
+        echo "📊 Démarrage du serveur mdBook sur http://localhost:$PORT..."
+        mdbook serve --port "$PORT" --open
 
   doc:clean:
     desc: "Nettoie les fichiers de documentation compilés"

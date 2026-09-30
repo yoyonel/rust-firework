@@ -52,6 +52,7 @@
   - [Rapport d'Achèvement : Intégration CI/CD & Standards Locaux DevSecOps](20260807_devsecops_cicd_completion_report.md)
   - [Validation OpenGL avec Mesa Debug Layer](opengl_debug_validation_guide.md)
   - [Rapport Technique : Curseur Fusée Personnalisé (Rocket Cursor)](20260930_rocket_cursor_feature_report.md)
+  - [Spécification : Éclairage Volumétrique de la Fumée (Média Participatif)](20260930_volumetric_smoke_lighting_spec.md)
 
 - [Profilage et Performance]()
   - [Guide d'Analyse VTune : Threading & Synchronisation (Locks & Waits)](VTUNE_THREADING_ANALYSIS_GUIDE.md)
