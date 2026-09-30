@@ -29,12 +29,9 @@ COPY Cargo.toml Cargo.lock ./
 RUN sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 RUN mkdir -p src benches && \
     echo "fn main() {}" > src/main.rs && \
-    echo "fn main() {}" > benches/audio_dsp_bench.rs && \
-    echo "fn main() {}" > benches/audio_binaural_bench.rs && \
-    echo "fn main() {}" > benches/simulator_full_bench.rs && \
-    echo "fn main() {}" > benches/spatial_bus_bench.rs && \
-    echo "fn main() {}" > benches/physic_pool_bench.rs && \
-    echo "fn main() {}" > benches/physic_pipeline_bench.rs
+    for b in $(grep -A 1 '\[\[bench\]\]' Cargo.toml | grep 'name =' | cut -d'"' -f2); do \
+        echo "fn main() {}" > "benches/${b}.rs"; \
+    done
 RUN cargo build --release
 RUN rm -rf src benches
 
