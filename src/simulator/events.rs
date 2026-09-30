@@ -342,13 +342,16 @@ where
         self.update_cursor_mode();
     }
 
-    fn update_cursor_mode(&mut self) {
-        let cursor_mode =
-            if self.console.open || self.show_audio_diagnostic || self.gui_settings.open {
-                glfw::CursorMode::Normal
-            } else {
-                glfw::CursorMode::Disabled
-            };
+    pub(crate) fn update_cursor_mode(&mut self) {
+        let cursor_mode = if self.window_engine.is_rocket_cursor_enabled()
+            || self.console.open
+            || self.show_audio_diagnostic
+            || self.gui_settings.open
+        {
+            glfw::CursorMode::Normal
+        } else {
+            glfw::CursorMode::Disabled
+        };
         self.window_engine.set_cursor_mode(cursor_mode);
     }
 

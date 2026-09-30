@@ -53,6 +53,32 @@ where
                 "-> Config reloaded".into()
             },
         );
+
+        // Rocket Cursor command
+        self.commands_registry.register_for_renderer(
+            "renderer.rocket_cursor",
+            move |args, cmd_queue| {
+                let trimmed = args.trim().to_lowercase();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.rocket_cursor [true|false|1|0]".into();
+                }
+                let enable = match trimmed.as_str() {
+                    "true" | "1" | "on" => true,
+                    "false" | "0" | "off" => false,
+                    other => {
+                        return format!("Unknown argument '{}', expected true or false", other);
+                    }
+                };
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Gui(
+                    crate::domain_contracts::GuiCommand::SetRocketCursor(enable),
+                ));
+                if enable {
+                    "-> Rocket cursor enabled".into()
+                } else {
+                    "-> Rocket cursor disabled".into()
+                }
+            },
+        );
     }
 
     pub(crate) fn register_bloom_commands(&mut self) {

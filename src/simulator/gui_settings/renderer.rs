@@ -1,6 +1,6 @@
 use super::theme::{COLOR_COMMAND_NAME, COLOR_HEADER, COLOR_TEXT_HINT, COLOR_TEXT_MUTED};
 use crate::audio_engine::AudioEngine;
-use crate::domain_contracts::{EngineCommand, RendererCommand, RendererStateReader};
+use crate::domain_contracts::{EngineCommand, GuiCommand, RendererCommand, RendererStateReader};
 use crate::physic_engine::PhysicEngineFull;
 use crate::renderer_engine::constants as renderer_constants;
 use crate::utils::command_console::CommandRegistry;
@@ -14,6 +14,7 @@ pub fn render_renderer_settings_tab(
     cmd_queue: &mut Vec<EngineCommand>,
     reload_shaders_requested: &AtomicBool,
     tonemapping_comparison_mode: &AtomicBool,
+    rocket_cursor: &mut bool,
 ) {
     let cfg = state.config();
 
@@ -47,6 +48,16 @@ pub fn render_renderer_settings_tab(
         cmd_queue.push(EngineCommand::Renderer(
             RendererCommand::ResetVisibilityDefaults,
         ));
+    }
+
+    // GUI_PERSIST: gui.rocket_cursor
+    if ui.checkbox(
+        "Custom Rocket Cursor (`renderer.rocket_cursor`)",
+        rocket_cursor,
+    ) {
+        cmd_queue.push(EngineCommand::Gui(GuiCommand::SetRocketCursor(
+            *rocket_cursor,
+        )));
     }
 
     let mut render_rockets = cfg.render_rockets;
@@ -307,7 +318,7 @@ mod tests {
         imgui_ctx.io_mut().display_size = [800.0, 600.0];
 
         let ui = imgui_ctx.frame();
-
+        let mut rocket_cursor = true;
         render_renderer_settings_tab(
             ui,
             "",
@@ -315,6 +326,7 @@ mod tests {
             &mut cmd_queue,
             &reload_shaders,
             &compare_mode,
+            &mut rocket_cursor,
         );
 
         assert!(cmd_queue.capacity() >= 16);

@@ -50,6 +50,7 @@ $GREP_CMD 'get_physic_config_path' src/simulator.rs
 $GREP_CMD 'tonemapping_comparison_mode' "$SOURCE"
 $GREP_CMD 'explosion_shape' "$SOURCE"
 $GREP_CMD 'fullscreen' "$SOURCE"
+$GREP_CMD 'rocket_cursor' "$SOURCE"
 $GREP_CMD 'show_geometry_trimming' "$SOURCE"
 $GREP_CMD 'smoke_preview_rocket_color' "$SOURCE"
 $GREP_CMD 'smoke_preview_simulated_speed' "$SOURCE"

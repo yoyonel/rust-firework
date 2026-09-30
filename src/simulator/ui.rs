@@ -66,8 +66,16 @@ where
             );
         }
 
+        let rocket_cursor_active = self.window_engine.is_rocket_cursor_enabled();
         let (_, imgui_system) = self.window_engine.get_window_and_imgui_mut();
         let io = imgui_system.context.io_mut();
+        if rocket_cursor_active {
+            io.config_flags
+                .insert(imgui::ConfigFlags::NO_MOUSE_CURSOR_CHANGE);
+        } else {
+            io.config_flags
+                .remove(imgui::ConfigFlags::NO_MOUSE_CURSOR_CHANGE);
+        }
         io.font_global_scale = self.gui_settings.gui_scale;
         io.display_size = [self.window_size_f32.0, self.window_size_f32.1];
         io.display_framebuffer_scale = [1.0, 1.0];
@@ -431,24 +439,44 @@ where
         self.dispatch_ui_commands();
 
         // Finalize ImGui Draw
+        let rocket_cursor_active = self.window_engine.is_rocket_cursor_enabled();
         let (win, sys) = self.window_engine.get_window_and_imgui_mut();
+        if rocket_cursor_active {
+            sys.context
+                .io_mut()
+                .config_flags
+                .insert(imgui::ConfigFlags::NO_MOUSE_CURSOR_CHANGE);
+        } else {
+            sys.context
+                .io_mut()
+                .config_flags
+                .remove(imgui::ConfigFlags::NO_MOUSE_CURSOR_CHANGE);
+        }
         sys.glfw.draw(&mut sys.context, win);
     }
 
     pub(crate) fn dispatch_ui_commands(&mut self) {
         let mut gui_save = false;
         let mut gui_reload = false;
+        let mut rocket_cursor_change: Option<bool> = None;
 
         self.engine_commands.retain(|cmd| match cmd {
             crate::domain_contracts::EngineCommand::Gui(gui_cmd) => {
                 match gui_cmd {
                     crate::domain_contracts::GuiCommand::SaveSession => gui_save = true,
                     crate::domain_contracts::GuiCommand::ReloadSession => gui_reload = true,
+                    crate::domain_contracts::GuiCommand::SetRocketCursor(enabled) => {
+                        rocket_cursor_change = Some(*enabled);
+                    }
                 }
                 false
             }
             _ => true,
         });
+
+        if let Some(enabled) = rocket_cursor_change {
+            self.set_rocket_cursor(enabled);
+        }
 
         if gui_save {
             self.gui_settings.save_session_state(
@@ -520,6 +548,7 @@ where
             );
             self.gui_settings
                 .apply_session_to_physic(&mut self.physic_engine);
+            self.set_rocket_cursor(session.rocket_cursor);
             if let Ok(config) = crate::physic_engine::config::PhysicConfig::from_file(
                 crate::utils::config_path::get_physic_config_path(),
             ) {

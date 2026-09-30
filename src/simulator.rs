@@ -315,6 +315,8 @@ where
             sim.toggle_fullscreen();
         }
 
+        sim.set_rocket_cursor(gui_session.rocket_cursor);
+
         sim
     }
 
@@ -354,6 +356,12 @@ where
             self.window_size_f32,
             &mut self.audio_engine,
         );
+    }
+
+    pub fn set_rocket_cursor(&mut self, enabled: bool) {
+        self.window_engine.set_rocket_cursor(enabled);
+        self.gui_settings.rocket_cursor = enabled;
+        self.update_cursor_mode();
     }
 
     pub fn run(&mut self, export_path: Option<String>) -> anyhow::Result<()> {

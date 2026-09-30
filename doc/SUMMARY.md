@@ -51,6 +51,7 @@
   - [Refonte Architecturale DevSecOps & CI/CD DAG (Golden Image)](20260806_devsecops_cicd_architecture_refactoring_report.md)
   - [Rapport d'Achèvement : Intégration CI/CD & Standards Locaux DevSecOps](20260807_devsecops_cicd_completion_report.md)
   - [Validation OpenGL avec Mesa Debug Layer](opengl_debug_validation_guide.md)
+  - [Rapport Technique : Curseur Fusée Personnalisé (Rocket Cursor)](20260930_rocket_cursor_feature_report.md)
 
 - [Profilage et Performance]()
   - [Guide d'Analyse VTune : Threading & Synchronisation (Locks & Waits)](VTUNE_THREADING_ANALYSIS_GUIDE.md)
