@@ -209,6 +209,7 @@ tasks:
   # 🧪 TESTS & QUALITÉ
   # =========================================
   test:all:
+    aliases: [test]
     desc: "Lancement des tests unitaires"
     cmds:
       - echo "▶️  Lancement des tests unitaires..."
@@ -313,6 +314,7 @@ tasks:
         fi
 
   lint:all:
+    aliases: [lint]
     desc: "Vérification complète du code (fmt + clippy + python-lint + doc-lint)"
     deps: [lint:fmt, lint:clippy, lint:python, doc:lint]
 
@@ -330,6 +332,7 @@ tasks:
   # ⏱️ BENCHMARKS (Criterion.rs)
   # =========================================
   bench:all:
+    aliases: [bench]
     desc: "Lance tous les benchmarks Criterion (DSP + Binaural)"
     cmds:
       - echo "⏱️  Lancement de tous les benchmarks..."
@@ -516,6 +519,7 @@ tasks:
 
 
   clean:all:
+    aliases: [clean]
     desc: "Nettoyage des artefacts"
     cmds:
       - echo "🧹 Nettoyage des artefacts..."
