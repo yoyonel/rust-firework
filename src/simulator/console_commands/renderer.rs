@@ -535,6 +535,114 @@ where
         );
     }
 
+    pub(crate) fn register_dither_commands(&mut self) {
+        // Enable
+        self.commands_registry.register_for_renderer(
+            "renderer.dither.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetDitherEnabled(true),
+                ));
+                "-> Dither anti-banding enabled".into()
+            },
+        );
+
+        // Disable
+        self.commands_registry.register_for_renderer(
+            "renderer.dither.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetDitherEnabled(false),
+                ));
+                "-> Dither anti-banding disabled".into()
+            },
+        );
+
+        // Toggle
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_for_renderer(
+            "renderer.dither.toggle",
+            move |_, cmd_queue| {
+                let current = cfg.read().map(|c| c.dither_enabled).unwrap_or(false);
+                let next = !current;
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetDitherEnabled(next),
+                ));
+                if next {
+                    "-> Dither anti-banding toggled ON".into()
+                } else {
+                    "-> Dither anti-banding toggled OFF".into()
+                }
+            },
+        );
+
+        // Strength
+        self.commands_registry.register_for_renderer(
+            "renderer.dither.strength",
+            move |args, cmd_queue| {
+                let val = args
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| s.parse::<f32>().ok());
+                match val {
+                    Some(v)
+                        if (crate::renderer_engine::constants::SLIDER_DITHER_STRENGTH_MIN
+                            ..=crate::renderer_engine::constants::SLIDER_DITHER_STRENGTH_MAX)
+                            .contains(&v) =>
+                    {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetDitherStrength(v),
+                        ));
+                        format!("-> Dither strength: {:.2}", v)
+                    }
+                    _ => format!(
+                        "Usage: renderer.dither.strength <{:.1}-{:.1}>",
+                        crate::renderer_engine::constants::SLIDER_DITHER_STRENGTH_MIN,
+                        crate::renderer_engine::constants::SLIDER_DITHER_STRENGTH_MAX
+                    ),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.dither.strength",
+            &format!(
+                "Usage: <{:.1}-{:.1}>",
+                crate::renderer_engine::constants::SLIDER_DITHER_STRENGTH_MIN,
+                crate::renderer_engine::constants::SLIDER_DITHER_STRENGTH_MAX
+            ),
+        );
+        self.commands_registry
+            .register_args("renderer.dither.strength", vec!["0.6", "1.5", "3.0"]);
+
+        // Reset
+        self.commands_registry.register_for_renderer(
+            "renderer.dither.reset",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::ResetDitherDefaults,
+                ));
+                "-> Dither reset to defaults".into()
+            },
+        );
+
+        // Current value providers
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.dither.enable", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.dither_enabled))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.dither.strength", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.2}", c.dither_strength))
+                    .unwrap_or("?".to_string())
+            });
+    }
+
     // Helper pur pour le parsing (peut être statique ou hors de la classe)
     fn parse_tonemap_mode(s: &str) -> Option<crate::renderer_engine::config::ToneMappingMode> {
         use crate::renderer_engine::config::ToneMappingMode::*;

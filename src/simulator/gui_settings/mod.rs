@@ -685,6 +685,18 @@ impl GuiSettings {
                                 c.sky_haze_ambient_flash =
                                     crate::renderer_engine::constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH;
                             }
+                            crate::domain_contracts::RendererCommand::SetDitherEnabled(enabled) => {
+                                c.dither_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetDitherStrength(strength) => {
+                                c.dither_strength = strength;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetDitherDefaults => {
+                                c.dither_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_DITHER_ENABLED;
+                                c.dither_strength =
+                                    crate::renderer_engine::constants::DEFAULT_DITHER_STRENGTH;
+                            }
                         }
                     }
                 }

@@ -566,6 +566,20 @@ fn test_ui_state_feedback_loop_renderer() {
         crate::renderer_engine::config::BlurMethod::Kawase,
         "Renderer bloom_blur_method"
     );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetDitherEnabled(false)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().dither_enabled,
+        false,
+        "Renderer dither_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetDitherStrength(1.75)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().dither_strength,
+        1.75,
+        "Renderer dither_strength"
+    );
 }
 
 #[test]

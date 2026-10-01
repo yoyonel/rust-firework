@@ -165,6 +165,72 @@ pub fn render_renderer_settings_tab(
 
     ui.spacing();
     ui.separator();
+    ui.text_colored(
+        COLOR_HEADER,
+        "=== POST-PROCESS DITHER (`renderer.dither.*`) ===",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Dither Defaults") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetDitherDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut dither_enabled = cfg.dither_enabled;
+    if ui.checkbox(
+        "Enable Anti-Banding Dither (`renderer.dither.enable` / `disable`)",
+        &mut dither_enabled,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherEnabled(
+            dither_enabled,
+        )));
+    }
+    ui.same_line();
+    if ui.small_button(if dither_enabled {
+        "A/B: Toggle OFF"
+    } else {
+        "A/B: Toggle ON"
+    }) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherEnabled(
+            !dither_enabled,
+        )));
+    }
+
+    let mut dither_strength = cfg.dither_strength;
+    if ui.slider(
+        "Strength / Amplitude (`renderer.dither.strength`)",
+        renderer_constants::SLIDER_DITHER_STRENGTH_MIN,
+        renderer_constants::SLIDER_DITHER_STRENGTH_MAX,
+        &mut dither_strength,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            dither_strength,
+        )));
+    }
+    ui.same_line();
+    ui.text_colored(COLOR_TEXT_HINT, "Presets:");
+    ui.same_line();
+    if ui.small_button("Subtle (0.6)") {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            renderer_constants::DITHER_PRESET_SUBTLE,
+        )));
+    }
+    ui.same_line();
+    if ui.small_button("Strong (1.5)") {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            renderer_constants::DITHER_PRESET_STRONG,
+        )));
+    }
+    ui.same_line();
+    if ui.small_button("Exaggerated (3.0)") {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            renderer_constants::DITHER_PRESET_EXAGGERATED,
+        )));
+    }
+
+    ui.spacing();
+    ui.separator();
     ui.text_colored(COLOR_HEADER, "=== BLOOM PIPELINE (`renderer.bloom.*`) ===");
     ui.same_line();
     if ui.small_button("Reset Bloom Defaults") {
