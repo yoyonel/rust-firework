@@ -13,6 +13,15 @@ echo "Output Directory: $OUTPUT_DIR"
 # Ensure release binary is compiled
 cargo build --release
 
+SIM_PID=""
+cleanup() {
+    if [ -n "${SIM_PID:-}" ] && kill -0 "$SIM_PID" 2>/dev/null; then
+        kill "$SIM_PID" 2>/dev/null || true
+    fi
+    pkill -f "./target/release/fireworks_sim" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 capture_variant() {
     local name="$1"
     local render_config="$2"

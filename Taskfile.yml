@@ -418,6 +418,7 @@ tasks:
         fi
         echo "📊 Démarrage du serveur HTTP sur {{.URL}}"
         echo "   (Ctrl+C pour arrêter)"
+        trap "kill \$SERVER_PID 2>/dev/null || true" EXIT INT TERM
         cd "{{.CRITERION_DIR}}" && python3 -m http.server {{.PORT}} &
         SERVER_PID=$!
         sleep 0.5
@@ -438,7 +439,7 @@ tasks:
     desc: "Run Heaptrack memory allocation analysis"
     deps: [build:release]
     cmds:
-      - ./scripts/benchmark_heaptrack.sh
+      - ./scripts/benchmark_heaptrack.sh {{.CLI_ARGS}}
 
   profile:vtune:hotspots:
     desc: "Run Intel VTune CPU Hotspots analysis (Top 15 time-consuming functions)"
@@ -574,6 +575,7 @@ tasks:
       - echo "🚀 Lancement du simulateur en tâche de fond et capture Tracy (5s)..."
       - |
         bash -c '
+          trap "kill -9 \$SIM_PID 2>/dev/null || true; pkill -f ./target/release/fireworks_sim 2>/dev/null || true" EXIT INT TERM
           vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim > /tmp/sim.log 2>&1 &
           SIM_PID=$!
           sleep 2
