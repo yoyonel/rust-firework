@@ -533,6 +533,94 @@ where
                 }
             },
         );
+
+        // Volumetric lighting hysteresis
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.hysteresis",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                let enable = match trimmed {
+                    "" => true,
+                    "1" | "true" | "on" => true,
+                    "0" | "false" | "off" => false,
+                    other => {
+                        return format!("Unknown argument '{}', expected true or false", other);
+                    }
+                };
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetVolumetricLightingHysteresisEnabled(
+                        enable,
+                    ),
+                ));
+                format!("-> Volumetric lighting hysteresis: {}", enable)
+            },
+        );
+        self.commands_registry
+            .register_args("renderer.lighting.hysteresis", vec!["true", "false"]);
+        self.commands_registry.register_hint(
+            "renderer.lighting.hysteresis",
+            "Usage: [true|false|1|0|on|off]",
+        );
+
+        // Volumetric lighting fade-in duration
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.fade_in",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.lighting.fade_in [float ms]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MIN,
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MAX,
+                        );
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingFadeInMs(
+                                clamped,
+                            ),
+                        ));
+                        format!(
+                            "-> Volumetric lighting fade-in duration set to: {:.1} ms",
+                            clamped
+                        )
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.lighting.fade_in",
+            &format!(
+                "Usage: <{:.0}-{:.0} ms>",
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MIN,
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MAX,
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.lighting.fade_in",
+            vec!["0.0", "50.0", "100.0", "200.0"],
+        );
+
+        // Current value getters
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_current_value(
+            "renderer.lighting.hysteresis",
+            move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.volumetric_lighting_hysteresis_enabled))
+                    .unwrap_or("?".to_string())
+            },
+        );
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.lighting.fade_in", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.1}", c.volumetric_lighting_fade_in_ms))
+                    .unwrap_or("?".to_string())
+            });
     }
 
     pub(crate) fn register_dither_commands(&mut self) {

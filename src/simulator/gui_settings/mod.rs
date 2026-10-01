@@ -697,6 +697,12 @@ impl GuiSettings {
                                 c.dither_strength =
                                     crate::renderer_engine::constants::DEFAULT_DITHER_STRENGTH;
                             }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingHysteresisEnabled(enabled) => {
+                                c.volumetric_lighting_hysteresis_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingFadeInMs(fade_ms) => {
+                                c.volumetric_lighting_fade_in_ms = fade_ms;
+                            }
                         }
                     }
                 }

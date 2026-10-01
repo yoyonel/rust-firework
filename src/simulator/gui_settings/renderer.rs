@@ -342,6 +342,36 @@ pub fn render_renderer_settings_tab(
         );
     }
 
+    let item_w = ui.current_font_size() * 14.0;
+
+    ui.spacing();
+    ui.text_colored(COLOR_HEADER, "--- Temporal Stabilization (§5 ADR) ---");
+
+    // GUI_PERSIST: renderer.config
+    let mut hysteresis = cfg.volumetric_lighting_hysteresis_enabled;
+    if ui.checkbox(
+        "Eviction Hysteresis 1.2x (`renderer.lighting.hysteresis`)",
+        &mut hysteresis,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingHysteresisEnabled(hysteresis),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut fade_in = cfg.volumetric_lighting_fade_in_ms;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Fade-in Duration (`renderer.lighting.fade_in`)",
+        renderer_constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MAX,
+        &mut fade_in,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingFadeInMs(fade_in),
+        ));
+    }
+
     ui.spacing();
     ui.text_colored(COLOR_HEADER, "--- Volumetric Smoke In-Scattering ---");
     ui.same_line();
@@ -361,8 +391,6 @@ pub fn render_renderer_settings_tab(
             RendererCommand::SetSmokeLightingEnabled(smoke_lighting),
         ));
     }
-
-    let item_w = ui.current_font_size() * 14.0;
 
     // GUI_PERSIST: renderer.config
     let mut scattering = cfg.smoke_scattering_intensity;
