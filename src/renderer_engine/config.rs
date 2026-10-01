@@ -60,6 +60,12 @@ pub struct RendererConfig {
     pub dither_enabled: bool,
     #[serde(default = "default_dither_strength")]
     pub dither_strength: f32,
+
+    // Volumetric Lighting Temporal Stabilization (§5 ADR)
+    #[serde(default = "default_volumetric_lighting_hysteresis_enabled")]
+    pub volumetric_lighting_hysteresis_enabled: bool,
+    #[serde(default = "default_volumetric_lighting_fade_in_ms")]
+    pub volumetric_lighting_fade_in_ms: f32,
 }
 
 fn default_true() -> bool {
@@ -90,6 +96,14 @@ fn default_dither_strength() -> f32 {
     constants::DEFAULT_DITHER_STRENGTH
 }
 
+fn default_volumetric_lighting_hysteresis_enabled() -> bool {
+    constants::DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED
+}
+
+fn default_volumetric_lighting_fade_in_ms() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
+}
+
 use crate::renderer_engine::constants;
 
 impl Default for RendererConfig {
@@ -114,6 +128,9 @@ impl Default for RendererConfig {
             sky_haze_ambient_flash: constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH,
             dither_enabled: constants::DEFAULT_DITHER_ENABLED,
             dither_strength: constants::DEFAULT_DITHER_STRENGTH,
+            volumetric_lighting_hysteresis_enabled:
+                constants::DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED,
+            volumetric_lighting_fade_in_ms: constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS,
         }
     }
 }
@@ -174,6 +191,11 @@ mod tests {
         );
         assert!(config.dither_enabled);
         assert_eq!(config.dither_strength, constants::DEFAULT_DITHER_STRENGTH);
+        assert!(config.volumetric_lighting_hysteresis_enabled);
+        assert_eq!(
+            config.volumetric_lighting_fade_in_ms,
+            constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
+        );
     }
 
     #[test]
@@ -201,6 +223,8 @@ mod tests {
             sky_haze_ambient_flash: 0.5,
             dither_enabled: false,
             dither_strength: 0.85,
+            volumetric_lighting_hysteresis_enabled: false,
+            volumetric_lighting_fade_in_ms: 75.0,
         };
 
         config.save_to_file(file_path)?;
@@ -228,6 +252,14 @@ mod tests {
         assert_eq!(loaded.sky_haze_ambient_flash, config.sky_haze_ambient_flash);
         assert_eq!(loaded.dither_enabled, config.dither_enabled);
         assert_eq!(loaded.dither_strength, config.dither_strength);
+        assert_eq!(
+            loaded.volumetric_lighting_hysteresis_enabled,
+            config.volumetric_lighting_hysteresis_enabled
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_fade_in_ms,
+            config.volumetric_lighting_fade_in_ms
+        );
         Ok(())
     }
 

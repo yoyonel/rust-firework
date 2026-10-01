@@ -43,6 +43,63 @@ struct PersistentLight {
     radius: f32,
     intensity: f32,
     decay_rate: f32,
+    elapsed_ms: f32,
+}
+
+impl PersistentLight {
+    #[inline]
+    pub fn uploaded_intensity(&self, fade_in_ms: f32) -> f32 {
+        if fade_in_ms <= 0.0 {
+            self.intensity
+        } else {
+            let fade_factor = (self.elapsed_ms / fade_in_ms).clamp(0.0, 1.0);
+            self.intensity * fade_factor
+        }
+    }
+}
+
+/// Helper pure pour allouer ou réassigner un slot de lumière volumétrique avec hystérésis d'éviction.
+#[inline]
+fn find_lighting_slot(
+    lights: &[PersistentLight],
+    candidate_id: u64,
+    candidate_intensity: f32,
+    hysteresis_enabled: bool,
+) -> Option<usize> {
+    // 1. Même rocket_id déjà présent : réutilise le slot
+    if let Some(idx) = lights
+        .iter()
+        .position(|l| l.active && l.rocket_id == candidate_id)
+    {
+        return Some(idx);
+    }
+
+    // 2. Slot inactif ou éteint : réclamable sans condition
+    if let Some(idx) = lights
+        .iter()
+        .position(|l| !l.active || l.intensity <= constants::VOLUMETRIC_LIGHT_MIN_INTENSITY)
+    {
+        return Some(idx);
+    }
+
+    // 3. Tous les slots occupés par des lumières vivantes : sélection du slot minimal
+    let (min_idx, min_occupant) = lights.iter().enumerate().min_by(|(_, a), (_, b)| {
+        a.intensity
+            .partial_cmp(&b.intensity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })?;
+
+    if hysteresis_enabled {
+        let threshold =
+            min_occupant.intensity * constants::VOLUMETRIC_LIGHT_EVICTION_HYSTERESIS_FACTOR;
+        if candidate_intensity > threshold {
+            Some(min_idx)
+        } else {
+            None
+        }
+    } else {
+        Some(min_idx)
+    }
 }
 
 #[repr(C)]
@@ -67,6 +124,7 @@ pub struct Renderer {
     persistent_lights: [PersistentLight; constants::MAX_VOLUMETRIC_LIGHTS],
     smoothed_flash: f32,
     was_lighting_active: bool,
+    last_lighting_update: Option<std::time::Instant>,
     // Window management
     window_size_f32: (f32, f32),
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
@@ -254,6 +312,7 @@ impl Renderer {
             persistent_lights: [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS],
             smoothed_flash: 0.0,
             was_lighting_active: false,
+            last_lighting_update: None,
             bloom_pass,
             gpu_profiler,
             last_gpu_log_time: std::time::Instant::now(),
@@ -262,54 +321,49 @@ impl Renderer {
 
     // Helper internal
     unsafe fn update_lighting_ubo<P: PhysicEngineIterator>(&mut self, physic: &P) {
-        // 1. Décroissance temporelle $C^1$ douce de toutes les lumières persistantes
+        let now = std::time::Instant::now();
+        let dt_ms = match self.last_lighting_update {
+            Some(prev) => (now - prev).as_secs_f32() * 1000.0,
+            None => 16.667,
+        };
+        self.last_lighting_update = Some(now);
+        let dt_ms = dt_ms.clamp(0.0, 100.0);
+
+        // 1. Décroissance temporelle C^1 douce de toutes les lumières persistantes
         for light in &mut self.persistent_lights {
             if light.active {
+                light.elapsed_ms += dt_ms;
                 light.intensity *= light.decay_rate;
                 light.radius *= constants::VOLUMETRIC_LIGHT_RADIUS_EXPANSION;
                 if light.intensity < constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
                     light.active = false;
                     light.intensity = 0.0;
                     light.rocket_id = 0;
+                    light.elapsed_ms = 0.0;
                 }
             }
         }
 
-        // 2. Échantillonnage des détonations actives de fusées (stabilisation par ID unique)
+        // 2. Échantillonnage des détonations actives de fusées (stabilisation par ID unique & hystérésis)
+        let hysteresis = self.config.volumetric_lighting_hysteresis_enabled;
         physic.for_each_active_rocket(&mut |rocket| {
             if rocket.active && rocket.exploded && rocket.explosion_active_count > 0 {
                 let target_intensity =
                     (rocket.explosion_active_count as f32 / 80.0).clamp(0.4, 2.0);
 
-                // Recherche si ce rocket_id possède déjà un slot persistant
-                let existing_idx = self
-                    .persistent_lights
-                    .iter()
-                    .position(|l| l.active && l.rocket_id == rocket.id);
-
-                let slot_idx = existing_idx.or_else(|| {
-                    // Sinon, chercher un slot inactif ou d'intensité quasi-nulle
-                    self.persistent_lights
-                        .iter()
-                        .position(|l| {
-                            !l.active || l.intensity <= constants::VOLUMETRIC_LIGHT_MIN_INTENSITY
-                        })
-                        .or_else(|| {
-                            // En dernier recours, réassigner le slot d'intensité minimale
-                            self.persistent_lights
-                                .iter()
-                                .enumerate()
-                                .min_by(|(_, a), (_, b)| {
-                                    a.intensity
-                                        .partial_cmp(&b.intensity)
-                                        .unwrap_or(std::cmp::Ordering::Equal)
-                                })
-                                .map(|(idx, _)| idx)
-                        })
-                });
+                let slot_idx = find_lighting_slot(
+                    &self.persistent_lights,
+                    rocket.id,
+                    target_intensity,
+                    hysteresis,
+                );
 
                 if let Some(idx) = slot_idx {
                     let slot = &mut self.persistent_lights[idx];
+                    let is_new_entry = !slot.active || slot.rocket_id != rocket.id;
+                    if is_new_entry {
+                        slot.elapsed_ms = 0.0;
+                    }
                     slot.active = true;
                     slot.rocket_id = rocket.id;
                     slot.pos = [rocket.pos.x, rocket.pos.y];
@@ -343,16 +397,18 @@ impl Renderer {
         let mut lights = [crate::renderer_engine::types::PointLightGPU::default();
             constants::MAX_VOLUMETRIC_LIGHTS];
         let mut max_active_idx = 0;
+        let fade_in_ms = self.config.volumetric_lighting_fade_in_ms;
 
         for (i, light) in self.persistent_lights.iter().enumerate() {
             if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                let uploaded_intensity = light.uploaded_intensity(fade_in_ms);
                 lights[i] = crate::renderer_engine::types::PointLightGPU {
                     position_radius: [light.pos[0], light.pos[1], 0.0, light.radius],
                     color_intensity: [
                         light.color[0],
                         light.color[1],
                         light.color[2],
-                        light.intensity,
+                        uploaded_intensity,
                     ],
                 };
                 max_active_idx = i + 1;
@@ -399,6 +455,7 @@ impl Renderer {
     unsafe fn reset_lighting_ubo(&mut self) {
         self.persistent_lights = [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS];
         self.smoothed_flash = 0.0;
+        self.last_lighting_update = None;
         let empty_block = crate::renderer_engine::types::VolumetricLightingBlockGPU {
             lights: [crate::renderer_engine::types::PointLightGPU::default();
                 constants::MAX_VOLUMETRIC_LIGHTS],
@@ -719,4 +776,124 @@ impl RendererEngine for Renderer {
     }
 }
 
-// Trait implementation
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::renderer_engine::constants;
+
+    #[test]
+    fn test_lighting_slot_fade_in_math() {
+        let mut light = PersistentLight {
+            active: true,
+            rocket_id: 10,
+            intensity: 1.6,
+            decay_rate: 0.94,
+            elapsed_ms: 0.0,
+            ..Default::default()
+        };
+
+        // 1. Division by zero impossible: fade_in = 0.0 outputs target directly
+        assert_eq!(light.uploaded_intensity(0.0), 1.6);
+        assert_eq!(light.uploaded_intensity(-10.0), 1.6);
+
+        // 2. Linear ramp with fade_in = 50.0 ms
+        let fade_in_ms = 50.0;
+        assert_eq!(light.uploaded_intensity(fade_in_ms), 0.0);
+
+        light.elapsed_ms = 25.0;
+        assert!((light.uploaded_intensity(fade_in_ms) - 0.8).abs() < 1e-5);
+
+        light.elapsed_ms = 50.0;
+        assert!((light.uploaded_intensity(fade_in_ms) - 1.6).abs() < 1e-5);
+
+        // Beyond fade-in duration: capped to target
+        light.elapsed_ms = 120.0;
+        assert_eq!(light.uploaded_intensity(fade_in_ms), 1.6);
+
+        // Target decay operates on target intensity, uploaded reflects it
+        light.intensity *= light.decay_rate; // 1.6 * 0.94 = 1.504
+        assert!((light.uploaded_intensity(fade_in_ms) - 1.504).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_lighting_slot_hysteresis_eviction() {
+        let mut lights = [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS];
+
+        // Fill all 16 slots with active living lights
+        for (i, l) in lights.iter_mut().enumerate() {
+            l.active = true;
+            l.rocket_id = (i + 1) as u64;
+            l.intensity = 1.0 + (i as f32 * 0.1); // min intensity is slot 0 with 1.0
+        }
+
+        // Slot 0 has intensity 1.0. With hysteresis 1.2x, eviction threshold is 1.0 * 1.2 = 1.2
+        let candidate_weaker = 1.15;
+        let slot = find_lighting_slot(&lights, 999, candidate_weaker, true);
+        assert_eq!(
+            slot, None,
+            "Weaker candidate (1.15 <= 1.20) must NOT evict living occupant under hysteresis"
+        );
+
+        // Candidate exceeding threshold (> 1.20) must evict slot 0
+        let candidate_stronger = 1.25;
+        let slot = find_lighting_slot(&lights, 999, candidate_stronger, true);
+        assert_eq!(
+            slot,
+            Some(0),
+            "Stronger candidate (1.25 > 1.20) must evict weakest occupant slot 0"
+        );
+
+        // Without hysteresis (hysteresis=false), candidate > min_occupant evicts
+        let slot = find_lighting_slot(&lights, 999, candidate_weaker, false);
+        assert_eq!(
+            slot,
+            Some(0),
+            "When hysteresis is OFF, candidate > min occupant picks min slot 0"
+        );
+
+        // Free/extinct slot (intensity <= MIN_INTENSITY) is claimed unconditionally even by weak light
+        lights[3].intensity = constants::VOLUMETRIC_LIGHT_MIN_INTENSITY * 0.5;
+        let weak_candidate = 0.4;
+        let slot = find_lighting_slot(&lights, 999, weak_candidate, true);
+        assert_eq!(
+            slot,
+            Some(3),
+            "Extinct slot must be claimable unconditionally without hysteresis barrier"
+        );
+
+        // Same rocket ID reclaims its own slot regardless of other lights
+        let slot = find_lighting_slot(&lights, 5, 0.5, true);
+        assert_eq!(
+            slot,
+            Some(4),
+            "Same rocket ID must reclaim existing slot without eviction check"
+        );
+    }
+
+    #[test]
+    fn test_same_rocket_keeps_slot_no_fade_reset() {
+        let mut slot = PersistentLight {
+            active: true,
+            rocket_id: 42,
+            intensity: 1.5,
+            elapsed_ms: 35.0,
+            ..Default::default()
+        };
+
+        // Same rocket on next frame: is_new_entry is false, elapsed preserved
+        let is_new_entry = !slot.active || slot.rocket_id != 42;
+        assert!(!is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+        }
+        assert_eq!(slot.elapsed_ms, 35.0);
+
+        // New rocket evicts slot: is_new_entry is true, elapsed resets to 0.0
+        let is_new_entry = !slot.active || slot.rocket_id != 99;
+        assert!(is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+        }
+        assert_eq!(slot.elapsed_ms, 0.0);
+    }
+}

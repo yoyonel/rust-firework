@@ -106,6 +106,8 @@ pub enum RendererCommand {
     SetDitherEnabled(bool),
     SetDitherStrength(f32),
     ResetDitherDefaults,
+    SetVolumetricLightingHysteresisEnabled(bool),
+    SetVolumetricLightingFadeInMs(f32),
 }
 
 /// Commands sent from UI to Smoke simulation engine without dynamic allocations.

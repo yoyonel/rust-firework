@@ -356,6 +356,23 @@ pub const VOLUMETRIC_FLASH_EMA_DECAY: f32 = 0.90;
 /// Exponential moving average target blend weight for detonation flash ambient glow.
 pub const VOLUMETRIC_FLASH_EMA_WEIGHT: f32 = 0.10;
 
+// ── Volumetric Lighting Temporal Stabilization (§5 ADR) ─────────────
+/// Default enable flag for volumetric lighting temporal hysteresis eviction.
+pub const DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED: bool = true;
+
+/// Eviction threshold factor for volumetric lighting slots (1.2x).
+/// A living light cannot be replaced unless candidate intensity > 1.2 * occupant.
+pub const VOLUMETRIC_LIGHT_EVICTION_HYSTERESIS_FACTOR: f32 = 1.2;
+
+/// Default fade-in duration for new volumetric lights entering a slot (in milliseconds).
+pub const DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS: f32 = 50.0;
+
+/// Slider minimum bound for volumetric light fade-in duration (ms).
+pub const SLIDER_VOLUMETRIC_FADE_IN_MS_MIN: f32 = 0.0;
+
+/// Slider maximum bound for volumetric light fade-in duration (ms).
+pub const SLIDER_VOLUMETRIC_FADE_IN_MS_MAX: f32 = 200.0;
+
 // ── Smoke Preview Viewport Rendering ─────────────────────────────────
 /// Smoke preview FBO width (pixels).
 pub const SMOKE_PREVIEW_FBO_WIDTH: i32 = 480;
