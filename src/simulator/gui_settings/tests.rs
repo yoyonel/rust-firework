@@ -580,6 +580,32 @@ fn test_ui_state_feedback_loop_renderer() {
         1.75,
         "Renderer dither_strength"
     );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingHysteresisEnabled(
+            false
+        )),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_hysteresis_enabled,
+        false,
+        "Renderer volumetric_lighting_hysteresis_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingFadeInMs(120.0)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_fade_in_ms,
+        120.0,
+        "Renderer volumetric_lighting_fade_in_ms"
+    );
 }
 
 #[test]
