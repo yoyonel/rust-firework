@@ -575,7 +575,6 @@ tasks:
       - echo "🚀 Lancement du simulateur en tâche de fond et capture Tracy (5s)..."
       - |
         bash -c '
-          trap "kill -9 \$SIM_PID 2>/dev/null || true; pkill -f ./target/release/fireworks_sim 2>/dev/null || true" EXIT INT TERM
           vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim > /tmp/sim.log 2>&1 &
           SIM_PID=$!
           sleep 2
