@@ -123,6 +123,8 @@ fn test_exhaustive_renderer_config_all_fields_persistence() -> anyhow::Result<()
     cfg.render_smoke = true;
     cfg.render_trails = false;
     cfg.render_explosions = true;
+    cfg.dither_enabled = false;
+    cfg.dither_strength = 2.45;
 
     cfg.save_to_file(path_str)?;
 
@@ -139,6 +141,8 @@ fn test_exhaustive_renderer_config_all_fields_persistence() -> anyhow::Result<()
     assert!(loaded_cfg.render_smoke);
     assert!(!loaded_cfg.render_trails);
     assert!(loaded_cfg.render_explosions);
+    assert!(!loaded_cfg.dither_enabled);
+    assert_eq!(loaded_cfg.dither_strength, 2.45);
 
     Ok(())
 }

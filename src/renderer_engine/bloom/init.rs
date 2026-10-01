@@ -1,6 +1,7 @@
 use super::{BloomPass, BlurMethod};
 use crate::label_gl_object;
 use crate::renderer_engine::config::{RendererConfig, ToneMappingMode};
+use crate::renderer_engine::constants;
 use crate::renderer_engine::shader::try_compile_shader_program_from_files;
 use log::info;
 
@@ -260,6 +261,15 @@ impl BloomPass {
 
             let loc_tone_mapping_mode =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uToneMappingMode"));
+            let loc_dither_enabled =
+                gl::GetUniformLocation(composition_shader, crate::cstr!("uDitherEnabled"));
+            let loc_dither_strength =
+                gl::GetUniformLocation(composition_shader, crate::cstr!("uDitherStrength"));
+
+            let loc_comparison_dither_enabled =
+                gl::GetUniformLocation(comparison_shader, crate::cstr!("uDitherEnabled"));
+            let loc_comparison_dither_strength =
+                gl::GetUniformLocation(comparison_shader, crate::cstr!("uDitherStrength"));
 
             let loc_passthrough_texture =
                 gl::GetUniformLocation(passthrough_shader, crate::cstr!("uTexture"));
@@ -351,6 +361,8 @@ impl BloomPass {
                 loc_kawase_down_halfpixel,
                 loc_kawase_up_halfpixel,
                 loc_tone_mapping_mode,
+                loc_dither_enabled,
+                loc_dither_strength,
                 passthrough_shader,
                 intensity: 2.0,
                 blur_iterations: 5,
@@ -358,10 +370,14 @@ impl BloomPass {
                 downsample_factor,
                 blur_method: BlurMethod::Gaussian, // Default to Gaussian
                 tone_mapping_mode: ToneMappingMode::ACES, // Default to ACES
+                dither_enabled: constants::DEFAULT_DITHER_ENABLED,
+                dither_strength: constants::DEFAULT_DITHER_STRENGTH,
                 comparison_mode: false,
                 comparison_fbo,
                 comparison_textures,
                 comparison_shader,
+                loc_comparison_dither_enabled,
+                loc_comparison_dither_strength,
                 width,
                 height,
                 blur_width,
@@ -388,16 +404,22 @@ impl BloomPass {
             loc_kawase_down_halfpixel: 0,
             loc_kawase_up_halfpixel: 0,
             loc_tone_mapping_mode: 0,
+            loc_dither_enabled: 0,
+            loc_dither_strength: 0,
             intensity: 1.0,
             blur_iterations: 1,
             enabled: false,
             downsample_factor: 1,
             blur_method: BlurMethod::Gaussian,
             tone_mapping_mode: ToneMappingMode::ACES,
+            dither_enabled: constants::DEFAULT_DITHER_ENABLED,
+            dither_strength: constants::DEFAULT_DITHER_STRENGTH,
             comparison_mode: false,
             comparison_fbo: 0,
             comparison_textures: [0; 5],
             comparison_shader: 0,
+            loc_comparison_dither_enabled: 0,
+            loc_comparison_dither_strength: 0,
             width: 800,
             height: 600,
             blur_width: 400,
@@ -516,6 +538,10 @@ impl BloomPass {
 
         self.loc_tone_mapping_mode =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uToneMappingMode"));
+        self.loc_dither_enabled =
+            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uDitherEnabled"));
+        self.loc_dither_strength =
+            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uDitherStrength"));
 
         // Setup reloaded static uniforms
         gl::UseProgram(self.blur_shader);
@@ -603,6 +629,8 @@ impl BloomPass {
             }
         };
         self.tone_mapping_mode = config.tone_mapping_mode;
+        self.dither_enabled = config.dither_enabled;
+        self.dither_strength = config.dither_strength;
 
         // Check for downsample change
         if self.downsample_factor != config.bloom_downsample {

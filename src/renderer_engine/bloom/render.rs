@@ -57,6 +57,15 @@ impl BloomPass {
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
 
         gl::Uniform1i(self.loc_tone_mapping_mode, self.tone_mapping_mode as i32);
+        if self.loc_dither_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_dither_enabled,
+                if self.dither_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_dither_strength != -1 {
+            gl::Uniform1f(self.loc_dither_strength, self.dither_strength);
+        }
 
         self.render_fullscreen_quad();
         pop_debug_group!();
@@ -106,6 +115,16 @@ impl BloomPass {
         // Bind bloom texture
         gl::ActiveTexture(gl::TEXTURE1);
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
+
+        if self.loc_comparison_dither_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_comparison_dither_enabled,
+                if self.dither_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_comparison_dither_strength != -1 {
+            gl::Uniform1f(self.loc_comparison_dither_strength, self.dither_strength);
+        }
 
         self.render_fullscreen_quad();
 

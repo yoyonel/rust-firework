@@ -155,6 +155,18 @@ impl SmokePreviewRenderer {
                 gl::GetUniformLocation(postproc_program, cstr!("uBloomTexture"));
             let loc_postproc_tone_mapping_mode =
                 gl::GetUniformLocation(postproc_program, cstr!("uToneMappingMode"));
+            let loc_postproc_dither_enabled =
+                gl::GetUniformLocation(postproc_program, cstr!("uDitherEnabled"));
+            let loc_postproc_dither_strength =
+                gl::GetUniformLocation(postproc_program, cstr!("uDitherStrength"));
+
+            gl::UseProgram(postproc_program);
+            if loc_postproc_dither_enabled != -1 {
+                gl::Uniform1i(loc_postproc_dither_enabled, 0);
+            }
+            if loc_postproc_dither_strength != -1 {
+                gl::Uniform1f(loc_postproc_dither_strength, 0.0);
+            }
 
             let block_idx_post = gl::GetUniformBlockIndex(postproc_program, cstr!("GlobalData"));
             if block_idx_post != gl::INVALID_INDEX {

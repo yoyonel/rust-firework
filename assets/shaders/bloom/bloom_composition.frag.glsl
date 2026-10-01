@@ -11,6 +11,15 @@ layout (std140) uniform GlobalData {
     float uBloomIntensity;
 };
 uniform int uToneMappingMode;
+uniform int uDitherEnabled;
+uniform float uDitherStrength;
+
+// --- Interleaved Gradient Noise (Jorge Jimenez 2014) ---
+// High-frequency static blue-noise-like pattern for anti-banding post-gamma
+float interleavedGradientNoise(vec2 screenPos) {
+    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+    return fract(magic.z * fract(dot(screenPos, magic.xy)));
+}
 
 // 0 = Reinhard
 // 1 = Reinhard Extended
@@ -188,6 +197,13 @@ void main() {
     
     // Gamma correction
     result = pow(result, vec3(1.0 / 2.2));
+
+    // Dither anti-banding (Interleaved Gradient Noise)
+    if (uDitherEnabled != 0 && uDitherStrength > 0.0) {
+        float noise = interleavedGradientNoise(gl_FragCoord.xy);
+        float dither = (noise - 0.5) * (uDitherStrength / 255.0);
+        result = clamp(result + vec3(dither), 0.0, 1.0);
+    }
     
     FragColor = vec4(result, 1.0);
 }

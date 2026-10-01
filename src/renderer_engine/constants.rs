@@ -56,6 +56,22 @@ pub const DEFAULT_BLOOM_BLUR_METHOD: BlurMethod = BlurMethod::Gaussian;
 /// - **System influence:** Modulates color contrast, highlight compression, and overall visual mood.
 pub const DEFAULT_TONE_MAPPING_MODE: ToneMappingMode = ToneMappingMode::KhronosPBR;
 
+/// Default post-processing dither enable flag.
+///
+/// - **Unit:** boolean
+/// - **Technical meaning:** Enables or disables static interleaved gradient noise (IGN) anti-banding dither.
+/// - **Bounds:** `true` or `false`.
+/// - **System influence:** Dissolves color banding steps on dark halos post-gamma.
+pub const DEFAULT_DITHER_ENABLED: bool = true;
+
+/// Default post-processing dither strength (amplitude in 8-bit LSB units).
+///
+/// - **Unit:** LSB amplitude (1/255 scale)
+/// - **Technical meaning:** Peak-to-peak noise amplitude added to post-gamma LDR signal.
+/// - **Bounds:** `0.0` to `5.0`.
+/// - **System influence:** 0.6 LSB preserves pure black zero while smoothing halo gradients.
+pub const DEFAULT_DITHER_STRENGTH: f32 = 0.6;
+
 /// Minimum float threshold epsilon to skip tiny render state position interpolation offsets.
 pub const RENDER_INTERPOLATION_EPSILON: f32 = 0.00001;
 
@@ -229,6 +245,13 @@ pub const SLIDER_BLOOM_ITERATIONS_MAX: u32 = 10;
 
 pub const SLIDER_BLOOM_DOWNSAMPLE_MIN: u32 = 1;
 pub const SLIDER_BLOOM_DOWNSAMPLE_MAX: u32 = 8;
+
+pub const SLIDER_DITHER_STRENGTH_MIN: f32 = 0.0;
+pub const SLIDER_DITHER_STRENGTH_MAX: f32 = 3.0;
+
+pub const DITHER_PRESET_SUBTLE: f32 = 0.6;
+pub const DITHER_PRESET_STRONG: f32 = 1.5;
+pub const DITHER_PRESET_EXAGGERATED: f32 = 3.0;
 
 /// Color RGBA tuple for the subtle translucent direction vector arrow in the smoke preview viewport.
 pub const SMOKE_PREVIEW_ARROW_COLOR: [f32; 4] = [0.0, 0.85, 1.0, 0.40];

@@ -103,6 +103,9 @@ pub enum RendererCommand {
     SetSkyHazeIntensity(f32),
     SetSkyHazeAmbientFlash(f32),
     ResetSkyHazeDefaults,
+    SetDitherEnabled(bool),
+    SetDitherStrength(f32),
+    ResetDitherDefaults,
 }
 
 /// Commands sent from UI to Smoke simulation engine without dynamic allocations.
