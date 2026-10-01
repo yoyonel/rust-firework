@@ -474,8 +474,16 @@ tasks:
         if ! command -v vale &>/dev/null && [ ! -f bin/vale ]; then
           echo "📥 Téléchargement de Vale CLI..."
           mkdir -p bin
-          curl -sSL https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz | tar -xzC bin vale
-          echo "✅ Vale CLI installé dans ./bin/vale"
+          TMP_TGZ=$(mktemp)
+          if curl -fSL --retry 3 --connect-timeout 10 --max-time 60 "https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz" -o "$TMP_TGZ"; then
+            tar -xzf "$TMP_TGZ" -C bin vale && chmod +x bin/vale
+            rm -f "$TMP_TGZ"
+            echo "✅ Vale CLI installé dans ./bin/vale"
+          else
+            rm -f "$TMP_TGZ"
+            echo "⚠️ Échec téléchargement Vale CLI"
+            exit 1
+          fi
         fi
     status:
       - "test -f bin/vale || command -v vale"

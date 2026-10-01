@@ -17,6 +17,9 @@ runs:
           ~/.cargo/registry/index
           ~/.cargo/registry/cache
           ~/.cargo/git/db
+          /usr/local/cargo/registry/index
+          /usr/local/cargo/registry/cache
+          /usr/local/cargo/git/db
         key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
           ${{ runner.os }}-cargo-registry-
@@ -29,3 +32,9 @@ runs:
         restore-keys: |
           ${{ runner.os }}-sccache-${{ inputs.shared_key }}-
           ${{ runner.os }}-sccache-
+
+    - name: Cache Vale CLI binary
+      uses: actions/cache@v4
+      with:
+        path: bin/vale
+        key: ${{ runner.os }}-vale-v3.0.0

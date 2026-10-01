@@ -30,6 +30,8 @@ jobs:
     container:
       image: ghcr.io/yoyonel/rust-firework-ci:latest
       options: --user root
+    env:
+      SCCACHE_DIR: /tmp/sccache_cache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,7 +56,14 @@ jobs:
       - name: Strip local patches in CI
         run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
 
+      - name: Setup CI Cache
+        uses: ./.github/actions/setup-ci-cache
+        with:
+          shared_key: "lint-and-security"
+
       - name: Run Linters (rustfmt, clippy, ruff, vale)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: task lint:all
 
       - name: Run DevSecOps Supply Chain Audit (cargo-deny)
