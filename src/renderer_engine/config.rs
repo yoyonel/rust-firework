@@ -66,6 +66,12 @@ pub struct RendererConfig {
     pub volumetric_lighting_hysteresis_enabled: bool,
     #[serde(default = "default_volumetric_lighting_fade_in_ms")]
     pub volumetric_lighting_fade_in_ms: f32,
+
+    // Screen-Space Smoke Backlight (§4.1 ADR)
+    #[serde(default = "default_backlight_enabled")]
+    pub backlight_enabled: bool,
+    #[serde(default = "default_backlight_strength")]
+    pub backlight_strength: f32,
 }
 
 fn default_true() -> bool {
@@ -104,6 +110,14 @@ fn default_volumetric_lighting_fade_in_ms() -> f32 {
     constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
 }
 
+fn default_backlight_enabled() -> bool {
+    constants::DEFAULT_BACKLIGHT_ENABLED
+}
+
+fn default_backlight_strength() -> f32 {
+    constants::DEFAULT_BACKLIGHT_STRENGTH
+}
+
 use crate::renderer_engine::constants;
 
 impl Default for RendererConfig {
@@ -131,6 +145,8 @@ impl Default for RendererConfig {
             volumetric_lighting_hysteresis_enabled:
                 constants::DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED,
             volumetric_lighting_fade_in_ms: constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS,
+            backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
+            backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
         }
     }
 }
@@ -196,6 +212,11 @@ mod tests {
             config.volumetric_lighting_fade_in_ms,
             constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
         );
+        assert!(config.backlight_enabled);
+        assert_eq!(
+            config.backlight_strength,
+            constants::DEFAULT_BACKLIGHT_STRENGTH
+        );
     }
 
     #[test]
@@ -225,6 +246,8 @@ mod tests {
             dither_strength: 0.85,
             volumetric_lighting_hysteresis_enabled: false,
             volumetric_lighting_fade_in_ms: 75.0,
+            backlight_enabled: false,
+            backlight_strength: 2.1,
         };
 
         config.save_to_file(file_path)?;
@@ -260,6 +283,8 @@ mod tests {
             loaded.volumetric_lighting_fade_in_ms,
             config.volumetric_lighting_fade_in_ms
         );
+        assert_eq!(loaded.backlight_enabled, config.backlight_enabled);
+        assert_eq!(loaded.backlight_strength, config.backlight_strength);
         Ok(())
     }
 

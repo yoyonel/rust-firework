@@ -373,6 +373,19 @@ pub const SLIDER_VOLUMETRIC_FADE_IN_MS_MIN: f32 = 0.0;
 /// Slider maximum bound for volumetric light fade-in duration (ms).
 pub const SLIDER_VOLUMETRIC_FADE_IN_MS_MAX: f32 = 200.0;
 
+// ── Screen-Space Backlight (§4.1 ADR) ────────────────────────────────
+/// Default enable flag for screen-space smoke backlight illumination.
+pub const DEFAULT_BACKLIGHT_ENABLED: bool = true;
+
+/// Default strength multiplier for screen-space backlight effect.
+pub const DEFAULT_BACKLIGHT_STRENGTH: f32 = 1.0;
+
+/// Slider minimum bound for backlight strength.
+pub const SLIDER_BACKLIGHT_STRENGTH_MIN: f32 = 0.0;
+
+/// Slider maximum bound for backlight strength.
+pub const SLIDER_BACKLIGHT_STRENGTH_MAX: f32 = 10.0;
+
 // ── Smoke Preview Viewport Rendering ─────────────────────────────────
 /// Smoke preview FBO width (pixels).
 pub const SMOKE_PREVIEW_FBO_WIDTH: i32 = 480;

@@ -225,6 +225,62 @@ impl BloomPass {
 
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
+            // Screen-space smoke mask FBO (at 1/2 screen resolution for backlight illumination)
+            let mask_width = std::cmp::max(1, width / 2);
+            let mask_height = std::cmp::max(1, height / 2);
+            let mut smoke_mask_fbo = 0;
+            let mut smoke_mask_texture = 0;
+            gl::GenFramebuffers(1, &mut smoke_mask_fbo);
+            gl::GenTextures(1, &mut smoke_mask_texture);
+
+            gl::BindFramebuffer(gl::FRAMEBUFFER, smoke_mask_fbo);
+            gl::BindTexture(gl::TEXTURE_2D, smoke_mask_texture);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::R8 as i32,
+                mask_width,
+                mask_height,
+                0,
+                gl::RED,
+                gl::UNSIGNED_BYTE,
+                std::ptr::null(),
+            );
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            gl::FramebufferTexture2D(
+                gl::FRAMEBUFFER,
+                gl::COLOR_ATTACHMENT0,
+                gl::TEXTURE_2D,
+                smoke_mask_texture,
+                0,
+            );
+
+            let mut mask_status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
+            if mask_status != gl::FRAMEBUFFER_COMPLETE {
+                log::warn!(
+                    "⚠️ Smoke mask R8 FBO incomplete (status {mask_status}), falling back to RGBA8"
+                );
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGBA8 as i32,
+                    mask_width,
+                    mask_height,
+                    0,
+                    gl::RGBA,
+                    gl::UNSIGNED_BYTE,
+                    std::ptr::null(),
+                );
+                mask_status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
+                if mask_status != gl::FRAMEBUFFER_COMPLETE {
+                    return Err(format!("Smoke mask framebuffer incomplete: {mask_status}"));
+                }
+            }
+            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+
             // Cache uniform locations
             let loc_blur_texture = gl::GetUniformLocation(blur_shader, crate::cstr!("uTexture"));
             let loc_blur_direction =
@@ -265,11 +321,19 @@ impl BloomPass {
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uDitherEnabled"));
             let loc_dither_strength =
                 gl::GetUniformLocation(composition_shader, crate::cstr!("uDitherStrength"));
+            let loc_backlight_enabled =
+                gl::GetUniformLocation(composition_shader, crate::cstr!("uBacklightEnabled"));
+            let loc_backlight_strength =
+                gl::GetUniformLocation(composition_shader, crate::cstr!("uBacklightStrength"));
 
             let loc_comparison_dither_enabled =
                 gl::GetUniformLocation(comparison_shader, crate::cstr!("uDitherEnabled"));
             let loc_comparison_dither_strength =
                 gl::GetUniformLocation(comparison_shader, crate::cstr!("uDitherStrength"));
+            let loc_comparison_backlight_enabled =
+                gl::GetUniformLocation(comparison_shader, crate::cstr!("uBacklightEnabled"));
+            let loc_comparison_backlight_strength =
+                gl::GetUniformLocation(comparison_shader, crate::cstr!("uBacklightStrength"));
 
             let loc_passthrough_texture =
                 gl::GetUniformLocation(passthrough_shader, crate::cstr!("uTexture"));
@@ -287,6 +351,11 @@ impl BloomPass {
             gl::UseProgram(composition_shader);
             gl::Uniform1i(loc_comp_scene, 0);
             gl::Uniform1i(loc_comp_bloom, 1);
+            let loc_comp_smoke_mask =
+                gl::GetUniformLocation(composition_shader, crate::cstr!("uSmokeMask"));
+            if loc_comp_smoke_mask != -1 {
+                gl::Uniform1i(loc_comp_smoke_mask, 2);
+            }
 
             gl::UseProgram(comparison_shader);
             gl::Uniform1i(
@@ -297,6 +366,11 @@ impl BloomPass {
                 gl::GetUniformLocation(comparison_shader, crate::cstr!("uBloomTexture")),
                 1,
             );
+            let loc_compare_smoke_mask =
+                gl::GetUniformLocation(comparison_shader, crate::cstr!("uSmokeMask"));
+            if loc_compare_smoke_mask != -1 {
+                gl::Uniform1i(loc_compare_smoke_mask, 2);
+            }
 
             gl::UseProgram(passthrough_shader);
             gl::Uniform1i(loc_passthrough_texture, 0);
@@ -341,6 +415,8 @@ impl BloomPass {
                 let label = format!("Tex_Bloom_Compare_Mode_{}", i);
                 label_gl_object!(gl::TEXTURE, tex, &label);
             }
+            label_gl_object!(gl::FRAMEBUFFER, smoke_mask_fbo, "FBO_Smoke_Mask");
+            label_gl_object!(gl::TEXTURE, smoke_mask_texture, "Tex_Smoke_Mask");
             label_gl_object!(gl::VERTEX_ARRAY, dummy_vao, "VAO_Fullscreen_Quad_Dummy");
 
             info!("✅ Bloom Pass initialized successfully (MRT enabled)");
@@ -363,6 +439,8 @@ impl BloomPass {
                 loc_tone_mapping_mode,
                 loc_dither_enabled,
                 loc_dither_strength,
+                loc_backlight_enabled,
+                loc_backlight_strength,
                 passthrough_shader,
                 intensity: 2.0,
                 blur_iterations: 5,
@@ -372,12 +450,20 @@ impl BloomPass {
                 tone_mapping_mode: ToneMappingMode::ACES, // Default to ACES
                 dither_enabled: constants::DEFAULT_DITHER_ENABLED,
                 dither_strength: constants::DEFAULT_DITHER_STRENGTH,
+                backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
+                backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
                 comparison_mode: false,
                 comparison_fbo,
                 comparison_textures,
                 comparison_shader,
                 loc_comparison_dither_enabled,
                 loc_comparison_dither_strength,
+                loc_comparison_backlight_enabled,
+                loc_comparison_backlight_strength,
+                smoke_mask_fbo,
+                smoke_mask_texture,
+                mask_width,
+                mask_height,
                 width,
                 height,
                 blur_width,
@@ -406,6 +492,8 @@ impl BloomPass {
             loc_tone_mapping_mode: 0,
             loc_dither_enabled: 0,
             loc_dither_strength: 0,
+            loc_backlight_enabled: -1,
+            loc_backlight_strength: -1,
             intensity: 1.0,
             blur_iterations: 1,
             enabled: false,
@@ -414,12 +502,20 @@ impl BloomPass {
             tone_mapping_mode: ToneMappingMode::ACES,
             dither_enabled: constants::DEFAULT_DITHER_ENABLED,
             dither_strength: constants::DEFAULT_DITHER_STRENGTH,
+            backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
+            backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
             comparison_mode: false,
             comparison_fbo: 0,
             comparison_textures: [0; 5],
             comparison_shader: 0,
             loc_comparison_dither_enabled: 0,
             loc_comparison_dither_strength: 0,
+            loc_comparison_backlight_enabled: -1,
+            loc_comparison_backlight_strength: -1,
+            smoke_mask_fbo: 0,
+            smoke_mask_texture: 0,
+            mask_width: 400,
+            mask_height: 300,
             width: 800,
             height: 600,
             blur_width: 400,
@@ -529,6 +625,8 @@ impl BloomPass {
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uSceneTexture"));
         let loc_comp_bloom =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBloomTexture"));
+        let loc_comp_smoke_mask =
+            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uSmokeMask"));
 
         let comp_block_idx =
             gl::GetUniformBlockIndex(self.composition_shader, crate::cstr!("GlobalData"));
@@ -542,6 +640,10 @@ impl BloomPass {
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uDitherEnabled"));
         self.loc_dither_strength =
             gl::GetUniformLocation(self.composition_shader, crate::cstr!("uDitherStrength"));
+        self.loc_backlight_enabled =
+            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBacklightEnabled"));
+        self.loc_backlight_strength =
+            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBacklightStrength"));
 
         // Setup reloaded static uniforms
         gl::UseProgram(self.blur_shader);
@@ -550,6 +652,9 @@ impl BloomPass {
         gl::UseProgram(self.composition_shader);
         gl::Uniform1i(loc_comp_scene, 0);
         gl::Uniform1i(loc_comp_bloom, 1);
+        if loc_comp_smoke_mask != -1 {
+            gl::Uniform1i(loc_comp_smoke_mask, 2);
+        }
 
         info!("✅ Bloom shaders reloaded successfully");
         Ok(())
@@ -585,6 +690,14 @@ impl BloomPass {
         if self.ping_pong_textures[0] != 0 {
             gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
             self.ping_pong_textures = [0; 2];
+        }
+        if self.smoke_mask_fbo != 0 {
+            gl::DeleteFramebuffers(1, &self.smoke_mask_fbo);
+            self.smoke_mask_fbo = 0;
+        }
+        if self.smoke_mask_texture != 0 {
+            gl::DeleteTextures(1, &self.smoke_mask_texture);
+            self.smoke_mask_texture = 0;
         }
         if self.blur_shader != 0 {
             gl::DeleteProgram(self.blur_shader);
@@ -631,6 +744,8 @@ impl BloomPass {
         self.tone_mapping_mode = config.tone_mapping_mode;
         self.dither_enabled = config.dither_enabled;
         self.dither_strength = config.dither_strength;
+        self.backlight_enabled = config.volumetric_lighting_enabled && config.backlight_enabled;
+        self.backlight_strength = config.backlight_strength;
 
         // Check for downsample change
         if self.downsample_factor != config.bloom_downsample {

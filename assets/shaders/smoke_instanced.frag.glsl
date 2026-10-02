@@ -22,6 +22,8 @@ uniform float u_ErosionScale;
 uniform float u_ErosionEdgeWidth;
 uniform vec3 u_ErosionEdgeColor;
 
+uniform int u_RenderMask;
+
 struct PointLight {
     vec4 position_radius; // xyz = world pos, w = radius
     vec4 color_intensity; // rgb = color, w = intensity
@@ -100,6 +102,16 @@ void main() {
             finalColor = mix(u_ErosionEdgeColor, finalColor, edgeFactor);
             finalAlpha = min(1.0, finalAlpha * 1.5);
         }
+    }
+
+    // Screen-space smoke backlight mask pass (§4.1 ADR)
+    // Directly output actual visible screen alpha (finalAlpha * vIntensity)
+    // Immediate return: bypasses expensive volumetric 16-light loop completely
+    if (u_RenderMask != 0) {
+        float maskAlpha = finalAlpha * vIntensity;
+        FragColor = vec4(maskAlpha, 0.0, 0.0, 1.0);
+        BrightColor = vec4(0.0);
+        return;
     }
 
     // 7. Volumetric In-Scattering (Participating Media Lighting)

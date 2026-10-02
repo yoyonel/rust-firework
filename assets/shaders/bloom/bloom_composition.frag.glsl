@@ -5,6 +5,7 @@ out vec4 FragColor;
 
 uniform sampler2D uSceneTexture;
 uniform sampler2D uBloomTexture;
+uniform sampler2D uSmokeMask;
 layout (std140) uniform GlobalData {
     vec2 uSize;
     float uTexRatio;
@@ -13,6 +14,8 @@ layout (std140) uniform GlobalData {
 uniform int uToneMappingMode;
 uniform int uDitherEnabled;
 uniform float uDitherStrength;
+uniform int uBacklightEnabled;
+uniform float uBacklightStrength;
 
 // --- Interleaved Gradient Noise (Jorge Jimenez 2014) ---
 // High-frequency static blue-noise-like pattern for anti-banding post-gamma
@@ -176,6 +179,11 @@ void main() {
     
     // Additive blending with intensity control
     vec3 result = sceneColor + bloomColor * uBloomIntensity;
+    
+    // Screen-space smoke backlight illumination (§4.1 ADR)
+    if (uBacklightEnabled != 0) {
+        result += pow(bloomColor, vec3(0.5)) * texture(uSmokeMask, vTexCoord).r * uBacklightStrength;
+    }
     
     // Apply tone mapping
     if (uToneMappingMode == 0) {

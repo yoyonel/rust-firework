@@ -52,6 +52,19 @@ pub trait ParticleGraphicsRenderer {
     /// Définit les paramètres d'éclairage volumétrique pour la fumée.
     fn set_smoke_lighting(&mut self, _enabled: bool, _intensity: f32, _ambient_flash: f32) {}
 
+    /// Dessine le masque alpha de la fumée pour le rétro-éclairage écran (Screen-Space Backlight).
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    unsafe fn render_smoke_mask(
+        &mut self,
+        _count: usize,
+        _mask_fbo: u32,
+        _mask_width: i32,
+        _mask_height: i32,
+    ) {
+    }
+
     /// Retourne l'ordre de priorité de rendu (pass order) pour trier les passes.
     fn render_order(&self) -> u32 {
         0

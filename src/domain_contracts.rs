@@ -108,6 +108,9 @@ pub enum RendererCommand {
     ResetDitherDefaults,
     SetVolumetricLightingHysteresisEnabled(bool),
     SetVolumetricLightingFadeInMs(f32),
+    SetBacklightEnabled(bool),
+    SetBacklightStrength(f32),
+    ResetBacklightDefaults,
 }
 
 /// Commands sent from UI to Smoke simulation engine without dynamic allocations.
@@ -141,6 +144,8 @@ pub enum GuiCommand {
     SaveSession,
     ReloadSession,
     SetRocketCursor(bool),
+    TogglePause,
+    SetPause(bool),
 }
 
 /// Unified domain command enum decoupling UI from core engines.

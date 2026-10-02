@@ -11,6 +11,7 @@ layout(location = 4) out vec4 FragColor4; // Khronos PBR
 
 uniform sampler2D uSceneTexture;
 uniform sampler2D uBloomTexture;
+uniform sampler2D uSmokeMask;
 layout (std140) uniform GlobalData {
     vec2 uSize;
     float uTexRatio;
@@ -18,6 +19,8 @@ layout (std140) uniform GlobalData {
 };
 uniform int uDitherEnabled;
 uniform float uDitherStrength;
+uniform int uBacklightEnabled;
+uniform float uBacklightStrength;
 
 // --- Interleaved Gradient Noise (Jorge Jimenez 2014) ---
 // High-frequency static blue-noise-like pattern for anti-banding post-gamma
@@ -89,6 +92,11 @@ void main() {
     
     // Additive blending with intensity control
     vec3 hdrColor = sceneColor + bloomColor * uBloomIntensity;
+    
+    // Screen-space smoke backlight illumination (§4.1 ADR)
+    if (uBacklightEnabled != 0) {
+        hdrColor += pow(bloomColor, vec3(0.5)) * texture(uSmokeMask, vTexCoord).r * uBacklightStrength;
+    }
     
     // Apply each tone mapping and gamma correction
     vec3 result0 = pow(reinhard(hdrColor), vec3(1.0 / 2.2));

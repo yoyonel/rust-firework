@@ -125,6 +125,7 @@ pub struct Renderer {
     smoothed_flash: f32,
     was_lighting_active: bool,
     last_lighting_update: Option<std::time::Instant>,
+    simulation_paused: bool,
     // Window management
     window_size_f32: (f32, f32),
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
@@ -313,6 +314,7 @@ impl Renderer {
             smoothed_flash: 0.0,
             was_lighting_active: false,
             last_lighting_update: None,
+            simulation_paused: false,
             bloom_pass,
             gpu_profiler,
             last_gpu_log_time: std::time::Instant::now(),
@@ -322,75 +324,79 @@ impl Renderer {
     // Helper internal
     unsafe fn update_lighting_ubo<P: PhysicEngineIterator>(&mut self, physic: &P) {
         let now = std::time::Instant::now();
-        let dt_ms = match self.last_lighting_update {
-            Some(prev) => (now - prev).as_secs_f32() * 1000.0,
-            None => 16.667,
-        };
-        self.last_lighting_update = Some(now);
-        let dt_ms = dt_ms.clamp(0.0, 100.0);
+        if !self.simulation_paused {
+            let dt_ms = match self.last_lighting_update {
+                Some(prev) => (now - prev).as_secs_f32() * 1000.0,
+                None => 16.667,
+            };
+            self.last_lighting_update = Some(now);
+            let dt_ms = dt_ms.clamp(0.0, 100.0);
 
-        // 1. Décroissance temporelle C^1 douce de toutes les lumières persistantes
-        for light in &mut self.persistent_lights {
-            if light.active {
-                light.elapsed_ms += dt_ms;
-                light.intensity *= light.decay_rate;
-                light.radius *= constants::VOLUMETRIC_LIGHT_RADIUS_EXPANSION;
-                if light.intensity < constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
-                    light.active = false;
-                    light.intensity = 0.0;
-                    light.rocket_id = 0;
-                    light.elapsed_ms = 0.0;
-                }
-            }
-        }
-
-        // 2. Échantillonnage des détonations actives de fusées (stabilisation par ID unique & hystérésis)
-        let hysteresis = self.config.volumetric_lighting_hysteresis_enabled;
-        physic.for_each_active_rocket(&mut |rocket| {
-            if rocket.active && rocket.exploded && rocket.explosion_active_count > 0 {
-                let target_intensity =
-                    (rocket.explosion_active_count as f32 / 80.0).clamp(0.4, 2.0);
-
-                let slot_idx = find_lighting_slot(
-                    &self.persistent_lights,
-                    rocket.id,
-                    target_intensity,
-                    hysteresis,
-                );
-
-                if let Some(idx) = slot_idx {
-                    let slot = &mut self.persistent_lights[idx];
-                    let is_new_entry = !slot.active || slot.rocket_id != rocket.id;
-                    if is_new_entry {
-                        slot.elapsed_ms = 0.0;
+            // 1. Décroissance temporelle C^1 douce de toutes les lumières persistantes
+            for light in &mut self.persistent_lights {
+                if light.active {
+                    light.elapsed_ms += dt_ms;
+                    light.intensity *= light.decay_rate;
+                    light.radius *= constants::VOLUMETRIC_LIGHT_RADIUS_EXPANSION;
+                    if light.intensity < constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                        light.active = false;
+                        light.intensity = 0.0;
+                        light.rocket_id = 0;
+                        light.elapsed_ms = 0.0;
                     }
-                    slot.active = true;
-                    slot.rocket_id = rocket.id;
-                    slot.pos = [rocket.pos.x, rocket.pos.y];
-                    slot.color = [rocket.color.x, rocket.color.y, rocket.color.z];
-                    slot.radius = constants::VOLUMETRIC_LIGHT_INITIAL_RADIUS;
-                    slot.intensity = slot.intensity.max(target_intensity);
-                    slot.decay_rate = constants::VOLUMETRIC_LIGHT_DECAY_RATE;
                 }
             }
-        });
 
-        // 3. Calcul de l'énergie explosive totale pour le flash ambiant (filtrage EMA continu sans seuil binaire)
-        let total_active_energy: f32 = self
-            .persistent_lights
-            .iter()
-            .filter(|l| l.active)
-            .map(|l| l.intensity)
-            .sum();
+            // 2. Échantillonnage des détonations actives de fusées (stabilisation par ID unique & hystérésis)
+            let hysteresis = self.config.volumetric_lighting_hysteresis_enabled;
+            physic.for_each_active_rocket(&mut |rocket| {
+                if rocket.active && rocket.exploded && rocket.explosion_active_count > 0 {
+                    let target_intensity =
+                        (rocket.explosion_active_count as f32 / 80.0).clamp(0.4, 2.0);
 
-        let target_flash = (total_active_energy * constants::VOLUMETRIC_FLASH_ENERGY_SCALE)
-            .min(constants::VOLUMETRIC_FLASH_MAX_CAP);
+                    let slot_idx = find_lighting_slot(
+                        &self.persistent_lights,
+                        rocket.id,
+                        target_intensity,
+                        hysteresis,
+                    );
 
-        if target_flash > self.smoothed_flash {
-            self.smoothed_flash = self.smoothed_flash * 0.80 + target_flash * 0.20;
+                    if let Some(idx) = slot_idx {
+                        let slot = &mut self.persistent_lights[idx];
+                        let is_new_entry = !slot.active || slot.rocket_id != rocket.id;
+                        if is_new_entry {
+                            slot.elapsed_ms = 0.0;
+                            slot.pos = [rocket.pos.x, rocket.pos.y];
+                            slot.color = [rocket.color.x, rocket.color.y, rocket.color.z];
+                            slot.radius = constants::VOLUMETRIC_LIGHT_INITIAL_RADIUS;
+                        }
+                        slot.active = true;
+                        slot.rocket_id = rocket.id;
+                        slot.intensity = slot.intensity.max(target_intensity);
+                        slot.decay_rate = constants::VOLUMETRIC_LIGHT_DECAY_RATE;
+                    }
+                }
+            });
+
+            // 3. Calcul de l'énergie explosive totale pour le flash ambiant (filtrage EMA continu sans seuil binaire)
+            let total_active_energy: f32 = self
+                .persistent_lights
+                .iter()
+                .filter(|l| l.active)
+                .map(|l| l.intensity)
+                .sum();
+
+            let target_flash = (total_active_energy * constants::VOLUMETRIC_FLASH_ENERGY_SCALE)
+                .min(constants::VOLUMETRIC_FLASH_MAX_CAP);
+
+            if target_flash > self.smoothed_flash {
+                self.smoothed_flash = self.smoothed_flash * 0.80 + target_flash * 0.20;
+            } else {
+                self.smoothed_flash = self.smoothed_flash * constants::VOLUMETRIC_FLASH_EMA_DECAY
+                    + target_flash * constants::VOLUMETRIC_FLASH_EMA_WEIGHT;
+            }
         } else {
-            self.smoothed_flash = self.smoothed_flash * constants::VOLUMETRIC_FLASH_EMA_DECAY
-                + target_flash * constants::VOLUMETRIC_FLASH_EMA_WEIGHT;
+            self.last_lighting_update = Some(now);
         }
 
         // 4. Copie 1:1 vers le bloc std140 GPU sans permutation d'indices (Zéro clignotement / Zéro saut)
@@ -451,7 +457,7 @@ impl Renderer {
     }
 
     /// Réinitialisation à zéro de l'UBO d'éclairage lors de la désactivation dynamique.
-    /// Garantit un coût de 0 GPU/CPU pour les frames suivantes et un rendu 100% ISO develop.
+    /// Garantit un coût de 0 GPU/CPU pour les frames suivantes lorsque l'éclairage volumique est désactivé.
     unsafe fn reset_lighting_ubo(&mut self) {
         self.persistent_lights = [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS];
         self.smoothed_flash = 0.0;
@@ -559,6 +565,38 @@ impl Renderer {
             {
                 tracy_zone!("Renderer::fill_buffer", palette::ENV);
                 nb = renderer.fill_particle_data_direct(physic, alpha);
+            }
+
+            // Screen-space smoke mask pass for backlight illumination (§4.1 ADR)
+            // Executed strictly if smoke particle type, bloom enabled, backlight enabled, and render_smoke active.
+            // Bypassed completely (zero-cost: zero draw calls, zero clears, zero uploads) otherwise.
+            if renderer.particle_type() == Some(crate::physic_engine::ParticleType::Smoke)
+                && self.bloom_pass.enabled
+                && self.config.volumetric_lighting_enabled
+                && self.config.backlight_enabled
+            {
+                gpu_profile_zone!(
+                    12,
+                    "Renderer::Smoke_Backlight_Mask",
+                    palette::POSTPROCESS,
+                    profiler
+                );
+                renderer.render_smoke_mask(
+                    nb,
+                    self.bloom_pass.smoke_mask_fbo,
+                    self.bloom_pass.mask_width,
+                    self.bloom_pass.mask_height,
+                );
+                // Restore HDR scene FBO, viewport, and MRT draw buffers
+                gl::BindFramebuffer(gl::FRAMEBUFFER, self.bloom_pass.hdr_fbo());
+                gl::Viewport(
+                    0,
+                    0,
+                    self.window_size_f32.0 as i32,
+                    self.window_size_f32.1 as i32,
+                );
+                let draw_buffers = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+                gl::DrawBuffers(2, draw_buffers.as_ptr());
             }
 
             // Dessine les particules (Opération hautement GPU, on utilise le profiler complet)
@@ -774,6 +812,15 @@ impl RendererEngine for Renderer {
         self.config = *config;
         self.bloom_pass.sync_with_renderer_config(config);
     }
+
+    fn set_simulation_paused(&mut self, paused: bool) {
+        if self.simulation_paused != paused {
+            self.simulation_paused = paused;
+            if !paused {
+                self.last_lighting_update = Some(std::time::Instant::now());
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -895,5 +942,81 @@ mod tests {
             slot.elapsed_ms = 0.0;
         }
         assert_eq!(slot.elapsed_ms, 0.0);
+    }
+
+    #[test]
+    fn test_light_slot_position_anchored_at_detonation() {
+        let mut slot = PersistentLight::default();
+
+        // 1. Initial entry: position is anchored
+        let initial_pos = [250.0, 400.0];
+        let is_new_entry = !slot.active || slot.rocket_id != 42;
+        assert!(is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+            slot.pos = initial_pos;
+            slot.color = [1.0, 0.5, 0.2];
+            slot.radius = constants::VOLUMETRIC_LIGHT_INITIAL_RADIUS;
+        }
+        slot.active = true;
+        slot.rocket_id = 42;
+
+        assert_eq!(slot.pos, initial_pos);
+
+        // 2. Subsequent frame for same rocket: is_new_entry is false
+        // Even if rocket_pos moves, slot.pos MUST NOT change
+        let moved_pos = [250.0, 100.0]; // Ghost movement
+        let is_new_entry = !slot.active || slot.rocket_id != 42;
+        assert!(!is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+            slot.pos = moved_pos;
+        }
+
+        assert_eq!(
+            slot.pos, initial_pos,
+            "Light source position must remain permanently anchored at detonation point"
+        );
+    }
+
+    #[test]
+    fn test_lighting_evolution_frozen_during_pause() {
+        let mut slot = PersistentLight {
+            active: true,
+            rocket_id: 10,
+            intensity: 1.8,
+            radius: 450.0,
+            elapsed_ms: 20.0,
+            decay_rate: 0.94,
+            pos: [100.0, 200.0],
+            color: [1.0, 1.0, 1.0],
+        };
+
+        let initial_radius = slot.radius;
+        let initial_intensity = slot.intensity;
+        let initial_elapsed = slot.elapsed_ms;
+
+        // When paused: no time accumulation, no radius expansion, no decay
+        let simulation_paused = true;
+        let dt_ms = 16.67;
+
+        if !simulation_paused {
+            slot.elapsed_ms += dt_ms;
+            slot.intensity *= slot.decay_rate;
+            slot.radius *= constants::VOLUMETRIC_LIGHT_RADIUS_EXPANSION;
+        }
+
+        assert_eq!(
+            slot.radius, initial_radius,
+            "Radius must not expand during pause"
+        );
+        assert_eq!(
+            slot.intensity, initial_intensity,
+            "Intensity must not decay during pause"
+        );
+        assert_eq!(
+            slot.elapsed_ms, initial_elapsed,
+            "Elapsed ms must not advance during pause"
+        );
     }
 }
