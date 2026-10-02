@@ -180,3 +180,61 @@ fn test_fixed_timestep_spiral_of_death_clamp() {
 
     sim.close();
 }
+
+#[test]
+#[serial]
+fn test_simulation_pause_freezes_physics_and_clock() {
+    let log = Rc::new(RefCell::new(vec![]));
+    let renderer = DummyRenderer::default();
+    let audio = DummyAudio;
+    let physic = TestPhysic::new(log.clone());
+    let window_engine = DummyWindowEngine::default();
+
+    let mut sim = Simulator::new(renderer, physic, audio, window_engine);
+    sim.config.fixed_dt = Some(0.016);
+    assert!(!sim.paused);
+
+    // Frame 1: running -> physics updates
+    sim.step();
+    let initial_updates = log
+        .borrow()
+        .iter()
+        .filter(|s| *s == "physic.update")
+        .count();
+    assert!(initial_updates > 0);
+
+    // Toggle pause ON
+    sim.toggle_pause();
+    assert!(sim.paused);
+
+    // Frame 2 & 3: paused -> physics NOT updated, stays frozen
+    let updates_before_paused_steps = log
+        .borrow()
+        .iter()
+        .filter(|s| *s == "physic.update")
+        .count();
+    sim.step();
+    sim.step();
+    let updates_after_paused_steps = log
+        .borrow()
+        .iter()
+        .filter(|s| *s == "physic.update")
+        .count();
+    assert_eq!(updates_before_paused_steps, updates_after_paused_steps);
+
+    // Toggle pause OFF (resume)
+    sim.toggle_pause();
+    assert!(!sim.paused);
+    assert_eq!(sim.dt_accumulator, 0.0);
+
+    // Frame 4: running again -> physics resumes normally
+    sim.step();
+    let final_updates = log
+        .borrow()
+        .iter()
+        .filter(|s| *s == "physic.update")
+        .count();
+    assert!(final_updates > updates_after_paused_steps);
+
+    sim.close();
+}

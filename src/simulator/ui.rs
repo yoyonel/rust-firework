@@ -114,6 +114,26 @@ where
 
         let mut commands = std::mem::take(&mut self.engine_commands);
 
+        // Draw pause indicator (top-right foreground overlay)
+        if self.paused {
+            let draw_list = ui.get_foreground_draw_list();
+            let label = "⏸️  SIMULATION PAUSED (<SPACE> to resume)";
+            let text_size = ui.calc_text_size(label);
+            let pad = 8.0;
+            let x = ui.io().display_size[0] - text_size[0] - pad * 2.0 - 20.0;
+            let y = 20.0;
+            draw_list
+                .add_rect(
+                    [x, y],
+                    [x + text_size[0] + pad * 2.0, y + text_size[1] + pad * 2.0],
+                    [0.0, 0.0, 0.0, 0.8],
+                )
+                .rounding(6.0)
+                .filled(true)
+                .build();
+            draw_list.add_text([x + pad, y + pad], [1.0, 0.85, 0.2, 1.0], label);
+        }
+
         // Draw console (foreground)
         if self.console.open {
             self.console.draw(
@@ -459,6 +479,8 @@ where
         let mut gui_save = false;
         let mut gui_reload = false;
         let mut rocket_cursor_change: Option<bool> = None;
+        let mut toggle_pause = false;
+        let mut set_pause: Option<bool> = None;
 
         self.engine_commands.retain(|cmd| match cmd {
             crate::domain_contracts::EngineCommand::Gui(gui_cmd) => {
@@ -468,6 +490,12 @@ where
                     crate::domain_contracts::GuiCommand::SetRocketCursor(enabled) => {
                         rocket_cursor_change = Some(*enabled);
                     }
+                    crate::domain_contracts::GuiCommand::TogglePause => {
+                        toggle_pause = true;
+                    }
+                    crate::domain_contracts::GuiCommand::SetPause(paused) => {
+                        set_pause = Some(*paused);
+                    }
                 }
                 false
             }
@@ -476,6 +504,15 @@ where
 
         if let Some(enabled) = rocket_cursor_change {
             self.set_rocket_cursor(enabled);
+        }
+
+        if toggle_pause {
+            self.toggle_pause();
+        }
+        if let Some(p) = set_pause {
+            if self.paused != p {
+                self.toggle_pause();
+            }
         }
 
         if gui_save {
