@@ -703,6 +703,18 @@ impl GuiSettings {
                             crate::domain_contracts::RendererCommand::SetVolumetricLightingFadeInMs(fade_ms) => {
                                 c.volumetric_lighting_fade_in_ms = fade_ms;
                             }
+                            crate::domain_contracts::RendererCommand::SetBacklightEnabled(enabled) => {
+                                c.backlight_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetBacklightStrength(strength) => {
+                                c.backlight_strength = strength;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetBacklightDefaults => {
+                                c.backlight_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_BACKLIGHT_ENABLED;
+                                c.backlight_strength =
+                                    crate::renderer_engine::constants::DEFAULT_BACKLIGHT_STRENGTH;
+                            }
                         }
                     }
                 }

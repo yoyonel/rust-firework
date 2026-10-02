@@ -79,6 +79,29 @@ where
                 }
             },
         );
+
+        // Simulation pause / resume / toggle (<SPACE>)
+        self.commands_registry
+            .register_for_renderer("simulation.pause", move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Gui(
+                    crate::domain_contracts::GuiCommand::SetPause(true),
+                ));
+                "-> Simulation paused (<SPACE> to toggle)".into()
+            });
+        self.commands_registry
+            .register_for_renderer("simulation.resume", move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Gui(
+                    crate::domain_contracts::GuiCommand::SetPause(false),
+                ));
+                "-> Simulation resumed (<SPACE> to toggle)".into()
+            });
+        self.commands_registry
+            .register_for_renderer("simulation.toggle", move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Gui(
+                    crate::domain_contracts::GuiCommand::TogglePause,
+                ));
+                "-> Simulation pause toggled".into()
+            });
     }
 
     pub(crate) fn register_bloom_commands(&mut self) {
@@ -404,6 +427,44 @@ where
                 });
         }
 
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetVolumetricLightingEnabled(true),
+                ));
+                "-> Volumetric lighting (master) enabled".into()
+            },
+        );
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetVolumetricLightingEnabled(false),
+                ));
+                "-> Volumetric lighting (master) disabled".into()
+            },
+        );
+        let cfg_toggle = self.renderer_config.clone();
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.toggle",
+            move |_, cmd_queue| {
+                let current = cfg_toggle
+                    .read()
+                    .map(|c| c.volumetric_lighting_enabled)
+                    .unwrap_or(false);
+                let next = !current;
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetVolumetricLightingEnabled(next),
+                ));
+                if next {
+                    "-> Volumetric lighting toggled ON".into()
+                } else {
+                    "-> Volumetric lighting toggled OFF".into()
+                }
+            },
+        );
+
         // Volumetric smoke lighting
         self.commands_registry.register_for_renderer(
             "renderer.smoke_lighting",
@@ -621,6 +682,24 @@ where
                     .map(|c| format!("{:.1}", c.volumetric_lighting_fade_in_ms))
                     .unwrap_or("?".to_string())
             });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.lighting", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.volumetric_lighting_enabled))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_current_value(
+            "renderer.volumetric_lighting",
+            move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.volumetric_lighting_enabled))
+                    .unwrap_or("?".to_string())
+            },
+        );
     }
 
     pub(crate) fn register_dither_commands(&mut self) {
@@ -729,6 +808,118 @@ where
                     .map(|c| format!("{:.2}", c.dither_strength))
                     .unwrap_or("?".to_string())
             });
+    }
+
+    pub(crate) fn register_backlight_commands(&mut self) {
+        // Enable
+        self.commands_registry.register_for_renderer(
+            "renderer.backlight.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetBacklightEnabled(true),
+                ));
+                "-> Screen-space smoke backlight enabled".into()
+            },
+        );
+
+        // Disable
+        self.commands_registry.register_for_renderer(
+            "renderer.backlight.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetBacklightEnabled(false),
+                ));
+                "-> Screen-space smoke backlight disabled".into()
+            },
+        );
+
+        // Toggle
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_for_renderer(
+            "renderer.backlight.toggle",
+            move |_, cmd_queue| {
+                let current = cfg.read().map(|c| c.backlight_enabled).unwrap_or(false);
+                let next = !current;
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetBacklightEnabled(next),
+                ));
+                if next {
+                    "-> Screen-space smoke backlight toggled ON".into()
+                } else {
+                    "-> Screen-space smoke backlight toggled OFF".into()
+                }
+            },
+        );
+
+        // Strength
+        self.commands_registry.register_for_renderer(
+            "renderer.backlight.strength",
+            move |args, cmd_queue| {
+                let val = args
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| s.parse::<f32>().ok());
+                match val {
+                    Some(v)
+                        if (crate::renderer_engine::constants::SLIDER_BACKLIGHT_STRENGTH_MIN
+                            ..=crate::renderer_engine::constants::SLIDER_BACKLIGHT_STRENGTH_MAX)
+                            .contains(&v) =>
+                    {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetBacklightStrength(v),
+                        ));
+                        format!("-> Backlight strength: {:.2}", v)
+                    }
+                    _ => format!(
+                        "Usage: renderer.backlight.strength <{:.1}-{:.1}>",
+                        crate::renderer_engine::constants::SLIDER_BACKLIGHT_STRENGTH_MIN,
+                        crate::renderer_engine::constants::SLIDER_BACKLIGHT_STRENGTH_MAX
+                    ),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.backlight.strength",
+            &format!(
+                "Usage: <{:.1}-{:.1}>",
+                crate::renderer_engine::constants::SLIDER_BACKLIGHT_STRENGTH_MIN,
+                crate::renderer_engine::constants::SLIDER_BACKLIGHT_STRENGTH_MAX
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.backlight.strength",
+            vec!["0.5", "1.0", "3.0", "5.0", "10.0"],
+        );
+
+        // Reset
+        self.commands_registry.register_for_renderer(
+            "renderer.backlight.reset",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::ResetBacklightDefaults,
+                ));
+                "-> Backlight reset to defaults".into()
+            },
+        );
+
+        // Current value providers
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.backlight.enable", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.backlight_enabled))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_current_value(
+            "renderer.backlight.strength",
+            move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.2}", c.backlight_strength))
+                    .unwrap_or("?".to_string())
+            },
+        );
     }
 
     // Helper pur pour le parsing (peut être statique ou hors de la classe)

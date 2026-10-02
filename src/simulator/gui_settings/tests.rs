@@ -582,6 +582,18 @@ fn test_ui_state_feedback_loop_renderer() {
     );
     test_reflection!(
         h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingEnabled(false)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_enabled,
+        false,
+        "Renderer volumetric_lighting_enabled"
+    );
+    test_reflection!(
+        h,
         EngineCommand::Renderer(RendererCommand::SetVolumetricLightingHysteresisEnabled(
             false
         )),
@@ -605,6 +617,25 @@ fn test_ui_state_feedback_loop_renderer() {
             .volumetric_lighting_fade_in_ms,
         120.0,
         "Renderer volumetric_lighting_fade_in_ms"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetBacklightEnabled(false)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().backlight_enabled,
+        false,
+        "Renderer backlight_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetBacklightStrength(2.25)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .backlight_strength,
+        2.25,
+        "Renderer backlight_strength"
     );
 }
 

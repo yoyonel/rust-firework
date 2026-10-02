@@ -22,5 +22,6 @@ where
         self.register_bloom_commands();
         self.register_tonemapping_commands();
         self.register_dither_commands();
+        self.register_backlight_commands();
     }
 }

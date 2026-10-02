@@ -19,7 +19,33 @@ pub fn render_renderer_settings_tab(
     let cfg = state.config();
 
     // GUI_PERSIST: renderer.config
+    let mut vol_lighting = cfg.volumetric_lighting_enabled;
     ui.spacing();
+    if ui.checkbox(
+        "Enable Volumetric Lighting (`renderer.lighting`)",
+        &mut vol_lighting,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingEnabled(vol_lighting),
+        ));
+    }
+    ui.same_line();
+    if ui.small_button(if vol_lighting {
+        "Disable##top_vol_toggle"
+    } else {
+        "Enable##top_vol_toggle"
+    }) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingEnabled(!vol_lighting),
+        ));
+    }
+    if !vol_lighting {
+        ui.same_line();
+        ui.text_colored(COLOR_TEXT_MUTED, "(All volumetric lighting disabled)");
+    }
+
+    ui.spacing();
+    ui.separator();
     ui.text_colored(COLOR_HEADER, "=== SHADER & CONFIG ACTIONS ===");
 
     if ui.button("[RELOAD] Reload Shaders (`renderer.reload_shaders`)") {
@@ -319,27 +345,27 @@ pub fn render_renderer_settings_tab(
 
     ui.spacing();
     ui.separator();
-    ui.text_colored(
-        COLOR_HEADER,
-        "=== VOLUMETRIC LIGHTING SYSTEM (PARTICIPATING MEDIA) ===",
-    );
-
-    // GUI_PERSIST: renderer.config
-    let mut vol_lighting = cfg.volumetric_lighting_enabled;
-    if ui.checkbox(
-        "Enable Volumetric Lighting (Master Switch) (`renderer.lighting`)",
-        &mut vol_lighting,
-    ) {
-        cmd_queue.push(EngineCommand::Renderer(
-            RendererCommand::SetVolumetricLightingEnabled(vol_lighting),
-        ));
-    }
+    ui.text_colored(COLOR_HEADER, "=== VOLUMETRIC LIGHTING SYSTEM ===");
 
     if !vol_lighting {
         ui.text_colored(
             COLOR_TEXT_MUTED,
-            "All volumetric lighting is disabled (0 cost / 100% ISO develop).",
+            "Volumetric lighting is disabled globally.",
         );
+        ui.same_line();
+        if ui.small_button("Enable##vol_enable_section") {
+            cmd_queue.push(EngineCommand::Renderer(
+                RendererCommand::SetVolumetricLightingEnabled(true),
+            ));
+        }
+        return;
+    }
+
+    ui.same_line();
+    if ui.small_button("Disable##vol_disable_section") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingEnabled(false),
+        ));
     }
 
     let item_w = ui.current_font_size() * 14.0;
@@ -469,6 +495,54 @@ pub fn render_renderer_settings_tab(
     ) {
         cmd_queue.push(EngineCommand::Renderer(
             RendererCommand::SetSkyHazeAmbientFlash(haze_flash),
+        ));
+    }
+
+    ui.spacing();
+    ui.separator();
+    ui.text_colored(
+        COLOR_HEADER,
+        "=== SCREEN-SPACE BACKLIGHT (`renderer.backlight.*`) ===",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Backlight Defaults##reset_backlight") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetBacklightDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut backlight_enabled = cfg.backlight_enabled;
+    if ui.checkbox(
+        "Enable Smoke Backlight (`renderer.backlight.enable` / `disable`)",
+        &mut backlight_enabled,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetBacklightEnabled(backlight_enabled),
+        ));
+    }
+    ui.same_line();
+    if ui.small_button(if backlight_enabled {
+        "A/B: Toggle OFF##ab_backlight"
+    } else {
+        "A/B: Toggle ON##ab_backlight"
+    }) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetBacklightEnabled(!backlight_enabled),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut backlight_strength = cfg.backlight_strength;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Backlight Strength (`renderer.backlight.strength`)",
+        renderer_constants::SLIDER_BACKLIGHT_STRENGTH_MIN,
+        renderer_constants::SLIDER_BACKLIGHT_STRENGTH_MAX,
+        &mut backlight_strength,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetBacklightStrength(backlight_strength),
         ));
     }
 }

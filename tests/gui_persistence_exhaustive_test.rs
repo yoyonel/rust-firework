@@ -125,8 +125,11 @@ fn test_exhaustive_renderer_config_all_fields_persistence() -> anyhow::Result<()
     cfg.render_explosions = true;
     cfg.dither_enabled = false;
     cfg.dither_strength = 2.45;
+    cfg.volumetric_lighting_enabled = false;
     cfg.volumetric_lighting_hysteresis_enabled = false;
     cfg.volumetric_lighting_fade_in_ms = 85.0;
+    cfg.backlight_enabled = false;
+    cfg.backlight_strength = 2.15;
 
     cfg.save_to_file(path_str)?;
 
@@ -145,8 +148,11 @@ fn test_exhaustive_renderer_config_all_fields_persistence() -> anyhow::Result<()
     assert!(loaded_cfg.render_explosions);
     assert!(!loaded_cfg.dither_enabled);
     assert_eq!(loaded_cfg.dither_strength, 2.45);
+    assert!(!loaded_cfg.volumetric_lighting_enabled);
     assert!(!loaded_cfg.volumetric_lighting_hysteresis_enabled);
     assert_eq!(loaded_cfg.volumetric_lighting_fade_in_ms, 85.0);
+    assert!(!loaded_cfg.backlight_enabled);
+    assert_eq!(loaded_cfg.backlight_strength, 2.15);
 
     Ok(())
 }
