@@ -48,6 +48,7 @@ pub struct SmokeRenderer {
     loc_erosion_scale: i32,
     loc_erosion_edge_width: i32,
     loc_erosion_edge_color: i32,
+    loc_render_mask: i32,
     flow_distortion_strength: f32,
     flow_animation_speed: f32,
     erosion_enabled: bool,
@@ -60,6 +61,10 @@ pub struct SmokeRenderer {
     tex_ratio: f32,
 
     max_smoke_particles: usize,
+
+    smoke_lighting_enabled: bool,
+    smoke_scattering_intensity: f32,
+    smoke_ambient_flash: f32,
 
     // Triple buffering
     current_frame: usize,
@@ -93,6 +98,8 @@ impl SmokeRenderer {
             unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeWidth")) };
         let loc_erosion_edge_color =
             unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeColor")) };
+        let loc_render_mask =
+            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_RenderMask")) };
 
         let texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(sprite_tex);
@@ -111,6 +118,16 @@ impl SmokeRenderer {
                 gl::UniformBlockBinding(shader_program, block_idx, 0);
             }
 
+            let lighting_block_idx =
+                gl::GetUniformBlockIndex(shader_program, cstr!("LightingBlock"));
+            if lighting_block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(
+                    shader_program,
+                    lighting_block_idx,
+                    constants::LIGHTING_UBO_BINDING_INDEX,
+                );
+            }
+
             if loc_smoke_tex != -1 {
                 gl::Uniform1i(loc_smoke_tex, 0);
             }
@@ -125,9 +142,7 @@ impl SmokeRenderer {
             label_gl_object!(gl::TEXTURE, texture_id, "Tex_Smoke_Sprite");
             label_gl_object!(gl::TEXTURE, flow_map_texture_id, "Tex_Smoke_FlowMap");
             label_gl_object!(gl::TEXTURE, noise_texture_id, "Tex_Noise_Dissolve");
-        }
 
-        unsafe {
             let (vaos, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
                 Self::setup_gpu_buffers(max_smoke_particles);
 
@@ -146,6 +161,7 @@ impl SmokeRenderer {
                 loc_erosion_scale,
                 loc_erosion_edge_width,
                 loc_erosion_edge_color,
+                loc_render_mask,
                 flow_distortion_strength:
                     crate::physic_engine::constants::DEFAULT_FLOW_DISTORTION_STRENGTH,
                 flow_animation_speed: crate::physic_engine::constants::DEFAULT_FLOW_ANIMATION_SPEED,
@@ -160,6 +176,9 @@ impl SmokeRenderer {
                 noise_texture_id,
                 tex_ratio: tex_width as f32 / tex_height as f32,
                 max_smoke_particles,
+                smoke_lighting_enabled: constants::DEFAULT_SMOKE_LIGHTING_ENABLED,
+                smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
+                smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -293,9 +312,9 @@ impl SmokeRenderer {
         // 2. Disable Depth Writing to prevent Z-fighting and quad intersection artifacts
         gl::DepthMask(gl::FALSE);
 
-        // 3. Only write to Color Attachment 0 (Scene), disable writes to Attachment 1 (Bloom)
+        // 3. Write to Color Attachment 0 (Scene) and Attachment 1 (Bloom)
         gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
-        gl::ColorMaski(1, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+        gl::ColorMaski(1, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
 
         if *active_shader != self.shader_program {
             gl::UseProgram(self.shader_program);
@@ -348,6 +367,10 @@ impl SmokeRenderer {
             );
         }
 
+        if self.loc_render_mask != -1 {
+            gl::Uniform1i(self.loc_render_mask, 0);
+        }
+
         gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, count as i32);
 
         // Restore depth write and color mask for attachment 1
@@ -363,6 +386,102 @@ impl SmokeRenderer {
         self.fences[self.current_frame] = Some(sync);
 
         self.current_frame = (self.current_frame + 1) % 3;
+    }
+
+    /// Dessine le masque alpha de fumée pour la backlight écran (§4.1 ADR).
+    ///
+    /// # Safety
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn render_smoke_mask(
+        &mut self,
+        count: usize,
+        mask_fbo: u32,
+        mask_width: i32,
+        mask_height: i32,
+    ) {
+        crate::tracy_zone!("SmokeRenderer::render_smoke_mask", 0x444444);
+
+        // Bind dedicated mask FBO at 1/2 resolution
+        gl::BindFramebuffer(gl::FRAMEBUFFER, mask_fbo);
+        gl::Viewport(0, 0, mask_width, mask_height);
+
+        // Clear mask to 0.0 EVERY frame (Mandatory: §4.1 ADR Non-Negotiable 1)
+        gl::ClearColor(0.0, 0.0, 0.0, 0.0);
+        gl::Clear(gl::COLOR_BUFFER_BIT);
+
+        if count == 0 {
+            return;
+        }
+
+        push_debug_group!(32, "Draw Smoke Alpha Mask");
+
+        // Additive blending (ONE, ONE) for accumulating smoke coverage
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::ONE, gl::ONE);
+        gl::DepthMask(gl::FALSE);
+        gl::Disable(gl::DEPTH_TEST);
+
+        gl::UseProgram(self.shader_program);
+        gl::BindVertexArray(self.vaos[self.current_frame]);
+
+        // Bind textures
+        gl::ActiveTexture(gl::TEXTURE0);
+        gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
+
+        gl::ActiveTexture(gl::TEXTURE1);
+        gl::BindTexture(gl::TEXTURE_2D, self.flow_map_texture_id);
+
+        gl::ActiveTexture(gl::TEXTURE2);
+        gl::BindTexture(gl::TEXTURE_2D, self.noise_texture_id);
+
+        if self.loc_flow_distortion_strength != -1 {
+            gl::Uniform1f(
+                self.loc_flow_distortion_strength,
+                self.flow_distortion_strength,
+            );
+        }
+        if self.loc_flow_animation_speed != -1 {
+            gl::Uniform1f(self.loc_flow_animation_speed, self.flow_animation_speed);
+        }
+
+        if self.loc_erosion_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_erosion_enabled,
+                if self.erosion_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_erosion_scale != -1 {
+            gl::Uniform1f(self.loc_erosion_scale, self.erosion_scale);
+        }
+        if self.loc_erosion_edge_width != -1 {
+            gl::Uniform1f(self.loc_erosion_edge_width, self.erosion_edge_width);
+        }
+        if self.loc_erosion_edge_color != -1 {
+            gl::Uniform3f(
+                self.loc_erosion_edge_color,
+                self.erosion_edge_color[0],
+                self.erosion_edge_color[1],
+                self.erosion_edge_color[2],
+            );
+        }
+
+        // Activate mask rendering mode (shader exits early, bypassing volumetric lights loop)
+        if self.loc_render_mask != -1 {
+            gl::Uniform1i(self.loc_render_mask, 1);
+        }
+
+        gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, count as i32);
+
+        // Reset mask mode back to 0
+        if self.loc_render_mask != -1 {
+            gl::Uniform1i(self.loc_render_mask, 0);
+        }
+
+        // Restore standard alpha blending and depth test
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        gl::Enable(gl::DEPTH_TEST);
+
+        pop_debug_group!();
     }
 
     /// Libère les ressources GPU (VAO, VBO, shaders, textures).
@@ -426,11 +545,22 @@ impl SmokeRenderer {
                     gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEdgeWidth"));
                 self.loc_erosion_edge_color =
                     gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEdgeColor"));
+                self.loc_render_mask =
+                    gl::GetUniformLocation(self.shader_program, cstr!("u_RenderMask"));
 
                 gl::UseProgram(self.shader_program);
                 let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
                 if block_idx != gl::INVALID_INDEX {
                     gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                }
+                let lighting_block_idx =
+                    gl::GetUniformBlockIndex(self.shader_program, cstr!("LightingBlock"));
+                if lighting_block_idx != gl::INVALID_INDEX {
+                    gl::UniformBlockBinding(
+                        self.shader_program,
+                        lighting_block_idx,
+                        constants::LIGHTING_UBO_BINDING_INDEX,
+                    );
                 }
                 if self.loc_smoke_tex != -1 {
                     gl::Uniform1i(self.loc_smoke_tex, 0);
@@ -641,6 +771,16 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
         self.render_smoke_with_persistent_buffer(count, active_shader, active_texture);
     }
 
+    unsafe fn render_smoke_mask(
+        &mut self,
+        count: usize,
+        mask_fbo: u32,
+        mask_width: i32,
+        mask_height: i32,
+    ) {
+        self.render_smoke_mask(count, mask_fbo, mask_width, mask_height);
+    }
+
     fn get_shader_program(&self) -> u32 {
         self.shader_program
     }
@@ -659,6 +799,12 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
 
     fn render_order(&self) -> u32 {
         10
+    }
+
+    fn set_smoke_lighting(&mut self, enabled: bool, intensity: f32, ambient_flash: f32) {
+        self.smoke_lighting_enabled = enabled;
+        self.smoke_scattering_intensity = intensity;
+        self.smoke_ambient_flash = ambient_flash;
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {

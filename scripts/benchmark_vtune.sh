@@ -3,6 +3,12 @@ set -euo pipefail
 
 echo "--- 🚀 Running VTune Memory Access Benchmark ---"
 
+cleanup() {
+	pkill -f "./target/release/fireworks_sim" 2>/dev/null || true
+	pkill -f "./target/profiling/fireworks_sim" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 RES_DIR="/tmp/vtune_results_memory_$(date +%s)"
 
 # Source Intel vars if they exist

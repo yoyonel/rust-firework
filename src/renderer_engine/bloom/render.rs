@@ -56,7 +56,29 @@ impl BloomPass {
         gl::ActiveTexture(gl::TEXTURE1);
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
 
+        // Bind smoke mask texture (Screen-Space Backlight)
+        gl::ActiveTexture(gl::TEXTURE2);
+        gl::BindTexture(gl::TEXTURE_2D, self.smoke_mask_texture);
+
         gl::Uniform1i(self.loc_tone_mapping_mode, self.tone_mapping_mode as i32);
+        if self.loc_dither_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_dither_enabled,
+                if self.dither_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_dither_strength != -1 {
+            gl::Uniform1f(self.loc_dither_strength, self.dither_strength);
+        }
+        if self.loc_backlight_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_backlight_enabled,
+                if self.backlight_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_backlight_strength != -1 {
+            gl::Uniform1f(self.loc_backlight_strength, self.backlight_strength);
+        }
 
         self.render_fullscreen_quad();
         pop_debug_group!();
@@ -106,6 +128,32 @@ impl BloomPass {
         // Bind bloom texture
         gl::ActiveTexture(gl::TEXTURE1);
         gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
+
+        // Bind smoke mask texture (Screen-Space Backlight)
+        gl::ActiveTexture(gl::TEXTURE2);
+        gl::BindTexture(gl::TEXTURE_2D, self.smoke_mask_texture);
+
+        if self.loc_comparison_dither_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_comparison_dither_enabled,
+                if self.dither_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_comparison_dither_strength != -1 {
+            gl::Uniform1f(self.loc_comparison_dither_strength, self.dither_strength);
+        }
+        if self.loc_comparison_backlight_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_comparison_backlight_enabled,
+                if self.backlight_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_comparison_backlight_strength != -1 {
+            gl::Uniform1f(
+                self.loc_comparison_backlight_strength,
+                self.backlight_strength,
+            );
+        }
 
         self.render_fullscreen_quad();
 
@@ -300,6 +348,8 @@ impl BloomPass {
         gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
         gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
         gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
+        gl::DeleteFramebuffers(1, &self.smoke_mask_fbo);
+        gl::DeleteTextures(1, &self.smoke_mask_texture);
 
         // Recreate with new size
         let new_bloom = Self::new(width, height).expect("Failed to recreate bloom framebuffers");
@@ -311,6 +361,10 @@ impl BloomPass {
         self.hdr_depth_rbo = new_bloom.hdr_depth_rbo;
         self.ping_pong_fbo = new_bloom.ping_pong_fbo;
         self.ping_pong_textures = new_bloom.ping_pong_textures;
+        self.smoke_mask_fbo = new_bloom.smoke_mask_fbo;
+        self.smoke_mask_texture = new_bloom.smoke_mask_texture;
+        self.mask_width = new_bloom.mask_width;
+        self.mask_height = new_bloom.mask_height;
 
         // Update blur dimensions
         self.blur_width = new_bloom.blur_width;

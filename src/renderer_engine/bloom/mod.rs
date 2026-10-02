@@ -42,6 +42,10 @@ pub struct BloomPass {
     loc_kawase_down_halfpixel: GLint,
     loc_kawase_up_halfpixel: GLint,
     loc_tone_mapping_mode: GLint,
+    loc_dither_enabled: GLint,
+    loc_dither_strength: GLint,
+    loc_backlight_enabled: GLint,
+    loc_backlight_strength: GLint,
 
     // Configuration
     pub intensity: f32,
@@ -50,12 +54,26 @@ pub struct BloomPass {
     pub downsample_factor: u32, // 1 = full res, 2 = half res, 4 = quarter res
     pub blur_method: BlurMethod,
     pub tone_mapping_mode: ToneMappingMode,
+    pub dither_enabled: bool,
+    pub dither_strength: f32,
+    pub backlight_enabled: bool,
+    pub backlight_strength: f32,
 
     // Comparison mode
     pub comparison_mode: bool,
     comparison_fbo: GLuint,
     comparison_textures: [GLuint; 5], // One texture per tone mapping
     comparison_shader: GLuint,
+    loc_comparison_dither_enabled: GLint,
+    loc_comparison_dither_strength: GLint,
+    loc_comparison_backlight_enabled: GLint,
+    loc_comparison_backlight_strength: GLint,
+
+    // Smoke mask framebuffer and texture (Screen-Space Backlight)
+    pub smoke_mask_fbo: GLuint,
+    pub smoke_mask_texture: GLuint,
+    pub mask_width: i32,
+    pub mask_height: i32,
 
     // Window size
     width: i32,

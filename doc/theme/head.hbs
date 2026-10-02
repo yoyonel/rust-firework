@@ -128,6 +128,30 @@
     height: auto !important;
   }
 
+  /* Zoomable images in main content */
+  #content img, main img, .content img {
+    cursor: zoom-in;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    border-radius: 6px;
+    border: 1px solid transparent;
+  }
+
+  #content img:hover, main img:hover, .content img:hover {
+    border-color: rgba(56, 189, 248, 0.6);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    transform: scale(1.005);
+  }
+
+  .mermaid-modal-content img {
+    max-width: 95vw !important;
+    max-height: 85vh !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain;
+    border-radius: 6px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+  }
+
   @keyframes mermaidFadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -164,7 +188,7 @@
     modal.className = 'mermaid-modal-overlay';
     modal.innerHTML = `
       <div class="mermaid-modal-header">
-        <span>🔍 <b>Vue Plein Écran</b> (Double-clic ou touche <b>Échap</b> pour fermer)</span>
+        <span>🔍 <b>Vue Plein Écran</b> (Clic ou touche <b>Échap</b> pour fermer)</span>
         <button class="mermaid-modal-close-btn" id="mermaid-modal-close">✕ Fermer</button>
       </div>
       <div class="mermaid-modal-content" id="mermaid-modal-content"></div>
@@ -204,6 +228,36 @@
     content.appendChild(clone);
 
     modal.classList.add('active');
+  }
+
+  function setupImageZoom() {
+    setupModal();
+    const images = document.querySelectorAll("#content img, main img, .content img");
+    images.forEach((img) => {
+      if (img.dataset.zoomAttached) return;
+      img.dataset.zoomAttached = "true";
+      img.title = "Cliquer pour agrandir en plein écran";
+
+      img.addEventListener("click", () => {
+        setupModal();
+        const modal = document.getElementById('mermaid-modal');
+        const content = document.getElementById('mermaid-modal-content');
+        content.innerHTML = '';
+
+        const clone = document.createElement('img');
+        clone.src = img.src;
+        clone.alt = img.alt || 'Visualisation plein écran';
+        clone.title = "Cliquer ou touche Échap pour fermer";
+        clone.style.cursor = "zoom-out";
+        clone.addEventListener("click", () => {
+          modal.classList.remove('active');
+          content.innerHTML = '';
+        });
+
+        content.appendChild(clone);
+        modal.classList.add('active');
+      });
+    });
   }
 
   async function renderMermaid() {
@@ -257,27 +311,50 @@
     }
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", renderMermaid);
-  } else {
-    renderMermaid();
+  function ensureSyntaxHighlighting() {
+    if (window.hljs) {
+      document.querySelectorAll("pre code").forEach((block) => {
+        if (!block.classList.contains("language-mermaid")) {
+          if (typeof hljs.highlightBlock === "function") {
+            hljs.highlightBlock(block);
+          } else if (typeof hljs.highlightElement === "function") {
+            hljs.highlightElement(block);
+          }
+          block.classList.add("hljs");
+        }
+      });
+    }
   }
+
+  function initPage() {
+    renderMermaid();
+    setupImageZoom();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initPage);
+  } else {
+    initPage();
+  }
+
+  window.addEventListener("load", ensureSyntaxHighlighting);
 </script>
 
 <!-- MathJax Dynamic Loader -->
 <script type="text/javascript">
   window.MathJax = {
     tex: {
-      inlineMath: [['\\(', '\\)']],
-      displayMath: [['\\[', '\\]'], ['$$', '$$']],
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']],
       processEscapes: true
     },
     options: {
-      ignoreHtmlClass: 'tex2jax_ignore',
-      processHtmlClass: 'tex2jax_process'
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
     }
   };
 </script>
 <script type="text/javascript" id="MathJax-script" async
   src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js">
 </script>
+
+

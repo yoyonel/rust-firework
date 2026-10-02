@@ -94,6 +94,23 @@ pub enum RendererCommand {
     SetBloomIterations(u32),
     SetBloomDownsample(u32),
     SetBloomBlurMethod(BlurMethod),
+    SetVolumetricLightingEnabled(bool),
+    SetSmokeLightingEnabled(bool),
+    SetSmokeScatteringIntensity(f32),
+    SetSmokeAmbientFlash(f32),
+    ResetSmokeLightingDefaults,
+    SetSkyHazeEnabled(bool),
+    SetSkyHazeIntensity(f32),
+    SetSkyHazeAmbientFlash(f32),
+    ResetSkyHazeDefaults,
+    SetDitherEnabled(bool),
+    SetDitherStrength(f32),
+    ResetDitherDefaults,
+    SetVolumetricLightingHysteresisEnabled(bool),
+    SetVolumetricLightingFadeInMs(f32),
+    SetBacklightEnabled(bool),
+    SetBacklightStrength(f32),
+    ResetBacklightDefaults,
 }
 
 /// Commands sent from UI to Smoke simulation engine without dynamic allocations.
@@ -127,6 +144,8 @@ pub enum GuiCommand {
     SaveSession,
     ReloadSession,
     SetRocketCursor(bool),
+    TogglePause,
+    SetPause(bool),
 }
 
 /// Unified domain command enum decoupling UI from core engines.

@@ -153,6 +153,7 @@ where
     // Loop state
     pub dt_accumulator: f32,
     pub render_alpha: f32,
+    pub paused: bool,
     profiler: Profiler,
     sampler: AdaptiveSampler,
     sampled_fps: Vec<f32>,
@@ -254,6 +255,7 @@ where
             window_last_size: window_size,
             dt_accumulator: crate::physic_engine::constants::FIXED_TIMESTEP_DELTA,
             render_alpha: 0.0,
+            paused: false,
             profiler: Profiler::new(200),
             sampler: AdaptiveSampler::new(std::time::Duration::from_secs(5), 200, 60.0),
             sampled_fps: Vec::with_capacity(200),
@@ -436,7 +438,9 @@ where
             "simulator::physics",
             0xFF5500, // Orange
             {
-                self.update_simulation(delta);
+                if !self.paused {
+                    self.update_simulation(delta);
+                }
                 if !self.audio_stress_scene.enabled {
                     if (self.console.open || self.show_audio_diagnostic)
                         && self.last_audio_debug_update.elapsed()
@@ -846,6 +850,20 @@ where
         self.audio_engine.stop_audio_thread();
     }
 
+    /// Bascule l'état de pause de la simulation physique / horloge (<SPACE>)
+    pub fn toggle_pause(&mut self) {
+        self.paused = !self.paused;
+        if !self.paused {
+            // Réinitialise last_time et dt_accumulator pour éviter tout saut brutal / spiral of death
+            self.last_time = Instant::now();
+            self.dt_accumulator = 0.0;
+        }
+        log::info!(
+            "Simulation {}",
+            if self.paused { "PAUSED" } else { "RESUMED" }
+        );
+    }
+
     /// Helper pour avancer la simulation d'un pas de temps fixe (uniquement pour les tests)
     pub fn step_custom_dt(&mut self, dt: f32) {
         self.update_simulation(dt);
@@ -868,6 +886,14 @@ where
     #[cfg(any(test, feature = "interactive_tests"))]
     pub fn get_renderer_engine(&self) -> &R {
         &self.renderer_engine
+    }
+
+    /// Helper pour obtenir la configuration renderer (réservé aux tests)
+    #[cfg(any(test, feature = "interactive_tests"))]
+    pub fn get_renderer_config(
+        &self,
+    ) -> std::sync::Arc<std::sync::RwLock<crate::renderer_engine::RendererConfig>> {
+        self.renderer_config.clone()
     }
 
     /// Helper pour obtenir les moyennes de synchronisation de debug (uniquement pour les tests)

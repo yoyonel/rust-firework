@@ -224,6 +224,17 @@ where
                 glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     self.window_engine.set_should_close(true);
                 }
+                glfw::WindowEvent::Key(Key::Space, _, Action::Press, _) if !self.console.open => {
+                    let imgui_capturing = self
+                        .window_engine
+                        .get_imgui_system_mut()
+                        .context
+                        .io()
+                        .want_capture_keyboard;
+                    if !imgui_capturing {
+                        self.toggle_pause();
+                    }
+                }
                 glfw::WindowEvent::Key(Key::R, _, Action::Press, _) if !self.console.open => {
                     reload_config = true;
                 }
@@ -396,6 +407,9 @@ where
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
         self.renderer_engine.bloom_pass_mut().comparison_mode = comparison_active;
+
+        // Sync simulation pause state to renderer to freeze lighting evolution during pause
+        self.renderer_engine.set_simulation_paused(self.paused);
     }
 
     pub(crate) fn update_frame_timing(&mut self) -> f32 {

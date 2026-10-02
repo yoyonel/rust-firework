@@ -229,6 +229,9 @@ impl Rocket {
 
     #[inline(always)]
     fn update_movement(&mut self, dt: f32, gravity: Vec2) {
+        if self.exploded {
+            return;
+        }
         self.vel += gravity * dt;
         self.pos += self.vel * dt;
     }
@@ -617,5 +620,26 @@ mod tests {
             expected_boosted_displacement,
             diff
         );
+    }
+
+    #[test]
+    fn test_rocket_pos_frozen_after_explosion() {
+        let mut rng = rand::rng();
+        let mut rocket = Rocket::new(&mut rng);
+        rocket.active = true;
+        rocket.exploded = true;
+        rocket.pos = Vec2::new(150.0, 300.0);
+        rocket.vel = Vec2::new(10.0, -20.0);
+
+        let mut particles_pools = ParticlesPoolsForRockets::new(100, 100, 100);
+        let config = PhysicConfig::default();
+        let explosion_shape = ExplosionShape::default();
+
+        // Calling update multiple times should not change rocket.pos
+        rocket.update(0.1, &mut particles_pools, &config, &explosion_shape);
+        assert_eq!(rocket.pos, Vec2::new(150.0, 300.0));
+
+        rocket.update(0.5, &mut particles_pools, &config, &explosion_shape);
+        assert_eq!(rocket.pos, Vec2::new(150.0, 300.0));
     }
 }

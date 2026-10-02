@@ -17,6 +17,7 @@ out float vAlpha;
 out float vIntensity;
 out vec3 vColor;
 out float vNormalizedAge;
+out vec2 vWorldPos;
 
 layout (std140) uniform GlobalData {
     vec2 uSize;
@@ -43,6 +44,7 @@ void main() {
 
     // Translate to world space
     vec2 worldPos = aPosition.xy + rotatedQuad;
+    vWorldPos = worldPos;
 
     // Screen clip-space transform (-1.0 to 1.0)
     float x = (worldPos.x / uSize.x) * 2.0 - 1.0;

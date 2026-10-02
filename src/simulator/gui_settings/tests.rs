@@ -566,6 +566,77 @@ fn test_ui_state_feedback_loop_renderer() {
         crate::renderer_engine::config::BlurMethod::Kawase,
         "Renderer bloom_blur_method"
     );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetDitherEnabled(false)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().dither_enabled,
+        false,
+        "Renderer dither_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetDitherStrength(1.75)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().dither_strength,
+        1.75,
+        "Renderer dither_strength"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingEnabled(false)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_enabled,
+        false,
+        "Renderer volumetric_lighting_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingHysteresisEnabled(
+            false
+        )),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_hysteresis_enabled,
+        false,
+        "Renderer volumetric_lighting_hysteresis_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingFadeInMs(120.0)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_fade_in_ms,
+        120.0,
+        "Renderer volumetric_lighting_fade_in_ms"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetBacklightEnabled(false)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().backlight_enabled,
+        false,
+        "Renderer backlight_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetBacklightStrength(2.25)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .backlight_strength,
+        2.25,
+        "Renderer backlight_strength"
+    );
 }
 
 #[test]

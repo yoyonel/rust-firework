@@ -56,6 +56,22 @@ pub const DEFAULT_BLOOM_BLUR_METHOD: BlurMethod = BlurMethod::Gaussian;
 /// - **System influence:** Modulates color contrast, highlight compression, and overall visual mood.
 pub const DEFAULT_TONE_MAPPING_MODE: ToneMappingMode = ToneMappingMode::KhronosPBR;
 
+/// Default post-processing dither enable flag.
+///
+/// - **Unit:** boolean
+/// - **Technical meaning:** Enables or disables static interleaved gradient noise (IGN) anti-banding dither.
+/// - **Bounds:** `true` or `false`.
+/// - **System influence:** Dissolves color banding steps on dark halos post-gamma.
+pub const DEFAULT_DITHER_ENABLED: bool = true;
+
+/// Default post-processing dither strength (amplitude in 8-bit LSB units).
+///
+/// - **Unit:** LSB amplitude (1/255 scale)
+/// - **Technical meaning:** Peak-to-peak noise amplitude added to post-gamma LDR signal.
+/// - **Bounds:** `0.0` to `5.0`.
+/// - **System influence:** 0.6 LSB preserves pure black zero while smoothing halo gradients.
+pub const DEFAULT_DITHER_STRENGTH: f32 = 0.6;
+
 /// Minimum float threshold epsilon to skip tiny render state position interpolation offsets.
 pub const RENDER_INTERPOLATION_EPSILON: f32 = 0.00001;
 
@@ -230,6 +246,13 @@ pub const SLIDER_BLOOM_ITERATIONS_MAX: u32 = 10;
 pub const SLIDER_BLOOM_DOWNSAMPLE_MIN: u32 = 1;
 pub const SLIDER_BLOOM_DOWNSAMPLE_MAX: u32 = 8;
 
+pub const SLIDER_DITHER_STRENGTH_MIN: f32 = 0.0;
+pub const SLIDER_DITHER_STRENGTH_MAX: f32 = 3.0;
+
+pub const DITHER_PRESET_SUBTLE: f32 = 0.6;
+pub const DITHER_PRESET_STRONG: f32 = 1.5;
+pub const DITHER_PRESET_EXAGGERATED: f32 = 3.0;
+
 /// Color RGBA tuple for the subtle translucent direction vector arrow in the smoke preview viewport.
 pub const SMOKE_PREVIEW_ARROW_COLOR: [f32; 4] = [0.0, 0.85, 1.0, 0.40];
 
@@ -275,6 +298,93 @@ pub const TEXTURE_SMOKE_PARTICLE_PATH: &str =
 
 /// Global UBO binding index for OpenGL shaders.
 pub const GLOBAL_UBO_BINDING_INDEX: u32 = 0;
+
+/// Volumetric lighting UBO binding index for smoke shaders.
+pub const LIGHTING_UBO_BINDING_INDEX: u32 = 1;
+
+/// Maximum number of volumetric point light sources processed per frame.
+pub const MAX_VOLUMETRIC_LIGHTS: usize = 16;
+
+/// Default master toggle enabling volumetric lighting system.
+pub const DEFAULT_VOLUMETRIC_LIGHTING_ENABLED: bool = true;
+
+/// Default volumetric smoke in-scattering intensity multiplier.
+pub const DEFAULT_SMOKE_SCATTERING_INTENSITY: f32 = 1.0;
+
+/// Default global ambient flash intensity for volumetric smoke.
+pub const DEFAULT_SMOKE_AMBIENT_FLASH: f32 = 0.25;
+
+/// Default flag enabling volumetric smoke lighting.
+pub const DEFAULT_SMOKE_LIGHTING_ENABLED: bool = true;
+
+/// Path to the atmospheric sky haze fullscreen vertex shader.
+pub const SHADER_SKY_HAZE_VERTEX_PATH: &str = "assets/shaders/bloom/fullscreen_quad.vert.glsl";
+
+/// Path to the atmospheric sky haze fragment shader.
+pub const SHADER_SKY_HAZE_FRAGMENT_PATH: &str = "assets/shaders/sky_haze.frag.glsl";
+
+/// Default flag enabling atmospheric sky haze participating media.
+pub const DEFAULT_SKY_HAZE_ENABLED: bool = true;
+
+/// Default atmospheric sky haze intensity multiplier.
+pub const DEFAULT_SKY_HAZE_INTENSITY: f32 = 0.6;
+
+/// Default ambient detonation flash intensity for atmospheric sky haze.
+pub const DEFAULT_SKY_HAZE_AMBIENT_FLASH: f32 = 0.35;
+
+/// Volumetric point light decay rate per frame (~0.8s smooth dissipation).
+pub const VOLUMETRIC_LIGHT_DECAY_RATE: f32 = 0.94;
+
+/// Volumetric point light minimum intensity threshold for deactivation.
+pub const VOLUMETRIC_LIGHT_MIN_INTENSITY: f32 = 0.001;
+
+/// Volumetric point light initial radius in simulation space.
+pub const VOLUMETRIC_LIGHT_INITIAL_RADIUS: f32 = 450.0;
+
+/// Volumetric point light radial expansion factor per frame.
+pub const VOLUMETRIC_LIGHT_RADIUS_EXPANSION: f32 = 1.003;
+
+/// Flash ambient energy multiplier per unit of active light intensity.
+pub const VOLUMETRIC_FLASH_ENERGY_SCALE: f32 = 0.015;
+
+/// Maximum cap for ambient detonation flash intensity.
+pub const VOLUMETRIC_FLASH_MAX_CAP: f32 = 0.40;
+
+/// Exponential moving average persistence for detonation flash ambient glow.
+pub const VOLUMETRIC_FLASH_EMA_DECAY: f32 = 0.90;
+
+/// Exponential moving average target blend weight for detonation flash ambient glow.
+pub const VOLUMETRIC_FLASH_EMA_WEIGHT: f32 = 0.10;
+
+// ── Volumetric Lighting Temporal Stabilization (§5 ADR) ─────────────
+/// Default enable flag for volumetric lighting temporal hysteresis eviction.
+pub const DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED: bool = true;
+
+/// Eviction threshold factor for volumetric lighting slots (1.2x).
+/// A living light cannot be replaced unless candidate intensity > 1.2 * occupant.
+pub const VOLUMETRIC_LIGHT_EVICTION_HYSTERESIS_FACTOR: f32 = 1.2;
+
+/// Default fade-in duration for new volumetric lights entering a slot (in milliseconds).
+pub const DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS: f32 = 50.0;
+
+/// Slider minimum bound for volumetric light fade-in duration (ms).
+pub const SLIDER_VOLUMETRIC_FADE_IN_MS_MIN: f32 = 0.0;
+
+/// Slider maximum bound for volumetric light fade-in duration (ms).
+pub const SLIDER_VOLUMETRIC_FADE_IN_MS_MAX: f32 = 200.0;
+
+// ── Screen-Space Backlight (§4.1 ADR) ────────────────────────────────
+/// Default enable flag for screen-space smoke backlight illumination.
+pub const DEFAULT_BACKLIGHT_ENABLED: bool = true;
+
+/// Default strength multiplier for screen-space backlight effect.
+pub const DEFAULT_BACKLIGHT_STRENGTH: f32 = 1.0;
+
+/// Slider minimum bound for backlight strength.
+pub const SLIDER_BACKLIGHT_STRENGTH_MIN: f32 = 0.0;
+
+/// Slider maximum bound for backlight strength.
+pub const SLIDER_BACKLIGHT_STRENGTH_MAX: f32 = 10.0;
 
 // ── Smoke Preview Viewport Rendering ─────────────────────────────────
 /// Smoke preview FBO width (pixels).

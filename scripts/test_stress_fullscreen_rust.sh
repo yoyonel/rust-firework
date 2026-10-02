@@ -47,6 +47,17 @@ rm -f "$LOG_FILE" "$PROGRESS_FILE" "$STACKS_FILE"
 : >"$LOG_FILE"
 : >"$PROGRESS_FILE"
 
+APP_PID=""
+cleanup() {
+    if [ -n "${APP_PID:-}" ] && kill -0 "$APP_PID" 2>/dev/null; then
+        echo -e "\n${CYAN}[CLEANUP]${NC} Terminating application..."
+        kill "$APP_PID" 2>/dev/null || true
+        wait "$APP_PID" 2>/dev/null || true
+    fi
+    pkill -f "$APP_PATH" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 echo -e "\n${CYAN}[INIT]${NC} Starting application..."
 export RUST_LOG=info
 stdbuf -oL -eL "$APP_PATH" > >(tee "$LOG_FILE") 2>&1 &
@@ -220,12 +231,6 @@ echo -e "${CYAN}║${NC} Crash detected:    $(if $CRASH_DETECTED; then echo -e "
 echo -e "${CYAN}║${NC} Total time:        ${TOTAL_TIME}s"
 echo -e "${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"
 
-if kill -0 $APP_PID 2>/dev/null; then
-    echo -e "\n${CYAN}[CLEANUP]${NC} Terminating application..."
-    kill $APP_PID 2>/dev/null || true
-fi
-
-wait $APP_PID 2>/dev/null || true
 
 if $CRASH_DETECTED || [ $HANG_COUNT -gt 0 ]; then
     exit 1

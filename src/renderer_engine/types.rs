@@ -180,3 +180,56 @@ impl ParticleGPU {
         }
     }
 }
+
+/// Point light representation sent to GPU for volumetric smoke in-scattering.
+/// Memory layout: position_radius (16 bytes) + color_intensity (16 bytes) = 32 bytes (std140 compatible).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PointLightGPU {
+    pub position_radius: [f32; 4], // xyz: world position, w: effective radius
+    pub color_intensity: [f32; 4], // rgb: light color, w: light intensity
+}
+
+unsafe impl bytemuck::Pod for PointLightGPU {}
+unsafe impl bytemuck::Zeroable for PointLightGPU {}
+
+/// std140 uniform block for volumetric lighting.
+/// Total size: 16 * 32 (512) + 16 (ambient) + 4 (num_active) + 4 (intensity) + 8 (padding) = 544 bytes.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct VolumetricLightingBlockGPU {
+    pub lights: [PointLightGPU; crate::renderer_engine::constants::MAX_VOLUMETRIC_LIGHTS],
+    pub ambient_light: [f32; 4],
+    pub num_active_lights: i32,
+    pub scattering_intensity: f32,
+    pub _padding: [i32; 2],
+}
+
+unsafe impl bytemuck::Pod for VolumetricLightingBlockGPU {}
+unsafe impl bytemuck::Zeroable for VolumetricLightingBlockGPU {}
+
+impl Default for VolumetricLightingBlockGPU {
+    fn default() -> Self {
+        Self {
+            lights: [PointLightGPU::default();
+                crate::renderer_engine::constants::MAX_VOLUMETRIC_LIGHTS],
+            ambient_light: [0.08, 0.08, 0.10, 0.0],
+            num_active_lights: 0,
+            scattering_intensity:
+                crate::renderer_engine::constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
+            _padding: [0; 2],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_volumetric_lighting_block_gpu_layout() {
+        assert_eq!(mem::size_of::<PointLightGPU>(), 32);
+        assert_eq!(mem::size_of::<VolumetricLightingBlockGPU>(), 544);
+        assert_eq!(mem::size_of::<VolumetricLightingBlockGPU>() % 16, 0);
+    }
+}

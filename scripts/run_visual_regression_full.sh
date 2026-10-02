@@ -13,6 +13,15 @@ echo "🧪 Running Exhaustive 120-Frame Pre-Merge Visual Regression Test Suite..
 # Ensure release binary is compiled
 cargo build --release
 
+SIM_PID=""
+cleanup() {
+    if [ -n "${SIM_PID:-}" ] && kill -0 "$SIM_PID" 2>/dev/null; then
+        kill "$SIM_PID" 2>/dev/null || true
+    fi
+    pkill -f "./target/release/fireworks_sim" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
 FAILURES=0
 TOTAL_TESTS=0
 
