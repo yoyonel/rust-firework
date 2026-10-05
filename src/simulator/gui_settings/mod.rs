@@ -684,6 +684,11 @@ impl GuiSettings {
                                     crate::renderer_engine::constants::DEFAULT_SKY_HAZE_INTENSITY;
                                 c.sky_haze_ambient_flash =
                                     crate::renderer_engine::constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH;
+                                c.sky_haze_falloff =
+                                    crate::renderer_engine::constants::DEFAULT_SKY_HAZE_FALLOFF;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSkyHazeFalloff(falloff) => {
+                                c.sky_haze_falloff = falloff;
                             }
                             crate::domain_contracts::RendererCommand::SetDitherEnabled(enabled) => {
                                 c.dither_enabled = enabled;
@@ -702,6 +707,21 @@ impl GuiSettings {
                             }
                             crate::domain_contracts::RendererCommand::SetVolumetricLightingFadeInMs(fade_ms) => {
                                 c.volumetric_lighting_fade_in_ms = fade_ms;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingRadius(radius) => {
+                                c.volumetric_lighting_radius = radius;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingDecayRate(decay) => {
+                                c.volumetric_lighting_decay_rate = decay;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingRadiusExpansion(expansion) => {
+                                c.volumetric_lighting_radius_expansion = expansion;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingFlashMaxCap(cap) => {
+                                c.volumetric_lighting_flash_max_cap = cap;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingDebug(debug) => {
+                                c.volumetric_lighting_debug = debug;
                             }
                             crate::domain_contracts::RendererCommand::SetBacklightEnabled(enabled) => {
                                 c.backlight_enabled = enabled;

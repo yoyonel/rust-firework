@@ -620,6 +620,73 @@ fn test_ui_state_feedback_loop_renderer() {
     );
     test_reflection!(
         h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingRadius(220.0)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_radius,
+        220.0,
+        "Renderer volumetric_lighting_radius"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingDecayRate(0.91)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_decay_rate,
+        0.91,
+        "Renderer volumetric_lighting_decay_rate"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingRadiusExpansion(1.005)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_radius_expansion,
+        1.005,
+        "Renderer volumetric_lighting_radius_expansion"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingFlashMaxCap(0.60)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_flash_max_cap,
+        0.60,
+        "Renderer volumetric_lighting_flash_max_cap"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingDebug(true)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_debug,
+        true,
+        "Renderer volumetric_lighting_debug"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSkyHazeFalloff(5.5)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().sky_haze_falloff,
+        5.5,
+        "Renderer sky_haze_falloff"
+    );
+    test_reflection!(
+        h,
         EngineCommand::Renderer(RendererCommand::SetBacklightEnabled(false)),
         |h: &TestHarness| h.renderer_config.read().unwrap().config().backlight_enabled,
         false,

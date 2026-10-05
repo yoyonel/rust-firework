@@ -595,6 +595,42 @@ where
             },
         );
 
+        // Atmospheric sky haze falloff
+        self.commands_registry.register_for_renderer(
+            "renderer.sky_haze.falloff",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.sky_haze.falloff [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(
+                            crate::renderer_engine::constants::SLIDER_SKY_HAZE_FALLOFF_MIN,
+                            crate::renderer_engine::constants::SLIDER_SKY_HAZE_FALLOFF_MAX,
+                        );
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetSkyHazeFalloff(clamped),
+                        ));
+                        format!("-> Sky haze atmospheric falloff set to: {:.1}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.sky_haze.falloff",
+            &format!(
+                "Usage: <{:.1}-{:.1}>",
+                crate::renderer_engine::constants::SLIDER_SKY_HAZE_FALLOFF_MIN,
+                crate::renderer_engine::constants::SLIDER_SKY_HAZE_FALLOFF_MAX,
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.sky_haze.falloff",
+            vec!["1.0", "2.0", "4.2", "6.0", "8.0", "10.0"],
+        );
+
         // Volumetric lighting hysteresis
         self.commands_registry.register_for_renderer(
             "renderer.lighting.hysteresis",
@@ -664,6 +700,184 @@ where
             vec!["0.0", "50.0", "100.0", "200.0"],
         );
 
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.radius",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.lighting.radius [float px]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MIN,
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MAX,
+                        );
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingRadius(
+                                clamped,
+                            ),
+                        ));
+                        format!(
+                            "-> Volumetric lighting initial radius set to: {:.1} px",
+                            clamped
+                        )
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.lighting.radius",
+            &format!(
+                "Usage: <{:.0}-{:.0} px>",
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MIN,
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MAX,
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.lighting.radius",
+            vec!["100.0", "150.0", "200.0", "300.0", "450.0"],
+        );
+
+        // Volumetric lighting decay rate
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.decay_rate",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.lighting.decay_rate [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_DECAY_RATE_MIN,
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_DECAY_RATE_MAX,
+                        );
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingDecayRate(
+                                clamped,
+                            ),
+                        ));
+                        format!("-> Volumetric lighting decay rate set to: {:.3}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.lighting.decay_rate",
+            &format!(
+                "Usage: <{:.2}-{:.2}>",
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_DECAY_RATE_MIN,
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_DECAY_RATE_MAX,
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.lighting.decay_rate",
+            vec!["0.85", "0.90", "0.94", "0.97", "0.99"],
+        );
+
+        // Volumetric lighting radius expansion
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.radius_expansion",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.lighting.radius_expansion [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MIN,
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MAX,
+                        );
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingRadiusExpansion(
+                                clamped,
+                            ),
+                        ));
+                        format!("-> Volumetric lighting radius expansion set to: {:.4}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.lighting.radius_expansion",
+            &format!(
+                "Usage: <{:.3}-{:.3}>",
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MIN,
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MAX,
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.lighting.radius_expansion",
+            vec!["1.000", "1.003", "1.005", "1.010", "1.020"],
+        );
+
+        // Volumetric lighting flash max cap
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.flash_max_cap",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.lighting.flash_max_cap [float]".into();
+                }
+                match trimmed.parse::<f32>() {
+                    Ok(val) => {
+                        let clamped = val.clamp(
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MIN,
+                            crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MAX,
+                        );
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingFlashMaxCap(
+                                clamped,
+                            ),
+                        ));
+                        format!("-> Volumetric lighting flash max cap set to: {:.2}", clamped)
+                    }
+                    Err(_) => format!("Invalid float value: '{}'", trimmed),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.lighting.flash_max_cap",
+            &format!(
+                "Usage: <{:.1}-{:.1}>",
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MIN,
+                crate::renderer_engine::constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MAX,
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.lighting.flash_max_cap",
+            vec!["0.10", "0.25", "0.40", "0.60", "1.00"],
+        );
+
+        // Volumetric lighting debug footprints wireframe
+        self.commands_registry.register_for_renderer(
+            "renderer.lighting.debug",
+            move |args, cmd_queue| {
+                let trimmed = args.trim();
+                let enable = match trimmed {
+                    "" => true,
+                    "1" | "true" | "on" => true,
+                    "0" | "false" | "off" => false,
+                    other => {
+                        return format!("Unknown argument '{}', expected true or false", other);
+                    }
+                };
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetVolumetricLightingDebug(enable),
+                ));
+                format!("-> Volumetric lighting debug wireframe: {}", enable)
+            },
+        );
+        self.commands_registry
+            .register_args("renderer.lighting.debug", vec!["true", "false"]);
+        self.commands_registry
+            .register_hint("renderer.lighting.debug", "Usage: <true|false>");
+
         // Current value getters
         let cfg = self.renderer_config.clone();
         self.commands_registry.register_current_value(
@@ -680,6 +894,60 @@ where
             .register_current_value("renderer.lighting.fade_in", move |_, _| {
                 cfg.read()
                     .map(|c| format!("{:.1}", c.volumetric_lighting_fade_in_ms))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.lighting.radius", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.1}", c.volumetric_lighting_radius))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_current_value(
+            "renderer.lighting.decay_rate",
+            move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.3}", c.volumetric_lighting_decay_rate))
+                    .unwrap_or("?".to_string())
+            },
+        );
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_current_value(
+            "renderer.lighting.radius_expansion",
+            move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.4}", c.volumetric_lighting_radius_expansion))
+                    .unwrap_or("?".to_string())
+            },
+        );
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_current_value(
+            "renderer.lighting.flash_max_cap",
+            move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.2}", c.volumetric_lighting_flash_max_cap))
+                    .unwrap_or("?".to_string())
+            },
+        );
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.lighting.debug", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.volumetric_lighting_debug))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.sky_haze.falloff", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.1}", c.sky_haze_falloff))
                     .unwrap_or("?".to_string())
             });
 

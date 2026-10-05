@@ -398,6 +398,73 @@ pub fn render_renderer_settings_tab(
         ));
     }
 
+    // GUI_PERSIST: renderer.config
+    let mut light_radius = cfg.volumetric_lighting_radius;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Light Radius px (`renderer.lighting.radius`)",
+        renderer_constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MAX,
+        &mut light_radius,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingRadius(light_radius),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut decay_rate = cfg.volumetric_lighting_decay_rate;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Decay Rate (`renderer.lighting.decay_rate`)",
+        renderer_constants::SLIDER_VOLUMETRIC_DECAY_RATE_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_DECAY_RATE_MAX,
+        &mut decay_rate,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingDecayRate(decay_rate),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut radius_expansion = cfg.volumetric_lighting_radius_expansion;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Radius Expansion (`renderer.lighting.radius_expansion`)",
+        renderer_constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MAX,
+        &mut radius_expansion,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingRadiusExpansion(radius_expansion),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut flash_cap = cfg.volumetric_lighting_flash_max_cap;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Flash Max Cap (`renderer.lighting.flash_max_cap`)",
+        renderer_constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MAX,
+        &mut flash_cap,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingFlashMaxCap(flash_cap),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut debug_footprints = cfg.volumetric_lighting_debug;
+    if ui.checkbox(
+        "Debug Footprints Wireframe (`renderer.lighting.debug`)",
+        &mut debug_footprints,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingDebug(debug_footprints),
+        ));
+    }
+
     ui.spacing();
     ui.text_colored(COLOR_HEADER, "--- Volumetric Smoke In-Scattering ---");
     ui.same_line();
@@ -496,6 +563,20 @@ pub fn render_renderer_settings_tab(
         cmd_queue.push(EngineCommand::Renderer(
             RendererCommand::SetSkyHazeAmbientFlash(haze_flash),
         ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut haze_falloff = cfg.sky_haze_falloff;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Atmospheric Falloff (`renderer.sky_haze.falloff`)",
+        renderer_constants::SLIDER_SKY_HAZE_FALLOFF_MIN,
+        renderer_constants::SLIDER_SKY_HAZE_FALLOFF_MAX,
+        &mut haze_falloff,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetSkyHazeFalloff(
+            haze_falloff,
+        )));
     }
 
     ui.spacing();
