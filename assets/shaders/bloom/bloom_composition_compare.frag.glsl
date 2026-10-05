@@ -94,8 +94,9 @@ void main() {
     vec3 hdrColor = sceneColor + bloomColor * uBloomIntensity;
     
     // Screen-space smoke backlight illumination (§4.1 ADR)
+    // Linear bloom response avoids expanding faint distant halo across entire screen
     if (uBacklightEnabled != 0) {
-        hdrColor += pow(bloomColor, vec3(0.5)) * texture(uSmokeMask, vTexCoord).r * uBacklightStrength;
+        hdrColor += bloomColor * texture(uSmokeMask, vTexCoord).r * uBacklightStrength;
     }
     
     // Apply each tone mapping and gamma correction

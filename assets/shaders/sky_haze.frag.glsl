@@ -25,6 +25,7 @@ layout (std140) uniform LightingBlock {
 
 uniform float u_HazeIntensity;
 uniform float u_AmbientFlash;
+uniform float u_HazeFalloff;
 
 void main() {
     // 1. World coordinates matching 2D simulation viewport (Y goes upward, 0 at bottom)
@@ -38,15 +39,15 @@ void main() {
         horizonFactor * horizonFactor
     );
 
-    // 3. Faint detonation flash across distant atmosphere (subtle, non-blinding)
-    vec3 ambientGlow = (u_AmbientLight.rgb + vec3(u_AmbientLight.a * 0.3)) * (u_AmbientFlash * 0.008);
+    // 3. Faint detonation flash across distant atmosphere (subtle, non-blinding, deep midnight)
+    vec3 ambientGlow = (u_AmbientLight.rgb + vec3(u_AmbientLight.a * 0.3)) * (u_AmbientFlash * 0.002);
     vec3 skyLight = baseSky + ambientGlow;
 
     // 4. Localized atmospheric haze glow around active detonations and rocket heads
     if (u_HazeIntensity > 0.001) {
         for (int i = 0; i < u_NumActiveLights; ++i) {
             vec2 lightPos = u_Lights[i].position_radius.xy;
-            float lightRadius = u_Lights[i].position_radius.w * 0.85; // Focused ~425-500px atmospheric envelope
+            float lightRadius = u_Lights[i].position_radius.w * 0.85; // Focused atmospheric envelope
             vec2 toLight = lightPos - worldPos;
             float distSq = dot(toLight, toLight);
             float radiusSq = lightRadius * lightRadius;
@@ -55,8 +56,9 @@ void main() {
                 float dist = sqrt(distSq);
                 float normDist = dist / lightRadius;
 
-                // Steep exponential falloff: intense near detonation, fades rapidly into deep darkness
-                float atten = exp(-4.2 * normDist) * (1.0 - normDist);
+                // Dynamic exponential falloff: intense near detonation, fades rapidly into deep darkness
+                float falloffExponent = max(0.5, u_HazeFalloff);
+                float atten = exp(-falloffExponent * normDist) * (1.0 - normDist);
 
                 vec3 lightCol = u_Lights[i].color_intensity.rgb;
                 float intensity = u_Lights[i].color_intensity.w;

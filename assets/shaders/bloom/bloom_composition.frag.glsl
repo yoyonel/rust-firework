@@ -181,8 +181,9 @@ void main() {
     vec3 result = sceneColor + bloomColor * uBloomIntensity;
     
     // Screen-space smoke backlight illumination (§4.1 ADR)
+    // Linear bloom response avoids expanding faint distant halo across entire screen
     if (uBacklightEnabled != 0) {
-        result += pow(bloomColor, vec3(0.5)) * texture(uSmokeMask, vTexCoord).r * uBacklightStrength;
+        result += bloomColor * texture(uSmokeMask, vTexCoord).r * uBacklightStrength;
     }
     
     // Apply tone mapping
