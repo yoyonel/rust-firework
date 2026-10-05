@@ -389,7 +389,7 @@ impl AudioStressScene {
             }
 
             unsafe {
-                renderer.draw(&orbits, &discs);
+                renderer.draw(&orbits, &discs, &[]);
             }
         }
     }

@@ -5,8 +5,10 @@ pub struct CircleGPURenderer {
     shader_program: u32,
     vao: u32,
     vao_orbits: u32,
+    vao_boxes: u32,
     vbo_quad: u32,
     vbo_unit_circle: u32,
+    vbo_box: u32,
     vbo_instances: u32,
 }
 
@@ -61,14 +63,18 @@ impl CircleGPURenderer {
 
             let mut vao = 0;
             let mut vao_orbits = 0;
+            let mut vao_boxes = 0;
             let mut vbo_quad = 0;
             let mut vbo_unit_circle = 0;
+            let mut vbo_box = 0;
             let mut vbo_instances = 0;
 
             gl::GenVertexArrays(1, &mut vao);
             gl::GenVertexArrays(1, &mut vao_orbits);
+            gl::GenVertexArrays(1, &mut vao_boxes);
             gl::GenBuffers(1, &mut vbo_quad);
             gl::GenBuffers(1, &mut vbo_unit_circle);
+            gl::GenBuffers(1, &mut vbo_box);
             gl::GenBuffers(1, &mut vbo_instances);
 
             let stride = std::mem::size_of::<CircleGPUData>() as i32;
@@ -147,6 +153,44 @@ impl CircleGPURenderer {
             gl::VertexAttribPointer(4, 1, gl::FLOAT, gl::FALSE, stride, 28 as *const _);
             gl::VertexAttribDivisor(4, 1);
 
+            // ==================== VAO FOR OUTLINE BOXES (LINE LOOP) ====================
+            gl::BindVertexArray(vao_boxes);
+
+            // Bind static Box VBO
+            let box_vertices = constants::BOX_OUTLINE_VERTICES;
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_box);
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                (box_vertices.len() * std::mem::size_of::<f32>()) as isize,
+                box_vertices.as_ptr() as *const _,
+                gl::STATIC_DRAW,
+            );
+            gl::EnableVertexAttribArray(0);
+            gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
+
+            // Bind dynamic Instances VBO (shares the same buffer!)
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_instances);
+
+            // Attribute 1: Center (vec2)
+            gl::EnableVertexAttribArray(1);
+            gl::VertexAttribPointer(1, 2, gl::FLOAT, gl::FALSE, stride, ptr::null());
+            gl::VertexAttribDivisor(1, 1);
+
+            // Attribute 2: Radius (float)
+            gl::EnableVertexAttribArray(2);
+            gl::VertexAttribPointer(2, 1, gl::FLOAT, gl::FALSE, stride, 8 as *const _);
+            gl::VertexAttribDivisor(2, 1);
+
+            // Attribute 3: Color (vec4)
+            gl::EnableVertexAttribArray(3);
+            gl::VertexAttribPointer(3, 4, gl::FLOAT, gl::FALSE, stride, 12 as *const _);
+            gl::VertexAttribDivisor(3, 1);
+
+            // Attribute 4: Thickness (float)
+            gl::EnableVertexAttribArray(4);
+            gl::VertexAttribPointer(4, 1, gl::FLOAT, gl::FALSE, stride, 28 as *const _);
+            gl::VertexAttribDivisor(4, 1);
+
             gl::BindVertexArray(0);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
 
@@ -154,8 +198,10 @@ impl CircleGPURenderer {
                 shader_program,
                 vao,
                 vao_orbits,
+                vao_boxes,
                 vbo_quad,
                 vbo_unit_circle,
+                vbo_box,
                 vbo_instances,
             }
         }
@@ -166,7 +212,12 @@ impl CircleGPURenderer {
     /// # Safety
     ///
     /// This function performs raw OpenGL calls and binds vertex array buffers, which requires a valid active OpenGL context.
-    pub unsafe fn draw(&mut self, orbits: &[CircleGPUData], discs: &[CircleGPUData]) {
+    pub unsafe fn draw(
+        &mut self,
+        orbits: &[CircleGPUData],
+        discs: &[CircleGPUData],
+        dashed_boxes: &[CircleGPUData],
+    ) {
         // Save current OpenGL states
         let mut depth_test_enabled = 0;
         gl::GetIntegerv(gl::DEPTH_TEST, &mut depth_test_enabled);
@@ -210,6 +261,20 @@ impl CircleGPURenderer {
             gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, discs.len() as i32);
         }
 
+        // 3. Draw dashed outline boxes using GL_LINE_LOOP
+        if !dashed_boxes.is_empty() {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_instances);
+            gl::BufferData(
+                gl::ARRAY_BUFFER,
+                std::mem::size_of_val(dashed_boxes) as isize,
+                dashed_boxes.as_ptr() as *const _,
+                gl::STREAM_DRAW,
+            );
+
+            gl::BindVertexArray(self.vao_boxes);
+            gl::DrawArraysInstanced(gl::LINE_LOOP, 0, 4, dashed_boxes.len() as i32);
+        }
+
         gl::BindVertexArray(0);
         gl::UseProgram(0);
 
@@ -235,6 +300,10 @@ impl CircleGPURenderer {
                 gl::DeleteVertexArrays(1, &self.vao_orbits);
                 self.vao_orbits = 0;
             }
+            if self.vao_boxes != 0 {
+                gl::DeleteVertexArrays(1, &self.vao_boxes);
+                self.vao_boxes = 0;
+            }
             if self.vbo_quad != 0 {
                 gl::DeleteBuffers(1, &self.vbo_quad);
                 self.vbo_quad = 0;
@@ -242,6 +311,10 @@ impl CircleGPURenderer {
             if self.vbo_unit_circle != 0 {
                 gl::DeleteBuffers(1, &self.vbo_unit_circle);
                 self.vbo_unit_circle = 0;
+            }
+            if self.vbo_box != 0 {
+                gl::DeleteBuffers(1, &self.vbo_box);
+                self.vbo_box = 0;
             }
             if self.vbo_instances != 0 {
                 gl::DeleteBuffers(1, &self.vbo_instances);

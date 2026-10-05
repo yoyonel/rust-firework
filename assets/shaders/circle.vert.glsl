@@ -13,6 +13,7 @@ out vec4 vColor;
 out vec2 vUV; // -0.5 to 0.5 coordinate inside the quad
 out float vRadius;
 out float vThickness;
+out vec2 vWorldPos;
 
 layout (std140) uniform GlobalData {
     vec2 uSize;
@@ -30,6 +31,7 @@ void main() {
     // Since aQuad ranges from -0.5 to 0.5, multiplying it by 2.0 * aRadius
     // scales the quad to exactly cover the diameter of the circle!
     vec2 world_pos = aCenter + aQuad * (2.0 * aRadius);
+    vWorldPos = world_pos;
 
     // Convert to NDC clip space
     float x = world_pos.x / uSize.x * 2.0 - 1.0;
