@@ -56,9 +56,9 @@ flowchart TD
 ### 2.2 Formule de Composition HDR & Pré-égalisation
 Dans `bloom_composition.frag.glsl` et `bloom_composition_compare.frag.glsl`, l'énergie est injectée en espace linéaire HDR avant le tonemapping :
 
-$$\mathbf{L}\_{\text{composite}} = \mathbf{L}\_{\text{scene}} + \mathbf{L}\_{\text{bloom}} \cdot u\_{\text{BloomIntensity}} + (\mathbf{L}\_{\text{bloom}})^{0.5} \cdot M(\mathbf{uv}) \cdot u\_{\text{BacklightStrength}}$$
+$$\mathbf{L}\_{\text{composite}} = \mathbf{L}\_{\text{scene}} + \mathbf{L}\_{\text{bloom}} \cdot u\_{\text{BloomIntensity}} + \mathbf{L}\_{\text{bloom}} \cdot M(\mathbf{uv}) \cdot u\_{\text{BacklightStrength}}$$
 
-* **Pré-égalisation $(\mathbf{L}_{\text{bloom}})^{0.5}$** : booste le halo lointain ($\sim 5\times$) tout en adoucissant le cœur saturé pour élargir nettement la zone d'interaction visible sur les panaches étendus.
+* **Réponse linéaire $\mathbf{L}_{\text{bloom}}$** : injecte fidèlement l'énergie lumineuse proportionnellement à la luminance locale sans étaler artificiellement les faibles halos lointains sur l'intégralité des volutes de fumée de l'écran.
 * **Étendue du slider** : $u_{\text{BacklightStrength}} \in [0.0, 10.0]$ (défaut : $1.0$).
 
 ### 2.3 Limitation Assumée
@@ -68,10 +68,9 @@ La backlight s'appuyant sur l'énergie du bloom flouté, si le pipeline de bloom
 
 ## 3. Pièges Rencontrés & Résolutions
 
-### 3.1 Détection Delta Invisible (2-6%)
-* **Symptôme** : Bascule A/B quasi imperceptible à l'œil sur écran standard.
-* **Cause** : La couleur bloom linéaire s'effondrait trop rapidement en périphérie des détonations, limitant l'apport lumineux aux seuls texels déjà saturés.
-* **Correctif** : Application de la courbe racine carrée $(\mathbf{L}_{\text{bloom}})^{0.5}$ sur la source d'énergie et extension de la plage utile à $10.0$.
+### 3.1 Détection Delta Invisible vs Blanchiment Global
+* **Symptôme** : Un essai initial avec égalisation racine carrée $(\mathbf{L}_{\text{bloom}})^{0.5}$ a provoqué un voile laiteux lointain sur toutes les traînées de l'écran lors des détonations intenses.
+* **Correctif** : Retour à la réponse linéaire directe $\mathbf{L}_{\text{bloom}}$, préservant le contraste local et évitant la contamination des panaches distants. Plage utile du slider conservée à $[0.0, 10.0]$.
 
 ### 3.2 Blanchiment Progressif lors de la Pause (`<SPACE>`)
 * **Symptôme** : L'appui sur `<SPACE>` figeait la simulation mais l'écran devenait progressivement blanc en quelques secondes.

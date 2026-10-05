@@ -132,12 +132,18 @@ physic.explosion.stats
 | `renderer.lighting.enable` / `disable` / `toggle` | | Quick toggles for global volumetric lighting. |
 | `renderer.lighting.hysteresis` | `[true\|false\|1\|0]` | Toggle 1.2x eviction hysteresis preventing light slot flicker (§5 ADR). |
 | `renderer.lighting.fade_in` | `[0.0-200.0]` | View or set linear fade-in duration (ms) for newly allocated light slots. |
+| `renderer.lighting.radius` | `[50.0-800.0]` | View or set initial volumetric light radius (px). |
+| `renderer.lighting.decay_rate` | `[0.800-0.999]` | View or set per-frame volumetric light decay rate. |
+| `renderer.lighting.radius_expansion` | `[1.000-1.020]` | View or set per-frame volumetric light radius expansion multiplier. |
+| `renderer.lighting.flash_max_cap` | `[0.0-1.0]` | View or set global ambient flash max cap intensity. |
+| `renderer.lighting.debug` | `[true\|false\|1\|0]` | Toggle wireframe footprint & bounding quad debug overlay. |
 | `renderer.smoke_lighting` | `[true\|false\|1\|0]` | Toggle dynamic in-scattering lighting on smoke particles. |
 | `renderer.smoke_scattering` | `[0.0-5.0]` | View or set point light in-scattering intensity multiplier. |
 | `renderer.smoke_ambient_flash` | `[0.0-1.5]` | View or set global ambient flash intensity on detonations. |
 | `renderer.sky_haze` | `[true\|false\|1\|0]` | Toggle global atmospheric sky haze participating media. |
 | `renderer.sky_haze_intensity` | `[0.0-5.0]` | View or set atmospheric sky haze in-scattering intensity. |
 | `renderer.sky_haze_ambient_flash` | `[0.0-2.0]` | View or set global atmospheric sky haze ambient flash intensity. |
+| `renderer.sky_haze.falloff` | `[0.5-12.0]` | View or set atmospheric sky haze exponential falloff rate. |
 | `renderer.backlight.enable` / `disable` / `toggle` | | Toggle screen-space smoke backlight illumination (§4.1 ADR). |
 | `renderer.backlight.strength` | `[0.0-10.0]` | View or set screen-space smoke backlight intensity multiplier. |
 | `renderer.backlight.reset` | | Reset backlight parameters to default values. |
