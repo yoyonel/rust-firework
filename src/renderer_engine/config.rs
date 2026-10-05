@@ -66,6 +66,20 @@ pub struct RendererConfig {
     pub volumetric_lighting_hysteresis_enabled: bool,
     #[serde(default = "default_volumetric_lighting_fade_in_ms")]
     pub volumetric_lighting_fade_in_ms: f32,
+    #[serde(default = "default_volumetric_lighting_radius")]
+    pub volumetric_lighting_radius: f32,
+    #[serde(default = "default_volumetric_lighting_decay_rate")]
+    pub volumetric_lighting_decay_rate: f32,
+    #[serde(default = "default_volumetric_lighting_radius_expansion")]
+    pub volumetric_lighting_radius_expansion: f32,
+    #[serde(default = "default_volumetric_lighting_flash_max_cap")]
+    pub volumetric_lighting_flash_max_cap: f32,
+    #[serde(default = "default_volumetric_lighting_debug")]
+    pub volumetric_lighting_debug: bool,
+
+    // Atmospheric Sky Haze (§4.2 ADR)
+    #[serde(default = "default_sky_haze_falloff")]
+    pub sky_haze_falloff: f32,
 
     // Screen-Space Smoke Backlight (§4.1 ADR)
     #[serde(default = "default_backlight_enabled")]
@@ -110,6 +124,30 @@ fn default_volumetric_lighting_fade_in_ms() -> f32 {
     constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
 }
 
+fn default_volumetric_lighting_radius() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS
+}
+
+fn default_volumetric_lighting_decay_rate() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE
+}
+
+fn default_volumetric_lighting_radius_expansion() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION
+}
+
+fn default_volumetric_lighting_flash_max_cap() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_FLASH_MAX_CAP
+}
+
+fn default_volumetric_lighting_debug() -> bool {
+    constants::DEFAULT_VOLUMETRIC_LIGHTING_DEBUG
+}
+
+fn default_sky_haze_falloff() -> f32 {
+    constants::DEFAULT_SKY_HAZE_FALLOFF
+}
+
 fn default_backlight_enabled() -> bool {
     constants::DEFAULT_BACKLIGHT_ENABLED
 }
@@ -140,11 +178,18 @@ impl Default for RendererConfig {
             sky_haze_enabled: constants::DEFAULT_SKY_HAZE_ENABLED,
             sky_haze_intensity: constants::DEFAULT_SKY_HAZE_INTENSITY,
             sky_haze_ambient_flash: constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH,
+            sky_haze_falloff: constants::DEFAULT_SKY_HAZE_FALLOFF,
             dither_enabled: constants::DEFAULT_DITHER_ENABLED,
             dither_strength: constants::DEFAULT_DITHER_STRENGTH,
             volumetric_lighting_hysteresis_enabled:
                 constants::DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED,
             volumetric_lighting_fade_in_ms: constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS,
+            volumetric_lighting_radius: constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS,
+            volumetric_lighting_decay_rate: constants::DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE,
+            volumetric_lighting_radius_expansion:
+                constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION,
+            volumetric_lighting_flash_max_cap: constants::DEFAULT_VOLUMETRIC_FLASH_MAX_CAP,
+            volumetric_lighting_debug: constants::DEFAULT_VOLUMETRIC_LIGHTING_DEBUG,
             backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
             backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
         }
@@ -205,12 +250,29 @@ mod tests {
             config.sky_haze_ambient_flash,
             constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH
         );
+        assert_eq!(config.sky_haze_falloff, constants::DEFAULT_SKY_HAZE_FALLOFF);
         assert!(config.dither_enabled);
         assert_eq!(config.dither_strength, constants::DEFAULT_DITHER_STRENGTH);
         assert!(config.volumetric_lighting_hysteresis_enabled);
         assert_eq!(
             config.volumetric_lighting_fade_in_ms,
             constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
+        );
+        assert_eq!(
+            config.volumetric_lighting_radius,
+            constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS
+        );
+        assert_eq!(
+            config.volumetric_lighting_decay_rate,
+            constants::DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE
+        );
+        assert_eq!(
+            config.volumetric_lighting_radius_expansion,
+            constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION
+        );
+        assert_eq!(
+            config.volumetric_lighting_flash_max_cap,
+            constants::DEFAULT_VOLUMETRIC_FLASH_MAX_CAP
         );
         assert!(config.backlight_enabled);
         assert_eq!(
@@ -242,10 +304,16 @@ mod tests {
             sky_haze_enabled: false,
             sky_haze_intensity: 1.2,
             sky_haze_ambient_flash: 0.5,
+            sky_haze_falloff: 5.5,
             dither_enabled: false,
             dither_strength: 0.85,
             volumetric_lighting_hysteresis_enabled: false,
             volumetric_lighting_fade_in_ms: 75.0,
+            volumetric_lighting_radius: 220.0,
+            volumetric_lighting_decay_rate: 0.91,
+            volumetric_lighting_radius_expansion: 1.005,
+            volumetric_lighting_flash_max_cap: 0.60,
+            volumetric_lighting_debug: true,
             backlight_enabled: false,
             backlight_strength: 2.1,
         };
@@ -273,6 +341,7 @@ mod tests {
         assert!(!loaded.sky_haze_enabled);
         assert_eq!(loaded.sky_haze_intensity, config.sky_haze_intensity);
         assert_eq!(loaded.sky_haze_ambient_flash, config.sky_haze_ambient_flash);
+        assert_eq!(loaded.sky_haze_falloff, config.sky_haze_falloff);
         assert_eq!(loaded.dither_enabled, config.dither_enabled);
         assert_eq!(loaded.dither_strength, config.dither_strength);
         assert_eq!(
@@ -282,6 +351,26 @@ mod tests {
         assert_eq!(
             loaded.volumetric_lighting_fade_in_ms,
             config.volumetric_lighting_fade_in_ms
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_radius,
+            config.volumetric_lighting_radius
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_decay_rate,
+            config.volumetric_lighting_decay_rate
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_radius_expansion,
+            config.volumetric_lighting_radius_expansion
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_flash_max_cap,
+            config.volumetric_lighting_flash_max_cap
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_debug,
+            config.volumetric_lighting_debug
         );
         assert_eq!(loaded.backlight_enabled, config.backlight_enabled);
         assert_eq!(loaded.backlight_strength, config.backlight_strength);

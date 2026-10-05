@@ -121,6 +121,7 @@ pub struct Renderer {
     dummy_vao: u32,
     loc_haze_intensity: i32,
     loc_haze_ambient_flash: i32,
+    loc_haze_falloff: i32,
     persistent_lights: [PersistentLight; constants::MAX_VOLUMETRIC_LIGHTS],
     smoothed_flash: f32,
     was_lighting_active: bool,
@@ -131,6 +132,7 @@ pub struct Renderer {
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
     // Bloom post-processing
     bloom_pass: BloomPass,
+    circle_renderer: Option<crate::renderer_engine::CircleGPURenderer>,
     // moteur de profilage GPU autonome
     pub gpu_profiler:
         std::sync::Arc<std::sync::Mutex<crate::renderer_engine::utils::gpu_profiler::GpuProfiler>>,
@@ -227,6 +229,7 @@ impl Renderer {
         let sky_haze_program;
         let loc_haze_intensity;
         let loc_haze_ambient_flash;
+        let loc_haze_falloff;
 
         unsafe {
             gl::GenBuffers(1, &mut ubo_global);
@@ -294,6 +297,7 @@ impl Renderer {
             loc_haze_intensity = gl::GetUniformLocation(sky_haze_program, cstr!("u_HazeIntensity"));
             loc_haze_ambient_flash =
                 gl::GetUniformLocation(sky_haze_program, cstr!("u_AmbientFlash"));
+            loc_haze_falloff = gl::GetUniformLocation(sky_haze_program, cstr!("u_HazeFalloff"));
         }
 
         Ok(Self {
@@ -310,12 +314,14 @@ impl Renderer {
             dummy_vao,
             loc_haze_intensity,
             loc_haze_ambient_flash,
+            loc_haze_falloff,
             persistent_lights: [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS],
             smoothed_flash: 0.0,
             was_lighting_active: false,
             last_lighting_update: None,
             simulation_paused: false,
             bloom_pass,
+            circle_renderer: None,
             gpu_profiler,
             last_gpu_log_time: std::time::Instant::now(),
         })
@@ -336,8 +342,8 @@ impl Renderer {
             for light in &mut self.persistent_lights {
                 if light.active {
                     light.elapsed_ms += dt_ms;
-                    light.intensity *= light.decay_rate;
-                    light.radius *= constants::VOLUMETRIC_LIGHT_RADIUS_EXPANSION;
+                    light.intensity *= self.config.volumetric_lighting_decay_rate;
+                    light.radius *= self.config.volumetric_lighting_radius_expansion;
                     if light.intensity < constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
                         light.active = false;
                         light.intensity = 0.0;
@@ -368,12 +374,12 @@ impl Renderer {
                             slot.elapsed_ms = 0.0;
                             slot.pos = [rocket.pos.x, rocket.pos.y];
                             slot.color = [rocket.color.x, rocket.color.y, rocket.color.z];
-                            slot.radius = constants::VOLUMETRIC_LIGHT_INITIAL_RADIUS;
+                            slot.radius = self.config.volumetric_lighting_radius;
                         }
                         slot.active = true;
                         slot.rocket_id = rocket.id;
                         slot.intensity = slot.intensity.max(target_intensity);
-                        slot.decay_rate = constants::VOLUMETRIC_LIGHT_DECAY_RATE;
+                        slot.decay_rate = self.config.volumetric_lighting_decay_rate;
                     }
                 }
             });
@@ -387,7 +393,7 @@ impl Renderer {
                 .sum();
 
             let target_flash = (total_active_energy * constants::VOLUMETRIC_FLASH_ENERGY_SCALE)
-                .min(constants::VOLUMETRIC_FLASH_MAX_CAP);
+                .min(self.config.volumetric_lighting_flash_max_cap);
 
             if target_flash > self.smoothed_flash {
                 self.smoothed_flash = self.smoothed_flash * 0.80 + target_flash * 0.20;
@@ -503,6 +509,9 @@ impl Renderer {
                 self.config.sky_haze_ambient_flash,
             );
         }
+        if self.loc_haze_falloff != -1 {
+            gl::Uniform1f(self.loc_haze_falloff, self.config.sky_haze_falloff);
+        }
 
         gl::BindVertexArray(self.dummy_vao);
         gl::DrawArrays(gl::TRIANGLES, 0, 3);
@@ -510,6 +519,77 @@ impl Renderer {
 
         // Restore blend state for particle rendering pipeline
         gl::Enable(gl::BLEND);
+    }
+
+    /// Renders wireframe footprints, dashed bounding quads, and origin markers for active volumetric lights in debug mode.
+    unsafe fn render_volumetric_debug(&mut self) {
+        if !self.config.volumetric_lighting_debug {
+            return;
+        }
+
+        let mut orbits: Vec<crate::renderer_engine::CircleGPUData> =
+            Vec::with_capacity(constants::MAX_VOLUMETRIC_LIGHTS);
+        let mut discs: Vec<crate::renderer_engine::CircleGPUData> =
+            Vec::with_capacity(constants::MAX_VOLUMETRIC_LIGHTS);
+        let mut boxes: Vec<crate::renderer_engine::CircleGPUData> =
+            Vec::with_capacity(constants::MAX_VOLUMETRIC_LIGHTS);
+
+        let fade_in_ms = self.config.volumetric_lighting_fade_in_ms;
+        let base_radius = self.config.volumetric_lighting_radius;
+
+        for light in &self.persistent_lights {
+            if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                let r = light.color[0];
+                let g = light.color[1];
+                let b = light.color[2];
+                let intensity = light.uploaded_intensity(fade_in_ms);
+
+                // Blend décroissant :
+                // Quand le cercle d'influence grossit et que son impact est décroissant
+                // (diffusé sur tout l'écran avec atténuation de l'énergie surfacique),
+                // l'opacité alpha décroît en proportion directe de l'intensité et de l'étalement
+                // géométrique (base_radius / light.radius).
+                let radius_ratio = (base_radius / light.radius.max(base_radius)).min(1.0);
+                let decay_blend = (intensity * radius_ratio).clamp(0.0, 1.0);
+
+                let circle_alpha = (decay_blend * 0.85).clamp(0.0, 0.95);
+                let quad_alpha = (decay_blend * 0.50).clamp(0.0, 0.70);
+                let center_alpha = (decay_blend * 1.2).clamp(0.0, 1.0);
+
+                // Wireframe footprint circle outline (orbit)
+                orbits.push(crate::renderer_engine::CircleGPUData {
+                    center: light.pos,
+                    radius: light.radius,
+                    color: [r, g, b, circle_alpha],
+                    thickness: 0.0,
+                });
+
+                // Dashed bounding box quad outline (pointillé)
+                boxes.push(crate::renderer_engine::CircleGPUData {
+                    center: light.pos,
+                    radius: light.radius,
+                    color: [r, g, b, quad_alpha],
+                    thickness: -constants::VOLUMETRIC_LIGHT_DEBUG_DASH_LENGTH,
+                });
+
+                // Origin center disc
+                discs.push(crate::renderer_engine::CircleGPUData {
+                    center: light.pos,
+                    radius: constants::VOLUMETRIC_LIGHT_DEBUG_ORIGIN_RADIUS,
+                    color: [r, g, b, center_alpha],
+                    thickness: 0.0,
+                });
+            }
+        }
+
+        if orbits.is_empty() && discs.is_empty() && boxes.is_empty() {
+            return;
+        }
+
+        let renderer = self
+            .circle_renderer
+            .get_or_insert_with(crate::renderer_engine::CircleGPURenderer::new);
+        renderer.draw(&orbits, &discs, &boxes);
     }
 
     // Helper internal
@@ -710,6 +790,11 @@ impl RendererEngine for Renderer {
                     // Apply bloom and render to screen
                     self.bloom_pass.end_scene_and_apply_bloom();
                 } // ⬅️ Drop RAII
+
+                if self.config.volumetric_lighting_debug {
+                    self.render_volumetric_debug();
+                }
+
                 particle_count
             } else {
                 gpu_profile_zone!(0, "Pass: Forward (No Bloom)", palette::COMPOSITE, profiler);
@@ -721,7 +806,13 @@ impl RendererEngine for Renderer {
 
                 self.render_sky_haze();
 
-                self.render_particles(physic, &profiler, alpha)
+                let count = self.render_particles(physic, &profiler, alpha);
+
+                if self.config.volumetric_lighting_debug {
+                    self.render_volumetric_debug();
+                }
+
+                count
             } // ⬅️ Drop RAII
         }
     }
@@ -784,6 +875,9 @@ impl RendererEngine for Renderer {
                 renderer.close();
             }
             self.bloom_pass.close();
+            if let Some(mut cr) = self.circle_renderer.take() {
+                cr.destroy();
+            }
 
             if self.ubo_global != 0 {
                 gl::DeleteBuffers(1, &self.ubo_global);

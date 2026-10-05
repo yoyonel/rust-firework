@@ -332,23 +332,68 @@ pub const DEFAULT_SKY_HAZE_INTENSITY: f32 = 0.6;
 /// Default ambient detonation flash intensity for atmospheric sky haze.
 pub const DEFAULT_SKY_HAZE_AMBIENT_FLASH: f32 = 0.35;
 
-/// Volumetric point light decay rate per frame (~0.8s smooth dissipation).
-pub const VOLUMETRIC_LIGHT_DECAY_RATE: f32 = 0.94;
+/// Default volumetric point light decay rate per frame (~0.8s smooth dissipation).
+pub const DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE: f32 = 0.94;
+
+/// Volumetric point light decay rate per frame (legacy alias).
+pub const VOLUMETRIC_LIGHT_DECAY_RATE: f32 = DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE;
+
+/// Slider minimum bound for volumetric light decay rate.
+pub const SLIDER_VOLUMETRIC_DECAY_RATE_MIN: f32 = 0.80;
+
+/// Slider maximum bound for volumetric light decay rate.
+pub const SLIDER_VOLUMETRIC_DECAY_RATE_MAX: f32 = 0.99;
 
 /// Volumetric point light minimum intensity threshold for deactivation.
 pub const VOLUMETRIC_LIGHT_MIN_INTENSITY: f32 = 0.001;
 
-/// Volumetric point light initial radius in simulation space.
-pub const VOLUMETRIC_LIGHT_INITIAL_RADIUS: f32 = 450.0;
+/// Default volumetric point light initial radius in simulation space.
+pub const DEFAULT_VOLUMETRIC_LIGHT_RADIUS: f32 = 200.0;
 
-/// Volumetric point light radial expansion factor per frame.
-pub const VOLUMETRIC_LIGHT_RADIUS_EXPANSION: f32 = 1.003;
+/// Volumetric point light initial radius in simulation space (legacy alias).
+pub const VOLUMETRIC_LIGHT_INITIAL_RADIUS: f32 = DEFAULT_VOLUMETRIC_LIGHT_RADIUS;
+
+/// Slider minimum bound for volumetric light radius (pixels).
+pub const SLIDER_VOLUMETRIC_LIGHT_RADIUS_MIN: f32 = 50.0;
+
+/// Slider maximum bound for volumetric light radius (pixels).
+pub const SLIDER_VOLUMETRIC_LIGHT_RADIUS_MAX: f32 = 800.0;
+
+/// Default volumetric point light radial expansion factor per frame.
+pub const DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION: f32 = 1.003;
+
+/// Volumetric point light radial expansion factor per frame (legacy alias).
+pub const VOLUMETRIC_LIGHT_RADIUS_EXPANSION: f32 = DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION;
+
+/// Slider minimum bound for volumetric light radius expansion factor.
+pub const SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MIN: f32 = 1.000;
+
+/// Slider maximum bound for volumetric light radius expansion factor.
+pub const SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MAX: f32 = 1.020;
 
 /// Flash ambient energy multiplier per unit of active light intensity.
 pub const VOLUMETRIC_FLASH_ENERGY_SCALE: f32 = 0.015;
 
-/// Maximum cap for ambient detonation flash intensity.
-pub const VOLUMETRIC_FLASH_MAX_CAP: f32 = 0.40;
+/// Default maximum cap for ambient detonation flash intensity.
+pub const DEFAULT_VOLUMETRIC_FLASH_MAX_CAP: f32 = 0.40;
+
+/// Maximum cap for ambient detonation flash intensity (legacy alias).
+pub const VOLUMETRIC_FLASH_MAX_CAP: f32 = DEFAULT_VOLUMETRIC_FLASH_MAX_CAP;
+
+/// Slider minimum bound for ambient detonation flash max cap.
+pub const SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MIN: f32 = 0.0;
+
+/// Slider maximum bound for ambient detonation flash max cap.
+pub const SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MAX: f32 = 1.0;
+
+/// Default exponential falloff steepness exponent for atmospheric sky haze.
+pub const DEFAULT_SKY_HAZE_FALLOFF: f32 = 4.2;
+
+/// Slider minimum bound for sky haze atmospheric falloff steepness.
+pub const SLIDER_SKY_HAZE_FALLOFF_MIN: f32 = 1.0;
+
+/// Slider maximum bound for sky haze atmospheric falloff steepness.
+pub const SLIDER_SKY_HAZE_FALLOFF_MAX: f32 = 10.0;
 
 /// Exponential moving average persistence for detonation flash ambient glow.
 pub const VOLUMETRIC_FLASH_EMA_DECAY: f32 = 0.90;
@@ -359,6 +404,18 @@ pub const VOLUMETRIC_FLASH_EMA_WEIGHT: f32 = 0.10;
 // ── Volumetric Lighting Temporal Stabilization (§5 ADR) ─────────────
 /// Default enable flag for volumetric lighting temporal hysteresis eviction.
 pub const DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED: bool = true;
+
+/// Default enable flag for volumetric lighting debug wireframe footprint overlays.
+pub const DEFAULT_VOLUMETRIC_LIGHTING_DEBUG: bool = false;
+
+/// Radius of the center anchor point disc in volumetric lighting debug mode (pixels).
+pub const VOLUMETRIC_LIGHT_DEBUG_ORIGIN_RADIUS: f32 = 4.0;
+
+/// Default dash segment length (pixels) for volumetric light debug bounding quads.
+pub const VOLUMETRIC_LIGHT_DEBUG_DASH_LENGTH: f32 = 6.0;
+
+/// Unit box outline vertices for instanced LINE_LOOP bounding box debug rendering (-0.5 to 0.5 centered).
+pub const BOX_OUTLINE_VERTICES: [f32; 8] = [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5];
 
 /// Eviction threshold factor for volumetric lighting slots (1.2x).
 /// A living light cannot be replaced unless candidate intensity > 1.2 * occupant.
