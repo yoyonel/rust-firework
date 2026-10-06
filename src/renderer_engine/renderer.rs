@@ -415,7 +415,12 @@ impl Renderer {
             if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
                 let uploaded_intensity = light.uploaded_intensity(fade_in_ms);
                 lights[i] = crate::renderer_engine::types::PointLightGPU {
-                    position_radius: [light.pos[0], light.pos[1], 0.0, light.radius],
+                    position_radius: [
+                        light.pos[0],
+                        light.pos[1],
+                        1.0 / light.radius.max(0.001),
+                        light.radius,
+                    ],
                     color_intensity: [
                         light.color[0],
                         light.color[1],

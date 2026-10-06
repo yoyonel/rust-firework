@@ -77,35 +77,43 @@ void main() {
         if (u_UseLut != 0) {
             for (int i = 0; i < u_NumActiveLights; ++i) {
                 vec2 lightPos = u_Lights[i].position_radius.xy;
+                float invRadius = u_Lights[i].position_radius.z;
                 float radius = u_Lights[i].position_radius.w;
                 vec2 toLight = lightPos - worldPos;
+                float distSq = dot(toLight, toLight);
 
-                vec2 lutUV = toLight * (0.5 / radius) + 0.5;
-                float falloff = textureLod(u_LightFalloffLut, lutUV, 0.0).r;
+                if (distSq < radius * radius) {
+                    vec2 lutUV = toLight * (0.5 * invRadius) + 0.5;
+                    float falloff = textureLod(u_LightFalloffLut, lutUV, 0.0).r;
 
-                vec3 lightCol = u_Lights[i].color_intensity.rgb;
-                float intensity = u_Lights[i].color_intensity.w;
+                    vec3 lightCol = u_Lights[i].color_intensity.rgb;
+                    float intensity = u_Lights[i].color_intensity.w;
 
-                scatteredLight += lightCol * (intensity * falloff * u_ScatteringIntensity);
+                    scatteredLight += lightCol * (intensity * falloff * u_ScatteringIntensity);
+                }
             }
         } else {
             for (int i = 0; i < u_NumActiveLights; ++i) {
                 vec2 lightPos = u_Lights[i].position_radius.xy;
+                float invRadius = u_Lights[i].position_radius.z;
                 float radius = u_Lights[i].position_radius.w;
                 vec2 toLight = lightPos - worldPos;
                 float distSq = dot(toLight, toLight);
                 float radiusSq = radius * radius;
 
                 if (distSq < radiusSq) {
-                    float dist = sqrt(distSq);
-                    float atten = 1.0 - (dist / radius);
-                    atten = atten * atten; // Smooth quadratic falloff identical to canon
+                    // Fast zero-division lighting using single-cycle rsq (inversesqrt)
+                    float invDist = inversesqrt(max(0.00001, distSq));
+                    float dist = distSq * invDist;
+                    float atten = clamp(1.0 - (dist * invRadius), 0.0, 1.0);
+                    atten = atten * atten; // Smooth quadratic falloff
 
                     vec3 lightCol = u_Lights[i].color_intensity.rgb;
                     float intensity = u_Lights[i].color_intensity.w;
 
                     // Anisotropic forward scattering approximation (Schlick/Mie phase)
-                    float cosTheta = toLight.y / max(0.0001, dist);
+                    // cosTheta = toLight.y / dist = toLight.y * invDist (zero divisions!)
+                    float cosTheta = toLight.y * invDist;
                     float phase = 1.0 + 0.3 * cosTheta;
 
                     scatteredLight += lightCol * (intensity * atten * phase * u_ScatteringIntensity);
