@@ -53,9 +53,10 @@ Un test unitaire dédié (`test_smoke_lighting_lut_mathematical_precision`) éch
 | **Analytique Legacy (2x DIV + SQRT)** | 486.20 | 364.60 | 400.40 | **417.06** | **2.398 ms** | Baseline |
 | **Precomputed 2D LUT (Phase 1)** | 423.00 | 416.00 | 430.20 | **423.06** | **2.364 ms** | +1.44 % |
 | **Analytique Fast-Math (Zero-DIV + RSQ)** | 491.60 | 415.60 | 430.20 | **445.80** | **2.243 ms** | **+6.89 %** |
+| **Frustum Culling + Mask Pass Bypass** | 560.80 | 574.40 | 529.60 | **554.94** | **1.802 ms** | **+33.06 %** |
 
-- **Gain net vs Legacy :** $+28.74 \text{ FPS}$ ($-0.155 \text{ ms/frame}$)
-- **Amélioration de frametime :** $-6.46\%$ sur le pipeline global de rendu.
+- **Gain net cumulé vs Legacy :** $+137.88 \text{ FPS}$ ($-0.596 \text{ ms/frame}$)
+- **Amélioration de frametime :** $-24.85\%$ sur le frame time complet.
 
 ### 3.3 Analyse Architecturale GPU (Intel Xe-LP EUs)
 
@@ -65,6 +66,8 @@ Un test unitaire dédié (`test_smoke_lighting_lut_mathematical_precision`) éch
    - L'instruction GLSL `inversesqrt(distSq)` est mappée directement sur l'instruction matérielle vectorielle `rsq` (débit d'1 cycle par EU).
    - Le calcul de $\cos\theta = \text{toLight.y} \times \text{invDist}$ remplace la division `toLight.y / dist` par une simple multiplication fused.
 3. **Hiérarchie ALU vs Texture Sampler :** Le mode Fast-Math surpasse le mode 2D LUT (445.80 vs 423.06 FPS) car il n'engorge pas les unités d'échantillonnage de texture partagées et supprime les temps de latence de transit mémoire L1/L2 au stade vertex.
+4. **Frustum Culling au stade Vertex :** Les particules hors champ sont immédiatement projetées hors de l'espace de découpage (`gl_Position = vec4(2.0)`), éliminant l'évaluation des 16 lumières, la trigonométrie de rotation et la rasterisation pour toutes les particules en dehors de la fenêtre.
+5. **Court-circuit du Fragment Shader de Masque :** Lors de la passe de masque de rétro-éclairage (`u_RenderMask != 0`), tous les calculs de couleur et d'in-scattering sont court-circuités dès l'alpha final calculé.
 
 ---
 
