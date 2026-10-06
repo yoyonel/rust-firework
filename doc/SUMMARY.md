@@ -56,6 +56,7 @@
   - [Note de Vision & ADR : Éclairage Volumétrique Global & Quickwins](20261001_volumetric_lighting_ideas_and_adr.md)
   - [Rapport Technique : Éclairage Backlight Screen-Space de la Fumée & Stabilisation](20261001_screen_space_smoke_backlight_report.md)
   - [Autopsie du Coût GPU des Particules de Fumée, Paradoxe Visuel et Stratégie Lightmap / LUT](20261005_smoke_volumetric_cost_and_lightmap_analysis.md)
+  - [Rapport Technique : LUT 2D Précalculée de Falloff & Diffusion Mie (Phase 1 Zero SQRT)](20261006_precomputed_light_falloff_lut_report.md)
 
 - [Profilage et Performance]()
   - [Rapport de Profiling GPU Matériel : Éclairage Volumétrique (Intel Iris Xe)](20260930_volumetric_lighting_hardware_profiling_report.md)
