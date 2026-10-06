@@ -405,16 +405,16 @@ impl Renderer {
             self.last_lighting_update = Some(now);
         }
 
-        // 4. Copie 1:1 vers le bloc std140 GPU sans permutation d'indices (Zéro clignotement / Zéro saut)
+        // 4. Compaction contiguë des lumières actives vers le bloc std140 GPU (Zéro itération inutile dans les shaders)
         let mut lights = [crate::renderer_engine::types::PointLightGPU::default();
             constants::MAX_VOLUMETRIC_LIGHTS];
-        let mut max_active_idx = 0;
+        let mut active_count = 0;
         let fade_in_ms = self.config.volumetric_lighting_fade_in_ms;
 
-        for (i, light) in self.persistent_lights.iter().enumerate() {
+        for light in &self.persistent_lights {
             if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
                 let uploaded_intensity = light.uploaded_intensity(fade_in_ms);
-                lights[i] = crate::renderer_engine::types::PointLightGPU {
+                lights[active_count] = crate::renderer_engine::types::PointLightGPU {
                     position_radius: [
                         light.pos[0],
                         light.pos[1],
@@ -428,9 +428,7 @@ impl Renderer {
                         uploaded_intensity,
                     ],
                 };
-                max_active_idx = i + 1;
-            } else {
-                lights[i] = crate::renderer_engine::types::PointLightGPU::default();
+                active_count += 1;
             }
         }
 
@@ -443,7 +441,7 @@ impl Renderer {
                 flash_clamped * 1.0,
                 flash_clamped,
             ],
-            num_active_lights: max_active_idx as i32,
+            num_active_lights: active_count as i32,
             scattering_intensity: if self.config.smoke_lighting_enabled {
                 self.config.smoke_scattering_intensity
             } else {
