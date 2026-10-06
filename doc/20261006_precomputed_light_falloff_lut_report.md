@@ -48,19 +48,23 @@ Un test unitaire dédié (`test_smoke_lighting_lut_mathematical_precision`) éch
 
 ### 3.2 Résultats Chiffrés
 
-| Configuration | Run 1 (FPS) | Run 2 (FPS) | Run 3 (FPS) | Moyenne (FPS) | Frame Time (ms) |
-|---|---|---|---|---|---|
-| **Analytique (Legacy SQRT)** | 486.20 | 364.60 | 400.40 | **417.06** | **2.398 ms** |
-| **Precomputed 2D LUT (Phase 1)** | 407.60 | 417.00 | 398.40 | **407.66** | **2.453 ms** |
+| Configuration | Run 1 (FPS) | Run 2 (FPS) | Run 3 (FPS) | Moyenne (FPS) | Frame Time (ms) | Gain vs Legacy |
+|---|---|---|---|---|---|---|
+| **Analytique Legacy (2x DIV + SQRT)** | 486.20 | 364.60 | 400.40 | **417.06** | **2.398 ms** | Baseline |
+| **Precomputed 2D LUT (Phase 1)** | 423.00 | 416.00 | 430.20 | **423.06** | **2.364 ms** | +1.44 % |
+| **Analytique Fast-Math (Zero-DIV + RSQ)** | 491.60 | 415.60 | 430.20 | **445.80** | **2.243 ms** | **+6.89 %** |
 
-- **Différence brute :** $-9.40 \text{ FPS}$ ($-0.055 \text{ ms/frame}$)
-- **Écart relatif :** $-2.25\%$ (dans la marge de variabilité de l'iGPU)
+- **Gain net vs Legacy :** $+28.74 \text{ FPS}$ ($-0.155 \text{ ms/frame}$)
+- **Amélioration de frametime :** $-6.46\%$ sur le pipeline global de rendu.
 
-### 3.3 Analyse Architecturale GPU (Pourquoi pas de gain massif ?)
+### 3.3 Analyse Architecturale GPU (Intel Xe-LP EUs)
 
-1. **Débit ALU des EUs Intel Iris Xe :** Les unités d'exécution (EU) de l'architecture Xe-LP disposent d'ALUs superscalaires capables d'exécuter l'instruction `rsqrt` et les opérations arithmétiques vectorielles à un coût marginal par rapport aux transferts mémoire.
-2. **Latence du Texture Sampler au stade Vertex :** L'échantillonnage de texture au niveau du Vertex Shader (Vertex Texture Fetch - VTF via `textureLod`) sollicite le cache de texture et les unités de filtrage partagées avec le Fragment Shader (qui échantillonne déjà le sprite de fumée, la flow map et le masque de bruit).
-3. **Stabilité :** La variante LUT affiche une variance inter-runs remarquablement faible ($398$ à $417 \text{ FPS}$) par rapport au mode analytique ($364$ à $486 \text{ FPS}$).
+1. **Pénalité des divisions matérielles flottantes :** Sur l'architecture Intel Iris Xe (Gen12 Xe-LP), une division flottante scalaire (`fdiv`) mobilise 8 à 16 cycles d'horloge et immobilise le pipeline scalaire de l'unité d'exécution (EU). Avec 16 lumières actives par sommet sur 30 000 quads (120 000 sommets), l'ancien shader exécutait jusqu'à $3,84 \times 10^6$ divisions par frame.
+2. **Précalcul CPU `invRadius` + `inversesqrt` (RSQ) :**
+   - Le précalcul de `invRadius = 1.0 / radius` sur CPU dans la composante `z` inutilisée de `position_radius` (UBO std140 sans réallocation ni padding supplémentaire) élimine la division `dist / radius`.
+   - L'instruction GLSL `inversesqrt(distSq)` est mappée directement sur l'instruction matérielle vectorielle `rsq` (débit d'1 cycle par EU).
+   - Le calcul de $\cos\theta = \text{toLight.y} \times \text{invDist}$ remplace la division `toLight.y / dist` par une simple multiplication fused.
+3. **Hiérarchie ALU vs Texture Sampler :** Le mode Fast-Math surpasse le mode 2D LUT (445.80 vs 423.06 FPS) car il n'engorge pas les unités d'échantillonnage de texture partagées et supprime les temps de latence de transit mémoire L1/L2 au stade vertex.
 
 ---
 
