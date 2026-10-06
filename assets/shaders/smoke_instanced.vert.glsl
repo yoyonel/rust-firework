@@ -44,7 +44,15 @@ uniform sampler2D u_LightFalloffLut;
 
 void main() {
     // 1. Early clipping for dead or fully transparent particles (hardware rasterizer bypass)
-    if (aAlpha <= 0.001 || aIntensity <= 0.001) {
+    if (aAlpha <= 0.001 || aIntensity <= 0.001 || aScale <= 0.001) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+
+    // 2. Early screen-space frustum culling: reject particles completely outside viewport
+    float margin = aScale * 1.2;
+    if (aPosition.x < -margin || aPosition.x > uSize.x + margin ||
+        aPosition.y < -margin || aPosition.y > uSize.y + margin) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         return;
     }

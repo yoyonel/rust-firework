@@ -87,24 +87,30 @@ void main() {
         discard;
     }
 
-    vec3 finalColor = smokeTex.rgb * vColor;
-
-    // 5. Glowing burn edge effect along erosion seam (reusing noiseVal already sampled)
+    // 5. Glowing burn edge alpha boost along erosion seam (reusing noiseVal already sampled)
     if (u_ErosionEnabled && u_ErosionScale > 0.001) {
         if (noiseVal < erosionThreshold + u_ErosionEdgeWidth) {
-            float edgeFactor = (noiseVal - erosionThreshold) / max(0.0001, u_ErosionEdgeWidth);
-            finalColor = mix(u_ErosionEdgeColor, finalColor, edgeFactor);
             finalAlpha = min(1.0, finalAlpha * 1.5);
         }
     }
 
     // Screen-space smoke backlight mask pass (§4.1 ADR)
-    // Directly output actual visible screen alpha (finalAlpha * vIntensity)
+    // Directly output actual visible screen alpha (finalAlpha * vIntensity) and bypass all color/scattering logic
     if (u_RenderMask != 0) {
         float maskAlpha = finalAlpha * vIntensity;
         FragColor = vec4(maskAlpha, 0.0, 0.0, 1.0);
         BrightColor = vec4(0.0);
         return;
+    }
+
+    vec3 finalColor = smokeTex.rgb * vColor;
+
+    // Glowing burn edge color along erosion seam
+    if (u_ErosionEnabled && u_ErosionScale > 0.001) {
+        if (noiseVal < erosionThreshold + u_ErosionEdgeWidth) {
+            float edgeFactor = (noiseVal - erosionThreshold) / max(0.0001, u_ErosionEdgeWidth);
+            finalColor = mix(u_ErosionEdgeColor, finalColor, edgeFactor);
+        }
     }
 
     // 6. Volumetric In-Scattering (interpolated smoothly from vertices, zero per-pixel loop)
