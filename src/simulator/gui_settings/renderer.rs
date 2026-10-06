@@ -371,7 +371,41 @@ pub fn render_renderer_settings_tab(
     let item_w = ui.current_font_size() * 14.0;
 
     ui.spacing();
-    ui.text_colored(COLOR_HEADER, "--- Temporal Stabilization (§5 ADR) ---");
+    ui.text_colored(
+        COLOR_HEADER,
+        "--- Temporal Stabilization & Spectral Afterglow (§5 ADR) ---",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Realism Defaults##reset_vol_realism") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetVolumetricRealismDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut afterglow_enabled = cfg.spectral_afterglow_enabled;
+    if ui.checkbox(
+        "Enable Spectral Afterglow (`renderer.afterglow.enable` / `disable`)",
+        &mut afterglow_enabled,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSpectralAfterglowEnabled(afterglow_enabled),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut afterglow_decay = cfg.spectral_afterglow_decay;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Spectral Afterglow Decay (`renderer.afterglow.decay`)",
+        renderer_constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MIN,
+        renderer_constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MAX,
+        &mut afterglow_decay,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSpectralAfterglowDecay(afterglow_decay),
+        ));
+    }
 
     // GUI_PERSIST: renderer.config
     let mut hysteresis = cfg.volumetric_lighting_hysteresis_enabled;
@@ -527,6 +561,20 @@ pub fn render_renderer_settings_tab(
     ) {
         cmd_queue.push(EngineCommand::Renderer(
             RendererCommand::SetSmokeAmbientFlash(flash),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut wrap_relief = cfg.smoke_wrap_relief;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "3D Volume Relief / Wrap (`renderer.smoke_wrap_relief`)",
+        renderer_constants::SLIDER_SMOKE_WRAP_RELIEF_MIN,
+        renderer_constants::SLIDER_SMOKE_WRAP_RELIEF_MAX,
+        &mut wrap_relief,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeWrapRelief(wrap_relief),
         ));
     }
 

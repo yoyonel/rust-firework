@@ -90,6 +90,16 @@ pub struct RendererConfig {
     pub backlight_enabled: bool,
     #[serde(default = "default_backlight_strength")]
     pub backlight_strength: f32,
+
+    // Volumetric Smoke 3D Wrap Relief
+    #[serde(default = "default_smoke_wrap_relief")]
+    pub smoke_wrap_relief: f32,
+
+    // Spectral Afterglow (§4.4 ADR)
+    #[serde(default = "default_true")]
+    pub spectral_afterglow_enabled: bool,
+    #[serde(default = "default_spectral_afterglow_decay")]
+    pub spectral_afterglow_decay: f32,
 }
 
 fn default_true() -> bool {
@@ -164,6 +174,14 @@ fn default_backlight_strength() -> f32 {
     constants::DEFAULT_BACKLIGHT_STRENGTH
 }
 
+fn default_smoke_wrap_relief() -> f32 {
+    constants::DEFAULT_SMOKE_WRAP_RELIEF
+}
+
+fn default_spectral_afterglow_decay() -> f32 {
+    constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY
+}
+
 use crate::renderer_engine::constants;
 
 impl Default for RendererConfig {
@@ -201,6 +219,9 @@ impl Default for RendererConfig {
             volumetric_lighting_debug: constants::DEFAULT_VOLUMETRIC_LIGHTING_DEBUG,
             backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
             backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
+            smoke_wrap_relief: constants::DEFAULT_SMOKE_WRAP_RELIEF,
+            spectral_afterglow_enabled: constants::DEFAULT_SPECTRAL_AFTERGLOW_ENABLED,
+            spectral_afterglow_decay: constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY,
         }
     }
 }
@@ -289,6 +310,15 @@ mod tests {
             config.backlight_strength,
             constants::DEFAULT_BACKLIGHT_STRENGTH
         );
+        assert_eq!(
+            config.smoke_wrap_relief,
+            constants::DEFAULT_SMOKE_WRAP_RELIEF
+        );
+        assert!(config.spectral_afterglow_enabled);
+        assert_eq!(
+            config.spectral_afterglow_decay,
+            constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY
+        );
     }
 
     #[test]
@@ -327,6 +357,9 @@ mod tests {
             volumetric_lighting_debug: true,
             backlight_enabled: false,
             backlight_strength: 2.1,
+            smoke_wrap_relief: 0.55,
+            spectral_afterglow_enabled: false,
+            spectral_afterglow_decay: 0.95,
         };
 
         config.save_to_file(file_path)?;
@@ -386,6 +419,15 @@ mod tests {
         );
         assert_eq!(loaded.backlight_enabled, config.backlight_enabled);
         assert_eq!(loaded.backlight_strength, config.backlight_strength);
+        assert_eq!(loaded.smoke_wrap_relief, config.smoke_wrap_relief);
+        assert_eq!(
+            loaded.spectral_afterglow_enabled,
+            config.spectral_afterglow_enabled
+        );
+        assert_eq!(
+            loaded.spectral_afterglow_decay,
+            config.spectral_afterglow_decay
+        );
         Ok(())
     }
 

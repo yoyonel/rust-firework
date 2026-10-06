@@ -1223,6 +1223,167 @@ where
         );
     }
 
+    pub(crate) fn register_volumetric_realism_commands(&mut self) {
+        // Smoke wrap relief
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke_wrap_relief",
+            move |args, cmd_queue| {
+                let val = args
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| s.parse::<f32>().ok());
+                match val {
+                    Some(v)
+                        if (crate::renderer_engine::constants::SLIDER_SMOKE_WRAP_RELIEF_MIN
+                            ..=crate::renderer_engine::constants::SLIDER_SMOKE_WRAP_RELIEF_MAX)
+                            .contains(&v) =>
+                    {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetSmokeWrapRelief(v),
+                        ));
+                        format!("-> Smoke 3D wrap relief: {:.2}", v)
+                    }
+                    _ => format!(
+                        "Usage: renderer.smoke_wrap_relief <{:.2}-{:.2}>",
+                        crate::renderer_engine::constants::SLIDER_SMOKE_WRAP_RELIEF_MIN,
+                        crate::renderer_engine::constants::SLIDER_SMOKE_WRAP_RELIEF_MAX
+                    ),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.smoke_wrap_relief",
+            &format!(
+                "Usage: <{:.2}-{:.2}>",
+                crate::renderer_engine::constants::SLIDER_SMOKE_WRAP_RELIEF_MIN,
+                crate::renderer_engine::constants::SLIDER_SMOKE_WRAP_RELIEF_MAX
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.smoke_wrap_relief",
+            vec!["0.0", "0.2", "0.35", "0.5", "0.8", "1.0"],
+        );
+
+        // Afterglow Enable
+        self.commands_registry.register_for_renderer(
+            "renderer.afterglow.enable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetSpectralAfterglowEnabled(true),
+                ));
+                "-> Atmospheric spectral afterglow enabled".into()
+            },
+        );
+
+        // Afterglow Disable
+        self.commands_registry.register_for_renderer(
+            "renderer.afterglow.disable",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetSpectralAfterglowEnabled(false),
+                ));
+                "-> Atmospheric spectral afterglow disabled".into()
+            },
+        );
+
+        // Afterglow Toggle
+        let cfg = self.renderer_config.clone();
+        self.commands_registry.register_for_renderer(
+            "renderer.afterglow.toggle",
+            move |_, cmd_queue| {
+                let current = cfg
+                    .read()
+                    .map(|c| c.spectral_afterglow_enabled)
+                    .unwrap_or(false);
+                let next = !current;
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetSpectralAfterglowEnabled(next),
+                ));
+                if next {
+                    "-> Atmospheric spectral afterglow toggled ON".into()
+                } else {
+                    "-> Atmospheric spectral afterglow toggled OFF".into()
+                }
+            },
+        );
+
+        // Afterglow Decay
+        self.commands_registry.register_for_renderer(
+            "renderer.afterglow.decay",
+            move |args, cmd_queue| {
+                let val = args
+                    .split_whitespace()
+                    .nth(1)
+                    .and_then(|s| s.parse::<f32>().ok());
+                match val {
+                    Some(v)
+                        if (crate::renderer_engine::constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MIN
+                            ..=crate::renderer_engine::constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MAX)
+                            .contains(&v) =>
+                    {
+                        cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                            crate::domain_contracts::RendererCommand::SetSpectralAfterglowDecay(v),
+                        ));
+                        format!("-> Spectral afterglow decay: {:.3}", v)
+                    }
+                    _ => format!(
+                        "Usage: renderer.afterglow.decay <{:.2}-{:.2}>",
+                        crate::renderer_engine::constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MIN,
+                        crate::renderer_engine::constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MAX
+                    ),
+                }
+            },
+        );
+        self.commands_registry.register_hint(
+            "renderer.afterglow.decay",
+            &format!(
+                "Usage: <{:.2}-{:.2}>",
+                crate::renderer_engine::constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MIN,
+                crate::renderer_engine::constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MAX
+            ),
+        );
+        self.commands_registry.register_args(
+            "renderer.afterglow.decay",
+            vec!["0.80", "0.90", "0.95", "0.98", "0.99"],
+        );
+
+        // Reset
+        self.commands_registry.register_for_renderer(
+            "renderer.realism.reset",
+            move |_, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::ResetVolumetricRealismDefaults,
+                ));
+                "-> Volumetric realism settings reset to defaults".into()
+            },
+        );
+
+        // Current value providers
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.smoke_wrap_relief", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.2}", c.smoke_wrap_relief))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.afterglow.enable", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{}", c.spectral_afterglow_enabled))
+                    .unwrap_or("?".to_string())
+            });
+
+        let cfg = self.renderer_config.clone();
+        self.commands_registry
+            .register_current_value("renderer.afterglow.decay", move |_, _| {
+                cfg.read()
+                    .map(|c| format!("{:.3}", c.spectral_afterglow_decay))
+                    .unwrap_or("?".to_string())
+            });
+    }
+
     // Helper pur pour le parsing (peut être statique ou hors de la classe)
     fn parse_tonemap_mode(s: &str) -> Option<crate::renderer_engine::config::ToneMappingMode> {
         use crate::renderer_engine::config::ToneMappingMode::*;

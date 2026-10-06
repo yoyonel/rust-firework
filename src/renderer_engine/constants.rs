@@ -417,6 +417,45 @@ pub const VOLUMETRIC_FLASH_EMA_DECAY: f32 = 0.90;
 /// Exponential moving average target blend weight for detonation flash ambient glow.
 pub const VOLUMETRIC_FLASH_EMA_WEIGHT: f32 = 0.10;
 
+/// Default neutral ambient twilight color for volumetric afterglow decay.
+pub const DEFAULT_VOLUMETRIC_AMBIENT_TINT: [f32; 3] = [0.8, 0.8, 1.0];
+
+/// Default enable flag for spectral afterglow color tracking.
+pub const DEFAULT_SPECTRAL_AFTERGLOW_ENABLED: bool = true;
+
+/// Spectral afterglow EMA decay rate per frame when lights are extinguishing.
+pub const DEFAULT_SPECTRAL_AFTERGLOW_DECAY: f32 = 0.985;
+
+/// Spectral afterglow EMA decay rate legacy alias.
+pub const VOLUMETRIC_AFTERGLOW_SPECTRAL_DECAY: f32 = DEFAULT_SPECTRAL_AFTERGLOW_DECAY;
+
+/// Slider minimum bound for spectral afterglow decay rate.
+pub const SLIDER_SPECTRAL_AFTERGLOW_DECAY_MIN: f32 = 0.80;
+
+/// Slider maximum bound for spectral afterglow decay rate.
+pub const SLIDER_SPECTRAL_AFTERGLOW_DECAY_MAX: f32 = 0.999;
+
+/// Fast attack blend weight for spectral afterglow when new detonations enter.
+pub const AFTERGLOW_ATTACK_WEIGHT: f32 = 0.25;
+
+/// Sustain blend weight for spectral afterglow during active detonations.
+pub const AFTERGLOW_SUSTAIN_WEIGHT: f32 = 0.08;
+
+/// Fast decay rate to reset ambient tint when spectral afterglow is disabled.
+pub const AFTERGLOW_DISABLED_FAST_RESET_DECAY: f32 = 0.50;
+
+/// Default 3D spherical volumetric wrap relief factor for smoke billboards.
+pub const DEFAULT_SMOKE_WRAP_RELIEF: f32 = 0.35;
+
+/// Slider minimum bound for 3D spherical smoke wrap relief.
+pub const SLIDER_SMOKE_WRAP_RELIEF_MIN: f32 = 0.0;
+
+/// Slider maximum bound for 3D spherical smoke wrap relief.
+pub const SLIDER_SMOKE_WRAP_RELIEF_MAX: f32 = 1.0;
+
+/// Minimum ambient wrap diffuse floor for smoke billboards.
+pub const VOLUMETRIC_WRAP_BASE_AMBIENT: f32 = 0.30;
+
 // ── Volumetric Lighting Temporal Stabilization (§5 ADR) ─────────────
 /// Default enable flag for volumetric lighting temporal hysteresis eviction.
 pub const DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED: bool = true;

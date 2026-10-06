@@ -716,6 +716,70 @@ fn test_ui_state_feedback_loop_renderer() {
         false,
         "Renderer smoke_lighting_lut_enabled"
     );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSmokeWrapRelief(0.42)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().smoke_wrap_relief,
+        0.42,
+        "Renderer smoke_wrap_relief"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSpectralAfterglowEnabled(false)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_enabled,
+        false,
+        "Renderer spectral_afterglow_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSpectralAfterglowDecay(0.92)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_decay,
+        0.92,
+        "Renderer spectral_afterglow_decay"
+    );
+
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::SetSmokeWrapRelief(0.85),
+    ));
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::SetSpectralAfterglowEnabled(false),
+    ));
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::SetSpectralAfterglowDecay(0.70),
+    ));
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::ResetVolumetricRealismDefaults,
+    ));
+    assert_eq!(
+        h.renderer_config.read().unwrap().config().smoke_wrap_relief,
+        crate::renderer_engine::constants::DEFAULT_SMOKE_WRAP_RELIEF
+    );
+    assert_eq!(
+        h.renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_enabled,
+        crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_ENABLED
+    );
+    assert_eq!(
+        h.renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_decay,
+        crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY
+    );
 }
 
 #[test]

@@ -743,6 +743,23 @@ impl GuiSettings {
                                 c.backlight_strength =
                                     crate::renderer_engine::constants::DEFAULT_BACKLIGHT_STRENGTH;
                             }
+                            crate::domain_contracts::RendererCommand::SetSmokeWrapRelief(relief) => {
+                                c.smoke_wrap_relief = relief;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSpectralAfterglowEnabled(enabled) => {
+                                c.spectral_afterglow_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSpectralAfterglowDecay(decay) => {
+                                c.spectral_afterglow_decay = decay;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetVolumetricRealismDefaults => {
+                                c.smoke_wrap_relief =
+                                    crate::renderer_engine::constants::DEFAULT_SMOKE_WRAP_RELIEF;
+                                c.spectral_afterglow_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_ENABLED;
+                                c.spectral_afterglow_decay =
+                                    crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY;
+                            }
                         }
                     }
                 }

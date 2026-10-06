@@ -40,6 +40,7 @@ layout (std140) uniform LightingBlock {
 
 uniform int u_RenderMask;
 uniform int u_UseLut;
+uniform float u_WrapRelief;
 uniform sampler2D u_LightFalloffLut;
 
 void main() {
@@ -77,6 +78,9 @@ void main() {
     vec2 worldPos = aPosition.xy + rotatedQuad;
     vWorldPos = worldPos;
 
+    // Unit radial outward normal of the smoke puff corner for 3D volumetric wrap shading (0.70710678 = 1/sqrt(2))
+    vec2 puffNormal = rot * (aQuad * 0.70710678);
+
     // 2. Per-vertex volumetric in-scattering (computed at vertex stage, bypassed during mask pass)
     vec3 scatteredLight = vec3(0.0);
     if (u_RenderMask == 0 && u_ScatteringIntensity > 0.001) {
@@ -97,7 +101,13 @@ void main() {
                     vec3 lightCol = u_Lights[i].color_intensity.rgb;
                     float intensity = u_Lights[i].color_intensity.w;
 
-                    scatteredLight += lightCol * (intensity * falloff * u_ScatteringIntensity);
+                    // 3D Spherical Volume Shading
+                    float invDist = inversesqrt(max(0.00001, distSq));
+                    vec2 lightDir = toLight * invDist;
+                    float NdotL = dot(puffNormal, lightDir);
+                    float wrapShading = clamp(NdotL * u_WrapRelief + (1.0 - u_WrapRelief), 0.3, 1.0);
+
+                    scatteredLight += lightCol * (intensity * falloff * wrapShading * u_ScatteringIntensity);
                 }
             }
         } else {
@@ -119,10 +129,11 @@ void main() {
                     vec3 lightCol = u_Lights[i].color_intensity.rgb;
                     float intensity = u_Lights[i].color_intensity.w;
 
-                    // Anisotropic forward scattering approximation (Schlick/Mie phase)
-                    // cosTheta = toLight.y / dist = toLight.y * invDist (zero divisions!)
-                    float cosTheta = toLight.y * invDist;
-                    float phase = 1.0 + 0.3 * cosTheta;
+                    // 3D Spherical Volume Shading & Mie Forward Scattering
+                    vec2 lightDir = toLight * invDist;
+                    float NdotL = dot(puffNormal, lightDir);
+                    float wrapShading = clamp(NdotL * u_WrapRelief + (1.0 - u_WrapRelief), 0.3, 1.0);
+                    float phase = wrapShading * (1.0 + 0.25 * atten);
 
                     scatteredLight += lightCol * (intensity * atten * phase * u_ScatteringIntensity);
                 }

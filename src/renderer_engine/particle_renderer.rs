@@ -56,6 +56,7 @@ pub trait ParticleGraphicsRenderer {
         _intensity: f32,
         _ambient_flash: f32,
         _use_lut: bool,
+        _wrap_relief: f32,
     ) {
     }
 

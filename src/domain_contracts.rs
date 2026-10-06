@@ -119,6 +119,10 @@ pub enum RendererCommand {
     SetBacklightEnabled(bool),
     SetBacklightStrength(f32),
     ResetBacklightDefaults,
+    SetSmokeWrapRelief(f32),
+    SetSpectralAfterglowEnabled(bool),
+    SetSpectralAfterglowDecay(f32),
+    ResetVolumetricRealismDefaults,
 }
 
 /// Commands sent from UI to Smoke simulation engine without dynamic allocations.

@@ -66,9 +66,11 @@ pub struct SmokeRenderer {
     smoke_scattering_intensity: f32,
     smoke_ambient_flash: f32,
     smoke_lighting_lut_enabled: bool,
+    smoke_wrap_relief: f32,
     light_falloff_lut_texture_id: u32,
     loc_light_falloff_lut: i32,
     loc_use_lut: i32,
+    loc_wrap_relief: i32,
 
     // Triple buffering
     current_frame: usize,
@@ -107,6 +109,8 @@ impl SmokeRenderer {
         let loc_light_falloff_lut =
             unsafe { gl::GetUniformLocation(shader_program, cstr!("u_LightFalloffLut")) };
         let loc_use_lut = unsafe { gl::GetUniformLocation(shader_program, cstr!("u_UseLut")) };
+        let loc_wrap_relief =
+            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_WrapRelief")) };
 
         let texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(sprite_tex);
@@ -179,6 +183,7 @@ impl SmokeRenderer {
                 loc_render_mask,
                 loc_light_falloff_lut,
                 loc_use_lut,
+                loc_wrap_relief,
                 flow_distortion_strength:
                     crate::physic_engine::constants::DEFAULT_FLOW_DISTORTION_STRENGTH,
                 flow_animation_speed: crate::physic_engine::constants::DEFAULT_FLOW_ANIMATION_SPEED,
@@ -198,6 +203,7 @@ impl SmokeRenderer {
                 smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
                 smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
                 smoke_lighting_lut_enabled: constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED,
+                smoke_wrap_relief: constants::DEFAULT_SMOKE_WRAP_RELIEF,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -486,6 +492,10 @@ impl SmokeRenderer {
             );
         }
 
+        if self.loc_wrap_relief != -1 {
+            gl::Uniform1f(self.loc_wrap_relief, self.smoke_wrap_relief);
+        }
+
         gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, count as i32);
 
         // Restore depth write and color mask for attachment 1
@@ -693,6 +703,8 @@ impl SmokeRenderer {
                 self.loc_light_falloff_lut =
                     gl::GetUniformLocation(self.shader_program, cstr!("u_LightFalloffLut"));
                 self.loc_use_lut = gl::GetUniformLocation(self.shader_program, cstr!("u_UseLut"));
+                self.loc_wrap_relief =
+                    gl::GetUniformLocation(self.shader_program, cstr!("u_WrapRelief"));
                 if self.loc_light_falloff_lut != -1 {
                     gl::Uniform1i(
                         self.loc_light_falloff_lut,
@@ -936,11 +948,13 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
         intensity: f32,
         ambient_flash: f32,
         use_lut: bool,
+        wrap_relief: f32,
     ) {
         self.smoke_lighting_enabled = enabled;
         self.smoke_scattering_intensity = intensity;
         self.smoke_ambient_flash = ambient_flash;
         self.smoke_lighting_lut_enabled = use_lut;
+        self.smoke_wrap_relief = wrap_relief;
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {

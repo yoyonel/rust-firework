@@ -124,6 +124,7 @@ pub struct Renderer {
     loc_haze_falloff: i32,
     persistent_lights: [PersistentLight; constants::MAX_VOLUMETRIC_LIGHTS],
     smoothed_flash: f32,
+    smoothed_ambient_color: [f32; 3],
     was_lighting_active: bool,
     last_lighting_update: Option<std::time::Instant>,
     simulation_paused: bool,
@@ -317,6 +318,7 @@ impl Renderer {
             loc_haze_falloff,
             persistent_lights: [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS],
             smoothed_flash: 0.0,
+            smoothed_ambient_color: constants::DEFAULT_VOLUMETRIC_AMBIENT_TINT,
             was_lighting_active: false,
             last_lighting_update: None,
             simulation_paused: false,
@@ -384,13 +386,18 @@ impl Renderer {
                 }
             });
 
-            // 3. Calcul de l'énergie explosive totale pour le flash ambiant (filtrage EMA continu sans seuil binaire)
-            let total_active_energy: f32 = self
-                .persistent_lights
-                .iter()
-                .filter(|l| l.active)
-                .map(|l| l.intensity)
-                .sum();
+            // 3. Calcul de l'énergie explosive totale et teinte spectrale pour l'afterglow ambiant
+            let mut total_active_energy = 0.0f32;
+            let mut total_color_energy = [0.0f32; 3];
+
+            for light in &self.persistent_lights {
+                if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                    total_active_energy += light.intensity;
+                    total_color_energy[0] += light.color[0] * light.intensity;
+                    total_color_energy[1] += light.color[1] * light.intensity;
+                    total_color_energy[2] += light.color[2] * light.intensity;
+                }
+            }
 
             let target_flash = (total_active_energy * constants::VOLUMETRIC_FLASH_ENERGY_SCALE)
                 .min(self.config.volumetric_lighting_flash_max_cap);
@@ -400,6 +407,45 @@ impl Renderer {
             } else {
                 self.smoothed_flash = self.smoothed_flash * constants::VOLUMETRIC_FLASH_EMA_DECAY
                     + target_flash * constants::VOLUMETRIC_FLASH_EMA_WEIGHT;
+            }
+
+            // Afterglow spectral: transition douce vers la teinte dominante des charges pyrotechniques
+            if self.config.spectral_afterglow_enabled
+                && total_active_energy > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY
+            {
+                let inv_energy = 1.0 / total_active_energy;
+                let target_color = [
+                    total_color_energy[0] * inv_energy,
+                    total_color_energy[1] * inv_energy,
+                    total_color_energy[2] * inv_energy,
+                ];
+                let color_blend = if target_flash > self.smoothed_flash {
+                    constants::AFTERGLOW_ATTACK_WEIGHT
+                } else {
+                    constants::AFTERGLOW_SUSTAIN_WEIGHT
+                };
+                self.smoothed_ambient_color[0] = self.smoothed_ambient_color[0]
+                    * (1.0 - color_blend)
+                    + target_color[0] * color_blend;
+                self.smoothed_ambient_color[1] = self.smoothed_ambient_color[1]
+                    * (1.0 - color_blend)
+                    + target_color[1] * color_blend;
+                self.smoothed_ambient_color[2] = self.smoothed_ambient_color[2]
+                    * (1.0 - color_blend)
+                    + target_color[2] * color_blend;
+            } else {
+                let decay = if self.config.spectral_afterglow_enabled {
+                    self.config.spectral_afterglow_decay
+                } else {
+                    constants::AFTERGLOW_DISABLED_FAST_RESET_DECAY
+                };
+                let neutral = constants::DEFAULT_VOLUMETRIC_AMBIENT_TINT;
+                self.smoothed_ambient_color[0] =
+                    self.smoothed_ambient_color[0] * decay + neutral[0] * (1.0 - decay);
+                self.smoothed_ambient_color[1] =
+                    self.smoothed_ambient_color[1] * decay + neutral[1] * (1.0 - decay);
+                self.smoothed_ambient_color[2] =
+                    self.smoothed_ambient_color[2] * decay + neutral[2] * (1.0 - decay);
             }
         } else {
             self.last_lighting_update = Some(now);
@@ -436,9 +482,9 @@ impl Renderer {
         let lighting_block = crate::renderer_engine::types::VolumetricLightingBlockGPU {
             lights,
             ambient_light: [
-                flash_clamped * 0.8,
-                flash_clamped * 0.8,
-                flash_clamped * 1.0,
+                flash_clamped * self.smoothed_ambient_color[0],
+                flash_clamped * self.smoothed_ambient_color[1],
+                flash_clamped * self.smoothed_ambient_color[2],
                 flash_clamped,
             ],
             num_active_lights: active_count as i32,
@@ -470,6 +516,7 @@ impl Renderer {
     unsafe fn reset_lighting_ubo(&mut self) {
         self.persistent_lights = [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS];
         self.smoothed_flash = 0.0;
+        self.smoothed_ambient_color = constants::DEFAULT_VOLUMETRIC_AMBIENT_TINT;
         self.last_lighting_update = None;
         let empty_block = crate::renderer_engine::types::VolumetricLightingBlockGPU {
             lights: [crate::renderer_engine::types::PointLightGPU::default();
@@ -641,6 +688,7 @@ impl Renderer {
                         0.0
                     },
                     self.config.smoke_lighting_lut_enabled,
+                    self.config.smoke_wrap_relief,
                 );
             }
 
