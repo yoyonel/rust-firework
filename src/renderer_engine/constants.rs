@@ -317,6 +317,22 @@ pub const DEFAULT_SMOKE_AMBIENT_FLASH: f32 = 0.25;
 /// Default flag enabling volumetric smoke lighting.
 pub const DEFAULT_SMOKE_LIGHTING_ENABLED: bool = true;
 
+// ── Precomputed Volumetric Lighting LUT (§Phase 1 Zero SQRT) ─────────
+/// Default flag enabling precomputed falloff and phase scattering LUT for smoke lighting.
+pub const DEFAULT_SMOKE_LIGHTING_LUT_ENABLED: bool = true;
+
+/// Resolution (width and height in texels) of the 2D light falloff and phase scattering LUT.
+pub const SMOKE_LIGHTING_LUT_RESOLUTION: usize = 256;
+
+/// Mie forward scattering anisotropy coefficient for the precomputed phase polynomial.
+pub const SMOKE_LIGHTING_ANISOTROPY_COEFF: f32 = 0.3;
+
+/// OpenGL texture unit dedicated to the light falloff LUT.
+pub const SMOKE_LIGHTING_LUT_TEXTURE_UNIT: u32 = 3;
+
+/// Border color returned for clamped out-of-bounds LUT texture coordinates.
+pub const SMOKE_LIGHTING_LUT_BORDER_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
+
 /// Path to the atmospheric sky haze fullscreen vertex shader.
 pub const SHADER_SKY_HAZE_VERTEX_PATH: &str = "assets/shaders/bloom/fullscreen_quad.vert.glsl";
 

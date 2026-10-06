@@ -47,6 +47,10 @@ pub struct RendererConfig {
     #[serde(default = "default_smoke_ambient_flash")]
     pub smoke_ambient_flash: f32,
 
+    // Volumetric Smoke Lighting Precomputed LUT (§Phase 1 Zero SQRT)
+    #[serde(default = "default_smoke_lighting_lut_enabled")]
+    pub smoke_lighting_lut_enabled: bool,
+
     // Atmospheric Sky Haze (Background Participating Media)
     #[serde(default = "default_true")]
     pub sky_haze_enabled: bool,
@@ -98,6 +102,10 @@ fn default_smoke_scattering_intensity() -> f32 {
 
 fn default_smoke_ambient_flash() -> f32 {
     constants::DEFAULT_SMOKE_AMBIENT_FLASH
+}
+
+fn default_smoke_lighting_lut_enabled() -> bool {
+    constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED
 }
 
 fn default_sky_haze_intensity() -> f32 {
@@ -175,6 +183,7 @@ impl Default for RendererConfig {
             smoke_lighting_enabled: constants::DEFAULT_SMOKE_LIGHTING_ENABLED,
             smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
             smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
+            smoke_lighting_lut_enabled: constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED,
             sky_haze_enabled: constants::DEFAULT_SKY_HAZE_ENABLED,
             sky_haze_intensity: constants::DEFAULT_SKY_HAZE_INTENSITY,
             sky_haze_ambient_flash: constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH,
@@ -233,6 +242,7 @@ mod tests {
         assert!(config.render_explosions);
         assert!(config.volumetric_lighting_enabled);
         assert!(config.smoke_lighting_enabled);
+        assert!(config.smoke_lighting_lut_enabled);
         assert_eq!(
             config.smoke_scattering_intensity,
             constants::DEFAULT_SMOKE_SCATTERING_INTENSITY
@@ -299,6 +309,7 @@ mod tests {
             render_explosions: true,
             volumetric_lighting_enabled: false,
             smoke_lighting_enabled: false,
+            smoke_lighting_lut_enabled: false,
             smoke_scattering_intensity: 2.5,
             smoke_ambient_flash: 0.8,
             sky_haze_enabled: false,
@@ -333,6 +344,7 @@ mod tests {
         assert!(loaded.render_explosions);
         assert!(!loaded.volumetric_lighting_enabled);
         assert!(!loaded.smoke_lighting_enabled);
+        assert!(!loaded.smoke_lighting_lut_enabled);
         assert_eq!(
             loaded.smoke_scattering_intensity,
             config.smoke_scattering_intensity

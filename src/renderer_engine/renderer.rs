@@ -637,6 +637,7 @@ impl Renderer {
                     } else {
                         0.0
                     },
+                    self.config.smoke_lighting_lut_enabled,
                 );
             }
 

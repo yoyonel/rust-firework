@@ -39,6 +39,8 @@ layout (std140) uniform LightingBlock {
 };
 
 uniform int u_RenderMask;
+uniform int u_UseLut;
+uniform sampler2D u_LightFalloffLut;
 
 void main() {
     // 1. Early clipping for dead or fully transparent particles (hardware rasterizer bypass)
@@ -72,26 +74,42 @@ void main() {
     if (u_RenderMask == 0 && u_ScatteringIntensity > 0.001) {
         // Subtle distant atmospheric flash only (2% max) to avoid bleaching entire screen trails
         scatteredLight = (u_AmbientLight.rgb + vec3(u_AmbientLight.a)) * 0.02;
-        for (int i = 0; i < u_NumActiveLights; ++i) {
-            vec2 lightPos = u_Lights[i].position_radius.xy;
-            float radius = u_Lights[i].position_radius.w;
-            vec2 toLight = lightPos - worldPos;
-            float distSq = dot(toLight, toLight);
-            float radiusSq = radius * radius;
+        if (u_UseLut != 0) {
+            for (int i = 0; i < u_NumActiveLights; ++i) {
+                vec2 lightPos = u_Lights[i].position_radius.xy;
+                float radius = u_Lights[i].position_radius.w;
+                vec2 toLight = lightPos - worldPos;
 
-            if (distSq < radiusSq) {
-                float dist = sqrt(distSq);
-                float atten = 1.0 - (dist / radius);
-                atten = atten * atten; // Smooth quadratic falloff identical to canon
+                vec2 lutUV = toLight * (0.5 / radius) + 0.5;
+                float falloff = textureLod(u_LightFalloffLut, lutUV, 0.0).r;
 
                 vec3 lightCol = u_Lights[i].color_intensity.rgb;
                 float intensity = u_Lights[i].color_intensity.w;
 
-                // Anisotropic forward scattering approximation (Schlick/Mie phase)
-                float cosTheta = toLight.y / max(0.0001, dist);
-                float phase = 1.0 + 0.3 * cosTheta;
+                scatteredLight += lightCol * (intensity * falloff * u_ScatteringIntensity);
+            }
+        } else {
+            for (int i = 0; i < u_NumActiveLights; ++i) {
+                vec2 lightPos = u_Lights[i].position_radius.xy;
+                float radius = u_Lights[i].position_radius.w;
+                vec2 toLight = lightPos - worldPos;
+                float distSq = dot(toLight, toLight);
+                float radiusSq = radius * radius;
 
-                scatteredLight += lightCol * (intensity * atten * phase * u_ScatteringIntensity);
+                if (distSq < radiusSq) {
+                    float dist = sqrt(distSq);
+                    float atten = 1.0 - (dist / radius);
+                    atten = atten * atten; // Smooth quadratic falloff identical to canon
+
+                    vec3 lightCol = u_Lights[i].color_intensity.rgb;
+                    float intensity = u_Lights[i].color_intensity.w;
+
+                    // Anisotropic forward scattering approximation (Schlick/Mie phase)
+                    float cosTheta = toLight.y / max(0.0001, dist);
+                    float phase = 1.0 + 0.3 * cosTheta;
+
+                    scatteredLight += lightCol * (intensity * atten * phase * u_ScatteringIntensity);
+                }
             }
         }
     }

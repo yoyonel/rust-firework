@@ -65,6 +65,10 @@ pub struct SmokeRenderer {
     smoke_lighting_enabled: bool,
     smoke_scattering_intensity: f32,
     smoke_ambient_flash: f32,
+    smoke_lighting_lut_enabled: bool,
+    light_falloff_lut_texture_id: u32,
+    loc_light_falloff_lut: i32,
+    loc_use_lut: i32,
 
     // Triple buffering
     current_frame: usize,
@@ -100,6 +104,9 @@ impl SmokeRenderer {
             unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeColor")) };
         let loc_render_mask =
             unsafe { gl::GetUniformLocation(shader_program, cstr!("u_RenderMask")) };
+        let loc_light_falloff_lut =
+            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_LightFalloffLut")) };
+        let loc_use_lut = unsafe { gl::GetUniformLocation(shader_program, cstr!("u_UseLut")) };
 
         let texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(sprite_tex);
@@ -109,6 +116,8 @@ impl SmokeRenderer {
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(flow_tex);
         let noise_texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(noise_tex);
+        let light_falloff_lut_texture_id =
+            unsafe { Self::generate_light_falloff_lut(constants::SMOKE_LIGHTING_LUT_RESOLUTION) };
 
         unsafe {
             gl::UseProgram(shader_program);
@@ -137,6 +146,12 @@ impl SmokeRenderer {
             if loc_noise_tex != -1 {
                 gl::Uniform1i(loc_noise_tex, 2);
             }
+            if loc_light_falloff_lut != -1 {
+                gl::Uniform1i(
+                    loc_light_falloff_lut,
+                    constants::SMOKE_LIGHTING_LUT_TEXTURE_UNIT as i32,
+                );
+            }
 
             label_gl_object!(gl::PROGRAM, shader_program, "Shader_SmokeInstanced");
             label_gl_object!(gl::TEXTURE, texture_id, "Tex_Smoke_Sprite");
@@ -162,6 +177,8 @@ impl SmokeRenderer {
                 loc_erosion_edge_width,
                 loc_erosion_edge_color,
                 loc_render_mask,
+                loc_light_falloff_lut,
+                loc_use_lut,
                 flow_distortion_strength:
                     crate::physic_engine::constants::DEFAULT_FLOW_DISTORTION_STRENGTH,
                 flow_animation_speed: crate::physic_engine::constants::DEFAULT_FLOW_ANIMATION_SPEED,
@@ -174,11 +191,13 @@ impl SmokeRenderer {
                 texture_id,
                 flow_map_texture_id,
                 noise_texture_id,
+                light_falloff_lut_texture_id,
                 tex_ratio: tex_width as f32 / tex_height as f32,
                 max_smoke_particles,
                 smoke_lighting_enabled: constants::DEFAULT_SMOKE_LIGHTING_ENABLED,
                 smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
                 smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
+                smoke_lighting_lut_enabled: constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -203,6 +222,87 @@ impl SmokeRenderer {
             gl::DeleteBuffers(1, &self.vbo_quad);
             self.vbo_quad = 0;
         }
+    }
+
+    /// Génère la texture 2D R16F contenant la LUT de falloff quadratique et diffusion Mie (Zero SQRT).
+    ///
+    /// # Safety
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
+    pub unsafe fn generate_light_falloff_lut(resolution: usize) -> u32 {
+        let mut tex_id = 0;
+        gl::GenTextures(1, &mut tex_id);
+        gl::BindTexture(gl::TEXTURE_2D, tex_id);
+
+        let mut data = Vec::with_capacity(resolution * resolution);
+        let n = resolution as f32;
+        let anisotropy = constants::SMOKE_LIGHTING_ANISOTROPY_COEFF;
+
+        for j in 0..resolution {
+            let v = (j as f32 + 0.5) / n;
+            let y = (v - 0.5) * 2.0;
+            for i in 0..resolution {
+                let u = (i as f32 + 0.5) / n;
+                let x = (u - 0.5) * 2.0;
+
+                let dist_sq = x * x + y * y;
+                if dist_sq < 1.0 {
+                    let dist = dist_sq.sqrt();
+                    let atten = (1.0 - dist) * (1.0 - dist);
+                    let cos_theta = if dist > 0.0001 { y / dist } else { 0.0 };
+                    let phase = 1.0 + anisotropy * cos_theta;
+                    data.push(atten * phase);
+                } else {
+                    data.push(0.0);
+                }
+            }
+        }
+
+        gl::TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::R16F as i32,
+            resolution as i32,
+            resolution as i32,
+            0,
+            gl::RED,
+            gl::FLOAT,
+            data.as_ptr() as *const _,
+        );
+
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_S,
+            gl::CLAMP_TO_BORDER as i32,
+        );
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_T,
+            gl::CLAMP_TO_BORDER as i32,
+        );
+        let border_color = constants::SMOKE_LIGHTING_LUT_BORDER_COLOR;
+        gl::TexParameterfv(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_BORDER_COLOR,
+            border_color.as_ptr(),
+        );
+
+        label_gl_object!(gl::TEXTURE, tex_id, "Tex_Smoke_LightFalloffLut");
+        tex_id
+    }
+
+    /// Régénère la LUT de falloff et diffusion lumineuse.
+    ///
+    /// # Safety
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
+    pub unsafe fn rebake_smoke_lighting_lut(&mut self) {
+        if self.light_falloff_lut_texture_id != 0 {
+            gl::DeleteTextures(1, &self.light_falloff_lut_texture_id);
+        }
+        self.light_falloff_lut_texture_id =
+            Self::generate_light_falloff_lut(constants::SMOKE_LIGHTING_LUT_RESOLUTION);
+        debug!("SmokeRenderer: Light Falloff LUT rebaked successfully.");
     }
 
     /// Recrée les buffers GPU avec une nouvelle taille maximale.
@@ -336,6 +436,10 @@ impl SmokeRenderer {
         gl::ActiveTexture(gl::TEXTURE2);
         gl::BindTexture(gl::TEXTURE_2D, self.noise_texture_id);
 
+        // Bind Texture Unit 3: Light Falloff LUT (Zero SQRT)
+        gl::ActiveTexture(gl::TEXTURE0 + constants::SMOKE_LIGHTING_LUT_TEXTURE_UNIT);
+        gl::BindTexture(gl::TEXTURE_2D, self.light_falloff_lut_texture_id);
+
         if self.loc_flow_distortion_strength != -1 {
             gl::Uniform1f(
                 self.loc_flow_distortion_strength,
@@ -369,6 +473,17 @@ impl SmokeRenderer {
 
         if self.loc_render_mask != -1 {
             gl::Uniform1i(self.loc_render_mask, 0);
+        }
+
+        if self.loc_use_lut != -1 {
+            gl::Uniform1i(
+                self.loc_use_lut,
+                if self.smoke_lighting_lut_enabled {
+                    1
+                } else {
+                    0
+                },
+            );
         }
 
         gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, count as i32);
@@ -507,6 +622,10 @@ impl SmokeRenderer {
             gl::DeleteTextures(1, &self.noise_texture_id);
             self.noise_texture_id = 0;
         }
+        if self.light_falloff_lut_texture_id != 0 {
+            gl::DeleteTextures(1, &self.light_falloff_lut_texture_id);
+            self.light_falloff_lut_texture_id = 0;
+        }
         if self.shader_program != 0 {
             gl::DeleteProgram(self.shader_program);
             self.shader_program = 0;
@@ -571,6 +690,16 @@ impl SmokeRenderer {
                 if self.loc_noise_tex != -1 {
                     gl::Uniform1i(self.loc_noise_tex, 2);
                 }
+                self.loc_light_falloff_lut =
+                    gl::GetUniformLocation(self.shader_program, cstr!("u_LightFalloffLut"));
+                self.loc_use_lut = gl::GetUniformLocation(self.shader_program, cstr!("u_UseLut"));
+                if self.loc_light_falloff_lut != -1 {
+                    gl::Uniform1i(
+                        self.loc_light_falloff_lut,
+                        constants::SMOKE_LIGHTING_LUT_TEXTURE_UNIT as i32,
+                    );
+                }
+                self.rebake_smoke_lighting_lut();
 
                 label_gl_object!(gl::PROGRAM, self.shader_program, "Shader_SmokeInstanced");
                 info!("✅ Smoke instanced shaders reloaded successfully");
@@ -801,10 +930,17 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
         10
     }
 
-    fn set_smoke_lighting(&mut self, enabled: bool, intensity: f32, ambient_flash: f32) {
+    fn set_smoke_lighting(
+        &mut self,
+        enabled: bool,
+        intensity: f32,
+        ambient_flash: f32,
+        use_lut: bool,
+    ) {
         self.smoke_lighting_enabled = enabled;
         self.smoke_scattering_intensity = intensity;
         self.smoke_ambient_flash = ambient_flash;
+        self.smoke_lighting_lut_enabled = use_lut;
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {
@@ -821,5 +957,109 @@ impl Drop for SmokeRenderer {
         unsafe {
             self.close();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn analytic_falloff(x: f32, y: f32) -> f32 {
+        let dist_sq = x * x + y * y;
+        if dist_sq < 1.0 {
+            let dist = dist_sq.sqrt();
+            let atten = (1.0 - dist) * (1.0 - dist);
+            let cos_theta = if dist > 0.0001 { y / dist } else { 0.0 };
+            let phase = 1.0 + constants::SMOKE_LIGHTING_ANISOTROPY_COEFF * cos_theta;
+            atten * phase
+        } else {
+            0.0
+        }
+    }
+
+    fn sample_lut_cpu(lut: &[f32], res: usize, u: f32, v: f32) -> f32 {
+        if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
+            return 0.0;
+        }
+        let n = res as f32;
+        let x = u * n - 0.5;
+        let y = v * n - 0.5;
+        let i0 = (x.floor() as isize).clamp(0, res as isize - 1) as usize;
+        let i1 = (i0 + 1).min(res - 1);
+        let j0 = (y.floor() as isize).clamp(0, res as isize - 1) as usize;
+        let j1 = (j0 + 1).min(res - 1);
+
+        let fx = (x - x.floor()).clamp(0.0, 1.0);
+        let fy = (y - y.floor()).clamp(0.0, 1.0);
+
+        let s00 = lut[j0 * res + i0];
+        let s10 = lut[j0 * res + i1];
+        let s01 = lut[j1 * res + i0];
+        let s11 = lut[j1 * res + i1];
+
+        let top = s00 * (1.0 - fx) + s10 * fx;
+        let bot = s01 * (1.0 - fx) + s11 * fx;
+        top * (1.0 - fy) + bot * fy
+    }
+
+    #[test]
+    fn test_smoke_lighting_lut_mathematical_precision() {
+        let res = constants::SMOKE_LIGHTING_LUT_RESOLUTION;
+        let n = res as f32;
+        let anisotropy = constants::SMOKE_LIGHTING_ANISOTROPY_COEFF;
+        let mut lut = Vec::with_capacity(res * res);
+
+        for j in 0..res {
+            let v = (j as f32 + 0.5) / n;
+            let y = (v - 0.5) * 2.0;
+            for i in 0..res {
+                let u = (i as f32 + 0.5) / n;
+                let x = (u - 0.5) * 2.0;
+                let dist_sq = x * x + y * y;
+                if dist_sq < 1.0 {
+                    let dist = dist_sq.sqrt();
+                    let atten = (1.0 - dist) * (1.0 - dist);
+                    let cos_theta = if dist > 0.0001 { y / dist } else { 0.0 };
+                    let phase = 1.0 + anisotropy * cos_theta;
+                    lut.push(atten * phase);
+                } else {
+                    lut.push(0.0);
+                }
+            }
+        }
+
+        // 1. Center test: origin should have falloff ~= 1.0 (within 1.5% due to 256x256 texel centers)
+        let center_sample = sample_lut_cpu(&lut, res, 0.5, 0.5);
+        assert!((center_sample - 1.0).abs() < 0.015);
+
+        // 2. Far out of bounds: outside quad should be exactly 0.0
+        assert_eq!(sample_lut_cpu(&lut, res, -0.2, 0.5), 0.0);
+        assert_eq!(sample_lut_cpu(&lut, res, 1.2, 0.5), 0.0);
+
+        // 3. Dense grid parity test: max absolute error < 0.008 over 10,000 points
+        let steps = 100;
+        let mut max_err: f32 = 0.0;
+        for sy in 0..=steps {
+            let y = -1.1 + (2.2 * sy as f32 / steps as f32);
+            for sx in 0..=steps {
+                let x = -1.1 + (2.2 * sx as f32 / steps as f32);
+                let analytic = analytic_falloff(x, y);
+
+                let u = x * 0.5 + 0.5;
+                let v = y * 0.5 + 0.5;
+                let lut_val = sample_lut_cpu(&lut, res, u, v);
+
+                let err = (analytic - lut_val).abs();
+                if err > max_err {
+                    max_err = err;
+                }
+            }
+        }
+
+        assert!(
+            max_err < 0.015,
+            "LUT maximum discrepancy vs analytic formula was {:.5}, expected < 0.015",
+            max_err
+        );
     }
 }

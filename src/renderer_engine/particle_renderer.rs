@@ -50,7 +50,14 @@ pub trait ParticleGraphicsRenderer {
     fn set_visibility(&mut self, _render_trails: bool, _render_explosions: bool) {}
 
     /// Définit les paramètres d'éclairage volumétrique pour la fumée.
-    fn set_smoke_lighting(&mut self, _enabled: bool, _intensity: f32, _ambient_flash: f32) {}
+    fn set_smoke_lighting(
+        &mut self,
+        _enabled: bool,
+        _intensity: f32,
+        _ambient_flash: f32,
+        _use_lut: bool,
+    ) {
+    }
 
     /// Dessine le masque alpha de la fumée pour le rétro-éclairage écran (Screen-Space Backlight).
     ///
