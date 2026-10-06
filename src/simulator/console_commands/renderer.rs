@@ -487,6 +487,39 @@ where
             },
         );
 
+        // Precomputed Volumetric smoke lighting falloff LUT (Zero SQRT)
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke_lighting.lut",
+            move |args, cmd_queue| {
+                let trimmed = args.trim().to_lowercase();
+                if trimmed.is_empty() {
+                    return "Usage: renderer.smoke_lighting.lut [true|false|1|0]".into();
+                }
+                let enable = match trimmed.as_str() {
+                    "true" | "1" | "on" => true,
+                    "false" | "0" | "off" => false,
+                    other => {
+                        return format!("Unknown argument '{}', expected true or false", other);
+                    }
+                };
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::SetSmokeLightingLutEnabled(enable),
+                ));
+                format!("-> Precomputed smoke lighting falloff LUT: {}", enable)
+            },
+        );
+
+        // Rebake Precomputed Volumetric smoke lighting falloff LUT
+        self.commands_registry.register_for_renderer(
+            "renderer.smoke_lighting.rebake_lut",
+            move |_args, cmd_queue| {
+                cmd_queue.push(crate::domain_contracts::EngineCommand::Renderer(
+                    crate::domain_contracts::RendererCommand::RebakeSmokeLightingLut,
+                ));
+                "-> Re-baking volumetric smoke lighting falloff LUT...".into()
+            },
+        );
+
         // Volumetric smoke scattering intensity
         self.commands_registry.register_for_renderer(
             "renderer.smoke_scattering",

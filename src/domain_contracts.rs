@@ -96,6 +96,8 @@ pub enum RendererCommand {
     SetBloomBlurMethod(BlurMethod),
     SetVolumetricLightingEnabled(bool),
     SetSmokeLightingEnabled(bool),
+    SetSmokeLightingLutEnabled(bool),
+    RebakeSmokeLightingLut,
     SetSmokeScatteringIntensity(f32),
     SetSmokeAmbientFlash(f32),
     ResetSmokeLightingDefaults,

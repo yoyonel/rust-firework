@@ -654,6 +654,12 @@ impl GuiSettings {
                             crate::domain_contracts::RendererCommand::SetSmokeLightingEnabled(enabled) => {
                                 c.smoke_lighting_enabled = enabled;
                             }
+                            crate::domain_contracts::RendererCommand::SetSmokeLightingLutEnabled(enabled) => {
+                                c.smoke_lighting_lut_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::RebakeSmokeLightingLut => {
+                                reload_shaders_requested.store(true, Ordering::Relaxed);
+                            }
                             crate::domain_contracts::RendererCommand::SetSmokeScatteringIntensity(intensity) => {
                                 c.smoke_scattering_intensity = intensity;
                             }
@@ -663,6 +669,8 @@ impl GuiSettings {
                             crate::domain_contracts::RendererCommand::ResetSmokeLightingDefaults => {
                                 c.smoke_lighting_enabled =
                                     crate::renderer_engine::constants::DEFAULT_SMOKE_LIGHTING_ENABLED;
+                                c.smoke_lighting_lut_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED;
                                 c.smoke_scattering_intensity =
                                     crate::renderer_engine::constants::DEFAULT_SMOKE_SCATTERING_INTENSITY;
                                 c.smoke_ambient_flash =

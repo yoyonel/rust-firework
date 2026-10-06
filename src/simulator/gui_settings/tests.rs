@@ -704,6 +704,18 @@ fn test_ui_state_feedback_loop_renderer() {
         2.25,
         "Renderer backlight_strength"
     );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSmokeLightingLutEnabled(false)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .smoke_lighting_lut_enabled,
+        false,
+        "Renderer smoke_lighting_lut_enabled"
+    );
 }
 
 #[test]

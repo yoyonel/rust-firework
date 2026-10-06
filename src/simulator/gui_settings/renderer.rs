@@ -486,6 +486,23 @@ pub fn render_renderer_settings_tab(
     }
 
     // GUI_PERSIST: renderer.config
+    let mut use_lut = cfg.smoke_lighting_lut_enabled;
+    if ui.checkbox(
+        "Precomputed Falloff LUT [Zero SQRT] (`renderer.smoke_lighting.lut`)",
+        &mut use_lut,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeLightingLutEnabled(use_lut),
+        ));
+    }
+    ui.same_line();
+    if ui.small_button("Re-bake LUT##rebake_smoke_lighting_lut") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::RebakeSmokeLightingLut,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
     let mut scattering = cfg.smoke_scattering_intensity;
     ui.set_next_item_width(item_w);
     if ui.slider(

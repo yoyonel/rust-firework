@@ -138,6 +138,8 @@ physic.explosion.stats
 | `renderer.lighting.flash_max_cap` | `[0.0-1.0]` | View or set global ambient flash max cap intensity. |
 | `renderer.lighting.debug` | `[true\|false\|1\|0]` | Toggle wireframe footprint & bounding quad debug overlay. |
 | `renderer.smoke_lighting` | `[true\|false\|1\|0]` | Toggle dynamic in-scattering lighting on smoke particles. |
+| `renderer.smoke_lighting.lut` | `[true\|false\|1\|0]` | Toggle precomputed 2D falloff & phase scattering LUT (Zero SQRT). |
+| `renderer.smoke_lighting.rebake_lut` | | Re-bake 2D light falloff and phase scattering LUT texture at runtime. |
 | `renderer.smoke_scattering` | `[0.0-5.0]` | View or set point light in-scattering intensity multiplier. |
 | `renderer.smoke_ambient_flash` | `[0.0-1.5]` | View or set global ambient flash intensity on detonations. |
 | `renderer.sky_haze` | `[true\|false\|1\|0]` | Toggle global atmospheric sky haze participating media. |
