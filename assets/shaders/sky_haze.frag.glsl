@@ -47,14 +47,17 @@ void main() {
     if (u_HazeIntensity > 0.001) {
         for (int i = 0; i < u_NumActiveLights; ++i) {
             vec2 lightPos = u_Lights[i].position_radius.xy;
-            float lightRadius = u_Lights[i].position_radius.w * 0.85; // Focused atmospheric envelope
+            float invRadius = u_Lights[i].position_radius.z;
+            float radius = u_Lights[i].position_radius.w;
             vec2 toLight = lightPos - worldPos;
             float distSq = dot(toLight, toLight);
-            float radiusSq = lightRadius * lightRadius;
+            float radiusSq = radius * radius * 0.7225; // (radius * 0.85)^2
 
             if (distSq < radiusSq) {
-                float dist = sqrt(distSq);
-                float normDist = dist / lightRadius;
+                // Fast zero-division atmospheric lighting using single-cycle rsq
+                float invDist = inversesqrt(max(0.00001, distSq));
+                float dist = distSq * invDist;
+                float normDist = dist * (invRadius * 1.1764706); // 1.0 / 0.85
 
                 // Dynamic exponential falloff: intense near detonation, fades rapidly into deep darkness
                 float falloffExponent = max(0.5, u_HazeFalloff);

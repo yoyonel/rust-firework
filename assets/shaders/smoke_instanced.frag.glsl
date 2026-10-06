@@ -25,17 +25,6 @@ uniform vec3 u_ErosionEdgeColor;
 
 uniform int u_RenderMask;
 
-struct PointLight {
-    vec4 position_radius; // xyz = world pos, w = radius
-    vec4 color_intensity; // rgb = color, w = intensity
-};
-
-layout (std140) uniform LightingBlock {
-    PointLight u_Lights[16];
-    vec4 u_AmbientLight; // rgb = ambient tint, a = global flash intensity
-    int u_NumActiveLights;
-    float u_ScatteringIntensity;
-};
 
 void main() {
     // 1. Early discard for transparent or unlit instances (safety fallback)
@@ -115,9 +104,7 @@ void main() {
 
     // 6. Volumetric In-Scattering (interpolated smoothly from vertices, zero per-pixel loop)
     // Retains exact canonical soot modulation (factor 0.25, zero additive blowout)
-    if (u_ScatteringIntensity > 0.001) {
-        finalColor += finalColor * clamp(vScatteredLight * 0.25, vec3(0.0), vec3(1.2));
-    }
+    finalColor += finalColor * clamp(vScatteredLight * 0.25, vec3(0.0), vec3(1.2));
 
     FragColor = vec4(finalColor * vIntensity, finalAlpha * vIntensity);
 

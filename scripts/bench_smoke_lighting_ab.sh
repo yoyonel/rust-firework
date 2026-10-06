@@ -22,10 +22,42 @@ trap cleanup EXIT INT TERM
 
 cp "$CONFIG" "$BACKUP"
 
+set_config_val() {
+    local key="$1"
+    local val="$2"
+    if grep -q "^${key} =" "$CONFIG"; then
+        sed -i "s/^${key} = .*/${key} = ${val}/" "$CONFIG"
+    elif grep -q "^#* *${key} =" "$CONFIG"; then
+        sed -i "s/^#* *${key} = .*/${key} = ${val}/" "$CONFIG"
+    else
+        echo "${key} = ${val}" >> "$CONFIG"
+    fi
+}
+
+# Enforce strict preconditions for benchmark integrity
+set_config_val "render_rockets" "true"
+set_config_val "render_smoke" "true"
+set_config_val "render_trails" "true"
+set_config_val "render_explosions" "true"
+set_config_val "volumetric_lighting_enabled" "true"
+set_config_val "smoke_lighting_enabled" "true"
+set_config_val "sky_haze_enabled" "true"
+set_config_val "backlight_enabled" "true"
+
 echo "================================================================="
 echo "📊 BENCHMARK A/B: ANALYTIC vs PRECOMPUTED 2D LUT (ZERO SQRT)"
 echo "   Platform: Mesa Intel(R) Iris(R) Xe Graphics (RPL-U)"
 echo "   Runs: $RUNS x ${DURATION}s per configuration (Deterministic Seed: $SEED)"
+echo "-----------------------------------------------------------------"
+echo "   ⚙️  SETTINGS ACTIFS VÉRIFIÉS :"
+echo "      render_rockets              = $(grep '^render_rockets =' "$CONFIG" | cut -d'=' -f2 | xargs)"
+echo "      render_smoke                = $(grep '^render_smoke =' "$CONFIG" | cut -d'=' -f2 | xargs)"
+echo "      render_trails               = $(grep '^render_trails =' "$CONFIG" | cut -d'=' -f2 | xargs)"
+echo "      render_explosions           = $(grep '^render_explosions =' "$CONFIG" | cut -d'=' -f2 | xargs)"
+echo "      volumetric_lighting_enabled = $(grep '^volumetric_lighting_enabled =' "$CONFIG" | cut -d'=' -f2 | xargs)"
+echo "      smoke_lighting_enabled      = $(grep '^smoke_lighting_enabled =' "$CONFIG" | cut -d'=' -f2 | xargs)"
+echo "      sky_haze_enabled            = $(grep '^sky_haze_enabled =' "$CONFIG" | cut -d'=' -f2 | xargs)"
+echo "      backlight_enabled           = $(grep '^backlight_enabled =' "$CONFIG" | cut -d'=' -f2 | xargs)"
 echo "================================================================="
 
 run_benchmark() {
@@ -35,16 +67,12 @@ run_benchmark() {
     local frames_array=()
 
     # Configure renderer.toml
-    if grep -q "smoke_lighting_lut_enabled" "$CONFIG"; then
-        sed -i "s/smoke_lighting_lut_enabled = .*/smoke_lighting_lut_enabled = $lut_enabled/" "$CONFIG"
-    else
-        echo "smoke_lighting_lut_enabled = $lut_enabled" >> "$CONFIG"
-    fi
+    set_config_val "smoke_lighting_lut_enabled" "$lut_enabled"
 
     echo ""
     echo "▶ Mode: $mode_name (smoke_lighting_lut_enabled = $lut_enabled)"
     # Warmup to prime shader cache and pipeline state
-    timeout 5s env vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim --timeout-secs 2 --disable-audio --deterministic-seed "$SEED" >/dev/null 2>&1 || true
+    timeout 10s env vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim --timeout-secs 2 --disable-audio --deterministic-seed "$SEED" >/dev/null 2>&1 || true
 
     for r in $(seq 1 $RUNS); do
         output=$(timeout 15s env vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim --timeout-secs "$DURATION" --disable-audio --deterministic-seed "$SEED" 2>&1)
@@ -70,6 +98,10 @@ run_benchmark() {
 }
 
 run_benchmark "Analytic Formula (Legacy SQRT)" "false" FPS_ANALYTIC FT_ANALYTIC
+
+echo "   ⏸️  Pause anti-throttling (3s)..."
+sleep 3
+
 run_benchmark "Precomputed 2D LUT (Phase 1)" "true" FPS_LUT FT_LUT
 
 echo ""
