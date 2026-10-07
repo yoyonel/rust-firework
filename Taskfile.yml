@@ -587,7 +587,7 @@ tasks:
       - echo "🚀 Lancement du simulateur en tâche de fond et capture Tracy (5s)..."
       - |
         bash -c '
-          vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim > /tmp/sim.log 2>&1 &
+          vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim --deterministic-seed 42 --fixed-dt 0.016666 --disable-audio > /tmp/sim.log 2>&1 &
           SIM_PID=$!
           sleep 2
           echo "📊 Lancement de la capture Tracy (5s)..."
@@ -601,7 +601,7 @@ tasks:
         '
 
   bench:tracy-ratios:
-    desc: "Capture une trace Tracy et audite la dérive des ratios relatifs de temps de rendu par rapport à la baseline develop"
+    desc: "Capture une trace Tracy et audite en local la dérive des ratios relatifs de temps de rendu par rapport à la baseline develop"
     deps: [tracy:capture-headless]
     cmds:
       - ./scripts/analyze_tracy_ratios.sh /tmp/fireworks.tracy benches/baselines/tracy_ratios_develop.csv compare

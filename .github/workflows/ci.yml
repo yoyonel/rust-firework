@@ -214,62 +214,7 @@ jobs:
         run: task renderdoc:capture
 
   # ============================================================================
-  # JOB 5: Tracy Profile Ratio Benchmark (PR Only, Parallel)
-  # ============================================================================
-  tracy-ratio-benchmark:
-    needs: lint-and-security
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    container:
-      image: ghcr.io/yoyonel/rust-firework-ci:latest
-      options: --user root
-    env:
-      DISPLAY: :99
-      SCCACHE_DIR: /tmp/sccache_cache
-      TRACY_CAPTURE_BIN: /usr/local/bin/tracy-capture
-      TRACY_CSVEXPORT_BIN: /usr/local/bin/tracy-csvexport
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          fetch-depth: 1
-          filter: blob:none
-          lfs: false
-          show-progress: false
-          sparse-checkout: |
-            .github
-            assets
-            benches
-            doc
-            scripts
-            src
-            tests/goldens
-            Cargo.toml
-            Cargo.lock
-            Taskfile.yml
-            deny.toml
-
-      - name: Strip local patches in CI
-        run: sed -i '/\[patch.crates-io\]/,/tracy-client =/d' Cargo.toml
-
-      - name: Setup CI Cache
-        uses: ./.github/actions/setup-ci-cache
-        with:
-          shared_key: "tracy-bench"
-
-      - name: Run Tracy Profile Ratio Benchmark
-        run: xvfb-run -a task bench:tracy-ratios
-
-      - name: Post Tracy Ratio Comment on PR
-        if: always() && hashFiles('/tmp/tracy_pr_comment.md') != ''
-        uses: mshick/add-pr-comment@v3
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          message-id: tracy-ratio-benchmark
-          message-path: /tmp/tracy_pr_comment.md
-
-  # ============================================================================
-  # JOB 6: Observability DX Aggregator & Native Step Summary
+  # JOB 5: Observability DX Aggregator & Native Step Summary
   # ============================================================================
   ci-summary-report:
     needs: [unit-tests-coverage, mesa-visual-regression, renderdoc-validation]

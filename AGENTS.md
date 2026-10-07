@@ -76,8 +76,9 @@ soumettre une demande d'autorisation explicite et argumentée à l'humain.
     1. Capture Baseline CLI sur `develop` (`task profile:valgrind-callgrind`, `task asm:count-simd`, `task profile:heaptrack:cli` ou capture RenderDoc `task renderdoc:capture`).
     2. Capture Target CLI sur la branche du fix.
     3. Restitution obligatoire d'un diff textuel synthétique (% gain d'instructions, ratio d'instructions SIMD AVX2 vectorielles vs scalaires, réduction d'allocations mémoire, analyse des passes RenderDoc) avant la demande de validation humaine.
-3. **Multi-Hardware & Dual-Baseline Tracy Benchmarking :**
-  - **Isolation Hardware / Software :** `scripts/analyze_tracy_ratios.sh` dérive dynamiquement la baseline de profilage d'après le processeur graphique actif (`GL_RENDERER_DEVICE`), garantissant que les baselines de rendu logiciel Mesa Headless en CI (`tracy_ratios_llvmpipe_mesa.csv`) et les GPU matériels locaux (`tracy_ratios_<gpu_slug>.csv`) ne polluent ni n'invalident mutuellement leurs métriques de répartition.
+3. **Multi-Hardware & Dual-Baseline Tracy Benchmarking (Local/Investigatif) :**
+  - **Isolation Hardware / Software :** `scripts/analyze_tracy_ratios.sh` dérive dynamiquement la baseline de profilage d'après le processeur graphique actif (`GL_RENDERER_DEVICE`) pour isoler les profils matériels locaux (`tracy_ratios_<gpu_slug>.csv`) de l'émulation Mesa LLVMpipe.
+  - **Décommissionnement CI Gating :** Suite au rapport `doc/20261006_ci_tracy_ratio_drift_investigation_report.md`, le ratio benchmark Tracy est retiré des gates bloquants distants en CI (faux-positifs structurels de llvmpipe) et réservé à l'audit local investigatif.
 
 ### PILIER 3 : BENCHMARKING, PREUVE STATISTIQUE & INVARIANT HOLISTIQUE (PERF-TDD)
 1. **Workflow Bench-First & Invariant Holistique (Perf-TDD & No Local Optimum Trap) :**
