@@ -57,7 +57,7 @@ else
     BASELINE_FILE="$GPU_BASELINE_FILE"
 fi
 
-TRACY_CSVEXPORT="${TRACY_CSVEXPORT_BIN:-$(command -v tracy-csvexport 2>/dev/null || echo /usr/local/bin/tracy-csvexport)}"
+TRACY_CSVEXPORT="${TRACY_CSVEXPORT_BIN:-$([ -x /home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport ] && echo /home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/csvexport/build/tracy-csvexport || command -v tracy-csvexport 2>/dev/null || echo /usr/local/bin/tracy-csvexport)}"
 
 if [ ! -f "$TRACY_FILE" ]; then
     echo "❌ Erreur: Fichier de trace Tracy introuvable sur : $TRACY_FILE" >&2

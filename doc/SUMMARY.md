@@ -63,6 +63,8 @@
   - [Rapport d'Investigation Technique : Dérive des Ratios Tracy Profiler en CI & Justification Exhaustive](20261006_ci_tracy_ratio_drift_investigation_report.md)
 
 - [Profilage et Performance]()
+  - [Registre de Suivi des Baselines de Performance & Profiling (SSOT)](performance_profiling_baseline_tracker.md)
+  - [Rapport de Profiling Matériel Intel Iris Xe (Tracy & GPU Profiler)](20261007_intel_iris_xe_tracy_profiling_audit_report.md)
   - [Rapport de Profiling GPU Matériel : Éclairage Volumétrique (Intel Iris Xe)](20260930_volumetric_lighting_hardware_profiling_report.md)
   - [Guide d'Analyse VTune : Threading & Synchronisation (Locks & Waits)](VTUNE_THREADING_ANALYSIS_GUIDE.md)
   - [Rapport de Profiling VTune : Analyse Threading & Locks (14 Août 2026)](20260814_threading_locks_vtune_report.md)
