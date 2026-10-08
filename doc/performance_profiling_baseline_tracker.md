@@ -82,6 +82,7 @@ Ce registre centralise et pérennise l'historique complet des mesures de perform
 
 | Date | Jalon / Événement | Cible Matérielle | Tps Frame GPU | Tps Frame CPU | FPS Global | Notes Clés |
 | :--- | :--- | :--- | :---: | :---: | :---: | :--- |
+| **08/10/2026** | **Fusion Backlight MRT Single-Pass** | Intel Iris Xe | **1.711 ms** | **0.72 ms** | **584.46 FPS** | +31.60 FPS (+5.72 % vs baseline 552.86 FPS), suppression passe Smoke_Backlight_Mask. |
 | **07/10/2026** | **Audit Matériel iGPU & Real GPU Queries** | Intel Iris Xe | **1,63 ms** | **0,76 ms** | **~615** | GPU profiler activé (`feature = tracy`), bloom identifié à 51% GPU. |
 | **06/10/2026** | Volumetric Shading & Wrap Lighting | Intel Iris Xe | ~1,65 ms | ~0,80 ms | ~600 | Intégration LUT 2D Zero SQRT et wrap lighting fumée. |
 | **14/08/2026** | Refactoring Swap-and-Pop & Memory SoA | Intel Iris Xe | N/A | ~0,85 ms | ~580 | Élimination des réallocations vectorielles dans la physique. |

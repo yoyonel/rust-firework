@@ -60,6 +60,7 @@
   - [Rapport d'Autopsie : Channel Packing des Textures de Fumée (Phase 2 Option B)](20261006_smoke_texture_channel_packing_autopsy_report.md)
   - [Rapport d'Autopsie : Buffer d'Éclairage Volumétrique Basse Résolution (Phase 2)](20261006_low_res_volumetric_buffer_autopsy_report.md)
   - [Rapport Technique : Réalisme Volumétrique — Afterglow Spectral & Shading Sphérique 3D](20261006_volumetric_realism_afterglow_wrap_shading_report.md)
+  - [Rapport Technique : Fusion du Backlight Mask en MRT Single-Pass](20261007_mrt_single_pass_smoke_backlight_optimization_report.md)
   - [Rapport d'Investigation Technique : Dérive des Ratios Tracy Profiler en CI & Justification Exhaustive](20261006_ci_tracy_ratio_drift_investigation_report.md)
 
 - [Profilage et Performance]()
