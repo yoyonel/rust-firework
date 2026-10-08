@@ -60,6 +60,9 @@ pub trait ParticleGraphicsRenderer {
     ) {
     }
 
+    /// Définit si le rétroéclairage écran (Screen-Space Backlight) est actif pour ce renderer.
+    fn set_backlight_enabled(&mut self, _enabled: bool) {}
+
     /// Dessine le masque alpha de la fumée pour le rétro-éclairage écran (Screen-Space Backlight).
     ///
     /// # Safety

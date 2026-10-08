@@ -15,7 +15,19 @@ impl BloomPass {
     /// This function is unsafe because it calls OpenGL functions directly and changes framebuffer bindings.
     pub unsafe fn begin_scene(&self) {
         gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo);
+        // Clear all 3 MRT attachments (Scene, Brightness, SmokeMask) simultaneously
+        let all_attachments = [
+            gl::COLOR_ATTACHMENT0,
+            gl::COLOR_ATTACHMENT1,
+            gl::COLOR_ATTACHMENT2,
+        ];
+        gl::DrawBuffers(3, all_attachments.as_ptr());
+        gl::ClearColor(0.0, 0.0, 0.0, 0.0);
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+        // Reset default active draw buffers to Scene (0) and Brightness (1)
+        let default_attachments = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+        gl::DrawBuffers(2, default_attachments.as_ptr());
     }
 
     /// Ends scene rendering and applies bloom post-processing
@@ -348,7 +360,9 @@ impl BloomPass {
         gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
         gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
         gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
-        gl::DeleteFramebuffers(1, &self.smoke_mask_fbo);
+        if self.smoke_mask_fbo != 0 {
+            gl::DeleteFramebuffers(1, &self.smoke_mask_fbo);
+        }
         gl::DeleteTextures(1, &self.smoke_mask_texture);
 
         // Recreate with new size

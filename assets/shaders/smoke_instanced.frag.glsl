@@ -10,6 +10,7 @@ in vec3 vScatteredLight;
 
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 BrightColor;
+layout(location = 2) out vec4 SmokeMask;
 
 uniform sampler2D u_SmokeTexture;
 uniform sampler2D u_FlowMap;
@@ -83,15 +84,6 @@ void main() {
         }
     }
 
-    // Screen-space smoke backlight mask pass (§4.1 ADR)
-    // Directly output actual visible screen alpha (finalAlpha * vIntensity) and bypass all color/scattering logic
-    if (u_RenderMask != 0) {
-        float maskAlpha = finalAlpha * vIntensity;
-        FragColor = vec4(maskAlpha, 0.0, 0.0, 1.0);
-        BrightColor = vec4(0.0);
-        return;
-    }
-
     vec3 finalColor = smokeTex.rgb * vColor;
 
     // Glowing burn edge color along erosion seam
@@ -106,8 +98,12 @@ void main() {
     // Retains exact canonical soot modulation (factor 0.25, zero additive blowout)
     finalColor += finalColor * clamp(vScatteredLight * 0.25, vec3(0.0), vec3(1.2));
 
-    FragColor = vec4(finalColor * vIntensity, finalAlpha * vIntensity);
+    float maskAlpha = finalAlpha * vIntensity;
+    FragColor = vec4(finalColor * vIntensity, maskAlpha);
 
     // Smoke is non-emissive volumetric dust; keep bright bloom attachment zero to avoid blinding wash-out
     BrightColor = vec4(0.0, 0.0, 0.0, 0.0);
+
+    // Single-pass MRT: accumulate screen-space smoke backlight mask directly in Attachment 2
+    SmokeMask = vec4(maskAlpha, 0.0, 0.0, 1.0);
 }

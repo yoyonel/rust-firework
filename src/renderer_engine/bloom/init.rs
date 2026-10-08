@@ -69,7 +69,54 @@ impl BloomPass {
                 0,
             );
 
-            // Configure DrawBuffers for MRT
+            // Create Smoke Mask texture (MRT Attachment 2 for single-pass screen-space backlight)
+            let mut smoke_mask_texture = 0;
+            gl::GenTextures(1, &mut smoke_mask_texture);
+            gl::BindTexture(gl::TEXTURE_2D, smoke_mask_texture);
+            gl::TexImage2D(
+                gl::TEXTURE_2D,
+                0,
+                gl::R8 as i32,
+                width,
+                height,
+                0,
+                gl::RED,
+                gl::UNSIGNED_BYTE,
+                std::ptr::null(),
+            );
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
+            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
+            gl::FramebufferTexture2D(
+                gl::FRAMEBUFFER,
+                gl::COLOR_ATTACHMENT2,
+                gl::TEXTURE_2D,
+                smoke_mask_texture,
+                0,
+            );
+
+            // Check if R8 Attachment 2 is complete, fallback to RGBA8 if needed
+            let mask_status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
+            if mask_status != gl::FRAMEBUFFER_COMPLETE {
+                log::warn!(
+                    "⚠️ HDR FBO with R8 Attachment 2 incomplete (status {mask_status}), falling back to RGBA8"
+                );
+                gl::BindTexture(gl::TEXTURE_2D, smoke_mask_texture);
+                gl::TexImage2D(
+                    gl::TEXTURE_2D,
+                    0,
+                    gl::RGBA8 as i32,
+                    width,
+                    height,
+                    0,
+                    gl::RGBA,
+                    gl::UNSIGNED_BYTE,
+                    std::ptr::null(),
+                );
+            }
+
+            // Configure default DrawBuffers for MRT (Scene + Bright)
             let attachments = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
             gl::DrawBuffers(2, attachments.as_ptr());
 
@@ -225,61 +272,10 @@ impl BloomPass {
 
             gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
-            // Screen-space smoke mask FBO (at 1/2 screen resolution for backlight illumination)
-            let mask_width = std::cmp::max(1, width / 2);
-            let mask_height = std::cmp::max(1, height / 2);
-            let mut smoke_mask_fbo = 0;
-            let mut smoke_mask_texture = 0;
-            gl::GenFramebuffers(1, &mut smoke_mask_fbo);
-            gl::GenTextures(1, &mut smoke_mask_texture);
-
-            gl::BindFramebuffer(gl::FRAMEBUFFER, smoke_mask_fbo);
-            gl::BindTexture(gl::TEXTURE_2D, smoke_mask_texture);
-            gl::TexImage2D(
-                gl::TEXTURE_2D,
-                0,
-                gl::R8 as i32,
-                mask_width,
-                mask_height,
-                0,
-                gl::RED,
-                gl::UNSIGNED_BYTE,
-                std::ptr::null(),
-            );
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_S, gl::CLAMP_TO_EDGE as i32);
-            gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_WRAP_T, gl::CLAMP_TO_EDGE as i32);
-            gl::FramebufferTexture2D(
-                gl::FRAMEBUFFER,
-                gl::COLOR_ATTACHMENT0,
-                gl::TEXTURE_2D,
-                smoke_mask_texture,
-                0,
-            );
-
-            let mut mask_status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
-            if mask_status != gl::FRAMEBUFFER_COMPLETE {
-                log::warn!(
-                    "⚠️ Smoke mask R8 FBO incomplete (status {mask_status}), falling back to RGBA8"
-                );
-                gl::TexImage2D(
-                    gl::TEXTURE_2D,
-                    0,
-                    gl::RGBA8 as i32,
-                    mask_width,
-                    mask_height,
-                    0,
-                    gl::RGBA,
-                    gl::UNSIGNED_BYTE,
-                    std::ptr::null(),
-                );
-                mask_status = gl::CheckFramebufferStatus(gl::FRAMEBUFFER);
-                if mask_status != gl::FRAMEBUFFER_COMPLETE {
-                    return Err(format!("Smoke mask framebuffer incomplete: {mask_status}"));
-                }
-            }
-            gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
+            // Smoke mask dimensions match full HDR scene resolution for single-pass MRT
+            let mask_width = width;
+            let mask_height = height;
+            let smoke_mask_fbo = 0;
 
             // Cache uniform locations
             let loc_blur_texture = gl::GetUniformLocation(blur_shader, crate::cstr!("uTexture"));
@@ -415,7 +411,9 @@ impl BloomPass {
                 let label = format!("Tex_Bloom_Compare_Mode_{}", i);
                 label_gl_object!(gl::TEXTURE, tex, &label);
             }
-            label_gl_object!(gl::FRAMEBUFFER, smoke_mask_fbo, "FBO_Smoke_Mask");
+            if smoke_mask_fbo != 0 {
+                label_gl_object!(gl::FRAMEBUFFER, smoke_mask_fbo, "FBO_Smoke_Mask");
+            }
             label_gl_object!(gl::TEXTURE, smoke_mask_texture, "Tex_Smoke_Mask");
             label_gl_object!(gl::VERTEX_ARRAY, dummy_vao, "VAO_Fullscreen_Quad_Dummy");
 

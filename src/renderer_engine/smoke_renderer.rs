@@ -67,6 +67,7 @@ pub struct SmokeRenderer {
     smoke_ambient_flash: f32,
     smoke_lighting_lut_enabled: bool,
     smoke_wrap_relief: f32,
+    pub backlight_enabled: bool,
     light_falloff_lut_texture_id: u32,
     loc_light_falloff_lut: i32,
     loc_use_lut: i32,
@@ -204,6 +205,7 @@ impl SmokeRenderer {
                 smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
                 smoke_lighting_lut_enabled: constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED,
                 smoke_wrap_relief: constants::DEFAULT_SMOKE_WRAP_RELIEF,
+                backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -411,16 +413,39 @@ impl SmokeRenderer {
 
         push_debug_group!(31, "Draw Instanced Smoke");
 
-        // 1. Enable Alpha Blending for soft particle dissipation
+        // 1. Enable Blending
         gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
         // 2. Disable Depth Writing to prevent Z-fighting and quad intersection artifacts
         gl::DepthMask(gl::FALSE);
 
-        // 3. Write to Color Attachment 0 (Scene) and Attachment 1 (Bloom)
-        gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
-        gl::ColorMaski(1, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+        // 3. Configure DrawBuffers, ColorMasks and separate Blending per buffer (MRT single-pass)
+        let has_backlight = self.backlight_enabled;
+        if has_backlight {
+            let draw_buffers = [
+                gl::COLOR_ATTACHMENT0,
+                gl::COLOR_ATTACHMENT1,
+                gl::COLOR_ATTACHMENT2,
+            ];
+            gl::DrawBuffers(3, draw_buffers.as_ptr());
+            gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+            gl::ColorMaski(1, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE); // Smoke emits zero bloom
+            gl::ColorMaski(2, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+
+            if gl::BlendFunci::is_loaded() {
+                gl::BlendFunci(0, gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+                gl::BlendFunci(2, gl::ONE, gl::ONE);
+            } else {
+                gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            }
+        } else {
+            let draw_buffers = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+            gl::DrawBuffers(2, draw_buffers.as_ptr());
+            gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+            gl::ColorMaski(1, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+            gl::ColorMaski(2, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
 
         if *active_shader != self.shader_program {
             gl::UseProgram(self.shader_program);
@@ -498,9 +523,14 @@ impl SmokeRenderer {
 
         gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, count as i32);
 
-        // Restore depth write and color mask for attachment 1
+        // Restore draw buffers, depth write, color masks and default blending
         gl::DepthMask(gl::TRUE);
+        let default_draw_buffers = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+        gl::DrawBuffers(2, default_draw_buffers.as_ptr());
+        gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
         gl::ColorMaski(1, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+        gl::ColorMaski(2, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
         pop_debug_group!();
 
@@ -513,100 +543,23 @@ impl SmokeRenderer {
         self.current_frame = (self.current_frame + 1) % 3;
     }
 
+    pub fn set_backlight_enabled(&mut self, enabled: bool) {
+        self.backlight_enabled = enabled;
+    }
+
     /// Dessine le masque alpha de fumée pour la backlight écran (§4.1 ADR).
     ///
     /// # Safety
     /// L'appelant doit s'assurer que le contexte OpenGL est valide.
     pub unsafe fn render_smoke_mask(
         &mut self,
-        count: usize,
-        mask_fbo: u32,
-        mask_width: i32,
-        mask_height: i32,
+        _count: usize,
+        _mask_fbo: u32,
+        _mask_width: i32,
+        _mask_height: i32,
     ) {
-        crate::tracy_zone!("SmokeRenderer::render_smoke_mask", 0x444444);
-
-        // Bind dedicated mask FBO at 1/2 resolution
-        gl::BindFramebuffer(gl::FRAMEBUFFER, mask_fbo);
-        gl::Viewport(0, 0, mask_width, mask_height);
-
-        // Clear mask to 0.0 EVERY frame (Mandatory: §4.1 ADR Non-Negotiable 1)
-        gl::ClearColor(0.0, 0.0, 0.0, 0.0);
-        gl::Clear(gl::COLOR_BUFFER_BIT);
-
-        if count == 0 {
-            return;
-        }
-
-        push_debug_group!(32, "Draw Smoke Alpha Mask");
-
-        // Additive blending (ONE, ONE) for accumulating smoke coverage
-        gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::ONE, gl::ONE);
-        gl::DepthMask(gl::FALSE);
-        gl::Disable(gl::DEPTH_TEST);
-
-        gl::UseProgram(self.shader_program);
-        gl::BindVertexArray(self.vaos[self.current_frame]);
-
-        // Bind textures
-        gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-
-        gl::ActiveTexture(gl::TEXTURE1);
-        gl::BindTexture(gl::TEXTURE_2D, self.flow_map_texture_id);
-
-        gl::ActiveTexture(gl::TEXTURE2);
-        gl::BindTexture(gl::TEXTURE_2D, self.noise_texture_id);
-
-        if self.loc_flow_distortion_strength != -1 {
-            gl::Uniform1f(
-                self.loc_flow_distortion_strength,
-                self.flow_distortion_strength,
-            );
-        }
-        if self.loc_flow_animation_speed != -1 {
-            gl::Uniform1f(self.loc_flow_animation_speed, self.flow_animation_speed);
-        }
-
-        if self.loc_erosion_enabled != -1 {
-            gl::Uniform1i(
-                self.loc_erosion_enabled,
-                if self.erosion_enabled { 1 } else { 0 },
-            );
-        }
-        if self.loc_erosion_scale != -1 {
-            gl::Uniform1f(self.loc_erosion_scale, self.erosion_scale);
-        }
-        if self.loc_erosion_edge_width != -1 {
-            gl::Uniform1f(self.loc_erosion_edge_width, self.erosion_edge_width);
-        }
-        if self.loc_erosion_edge_color != -1 {
-            gl::Uniform3f(
-                self.loc_erosion_edge_color,
-                self.erosion_edge_color[0],
-                self.erosion_edge_color[1],
-                self.erosion_edge_color[2],
-            );
-        }
-
-        // Activate mask rendering mode (shader exits early, bypassing volumetric lights loop)
-        if self.loc_render_mask != -1 {
-            gl::Uniform1i(self.loc_render_mask, 1);
-        }
-
-        gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, count as i32);
-
-        // Reset mask mode back to 0
-        if self.loc_render_mask != -1 {
-            gl::Uniform1i(self.loc_render_mask, 0);
-        }
-
-        // Restore standard alpha blending and depth test
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        gl::Enable(gl::DEPTH_TEST);
-
-        pop_debug_group!();
+        // No-op : en mode MRT Single-Pass, le masque de rétroéclairage
+        // est écrit directement dans Attachment 2 pendant render_smoke_instanced.
     }
 
     /// Libère les ressources GPU (VAO, VBO, shaders, textures).
@@ -955,6 +908,10 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
         self.smoke_ambient_flash = ambient_flash;
         self.smoke_lighting_lut_enabled = use_lut;
         self.smoke_wrap_relief = wrap_relief;
+    }
+
+    fn set_backlight_enabled(&mut self, enabled: bool) {
+        self.backlight_enabled = enabled;
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {

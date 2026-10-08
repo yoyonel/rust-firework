@@ -690,6 +690,10 @@ impl Renderer {
                     self.config.smoke_lighting_lut_enabled,
                     self.config.smoke_wrap_relief,
                 );
+                let backlight = self.bloom_pass.enabled
+                    && self.config.volumetric_lighting_enabled
+                    && self.config.backlight_enabled;
+                renderer.set_backlight_enabled(backlight);
             }
 
             let nb;
@@ -697,38 +701,6 @@ impl Renderer {
             {
                 tracy_zone!("Renderer::fill_buffer", palette::ENV);
                 nb = renderer.fill_particle_data_direct(physic, alpha);
-            }
-
-            // Screen-space smoke mask pass for backlight illumination (§4.1 ADR)
-            // Executed strictly if smoke particle type, bloom enabled, backlight enabled, and render_smoke active.
-            // Bypassed completely (zero-cost: zero draw calls, zero clears, zero uploads) otherwise.
-            if renderer.particle_type() == Some(crate::physic_engine::ParticleType::Smoke)
-                && self.bloom_pass.enabled
-                && self.config.volumetric_lighting_enabled
-                && self.config.backlight_enabled
-            {
-                gpu_profile_zone!(
-                    12,
-                    "Renderer::Smoke_Backlight_Mask",
-                    palette::POSTPROCESS,
-                    profiler
-                );
-                renderer.render_smoke_mask(
-                    nb,
-                    self.bloom_pass.smoke_mask_fbo,
-                    self.bloom_pass.mask_width,
-                    self.bloom_pass.mask_height,
-                );
-                // Restore HDR scene FBO, viewport, and MRT draw buffers
-                gl::BindFramebuffer(gl::FRAMEBUFFER, self.bloom_pass.hdr_fbo());
-                gl::Viewport(
-                    0,
-                    0,
-                    self.window_size_f32.0 as i32,
-                    self.window_size_f32.1 as i32,
-                );
-                let draw_buffers = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
-                gl::DrawBuffers(2, draw_buffers.as_ptr());
             }
 
             // Dessine les particules (Opération hautement GPU, on utilise le profiler complet)
@@ -830,8 +802,6 @@ impl RendererEngine for Renderer {
                 {
                     gpu_profile_zone!(1, "Pass: HDR Scene", palette::SCENE, profiler);
                     self.bloom_pass.begin_scene();
-                    gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
 
                     self.render_sky_haze();
 
