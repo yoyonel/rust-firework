@@ -69,6 +69,7 @@
   - [Rapport d'Autopsie : Filtre Karis 13-Tap & Downscale Bloom (Piste 1)](20261010_bloom_karis_downsample_benchmark_and_postmortem_report.md)
   - [Rapport d'Autopsie : Optimisations Arithmétiques & DrawBuffers Sky Haze (Piste 3)](20261010_sky_haze_arithmetic_and_drawbuffers_optimization_report.md)
   - [Rapport d'Autopsie : Discard vs Branchless Alpha dans point_rendering.frag (Point 1)](20261010_point_rendering_discard_vs_branchless_autopsy_report.md)
+  - [Rapport d'Autopsie : Frustum Culling CPU des Particules (Point 2)](20261010_particle_frustum_culling_autopsy_report.md)
   - [Rapport de Profiling GPU Matériel : Éclairage Volumétrique (Intel Iris Xe)](20260930_volumetric_lighting_hardware_profiling_report.md)
   - [Guide d'Analyse VTune : Threading & Synchronisation (Locks & Waits)](VTUNE_THREADING_ANALYSIS_GUIDE.md)
   - [Rapport de Profiling VTune : Analyse Threading & Locks (14 Août 2026)](20260814_threading_locks_vtune_report.md)
