@@ -511,6 +511,16 @@ tasks:
         echo "📊 Démarrage du serveur mdBook sur http://localhost:$PORT..."
         mdbook serve --port "$PORT" --open
 
+  doc:record-demo:
+    desc: "Enregistre une démo vidéo (MP4) et GIF haute qualité du simulateur avec volumétrie active"
+    cmds:
+      - ./scripts/record_demo.sh
+
+  doc:capture-gui:
+    desc: "Capture automatiquement les captures d'écran des 5 onglets du panneau de contrôle ImGui (doc/images/)"
+    cmds:
+      - ./scripts/capture_gui_screenshots.sh
+
   doc:clean:
     desc: "Nettoie les fichiers de documentation compilés"
     cmds:
