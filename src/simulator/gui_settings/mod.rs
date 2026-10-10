@@ -54,6 +54,7 @@ pub struct GuiSettings {
     pub smoke_preview_rocket_color: [f32; 3],
     pub smoke_preview_simulated_speed: f32,
     pub smoke_preview_simulated_angle_offset: f32,
+    pub smoke_preview: Option<crate::renderer_engine::smoke_preview::SmokePreviewRenderer>,
 }
 
 impl Default for GuiSettings {
@@ -84,6 +85,7 @@ impl GuiSettings {
             smoke_preview_rocket_color: session.smoke_preview_rocket_color,
             smoke_preview_simulated_speed: session.smoke_preview_simulated_speed,
             smoke_preview_simulated_angle_offset: session.smoke_preview_simulated_angle_offset,
+            smoke_preview: None,
         };
         // Sync static AtomicBool and viewport transform atomics from persisted session state
         smoke::SHOW_GEOMETRY_TRIMMING.store(
@@ -468,6 +470,7 @@ impl GuiSettings {
                                 ui,
                                 physic_engine,
                                 cmd_queue,
+                                &mut self.smoke_preview,
                                 &mut self.smoke_preview_max_zoom,
                                 &mut self.smoke_preview_rocket_color,
                                 &mut self.smoke_preview_simulated_speed,

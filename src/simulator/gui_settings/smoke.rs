@@ -10,8 +10,6 @@ use crate::renderer_engine::smoke_preview::{
 };
 use imgui::{ColorEditFlags, Ui};
 use std::sync::atomic::{AtomicBool, Ordering};
-
-static mut PREVIEW_GPU: Option<SmokePreviewRenderer> = None;
 // GUI_PERSIST: gui.layout
 pub static SHOW_GEOMETRY_TRIMMING: AtomicBool = AtomicBool::new(true);
 
@@ -471,6 +469,7 @@ pub fn render_smoke_settings_tab(
     ui: &Ui,
     state: &impl SmokeStateReader,
     cmd_queue: &mut Vec<EngineCommand>,
+    smoke_preview: &mut Option<SmokePreviewRenderer>,
     preview_max_zoom: &mut f32,
     preview_rocket_color: &mut [f32; 3],
     preview_simulated_speed: &mut f32,
@@ -521,35 +520,29 @@ pub fn render_smoke_settings_tab(
     ui.spacing();
 
     // Init GPU FBO renderer if needed
-    #[allow(static_mut_refs)]
-    let fbo_tex = unsafe {
-        if PREVIEW_GPU.is_none() {
-            PREVIEW_GPU = Some(SmokePreviewRenderer::init());
-        }
-        let preview = PREVIEW_GPU.as_mut().unwrap();
-        let zoom = PREVIEW_ZOOM.load(Ordering::Relaxed) as f32 / 100.0;
-        let pan_x = PREVIEW_PAN_X.load(Ordering::Relaxed) as f32 / 10.0;
-        let pan_y = PREVIEW_PAN_Y.load(Ordering::Relaxed) as f32 / 10.0;
-        let rot_z = PREVIEW_ROT_Z.load(Ordering::Relaxed) as f32 / 10.0;
-        let font_sz = ui.current_font_size();
-        let preview_height = font_sz * 11.15;
-        let canvas_aspect = (avail_width / preview_height).max(0.1);
-        let ctx = PreviewContext {
-            config: cfg,
-            zoom,
-            pan_x,
-            pan_y,
-            rot_deg: rot_z,
-            canvas_aspect,
-            time: ui.time() as f32,
-            dt: ui.io().delta_time,
-            rocket_color: *preview_rocket_color,
-            simulated_speed: *preview_simulated_speed,
-            simulated_angle_offset_deg: *preview_simulated_angle_offset,
-            tone_mapping_mode: 5,
-        };
-        preview.render(&ctx)
+    let preview = smoke_preview.get_or_insert_with(SmokePreviewRenderer::init);
+    let zoom = PREVIEW_ZOOM.load(Ordering::Relaxed) as f32 / 100.0;
+    let pan_x = PREVIEW_PAN_X.load(Ordering::Relaxed) as f32 / 10.0;
+    let pan_y = PREVIEW_PAN_Y.load(Ordering::Relaxed) as f32 / 10.0;
+    let rot_z = PREVIEW_ROT_Z.load(Ordering::Relaxed) as f32 / 10.0;
+    let font_sz = ui.current_font_size();
+    let preview_height = font_sz * 11.15;
+    let canvas_aspect = (avail_width / preview_height).max(0.1);
+    let ctx = PreviewContext {
+        config: cfg,
+        zoom,
+        pan_x,
+        pan_y,
+        rot_deg: rot_z,
+        canvas_aspect,
+        time: ui.time() as f32,
+        dt: ui.io().delta_time,
+        rocket_color: *preview_rocket_color,
+        simulated_speed: *preview_simulated_speed,
+        simulated_angle_offset_deg: *preview_simulated_angle_offset,
+        tone_mapping_mode: 5,
     };
+    let fbo_tex = preview.render(&ctx);
 
     // =========================================================================
     // 2. 100% BIT-FOR-BIT ISO GPU FBO PREVIEW CANVAS (INTERACTIVE VIEWPORT)
@@ -820,8 +813,10 @@ pub fn render_smoke_settings_tab(
     ui.spacing();
     ui.separator();
 
-    #[allow(static_mut_refs)]
-    let raw_smoke_tex = unsafe { PREVIEW_GPU.as_ref().map(|p| p.smoke_tex).unwrap_or(0) };
+    let raw_smoke_tex = smoke_preview
+        .as_ref()
+        .map(|p| p.smoke_tex.raw())
+        .unwrap_or(0);
 
     let mut show_trimming = SHOW_GEOMETRY_TRIMMING.load(Ordering::Relaxed);
     if ui.checkbox(

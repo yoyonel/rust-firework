@@ -2,6 +2,7 @@ use crate::cstr;
 use crate::physic_engine::config::{PhysicConfig, SmokeColorMode};
 use crate::physic_engine::smoke_system::SmokeSystem;
 use crate::renderer_engine::constants;
+use crate::renderer_engine::gl_resource::{GlBuffer, GlFbo, GlProgram, GlTexture, GlVao};
 use crate::renderer_engine::smoke_renderer::SmokeInstanceGPU;
 use crate::renderer_engine::utils::texture::load_texture;
 use glam::{Vec2, Vec3};
@@ -31,19 +32,40 @@ pub struct PreviewContext<'a> {
 }
 
 pub struct SmokePreviewRenderer {
-    hdr_fbo: u32,
-    hdr_tex: u32,
-    fbo: u32,
-    color_tex: u32,
-    postproc_program: u32,
+    // 1. Framebuffers (détruits en premier afin de détacher les textures avant leur suppression)
+    hdr_fbo: GlFbo,
+    fbo: GlFbo,
+
+    // 2. Textures (détruites après les FBOs qui les référencent)
+    hdr_tex: GlTexture,
+    color_tex: GlTexture,
+    dummy_black_tex: GlTexture,
+    pub smoke_tex: GlTexture,
+    pub flow_map_tex: GlTexture,
+    pub noise_tex: GlTexture,
+    rocket_tex: GlTexture,
+
+    // 3. Vertex Array Objects (détruits avant les VBOs associés)
+    dummy_vao: GlVao,
+    smoke_vao: GlVao,
+    quad_vao: GlVao,
+
+    // 4. Buffers (VBOs et UBOs)
+    ubo_global: GlBuffer,
+    ubo_lighting: GlBuffer,
+    _smoke_quad_vbo: GlBuffer,
+    smoke_inst_vbo: GlBuffer,
+    _quad_vbo: GlBuffer,
+
+    // 5. Shader Programs (détruits en dernier)
+    postproc_program: GlProgram,
+    smoke_program: GlProgram,
+    quad_program: GlProgram,
+
+    // Uniform locations (scalaires i32, aucun RAII requis)
     loc_postproc_scene_tex: i32,
     loc_postproc_bloom_tex: i32,
     loc_postproc_tone_mapping_mode: i32,
-    dummy_vao: u32,
-    dummy_black_tex: u32,
-    ubo_global: u32,
-    ubo_lighting: u32,
-    smoke_program: u32,
     loc_smoke_tex: i32,
     loc_flow_map: i32,
     loc_noise_tex: i32,
@@ -53,16 +75,6 @@ pub struct SmokePreviewRenderer {
     loc_erosion_scale: i32,
     loc_edge_width: i32,
     loc_edge_color: i32,
-    smoke_vao: u32,
-    _smoke_quad_vbo: u32,
-    smoke_inst_vbo: u32,
-    pub smoke_tex: u32,
-    pub flow_map_tex: u32,
-    pub noise_tex: u32,
-    rocket_tex: u32,
-    quad_program: u32,
-    quad_vao: u32,
-    _quad_vbo: u32,
     loc_quad_rect: i32,
     loc_quad_size: i32,
     loc_quad_tex: i32,
@@ -440,19 +452,29 @@ impl SmokePreviewRenderer {
             gl::BindVertexArray(0);
 
             Self {
-                hdr_fbo,
-                hdr_tex,
-                fbo,
-                color_tex,
-                postproc_program,
+                hdr_fbo: GlFbo::from_raw(hdr_fbo),
+                fbo: GlFbo::from_raw(fbo),
+                hdr_tex: GlTexture::from_raw(hdr_tex),
+                color_tex: GlTexture::from_raw(color_tex),
+                dummy_black_tex: GlTexture::from_raw(dummy_black_tex),
+                smoke_tex: GlTexture::from_raw(smoke_tex),
+                flow_map_tex: GlTexture::from_raw(flow_map_tex),
+                noise_tex: GlTexture::from_raw(noise_tex),
+                rocket_tex: GlTexture::from_raw(rocket_tex),
+                dummy_vao: GlVao::from_raw(dummy_vao),
+                smoke_vao: GlVao::from_raw(smoke_vao),
+                quad_vao: GlVao::from_raw(quad_vao),
+                ubo_global: GlBuffer::from_raw(ubo_global),
+                ubo_lighting: GlBuffer::from_raw(ubo_lighting),
+                _smoke_quad_vbo: GlBuffer::from_raw(smoke_quad_vbo),
+                smoke_inst_vbo: GlBuffer::from_raw(smoke_inst_vbo),
+                _quad_vbo: GlBuffer::from_raw(quad_vbo),
+                postproc_program: GlProgram::from_raw(postproc_program),
+                smoke_program: GlProgram::from_raw(smoke_program),
+                quad_program: GlProgram::from_raw(quad_program),
                 loc_postproc_scene_tex,
                 loc_postproc_bloom_tex,
                 loc_postproc_tone_mapping_mode,
-                dummy_vao,
-                dummy_black_tex,
-                ubo_global,
-                ubo_lighting,
-                smoke_program,
                 loc_smoke_tex,
                 loc_flow_map,
                 loc_noise_tex,
@@ -462,16 +484,6 @@ impl SmokePreviewRenderer {
                 loc_erosion_scale,
                 loc_edge_width,
                 loc_edge_color,
-                smoke_vao,
-                _smoke_quad_vbo: smoke_quad_vbo,
-                smoke_inst_vbo,
-                smoke_tex,
-                flow_map_tex,
-                noise_tex,
-                rocket_tex,
-                quad_program,
-                quad_vao,
-                _quad_vbo: quad_vbo,
                 loc_quad_rect,
                 loc_quad_size,
                 loc_quad_tex,
@@ -491,7 +503,7 @@ impl SmokePreviewRenderer {
             let mut prev_viewport = [0; 4];
             gl::GetIntegerv(gl::VIEWPORT, prev_viewport.as_mut_ptr());
 
-            gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo.raw());
             gl::Viewport(
                 0,
                 0,
@@ -552,32 +564,32 @@ impl SmokePreviewRenderer {
             // Match main scene GL state: disable depth writes for smoke
             gl::DepthMask(gl::FALSE);
 
-            gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global.raw());
             let ubo_data: [f32; 4] = [sim_w, sim_h, 399.0 / 385.0, 1.5];
             gl::BufferSubData(gl::UNIFORM_BUFFER, 0, 16, ubo_data.as_ptr() as *const _);
-            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global);
+            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global.raw());
             gl::BindBufferBase(
                 gl::UNIFORM_BUFFER,
                 constants::LIGHTING_UBO_BINDING_INDEX,
-                self.ubo_lighting,
+                self.ubo_lighting.raw(),
             );
 
-            gl::UseProgram(self.smoke_program);
+            gl::UseProgram(self.smoke_program.raw());
 
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.smoke_tex);
+            gl::BindTexture(gl::TEXTURE_2D, self.smoke_tex.raw());
             if self.loc_smoke_tex != -1 {
                 gl::Uniform1i(self.loc_smoke_tex, 0);
             }
 
             gl::ActiveTexture(gl::TEXTURE1);
-            gl::BindTexture(gl::TEXTURE_2D, self.flow_map_tex);
+            gl::BindTexture(gl::TEXTURE_2D, self.flow_map_tex.raw());
             if self.loc_flow_map != -1 {
                 gl::Uniform1i(self.loc_flow_map, 1);
             }
 
             gl::ActiveTexture(gl::TEXTURE2);
-            gl::BindTexture(gl::TEXTURE_2D, self.noise_tex);
+            gl::BindTexture(gl::TEXTURE_2D, self.noise_tex.raw());
             if self.loc_noise_tex != -1 {
                 gl::Uniform1i(self.loc_noise_tex, 2);
             }
@@ -639,7 +651,7 @@ impl SmokePreviewRenderer {
             }
 
             if !instances.is_empty() {
-                gl::BindBuffer(gl::ARRAY_BUFFER, self.smoke_inst_vbo);
+                gl::BindBuffer(gl::ARRAY_BUFFER, self.smoke_inst_vbo.raw());
                 gl::BufferSubData(
                     gl::ARRAY_BUFFER,
                     0,
@@ -647,7 +659,7 @@ impl SmokePreviewRenderer {
                     instances.as_ptr() as *const _,
                 );
 
-                gl::BindVertexArray(self.smoke_vao);
+                gl::BindVertexArray(self.smoke_vao.raw());
                 gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, instances.len() as i32);
                 gl::BindVertexArray(0);
             }
@@ -656,7 +668,7 @@ impl SmokePreviewRenderer {
             gl::DepthMask(gl::TRUE);
 
             // 2. RENDER ROCKET SPRITE (render_order=20 in main scene — drawn OVER smoke)
-            gl::UseProgram(self.quad_program);
+            gl::UseProgram(self.quad_program.raw());
             gl::Uniform2f(self.loc_quad_size, sim_w, sim_h);
             gl::Uniform4f(self.loc_quad_rect, center_x, center_y, rocket_w, rocket_h);
             gl::Uniform1f(self.loc_quad_rot_z, rot_rad);
@@ -669,14 +681,14 @@ impl SmokePreviewRenderer {
                 );
             }
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.rocket_tex);
+            gl::BindTexture(gl::TEXTURE_2D, self.rocket_tex.raw());
             gl::Uniform1i(self.loc_quad_tex, 0);
 
-            gl::BindVertexArray(self.quad_vao);
+            gl::BindVertexArray(self.quad_vao.raw());
             gl::DrawArrays(gl::TRIANGLE_STRIP, 0, 4);
 
             // 3. POST-PROCESS COMPOSITE PASS: Tone-Mapping & Composition (shared with main scene bloom_composition shader)
-            gl::BindFramebuffer(gl::FRAMEBUFFER, self.fbo);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.fbo.raw());
             gl::Viewport(
                 0,
                 0,
@@ -687,16 +699,16 @@ impl SmokePreviewRenderer {
             gl::Clear(gl::COLOR_BUFFER_BIT);
 
             gl::Disable(gl::BLEND);
-            gl::UseProgram(self.postproc_program);
+            gl::UseProgram(self.postproc_program.raw());
 
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.hdr_tex);
+            gl::BindTexture(gl::TEXTURE_2D, self.hdr_tex.raw());
             if self.loc_postproc_scene_tex != -1 {
                 gl::Uniform1i(self.loc_postproc_scene_tex, 0);
             }
 
             gl::ActiveTexture(gl::TEXTURE1);
-            gl::BindTexture(gl::TEXTURE_2D, self.dummy_black_tex);
+            gl::BindTexture(gl::TEXTURE_2D, self.dummy_black_tex.raw());
             if self.loc_postproc_bloom_tex != -1 {
                 gl::Uniform1i(self.loc_postproc_bloom_tex, 1);
             }
@@ -705,7 +717,7 @@ impl SmokePreviewRenderer {
                 gl::Uniform1i(self.loc_postproc_tone_mapping_mode, ctx.tone_mapping_mode);
             }
 
-            gl::BindVertexArray(self.dummy_vao);
+            gl::BindVertexArray(self.dummy_vao.raw());
             gl::DrawArrays(gl::TRIANGLES, 0, 3);
             gl::BindVertexArray(0);
 
@@ -718,12 +730,12 @@ impl SmokePreviewRenderer {
                 prev_viewport[3],
             );
 
-            self.color_tex
+            self.color_tex.raw()
         }
     }
 
     pub fn fbo(&self) -> u32 {
-        self.fbo
+        self.fbo.raw()
     }
 
     pub fn reset_seed(&mut self) {
