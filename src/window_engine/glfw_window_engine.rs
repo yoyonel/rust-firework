@@ -6,7 +6,6 @@ use imgui_glfw_rs::glfw;
 use imgui_glfw_rs::ImguiGLFW;
 use log::{debug, info};
 
-use crate::renderer_engine::tools::{setup_opengl_debug, show_opengl_context_info};
 use crate::utils::clipboard_backend::make_clipboard_backend;
 use crate::utils::Fullscreen;
 
@@ -62,14 +61,6 @@ impl WindowEngine for GlfwWindowEngine {
         // load OpenGL function pointers
         gl::load_with(|s| window.get_proc_address(s) as *const _);
 
-        unsafe {
-            show_opengl_context_info();
-            setup_opengl_debug();
-            gl::Enable(gl::PROGRAM_POINT_SIZE);
-            gl::Enable(gl::BLEND);
-            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-        }
-
         let mut imgui = ImContext::create();
         imgui.set_ini_filename(crate::utils::config_path::get_imgui_ini_path());
 
@@ -87,10 +78,6 @@ impl WindowEngine for GlfwWindowEngine {
         }]);
 
         imgui.fonts().build_rgba32_texture();
-        let session_path = crate::utils::config_path::get_gui_session_path();
-        let session =
-            crate::simulator::gui_settings::GuiSessionState::load_from_file(&session_path);
-        crate::simulator::gui_settings::apply_theme_to_context(&mut imgui, session.theme);
 
         let imgui_glfw = ImguiGLFW::new(&mut imgui, &mut window);
 
@@ -194,6 +181,10 @@ impl WindowEngine for GlfwWindowEngine {
 
     fn get_events(&self) -> &WindowEvents {
         &self.events
+    }
+
+    fn has_imgui(&self) -> bool {
+        self.imgui_system.is_some()
     }
 
     fn get_imgui_system_mut(&mut self) -> &mut ImguiSystem {

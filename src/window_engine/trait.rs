@@ -13,6 +13,11 @@ pub trait WindowEngine {
     where
         Self: Sized;
 
+    /// Checks if a valid ImGui system is available in this window engine.
+    fn has_imgui(&self) -> bool {
+        false
+    }
+
     fn poll_events(&mut self);
     fn swap_buffers(&mut self);
     fn should_close(&self) -> bool;

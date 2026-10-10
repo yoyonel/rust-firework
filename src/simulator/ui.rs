@@ -43,10 +43,7 @@ where
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
 
-        let dummy_check = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = self.window_engine.get_imgui_system_mut();
-        }));
-        if dummy_check.is_err() {
+        if !self.window_engine.has_imgui() {
             return; // Skip ImGui rendering when using dummy window engine in tests
         }
 

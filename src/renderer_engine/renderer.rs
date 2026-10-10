@@ -166,8 +166,13 @@ pub struct Renderer {
 //   dans le binaire, ce qui peut augmenter légèrement la taille du code.
 impl Renderer {
     pub fn new(width: i32, height: i32, physic_config: &PhysicConfig) -> Result<Self> {
-        // Note: OpenGL context initialization (show_opengl_context_info, setup_opengl_debug, etc.)
-        // is already done by GlfwWindowEngine::init(), so we don't duplicate it here.
+        unsafe {
+            crate::renderer_engine::tools::show_opengl_context_info();
+            crate::renderer_engine::tools::setup_opengl_debug();
+            gl::Enable(gl::PROGRAM_POINT_SIZE);
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
 
         let max_particles_on_gpu: usize = physic_config.max_rockets
             * (physic_config.particles_per_explosion + physic_config.particles_per_trail);

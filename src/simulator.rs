@@ -223,12 +223,29 @@ where
     A: AudioEngine,
     W: WindowEngine,
 {
-    pub fn new(renderer_engine: R, physic_engine: P, audio_engine: A, window_engine: W) -> Self {
+    pub fn new(
+        renderer_engine: R,
+        physic_engine: P,
+        audio_engine: A,
+        mut window_engine: W,
+    ) -> Self {
         let window_size = window_engine.get_size();
         let window_pos = window_engine.get_pos();
         let session_path = crate::utils::config_path::get_gui_session_path();
         let gui_session =
             crate::simulator::gui_settings::GuiSessionState::load_from_file(&session_path);
+
+        if window_engine.has_imgui() {
+            let (_, imgui_system) = window_engine.get_window_and_imgui_mut();
+            crate::simulator::gui_settings::apply_theme_to_context(
+                &mut imgui_system.context,
+                gui_session.theme,
+            );
+            log::info!(
+                "🎨 Initial GUI theme {:?} applied to ImGui context before first frame",
+                gui_session.theme
+            );
+        }
 
         let renderer_path = crate::utils::config_path::get_renderer_config_path();
         let event_cap = crate::physic_engine::constants::INITIAL_EVENT_BUFFER_CAPACITY;
