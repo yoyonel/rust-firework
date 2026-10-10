@@ -1,27 +1,4 @@
-use glam::Vec2;
-use std::time::Instant;
-
-/// Event envoyé par le renderer/physic au moteur audio
-#[derive(Clone, Debug)]
-pub struct DopplerEvent {
-    pub id: u64,            // id unique de la rocket
-    pub pos: Vec2,          // (x, y)
-    pub vel: Vec2,          // velocity (vx, vy) si dispo (optionnel)
-    pub gain: f32,          // per-source gain
-    pub timestamp: Instant, // moment de mesure côté renderer
-}
-
-impl Default for DopplerEvent {
-    fn default() -> Self {
-        Self {
-            id: 0,
-            pos: Vec2::ZERO,
-            vel: Vec2::ZERO,
-            gain: 1.0,
-            timestamp: Instant::now(),
-        }
-    }
-}
+pub use crate::domain_contracts::DopplerEvent;
 
 /// Thread-safe queue : crossbeam channel (sender côté renderer, receiver côté audio)
 pub mod doppler_queue {

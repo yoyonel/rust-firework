@@ -1,20 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
-pub enum BlurMethod {
-    Gaussian = 0,
-    Kawase = 1,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
-pub enum ToneMappingMode {
-    Reinhard = 0,
-    ReinhardExtended = 1,
-    ACES = 2,
-    Uncharted2 = 3,
-    AgX = 4,
-    KhronosPBR = 5,
-}
+pub use crate::domain_contracts::{BlurMethod, ToneMappingMode};
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
 pub struct RendererConfig {
@@ -240,6 +226,69 @@ impl RendererConfig {
         }
         std::fs::write(path, text)?;
         Ok(())
+    }
+}
+
+impl From<&RendererConfig> for crate::domain_contracts::RendererConfigSnapshot {
+    fn from(c: &RendererConfig) -> Self {
+        Self {
+            bloom_enabled: c.bloom_enabled,
+            bloom_intensity: c.bloom_intensity,
+            bloom_iterations: c.bloom_iterations,
+            bloom_downsample: c.bloom_downsample,
+            bloom_blur_method: c.bloom_blur_method,
+            tone_mapping_mode: c.tone_mapping_mode,
+            render_rockets: c.render_rockets,
+            render_smoke: c.render_smoke,
+            render_trails: c.render_trails,
+            render_explosions: c.render_explosions,
+            volumetric_lighting_enabled: c.volumetric_lighting_enabled,
+            smoke_lighting_enabled: c.smoke_lighting_enabled,
+            smoke_scattering_intensity: c.smoke_scattering_intensity,
+            smoke_ambient_flash: c.smoke_ambient_flash,
+            smoke_lighting_lut_enabled: c.smoke_lighting_lut_enabled,
+            sky_haze_enabled: c.sky_haze_enabled,
+            sky_haze_intensity: c.sky_haze_intensity,
+            sky_haze_ambient_flash: c.sky_haze_ambient_flash,
+            sky_haze_falloff: c.sky_haze_falloff,
+            dither_enabled: c.dither_enabled,
+            dither_strength: c.dither_strength,
+            volumetric_lighting_hysteresis_enabled: c.volumetric_lighting_hysteresis_enabled,
+            volumetric_lighting_fade_in_ms: c.volumetric_lighting_fade_in_ms,
+            volumetric_lighting_radius: c.volumetric_lighting_radius,
+            volumetric_lighting_decay_rate: c.volumetric_lighting_decay_rate,
+            volumetric_lighting_radius_expansion: c.volumetric_lighting_radius_expansion,
+            volumetric_lighting_flash_max_cap: c.volumetric_lighting_flash_max_cap,
+            volumetric_lighting_debug: c.volumetric_lighting_debug,
+            backlight_enabled: c.backlight_enabled,
+            backlight_strength: c.backlight_strength,
+            smoke_wrap_relief: c.smoke_wrap_relief,
+            spectral_afterglow_enabled: c.spectral_afterglow_enabled,
+            spectral_afterglow_decay: c.spectral_afterglow_decay,
+        }
+    }
+}
+
+impl crate::domain_contracts::RendererStateReader for RendererConfig {
+    #[inline(always)]
+    fn bloom_intensity(&self) -> f32 {
+        self.bloom_intensity
+    }
+    #[inline(always)]
+    fn exposure(&self) -> f32 {
+        1.0
+    }
+    #[inline(always)]
+    fn is_wireframe(&self) -> bool {
+        false
+    }
+    #[inline(always)]
+    fn vsync_enabled(&self) -> bool {
+        true
+    }
+    #[inline(always)]
+    fn config(&self) -> crate::domain_contracts::RendererConfigSnapshot {
+        self.into()
     }
 }
 

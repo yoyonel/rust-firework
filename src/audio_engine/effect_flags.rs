@@ -10,76 +10,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
-/// Identifiant d'un effet DSP audio, encodé comme un bit dans le masque `u32`.
-#[repr(u32)]
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AudioEffect {
-    /// Spatialisation binaurale ITD + ILD (retard inter-aural + différence de niveau).
-    Binaural = 1 << 0,
-    /// Panoramique stéréo standard gauche/droite.
-    Panning = 1 << 1,
-    /// Atténuation de l'amplitude en fonction de la distance source→auditeur.
-    DistanceAtten = 1 << 2,
-    /// Filtre passe-bas IIR du 1er ordre, fréquence de coupure dépendante de la distance.
-    LowPassFilter = 1 << 3,
-    /// Décalage de hauteur (playback_rate) simulant l'effet Doppler pour les sources mobiles.
-    Doppler = 1 << 4,
-    /// Rampe linéaire de volume en début (fade-in) et fin (fade-out) de chaque son.
-    FadeInOut = 1 << 5,
-    /// Interpolation linéaire (LERP) des gains gauche/droite entre blocs (anti-zipper).
-    GainLerp = 1 << 6,
-    /// Normalisation douce et contrôle du gain appliqués en sortie globale (limiteur doux).
-    Normalization = 1 << 7,
-    /// Bus spatial 2D (Harmoniques Circulaires / Ambisonics 2D W, X, Y pré-accumulés).
-    SpatialBus = 1 << 8,
-    /// Réverbération spatiale globale sur bus unique (Feedback Delay Network / Schroeder Reverb).
-    SpatialReverb = 1 << 9,
-    /// Décodeur HRTF binaural sur Bus Spatial 2D (Overlap-Save FFT sur enceintes virtuelles).
-    HrtfBus = 1 << 10,
-}
-
-impl AudioEffect {
-    /// Table de correspondance nom textuel ↔ variant.
-    /// Utilisée pour l'autocomplétion de la console et le parsing des commandes.
-    pub fn all_names() -> &'static [(&'static str, AudioEffect)] {
-        &[
-            ("binaural", AudioEffect::Binaural),
-            ("panning", AudioEffect::Panning),
-            ("distance_atten", AudioEffect::DistanceAtten),
-            ("lowpass", AudioEffect::LowPassFilter),
-            ("doppler", AudioEffect::Doppler),
-            ("fade", AudioEffect::FadeInOut),
-            ("gain_lerp", AudioEffect::GainLerp),
-            ("normalize", AudioEffect::Normalization),
-            ("spatial_bus", AudioEffect::SpatialBus),
-            ("spatial_reverb", AudioEffect::SpatialReverb),
-            ("hrtf_bus", AudioEffect::HrtfBus),
-        ]
-    }
-
-    /// Retourne le nom textuel de l'effet (inverse de `FromStr`).
-    pub fn name(self) -> &'static str {
-        Self::all_names()
-            .iter()
-            .find(|(_, e)| *e == self)
-            .map(|(n, _)| *n)
-            .unwrap_or("unknown")
-    }
-}
-
-/// Implémentation du trait standard pour le parsing depuis une chaîne.
-/// Permet d'écrire `"lowpass".parse::<AudioEffect>()` et satisfait clippy.
-impl std::str::FromStr for AudioEffect {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Self::all_names()
-            .iter()
-            .find(|(n, _)| *n == s)
-            .map(|(_, e)| *e)
-            .ok_or_else(|| format!("Unknown audio effect: '{}'", s))
-    }
-}
+pub use crate::domain_contracts::AudioEffect;
 
 /// Valeur par défaut du masque : tous les effets sont activés.
 pub const DEFAULT_FLAGS: u32 = AudioEffect::Binaural as u32

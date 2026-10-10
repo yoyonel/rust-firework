@@ -528,8 +528,9 @@ pub fn render_smoke_settings_tab(
     let font_sz = ui.current_font_size();
     let preview_height = font_sz * 11.15;
     let canvas_aspect = (avail_width / preview_height).max(0.1);
+    let physic_cfg = PhysicConfig::from(&cfg);
     let ctx = PreviewContext {
-        config: cfg,
+        config: &physic_cfg,
         zoom,
         pan_x,
         pan_y,

@@ -94,12 +94,7 @@ pub struct PhysicConfig {
     pub flow_animation_speed: f32,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum SmokeColorMode {
-    #[default]
-    RocketColor,
-    Custom,
-}
+pub use crate::domain_contracts::SmokeColorMode;
 
 use crate::physic_engine::constants;
 
@@ -204,5 +199,95 @@ impl PhysicConfig {
         }
         std::fs::write(path, text)?;
         Ok(())
+    }
+}
+
+impl From<&PhysicConfig> for crate::domain_contracts::SmokeConfigSnapshot {
+    fn from(c: &PhysicConfig) -> Self {
+        Self {
+            smoke_spawn_rate: c.smoke_spawn_rate,
+            smoke_initial_size: c.smoke_initial_size,
+            smoke_growth_rate_multiplier: c.smoke_growth_rate_multiplier,
+            smoke_fade_duration: c.smoke_fade_duration,
+            max_smoke_particles: c.max_smoke_particles,
+            smoke_intensity: c.smoke_intensity,
+            smoke_color_mode: c.smoke_color_mode,
+            smoke_custom_color: c.smoke_custom_color,
+            smoke_inherited_color_intensity: c.smoke_inherited_color_intensity,
+            smoke_erosion_enabled: c.smoke_erosion_enabled,
+            smoke_erosion_scale: c.smoke_erosion_scale,
+            smoke_erosion_edge_width: c.smoke_erosion_edge_width,
+            smoke_erosion_edge_color: c.smoke_erosion_edge_color,
+            flow_distortion_strength: c.flow_distortion_strength,
+            flow_animation_speed: c.flow_animation_speed,
+        }
+    }
+}
+
+impl From<&PhysicConfig> for crate::domain_contracts::PhysicConfigSnapshot {
+    fn from(c: &PhysicConfig) -> Self {
+        Self {
+            max_rockets: c.max_rockets,
+            particles_per_explosion: c.particles_per_explosion,
+            particles_per_trail: c.particles_per_trail,
+            rocket_interval_mean: c.rocket_interval_mean,
+            rocket_interval_variation: c.rocket_interval_variation,
+            rocket_max_next_interval: c.rocket_max_next_interval,
+            spawn_rocket_margin: c.spawn_rocket_margin,
+            spawn_rocket_vertical_angle: c.spawn_rocket_vertical_angle,
+            spawn_rocket_angle_variation: c.spawn_rocket_angle_variation,
+            spawn_rocket_min_speed: c.spawn_rocket_min_speed,
+            spawn_rocket_max_speed: c.spawn_rocket_max_speed,
+            explosion_threshold: c.explosion_threshold,
+            gravity: c.gravity,
+            initial_rocket_speed: c.initial_rocket_speed,
+            explosion_min_vel: c.explosion_min_vel,
+            explosion_max_vel: c.explosion_max_vel,
+            explosion_velocity_boost: c.explosion_velocity_boost,
+            audio_launch_anticipation_ms: c.audio_launch_anticipation_ms,
+            audio_explosion_anticipation_ms: c.audio_explosion_anticipation_ms,
+            smoke: c.into(),
+        }
+    }
+}
+
+impl From<&crate::domain_contracts::PhysicConfigSnapshot> for PhysicConfig {
+    fn from(s: &crate::domain_contracts::PhysicConfigSnapshot) -> Self {
+        Self {
+            max_rockets: s.max_rockets,
+            particles_per_explosion: s.particles_per_explosion,
+            particles_per_trail: s.particles_per_trail,
+            rocket_interval_mean: s.rocket_interval_mean,
+            rocket_interval_variation: s.rocket_interval_variation,
+            rocket_max_next_interval: s.rocket_max_next_interval,
+            spawn_rocket_margin: s.spawn_rocket_margin,
+            spawn_rocket_vertical_angle: s.spawn_rocket_vertical_angle,
+            spawn_rocket_angle_variation: s.spawn_rocket_angle_variation,
+            spawn_rocket_min_speed: s.spawn_rocket_min_speed,
+            spawn_rocket_max_speed: s.spawn_rocket_max_speed,
+            explosion_threshold: s.explosion_threshold,
+            gravity: s.gravity,
+            initial_rocket_speed: s.initial_rocket_speed,
+            explosion_min_vel: s.explosion_min_vel,
+            explosion_max_vel: s.explosion_max_vel,
+            explosion_velocity_boost: s.explosion_velocity_boost,
+            audio_launch_anticipation_ms: s.audio_launch_anticipation_ms,
+            audio_explosion_anticipation_ms: s.audio_explosion_anticipation_ms,
+            smoke_spawn_rate: s.smoke.smoke_spawn_rate,
+            smoke_initial_size: s.smoke.smoke_initial_size,
+            smoke_growth_rate_multiplier: s.smoke.smoke_growth_rate_multiplier,
+            smoke_fade_duration: s.smoke.smoke_fade_duration,
+            max_smoke_particles: s.smoke.max_smoke_particles,
+            smoke_intensity: s.smoke.smoke_intensity,
+            smoke_color_mode: s.smoke.smoke_color_mode,
+            smoke_custom_color: s.smoke.smoke_custom_color,
+            smoke_inherited_color_intensity: s.smoke.smoke_inherited_color_intensity,
+            smoke_erosion_enabled: s.smoke.smoke_erosion_enabled,
+            smoke_erosion_scale: s.smoke.smoke_erosion_scale,
+            smoke_erosion_edge_width: s.smoke.smoke_erosion_edge_width,
+            smoke_erosion_edge_color: s.smoke.smoke_erosion_edge_color,
+            flow_distortion_strength: s.smoke.flow_distortion_strength,
+            flow_animation_speed: s.smoke.flow_animation_speed,
+        }
     }
 }

@@ -188,3 +188,64 @@ pub trait PhysicEngine {
 }
 
 pub trait PhysicEngineFull: PhysicEngine + PhysicEngineIterator {}
+
+impl<T: PhysicEngine> crate::domain_contracts::PhysicStateReader for T {
+    #[inline(always)]
+    fn gravity(&self) -> f32 {
+        self.get_pending_config().gravity
+    }
+    #[inline(always)]
+    fn drag(&self) -> f32 {
+        0.0
+    }
+    #[inline(always)]
+    fn max_particles(&self) -> u32 {
+        self.get_pending_config().max_rockets as u32
+    }
+    #[inline(always)]
+    fn explosion_force(&self) -> f32 {
+        self.get_pending_config().explosion_max_vel
+    }
+    #[inline(always)]
+    fn explosion_shape(&self) -> &crate::domain_contracts::ExplosionShape {
+        self.get_explosion_shape()
+    }
+}
+
+impl<T: PhysicEngine> crate::domain_contracts::SmokeStateReader for T {
+    #[inline(always)]
+    fn density(&self) -> f32 {
+        self.get_pending_config().smoke_intensity
+    }
+    #[inline(always)]
+    fn dissipation(&self) -> f32 {
+        self.get_pending_config().smoke_fade_duration
+    }
+    #[inline(always)]
+    fn wind(&self) -> [f32; 2] {
+        [0.0, 0.0]
+    }
+    #[inline(always)]
+    fn config(&self) -> crate::domain_contracts::PhysicConfigSnapshot {
+        self.get_pending_config().into()
+    }
+}
+
+impl crate::domain_contracts::SmokeStateReader for crate::physic_engine::config::PhysicConfig {
+    #[inline(always)]
+    fn density(&self) -> f32 {
+        self.smoke_intensity
+    }
+    #[inline(always)]
+    fn dissipation(&self) -> f32 {
+        self.smoke_fade_duration
+    }
+    #[inline(always)]
+    fn wind(&self) -> [f32; 2] {
+        [0.0, 0.0]
+    }
+    #[inline(always)]
+    fn config(&self) -> crate::domain_contracts::PhysicConfigSnapshot {
+        self.into()
+    }
+}
