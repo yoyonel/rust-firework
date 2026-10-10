@@ -1,4 +1,4 @@
-use crossbeam_channel::{unbounded, Receiver, Sender};
+use crossbeam_channel::{Receiver, Sender};
 use hound::{WavSpec, WavWriter};
 use log::info;
 use std::{
@@ -7,6 +7,11 @@ use std::{
     thread,
     time::{Duration, Instant},
 };
+
+/// Capacité de la file de blocs WAV en attente d'écriture disque.
+/// N = 256 blocs. Avec block_size = 512 frames à 48 000 Hz (~10.67 ms/bloc), cela correspond à ~2.73 secondes
+/// de mémoire tampon audio absorbant les pics de latence I/O disque sans bloquer le callback audio temps réel.
+pub const WAV_WRITER_QUEUE_CAPACITY: usize = 256;
 
 /// Bloc audio identifié
 #[derive(Debug)]
@@ -18,6 +23,7 @@ pub struct AudioBlock {
 /// Writer audio sûr et asynchrone
 pub struct SafeWavWriter {
     pub tx: Sender<AudioBlock>,
+    pub recycle_rx: Receiver<Vec<[f32; 2]>>,
     handle: Option<thread::JoinHandle<()>>,
     stop_pair: Arc<(Mutex<bool>, Condvar)>, // signal de fin
 }
@@ -30,7 +36,9 @@ impl SafeWavWriter {
         type AudioSender = Sender<AudioBlock>;
         type AudioReceiver = Receiver<AudioBlock>;
 
-        let (tx, rx): (AudioSender, AudioReceiver) = unbounded();
+        let (tx, rx): (AudioSender, AudioReceiver) =
+            crossbeam_channel::bounded(WAV_WRITER_QUEUE_CAPACITY);
+        let (recycle_tx, recycle_rx) = crossbeam_channel::bounded(WAV_WRITER_QUEUE_CAPACITY);
 
         // Condvar pour arrêter le thread proprement
         let stop_pair = Arc::new((Mutex::new(true), Condvar::new()));
@@ -65,9 +73,9 @@ impl SafeWavWriter {
                 // Lecture bloc audio avec timeout pour gérer le flush périodique
                 let block_opt = rx.recv_timeout(Duration::from_millis(50));
                 match block_opt {
-                    Ok(block) => {
+                    Ok(mut block) => {
                         // 🔹 Écriture du bloc
-                        for frame in block.frames {
+                        for frame in &block.frames {
                             let left = (frame[0].clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
                             let right = (frame[1].clamp(-1.0, 1.0) * i16::MAX as f32) as i16;
                             writer.write_sample(left).ok();
@@ -84,6 +92,10 @@ impl SafeWavWriter {
                             );
                             last_flush = Instant::now();
                         }
+
+                        // 🔹 Recyclage du buffer par le canal retour (zéro réallocation)
+                        block.frames.clear();
+                        let _ = recycle_tx.try_send(block.frames);
                     }
                     Err(_) => {
                         // Vérifie signal de stop
@@ -109,14 +121,26 @@ impl SafeWavWriter {
 
         Self {
             tx,
+            recycle_rx,
             handle: Some(handle),
             stop_pair,
         }
     }
 
-    /// Pousse un bloc audio dans le writer
+    /// Tente de pousser un bloc audio dans le writer de manière non bloquante.
+    /// Retourne `true` si le bloc a été accepté, `false` en cas de saturation de la file.
+    pub fn try_push_block(&self, block: AudioBlock) -> bool {
+        self.tx.try_send(block).is_ok()
+    }
+
+    /// Récupère un buffer audio recyclé après écriture disque.
+    pub fn try_recycle_buffer(&self) -> Option<Vec<[f32; 2]>> {
+        self.recycle_rx.try_recv().ok()
+    }
+
+    /// Pousse un bloc audio dans le writer (conservé pour compatibilité des tests existants)
     pub fn push_block(&self, block: AudioBlock) {
-        let _ = self.tx.send(block);
+        let _ = self.tx.try_send(block);
     }
 
     /// Stoppe le thread et finalise le fichier
@@ -131,5 +155,45 @@ impl SafeWavWriter {
         if let Some(handle) = self.handle.take() {
             let _ = handle.join();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_safewavwriter_bounded_push_and_buffer_recycling() {
+        let temp_dir = std::env::temp_dir();
+        let path = temp_dir.join("test_safewavwriter_recycling.wav");
+        let path_str = path.to_str().unwrap();
+
+        let mut writer = SafeWavWriter::new(path_str, 48000);
+        let frames = vec![[0.1, -0.1]; 512];
+        assert!(writer.try_push_block(AudioBlock { index: 0, frames }));
+
+        // Allow writer thread to process block and return recycled buffer
+        let mut recycled = None;
+        for _ in 0..50 {
+            if let Some(buf) = writer.try_recycle_buffer() {
+                recycled = Some(buf);
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+
+        assert!(
+            recycled.is_some(),
+            "Buffer should be recycled back via return channel"
+        );
+        let recycled_buf = recycled.unwrap();
+        assert!(recycled_buf.is_empty(), "Recycled buffer must be cleared");
+        assert!(
+            recycled_buf.capacity() >= 512,
+            "Recycled buffer must preserve allocated capacity"
+        );
+
+        writer.stop();
+        let _ = std::fs::remove_file(path);
     }
 }

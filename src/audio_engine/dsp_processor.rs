@@ -183,7 +183,7 @@ impl DspProcessor {
 
         // 4. Finalisation et monitoring (Soft clipping isolé dans Hotspot)
         self.write_cpal_buffer(data, frames, global_gain, fx_mask);
-        self.export_wav(data, frames);
+        self.export_wav(data, frames, stats);
 
         self.current_sample_clock += frames as u64;
         self.sample_clock.store(
@@ -840,21 +840,34 @@ impl DspProcessor {
     }
 
     #[inline(always)]
-    fn export_wav(&mut self, data: &[f32], frames: usize) {
+    fn export_wav(&mut self, data: &[f32], frames: usize, stats: &AudioRealtimeStats) {
         if let Some(writer_arc) = &self.export_writer {
             self.export_buffer.clear();
             for i in 0..frames {
                 self.export_buffer.push([data[2 * i], data[2 * i + 1]]);
             }
 
+            let frames_vec = std::mem::take(&mut self.export_buffer);
             let block = AudioBlock {
                 index: self.block_index,
-                frames: self.export_buffer.clone(),
+                frames: frames_vec,
             };
             self.block_index += 1;
 
             if let Ok(writer) = writer_arc.try_lock() {
-                writer.push_block(block);
+                if !writer.try_push_block(block) {
+                    stats
+                        .dropped_blocks
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+                self.export_buffer = writer
+                    .try_recycle_buffer()
+                    .unwrap_or_else(|| Vec::with_capacity(frames));
+            } else {
+                stats
+                    .dropped_blocks
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.export_buffer = Vec::with_capacity(frames);
             }
         }
     }
