@@ -4,6 +4,7 @@ use std::mem;
 
 use crate::cstr;
 use crate::physic_engine::PhysicEngineIterator;
+use crate::renderer_engine::gl_resource::{GlBuffer, GlProgram, GlTexture, GlVao};
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::utils::human_bytes::HumanBytes;
@@ -32,13 +33,13 @@ unsafe impl bytemuck::Pod for SmokeInstanceGPU {}
 unsafe impl bytemuck::Zeroable for SmokeInstanceGPU {}
 
 pub struct SmokeRenderer {
-    vaos: [u32; 3],
-    vbo_particles: u32,
-    vbo_quad: u32,
+    vaos: [GlVao; 3],
+    vbo_particles: GlBuffer,
+    vbo_quad: GlBuffer,
 
     mapped_ptr: *mut SmokeInstanceGPU,
 
-    shader_program: u32,
+    shader_program: GlProgram,
     loc_smoke_tex: i32,
     loc_flow_map: i32,
     loc_noise_tex: i32,
@@ -55,9 +56,9 @@ pub struct SmokeRenderer {
     erosion_scale: f32,
     erosion_edge_width: f32,
     erosion_edge_color: [f32; 3],
-    texture_id: u32,
-    flow_map_texture_id: u32,
-    noise_texture_id: u32,
+    texture_id: GlTexture,
+    flow_map_texture_id: GlTexture,
+    noise_texture_id: GlTexture,
     tex_ratio: f32,
 
     max_smoke_particles: usize,
@@ -68,7 +69,7 @@ pub struct SmokeRenderer {
     smoke_lighting_lut_enabled: bool,
     smoke_wrap_relief: f32,
     pub backlight_enabled: bool,
-    light_falloff_lut_texture_id: u32,
+    light_falloff_lut_texture_id: GlTexture,
     loc_light_falloff_lut: i32,
     loc_use_lut: i32,
     loc_wrap_relief: i32,
@@ -87,56 +88,63 @@ impl SmokeRenderer {
     ) -> Self {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
+        let shader_program = GlProgram::from_raw(shader_program);
 
         let loc_smoke_tex =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_SmokeTexture")) };
-        let loc_flow_map = unsafe { gl::GetUniformLocation(shader_program, cstr!("u_FlowMap")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_SmokeTexture")) };
+        let loc_flow_map =
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_FlowMap")) };
         let loc_noise_tex =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_NoiseTexture")) };
-        let loc_flow_distortion_strength =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_FlowDistortionStrength")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_NoiseTexture")) };
+        let loc_flow_distortion_strength = unsafe {
+            gl::GetUniformLocation(shader_program.raw(), cstr!("u_FlowDistortionStrength"))
+        };
         let loc_flow_animation_speed =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_FlowAnimationSpeed")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_FlowAnimationSpeed")) };
         let loc_erosion_enabled =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEnabled")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionEnabled")) };
         let loc_erosion_scale =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionScale")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionScale")) };
         let loc_erosion_edge_width =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeWidth")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionEdgeWidth")) };
         let loc_erosion_edge_color =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeColor")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionEdgeColor")) };
         let loc_render_mask =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_RenderMask")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_RenderMask")) };
         let loc_light_falloff_lut =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_LightFalloffLut")) };
-        let loc_use_lut = unsafe { gl::GetUniformLocation(shader_program, cstr!("u_UseLut")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_LightFalloffLut")) };
+        let loc_use_lut =
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_UseLut")) };
         let loc_wrap_relief =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_WrapRelief")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_WrapRelief")) };
 
         let texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(sprite_tex);
+        let texture_id = GlTexture::from_raw(texture_id);
         let tex_width = sprite_tex.width;
         let tex_height = sprite_tex.height;
         let flow_map_texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(flow_tex);
+        let flow_map_texture_id = GlTexture::from_raw(flow_map_texture_id);
         let noise_texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(noise_tex);
+        let noise_texture_id = GlTexture::from_raw(noise_texture_id);
         let light_falloff_lut_texture_id =
             unsafe { Self::generate_light_falloff_lut(constants::SMOKE_LIGHTING_LUT_RESOLUTION) };
 
         unsafe {
-            gl::UseProgram(shader_program);
+            gl::UseProgram(shader_program.raw());
 
-            let block_idx = gl::GetUniformBlockIndex(shader_program, cstr!("GlobalData"));
+            let block_idx = gl::GetUniformBlockIndex(shader_program.raw(), cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
-                gl::UniformBlockBinding(shader_program, block_idx, 0);
+                gl::UniformBlockBinding(shader_program.raw(), block_idx, 0);
             }
 
             let lighting_block_idx =
-                gl::GetUniformBlockIndex(shader_program, cstr!("LightingBlock"));
+                gl::GetUniformBlockIndex(shader_program.raw(), cstr!("LightingBlock"));
             if lighting_block_idx != gl::INVALID_INDEX {
                 gl::UniformBlockBinding(
-                    shader_program,
+                    shader_program.raw(),
                     lighting_block_idx,
                     constants::LIGHTING_UBO_BINDING_INDEX,
                 );
@@ -158,10 +166,10 @@ impl SmokeRenderer {
                 );
             }
 
-            label_gl_object!(gl::PROGRAM, shader_program, "Shader_SmokeInstanced");
-            label_gl_object!(gl::TEXTURE, texture_id, "Tex_Smoke_Sprite");
-            label_gl_object!(gl::TEXTURE, flow_map_texture_id, "Tex_Smoke_FlowMap");
-            label_gl_object!(gl::TEXTURE, noise_texture_id, "Tex_Noise_Dissolve");
+            label_gl_object!(gl::PROGRAM, shader_program.raw(), "Shader_SmokeInstanced");
+            label_gl_object!(gl::TEXTURE, texture_id.raw(), "Tex_Smoke_Sprite");
+            label_gl_object!(gl::TEXTURE, flow_map_texture_id.raw(), "Tex_Smoke_FlowMap");
+            label_gl_object!(gl::TEXTURE, noise_texture_id.raw(), "Tex_Noise_Dissolve");
 
             let (vaos, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
                 Self::setup_gpu_buffers(max_smoke_particles);
@@ -213,30 +221,23 @@ impl SmokeRenderer {
     }
 
     unsafe fn release_buffers(&mut self) {
-        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+        if !self.mapped_ptr.is_null() && self.vbo_particles.raw() != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::UnmapBuffer(gl::ARRAY_BUFFER);
             self.mapped_ptr = std::ptr::null_mut();
         }
-        if self.vaos[0] != 0 {
-            gl::DeleteVertexArrays(3, self.vaos.as_ptr());
-            self.vaos = [0; 3];
+        for vao in self.vaos.iter_mut() {
+            vao.reset(0);
         }
-        if self.vbo_particles != 0 {
-            gl::DeleteBuffers(1, &self.vbo_particles);
-            self.vbo_particles = 0;
-        }
-        if self.vbo_quad != 0 {
-            gl::DeleteBuffers(1, &self.vbo_quad);
-            self.vbo_quad = 0;
-        }
+        self.vbo_particles.reset(0);
+        self.vbo_quad.reset(0);
     }
 
     /// Génère la texture 2D R16F contenant la LUT de falloff quadratique et diffusion Mie (Zero SQRT).
     ///
     /// # Safety
     /// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
-    pub unsafe fn generate_light_falloff_lut(resolution: usize) -> u32 {
+    pub unsafe fn generate_light_falloff_lut(resolution: usize) -> GlTexture {
         let mut tex_id = 0;
         gl::GenTextures(1, &mut tex_id);
         gl::BindTexture(gl::TEXTURE_2D, tex_id);
@@ -297,7 +298,7 @@ impl SmokeRenderer {
         );
 
         label_gl_object!(gl::TEXTURE, tex_id, "Tex_Smoke_LightFalloffLut");
-        tex_id
+        GlTexture::from_raw(tex_id)
     }
 
     /// Régénère la LUT de falloff et diffusion lumineuse.
@@ -305,9 +306,6 @@ impl SmokeRenderer {
     /// # Safety
     /// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
     pub unsafe fn rebake_smoke_lighting_lut(&mut self) {
-        if self.light_falloff_lut_texture_id != 0 {
-            gl::DeleteTextures(1, &self.light_falloff_lut_texture_id);
-        }
         self.light_falloff_lut_texture_id =
             Self::generate_light_falloff_lut(constants::SMOKE_LIGHTING_LUT_RESOLUTION);
         debug!("SmokeRenderer: Light Falloff LUT rebaked successfully.");
@@ -387,7 +385,7 @@ impl SmokeRenderer {
         if count > 0 {
             let write_size = (count * mem::size_of::<SmokeInstanceGPU>()) as isize;
             let offset_bytes = (offset * mem::size_of::<SmokeInstanceGPU>()) as isize;
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, offset_bytes, write_size);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
@@ -447,29 +445,29 @@ impl SmokeRenderer {
             gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        if *active_shader != self.shader_program {
-            gl::UseProgram(self.shader_program);
-            *active_shader = self.shader_program;
+        if *active_shader != self.shader_program.raw() {
+            gl::UseProgram(self.shader_program.raw());
+            *active_shader = self.shader_program.raw();
         }
 
-        gl::BindVertexArray(self.vaos[self.current_frame]);
+        gl::BindVertexArray(self.vaos[self.current_frame].raw());
 
         // Bind Texture Unit 0: Smoke Texture
         gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-        *active_texture = self.texture_id;
+        gl::BindTexture(gl::TEXTURE_2D, self.texture_id.raw());
+        *active_texture = self.texture_id.raw();
 
         // Bind Texture Unit 1: Flow Map Texture
         gl::ActiveTexture(gl::TEXTURE1);
-        gl::BindTexture(gl::TEXTURE_2D, self.flow_map_texture_id);
+        gl::BindTexture(gl::TEXTURE_2D, self.flow_map_texture_id.raw());
 
         // Bind Texture Unit 2: Noise Dissolve Texture
         gl::ActiveTexture(gl::TEXTURE2);
-        gl::BindTexture(gl::TEXTURE_2D, self.noise_texture_id);
+        gl::BindTexture(gl::TEXTURE_2D, self.noise_texture_id.raw());
 
         // Bind Texture Unit 3: Light Falloff LUT (Zero SQRT)
         gl::ActiveTexture(gl::TEXTURE0 + constants::SMOKE_LIGHTING_LUT_TEXTURE_UNIT);
-        gl::BindTexture(gl::TEXTURE_2D, self.light_falloff_lut_texture_id);
+        gl::BindTexture(gl::TEXTURE_2D, self.light_falloff_lut_texture_id.raw());
 
         if self.loc_flow_distortion_strength != -1 {
             gl::Uniform1f(
@@ -573,26 +571,11 @@ impl SmokeRenderer {
             }
         }
         self.release_buffers();
-        if self.texture_id != 0 {
-            gl::DeleteTextures(1, &self.texture_id);
-            self.texture_id = 0;
-        }
-        if self.flow_map_texture_id != 0 {
-            gl::DeleteTextures(1, &self.flow_map_texture_id);
-            self.flow_map_texture_id = 0;
-        }
-        if self.noise_texture_id != 0 {
-            gl::DeleteTextures(1, &self.noise_texture_id);
-            self.noise_texture_id = 0;
-        }
-        if self.light_falloff_lut_texture_id != 0 {
-            gl::DeleteTextures(1, &self.light_falloff_lut_texture_id);
-            self.light_falloff_lut_texture_id = 0;
-        }
-        if self.shader_program != 0 {
-            gl::DeleteProgram(self.shader_program);
-            self.shader_program = 0;
-        }
+        self.texture_id.reset(0);
+        self.flow_map_texture_id.reset(0);
+        self.noise_texture_id.reset(0);
+        self.light_falloff_lut_texture_id.reset(0);
+        self.shader_program.reset(0);
         debug!("SmokeRenderer GPU resources released.");
     }
 
@@ -606,40 +589,43 @@ impl SmokeRenderer {
 
         match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
             Ok(new_program) => {
-                if self.shader_program != 0 {
-                    gl::DeleteProgram(self.shader_program);
-                }
-                self.shader_program = new_program;
+                self.shader_program.reset(new_program);
                 self.loc_smoke_tex =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_SmokeTexture"));
-                self.loc_flow_map = gl::GetUniformLocation(self.shader_program, cstr!("u_FlowMap"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_SmokeTexture"));
+                self.loc_flow_map =
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_FlowMap"));
                 self.loc_noise_tex =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_NoiseTexture"));
-                self.loc_flow_distortion_strength =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_FlowDistortionStrength"));
-                self.loc_flow_animation_speed =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_FlowAnimationSpeed"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_NoiseTexture"));
+                self.loc_flow_distortion_strength = gl::GetUniformLocation(
+                    self.shader_program.raw(),
+                    cstr!("u_FlowDistortionStrength"),
+                );
+                self.loc_flow_animation_speed = gl::GetUniformLocation(
+                    self.shader_program.raw(),
+                    cstr!("u_FlowAnimationSpeed"),
+                );
                 self.loc_erosion_enabled =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEnabled"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionEnabled"));
                 self.loc_erosion_scale =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionScale"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionScale"));
                 self.loc_erosion_edge_width =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEdgeWidth"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionEdgeWidth"));
                 self.loc_erosion_edge_color =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEdgeColor"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionEdgeColor"));
                 self.loc_render_mask =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_RenderMask"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_RenderMask"));
 
-                gl::UseProgram(self.shader_program);
-                let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
+                gl::UseProgram(self.shader_program.raw());
+                let block_idx =
+                    gl::GetUniformBlockIndex(self.shader_program.raw(), cstr!("GlobalData"));
                 if block_idx != gl::INVALID_INDEX {
-                    gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                    gl::UniformBlockBinding(self.shader_program.raw(), block_idx, 0);
                 }
                 let lighting_block_idx =
-                    gl::GetUniformBlockIndex(self.shader_program, cstr!("LightingBlock"));
+                    gl::GetUniformBlockIndex(self.shader_program.raw(), cstr!("LightingBlock"));
                 if lighting_block_idx != gl::INVALID_INDEX {
                     gl::UniformBlockBinding(
-                        self.shader_program,
+                        self.shader_program.raw(),
                         lighting_block_idx,
                         constants::LIGHTING_UBO_BINDING_INDEX,
                     );
@@ -654,10 +640,11 @@ impl SmokeRenderer {
                     gl::Uniform1i(self.loc_noise_tex, 2);
                 }
                 self.loc_light_falloff_lut =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_LightFalloffLut"));
-                self.loc_use_lut = gl::GetUniformLocation(self.shader_program, cstr!("u_UseLut"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_LightFalloffLut"));
+                self.loc_use_lut =
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_UseLut"));
                 self.loc_wrap_relief =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_WrapRelief"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_WrapRelief"));
                 if self.loc_light_falloff_lut != -1 {
                     gl::Uniform1i(
                         self.loc_light_falloff_lut,
@@ -666,7 +653,11 @@ impl SmokeRenderer {
                 }
                 self.rebake_smoke_lighting_lut();
 
-                label_gl_object!(gl::PROGRAM, self.shader_program, "Shader_SmokeInstanced");
+                label_gl_object!(
+                    gl::PROGRAM,
+                    self.shader_program.raw(),
+                    "Shader_SmokeInstanced"
+                );
                 info!("✅ Smoke instanced shaders reloaded successfully");
                 Ok(())
             }
@@ -679,9 +670,9 @@ impl SmokeRenderer {
 
     unsafe fn setup_gpu_buffers(
         max_smoke_particles: usize,
-    ) -> ([u32; 3], u32, u32, *mut SmokeInstanceGPU, isize) {
-        let mut vaos = [0u32; 3];
-        let (mut vbo_quad, mut vbo_particles) = (0u32, 0u32);
+    ) -> ([GlVao; 3], GlBuffer, GlBuffer, *mut SmokeInstanceGPU, isize) {
+        let mut raw_vaos = [0u32; 3];
+        let (mut raw_vbo_quad, mut raw_vbo_particles) = (0u32, 0u32);
 
         const OCTAGON_VERTICES: [f32; 20] = [
             0.0, 0.0, // Center vertex for TRIANGLE_FAN
@@ -690,8 +681,8 @@ impl SmokeRenderer {
             0.0, // Close fan
         ];
 
-        gl::GenBuffers(1, &mut vbo_quad);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+        gl::GenBuffers(1, &mut raw_vbo_quad);
+        gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_quad);
         gl::BufferData(
             gl::ARRAY_BUFFER,
             (OCTAGON_VERTICES.len() * mem::size_of::<f32>()) as isize,
@@ -699,8 +690,8 @@ impl SmokeRenderer {
             gl::STATIC_DRAW,
         );
 
-        gl::GenBuffers(1, &mut vbo_particles);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+        gl::GenBuffers(1, &mut raw_vbo_particles);
+        gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_particles);
 
         let buffer_size = (3 * max_smoke_particles * mem::size_of::<SmokeInstanceGPU>()) as isize;
         info!(
@@ -723,12 +714,12 @@ impl SmokeRenderer {
             gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_FLUSH_EXPLICIT_BIT,
         ) as *mut SmokeInstanceGPU;
 
-        gl::GenVertexArrays(3, vaos.as_mut_ptr());
-        for (frame, &vao) in vaos.iter().enumerate() {
+        gl::GenVertexArrays(3, raw_vaos.as_mut_ptr());
+        for (frame, &vao) in raw_vaos.iter().enumerate() {
             gl::BindVertexArray(vao);
 
             // Attrib 0: Quad vertices (vec2)
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+            gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_quad);
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(
                 0,
@@ -741,7 +732,7 @@ impl SmokeRenderer {
             gl::VertexAttribDivisor(0, 0);
 
             // Instanced attributes
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+            gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_particles);
             let base_offset =
                 (frame * max_smoke_particles * mem::size_of::<SmokeInstanceGPU>()) as isize;
             let stride = mem::size_of::<SmokeInstanceGPU>() as i32;
@@ -833,13 +824,24 @@ impl SmokeRenderer {
 
         gl::BindVertexArray(0);
 
-        for (frame, &vao) in vaos.iter().enumerate() {
+        for (frame, &vao) in raw_vaos.iter().enumerate() {
             label_gl_object!(gl::VERTEX_ARRAY, vao, &format!("VAO_Smoke_Frame_{}", frame));
         }
-        label_gl_object!(gl::BUFFER, vbo_quad, "VBO_Smoke_Static_Quad");
-        label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Smoke_Instance_Data");
+        label_gl_object!(gl::BUFFER, raw_vbo_quad, "VBO_Smoke_Static_Quad");
+        label_gl_object!(gl::BUFFER, raw_vbo_particles, "VBO_Smoke_Instance_Data");
 
-        (vaos, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
+        let vaos = [
+            GlVao::from_raw(raw_vaos[0]),
+            GlVao::from_raw(raw_vaos[1]),
+            GlVao::from_raw(raw_vaos[2]),
+        ];
+        (
+            vaos,
+            GlBuffer::from_raw(raw_vbo_quad),
+            GlBuffer::from_raw(raw_vbo_particles),
+            mapped_ptr,
+            buffer_size,
+        )
     }
 }
 
@@ -876,11 +878,11 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
     }
 
     fn get_shader_program(&self) -> u32 {
-        self.shader_program
+        self.shader_program.raw()
     }
 
     fn get_texture_id(&self) -> u32 {
-        self.texture_id
+        self.texture_id.raw()
     }
 
     fn get_tex_ratio(&self) -> f32 {

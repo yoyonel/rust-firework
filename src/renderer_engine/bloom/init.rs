@@ -2,6 +2,7 @@ use super::{BloomPass, BlurMethod};
 use crate::label_gl_object;
 use crate::renderer_engine::config::{RendererConfig, ToneMappingMode};
 use crate::renderer_engine::constants;
+use crate::renderer_engine::gl_resource::{GlFbo, GlProgram, GlRenderbuffer, GlTexture, GlVao};
 use crate::renderer_engine::shader::try_compile_shader_program_from_files;
 use log::info;
 
@@ -420,17 +421,23 @@ impl BloomPass {
             info!("✅ Bloom Pass initialized successfully (MRT enabled)");
 
             Ok(Self {
-                hdr_fbo,
-                hdr_texture,
-                bright_texture,
-                hdr_depth_rbo,
-                ping_pong_fbo,
-                ping_pong_textures,
-                blur_shader,
-                kawase_downsample_shader,
-                kawase_upsample_shader,
-                composition_shader,
-                dummy_vao,
+                hdr_fbo: GlFbo::from_raw(hdr_fbo),
+                hdr_texture: GlTexture::from_raw(hdr_texture),
+                bright_texture: GlTexture::from_raw(bright_texture),
+                hdr_depth_rbo: GlRenderbuffer::from_raw(hdr_depth_rbo),
+                ping_pong_fbo: [
+                    GlFbo::from_raw(ping_pong_fbo[0]),
+                    GlFbo::from_raw(ping_pong_fbo[1]),
+                ],
+                ping_pong_textures: [
+                    GlTexture::from_raw(ping_pong_textures[0]),
+                    GlTexture::from_raw(ping_pong_textures[1]),
+                ],
+                blur_shader: GlProgram::from_raw(blur_shader),
+                kawase_downsample_shader: GlProgram::from_raw(kawase_downsample_shader),
+                kawase_upsample_shader: GlProgram::from_raw(kawase_upsample_shader),
+                composition_shader: GlProgram::from_raw(composition_shader),
+                dummy_vao: GlVao::from_raw(dummy_vao),
                 loc_blur_direction,
                 loc_kawase_down_halfpixel,
                 loc_kawase_up_halfpixel,
@@ -439,7 +446,7 @@ impl BloomPass {
                 loc_dither_strength,
                 loc_backlight_enabled,
                 loc_backlight_strength,
-                passthrough_shader,
+                passthrough_shader: GlProgram::from_raw(passthrough_shader),
                 intensity: 2.0,
                 blur_iterations: 5,
                 enabled: true,
@@ -451,15 +458,21 @@ impl BloomPass {
                 backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
                 backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
                 comparison_mode: false,
-                comparison_fbo,
-                comparison_textures,
-                comparison_shader,
+                comparison_fbo: GlFbo::from_raw(comparison_fbo),
+                comparison_textures: [
+                    GlTexture::from_raw(comparison_textures[0]),
+                    GlTexture::from_raw(comparison_textures[1]),
+                    GlTexture::from_raw(comparison_textures[2]),
+                    GlTexture::from_raw(comparison_textures[3]),
+                    GlTexture::from_raw(comparison_textures[4]),
+                ],
+                comparison_shader: GlProgram::from_raw(comparison_shader),
                 loc_comparison_dither_enabled,
                 loc_comparison_dither_strength,
                 loc_comparison_backlight_enabled,
                 loc_comparison_backlight_strength,
-                smoke_mask_fbo,
-                smoke_mask_texture,
+                smoke_mask_fbo: GlFbo::from_raw(smoke_mask_fbo),
+                smoke_mask_texture: GlTexture::from_raw(smoke_mask_texture),
                 mask_width,
                 mask_height,
                 width,
@@ -472,18 +485,18 @@ impl BloomPass {
 
     pub fn new_dummy() -> Self {
         Self {
-            hdr_fbo: 0,
-            hdr_texture: 0,
-            bright_texture: 0,
-            hdr_depth_rbo: 0,
-            ping_pong_fbo: [0; 2],
-            ping_pong_textures: [0; 2],
-            blur_shader: 0,
-            kawase_downsample_shader: 0,
-            kawase_upsample_shader: 0,
-            composition_shader: 0,
-            passthrough_shader: 0,
-            dummy_vao: 0,
+            hdr_fbo: GlFbo::empty(),
+            hdr_texture: GlTexture::empty(),
+            bright_texture: GlTexture::empty(),
+            hdr_depth_rbo: GlRenderbuffer::empty(),
+            ping_pong_fbo: [GlFbo::empty(), GlFbo::empty()],
+            ping_pong_textures: [GlTexture::empty(), GlTexture::empty()],
+            blur_shader: GlProgram::empty(),
+            kawase_downsample_shader: GlProgram::empty(),
+            kawase_upsample_shader: GlProgram::empty(),
+            composition_shader: GlProgram::empty(),
+            passthrough_shader: GlProgram::empty(),
+            dummy_vao: GlVao::empty(),
             loc_blur_direction: 0,
             loc_kawase_down_halfpixel: 0,
             loc_kawase_up_halfpixel: 0,
@@ -503,15 +516,21 @@ impl BloomPass {
             backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
             backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
             comparison_mode: false,
-            comparison_fbo: 0,
-            comparison_textures: [0; 5],
-            comparison_shader: 0,
+            comparison_fbo: GlFbo::empty(),
+            comparison_textures: [
+                GlTexture::empty(),
+                GlTexture::empty(),
+                GlTexture::empty(),
+                GlTexture::empty(),
+                GlTexture::empty(),
+            ],
+            comparison_shader: GlProgram::empty(),
             loc_comparison_dither_enabled: 0,
             loc_comparison_dither_strength: 0,
             loc_comparison_backlight_enabled: -1,
             loc_comparison_backlight_strength: -1,
-            smoke_mask_fbo: 0,
-            smoke_mask_texture: 0,
+            smoke_mask_fbo: GlFbo::empty(),
+            smoke_mask_texture: GlTexture::empty(),
             mask_width: 400,
             mask_height: 300,
             width: 800,
@@ -528,8 +547,12 @@ impl BloomPass {
         );
 
         // Delete old ping-pong buffers
-        gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
-        gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
+        for fbo in self.ping_pong_fbo.iter_mut() {
+            fbo.reset(0);
+        }
+        for tex in self.ping_pong_textures.iter_mut() {
+            tex.reset(0);
+        }
 
         // Calculate new blur dimensions
         self.blur_width = self.width / self.downsample_factor as i32;
@@ -577,8 +600,14 @@ impl BloomPass {
 
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
 
-        self.ping_pong_fbo = ping_pong_fbo;
-        self.ping_pong_textures = ping_pong_textures;
+        self.ping_pong_fbo = [
+            GlFbo::from_raw(ping_pong_fbo[0]),
+            GlFbo::from_raw(ping_pong_fbo[1]),
+        ];
+        self.ping_pong_textures = [
+            GlTexture::from_raw(ping_pong_textures[0]),
+            GlTexture::from_raw(ping_pong_textures[1]),
+        ];
 
         info!(
             "✅ Blur buffers recreated at {}x{} ({}x downsample)",
@@ -606,48 +635,55 @@ impl BloomPass {
             constants::SHADER_BLOOM_COMPOSITION_FRAGMENT_PATH,
         )?;
 
-        // Delete old shaders
-        gl::DeleteProgram(self.blur_shader);
-        gl::DeleteProgram(self.composition_shader);
-
-        // Update with new shaders
-        self.blur_shader = new_blur;
-        self.composition_shader = new_composition;
+        // Update with new shaders (old shaders deleted by reset)
+        self.blur_shader.reset(new_blur);
+        self.composition_shader.reset(new_composition);
 
         // Update uniform locations
-        let loc_blur_texture = gl::GetUniformLocation(self.blur_shader, crate::cstr!("uTexture"));
+        let loc_blur_texture =
+            gl::GetUniformLocation(self.blur_shader.raw(), crate::cstr!("uTexture"));
         self.loc_blur_direction =
-            gl::GetUniformLocation(self.blur_shader, crate::cstr!("uDirection"));
+            gl::GetUniformLocation(self.blur_shader.raw(), crate::cstr!("uDirection"));
 
         let loc_comp_scene =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uSceneTexture"));
+            gl::GetUniformLocation(self.composition_shader.raw(), crate::cstr!("uSceneTexture"));
         let loc_comp_bloom =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBloomTexture"));
+            gl::GetUniformLocation(self.composition_shader.raw(), crate::cstr!("uBloomTexture"));
         let loc_comp_smoke_mask =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uSmokeMask"));
+            gl::GetUniformLocation(self.composition_shader.raw(), crate::cstr!("uSmokeMask"));
 
         let comp_block_idx =
-            gl::GetUniformBlockIndex(self.composition_shader, crate::cstr!("GlobalData"));
+            gl::GetUniformBlockIndex(self.composition_shader.raw(), crate::cstr!("GlobalData"));
         if comp_block_idx != gl::INVALID_INDEX {
-            gl::UniformBlockBinding(self.composition_shader, comp_block_idx, 0);
+            gl::UniformBlockBinding(self.composition_shader.raw(), comp_block_idx, 0);
         }
 
-        self.loc_tone_mapping_mode =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uToneMappingMode"));
-        self.loc_dither_enabled =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uDitherEnabled"));
-        self.loc_dither_strength =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uDitherStrength"));
-        self.loc_backlight_enabled =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBacklightEnabled"));
-        self.loc_backlight_strength =
-            gl::GetUniformLocation(self.composition_shader, crate::cstr!("uBacklightStrength"));
+        self.loc_tone_mapping_mode = gl::GetUniformLocation(
+            self.composition_shader.raw(),
+            crate::cstr!("uToneMappingMode"),
+        );
+        self.loc_dither_enabled = gl::GetUniformLocation(
+            self.composition_shader.raw(),
+            crate::cstr!("uDitherEnabled"),
+        );
+        self.loc_dither_strength = gl::GetUniformLocation(
+            self.composition_shader.raw(),
+            crate::cstr!("uDitherStrength"),
+        );
+        self.loc_backlight_enabled = gl::GetUniformLocation(
+            self.composition_shader.raw(),
+            crate::cstr!("uBacklightEnabled"),
+        );
+        self.loc_backlight_strength = gl::GetUniformLocation(
+            self.composition_shader.raw(),
+            crate::cstr!("uBacklightStrength"),
+        );
 
         // Setup reloaded static uniforms
-        gl::UseProgram(self.blur_shader);
+        gl::UseProgram(self.blur_shader.raw());
         gl::Uniform1i(loc_blur_texture, 0);
 
-        gl::UseProgram(self.composition_shader);
+        gl::UseProgram(self.composition_shader.raw());
         gl::Uniform1i(loc_comp_scene, 0);
         gl::Uniform1i(loc_comp_bloom, 1);
         if loc_comp_smoke_mask != -1 {
@@ -665,66 +701,29 @@ impl BloomPass {
     pub unsafe fn close(&mut self) {
         info!("🧹 Cleaning up Bloom Pass");
 
-        if self.hdr_fbo != 0 {
-            gl::DeleteFramebuffers(1, &self.hdr_fbo);
-            self.hdr_fbo = 0;
+        self.hdr_fbo.reset(0);
+        self.hdr_texture.reset(0);
+        self.bright_texture.reset(0);
+        self.hdr_depth_rbo.reset(0);
+        for fbo in self.ping_pong_fbo.iter_mut() {
+            fbo.reset(0);
         }
-        if self.hdr_texture != 0 {
-            gl::DeleteTextures(1, &self.hdr_texture);
-            self.hdr_texture = 0;
+        for tex in self.ping_pong_textures.iter_mut() {
+            tex.reset(0);
         }
-        if self.bright_texture != 0 {
-            gl::DeleteTextures(1, &self.bright_texture);
-            self.bright_texture = 0;
+        self.smoke_mask_fbo.reset(0);
+        self.smoke_mask_texture.reset(0);
+        self.blur_shader.reset(0);
+        self.kawase_downsample_shader.reset(0);
+        self.kawase_upsample_shader.reset(0);
+        self.composition_shader.reset(0);
+        self.passthrough_shader.reset(0);
+        self.dummy_vao.reset(0);
+        self.comparison_fbo.reset(0);
+        for tex in self.comparison_textures.iter_mut() {
+            tex.reset(0);
         }
-        if self.hdr_depth_rbo != 0 {
-            gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
-            self.hdr_depth_rbo = 0;
-        }
-        if self.ping_pong_fbo[0] != 0 {
-            gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
-            self.ping_pong_fbo = [0; 2];
-        }
-        if self.ping_pong_textures[0] != 0 {
-            gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
-            self.ping_pong_textures = [0; 2];
-        }
-        if self.smoke_mask_fbo != 0 {
-            gl::DeleteFramebuffers(1, &self.smoke_mask_fbo);
-            self.smoke_mask_fbo = 0;
-        }
-        if self.smoke_mask_texture != 0 {
-            gl::DeleteTextures(1, &self.smoke_mask_texture);
-            self.smoke_mask_texture = 0;
-        }
-        if self.blur_shader != 0 {
-            gl::DeleteProgram(self.blur_shader);
-            self.blur_shader = 0;
-        }
-        if self.composition_shader != 0 {
-            gl::DeleteProgram(self.composition_shader);
-            self.composition_shader = 0;
-        }
-        if self.dummy_vao != 0 {
-            gl::DeleteVertexArrays(1, &self.dummy_vao);
-            self.dummy_vao = 0;
-        }
-        if self.comparison_fbo != 0 {
-            gl::DeleteFramebuffers(1, &self.comparison_fbo);
-            self.comparison_fbo = 0;
-        }
-        if self.comparison_textures[0] != 0 {
-            gl::DeleteTextures(5, self.comparison_textures.as_ptr());
-            self.comparison_textures = [0; 5];
-        }
-        if self.comparison_shader != 0 {
-            gl::DeleteProgram(self.comparison_shader);
-            self.comparison_shader = 0;
-        }
-        if self.passthrough_shader != 0 {
-            gl::DeleteProgram(self.passthrough_shader);
-            self.passthrough_shader = 0;
-        }
+        self.comparison_shader.reset(0);
     }
 
     pub fn sync_with_renderer_config(&mut self, config: &RendererConfig) {
