@@ -29,5 +29,4 @@ pub use self::smoke_system::{SmokeParticle, SmokeSystem};
 pub mod explosion_shape;
 pub use self::explosion_shape::{ExplosionShape, ImageShape};
 
-// pub mod physic_engine_static_aos;
 pub mod physic_engine_generational_arena;

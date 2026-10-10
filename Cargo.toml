@@ -140,6 +140,5 @@ opt-level = 3 # Vrai niveau de perf production
 [package.metadata.cargo-shear]
 # Pour ignorer les fichiers legacy qui ne sont pas encore intégrés
 ignored-paths = [
-    "src/physic_engine/physic_engine_static_aos.rs",
     "src/physic_engine/smoke_system.rs"
 ]
