@@ -1,3 +1,4 @@
+use crate::audio_engine::realtime_metrics::AudioRealtimeStats;
 use crate::audio_engine::SpatialReverb;
 use std::f32::consts::PI;
 
@@ -15,7 +16,6 @@ fn generate_sine_wave(freq_hz: f32, sample_rate: u32, duration_samples: usize) -
 #[test]
 fn test_phase_continuity_across_block_boundaries() {
     use crate::audio_engine::types::Voice;
-    use crate::profiler::Profiler;
     use crate::AudioEngineSettings;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
@@ -83,9 +83,8 @@ fn test_phase_continuity_across_block_boundaries() {
         pending_requests: Vec::new(),
     };
 
-    let profiler = Profiler::new(1000);
     let fx_mask_ref = dsp_ref.effect_flags.load();
-    dsp_ref.process_dsp(total_samples, fx_mask_ref, &profiler);
+    dsp_ref.process_dsp(total_samples, fx_mask_ref);
     let reference_output = dsp_ref.acc.clone();
 
     // 3. Traitement Mode B : 4 blocs successifs de 256 échantillons
@@ -141,7 +140,7 @@ fn test_phase_continuity_across_block_boundaries() {
     for _ in 0..total_blocks {
         dsp_chunk.acc.fill([0.0; 2]);
         let fx_mask_chunk = dsp_chunk.effect_flags.load();
-        dsp_chunk.process_dsp(block_size, fx_mask_chunk, &profiler);
+        dsp_chunk.process_dsp(block_size, fx_mask_chunk);
         chunked_output.extend_from_slice(&dsp_chunk.acc);
     }
 
@@ -230,7 +229,6 @@ fn test_dsp_bypass_binaural_and_panning() {
 fn test_dsp_bypass_doppler() {
     use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
     use crate::audio_engine::types::Voice;
-    use crate::profiler::Profiler;
     use crate::AudioEngineSettings;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
@@ -294,8 +292,7 @@ fn test_dsp_bypass_doppler() {
     dsp.effect_flags.set(AudioEffect::Doppler, false);
     let fx_mask = dsp.effect_flags.load();
 
-    let profiler = Profiler::new(1000);
-    dsp.process_doppler(fx_mask, &profiler);
+    dsp.process_doppler(fx_mask);
 
     // Doppler processed but disabled -> playback_rate should be reset to 1.0
     assert_eq!(dsp.voices[0].playback_rate, 1.0);
@@ -304,7 +301,6 @@ fn test_dsp_bypass_doppler() {
 #[test]
 fn test_dsp_bypass_normalization() {
     use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
-    use crate::profiler::Profiler;
     use std::time::{Duration, Instant};
 
     let sample_rate = 48_000;
@@ -340,12 +336,10 @@ fn test_dsp_bypass_normalization() {
     };
 
     let mut output_data = vec![0.0; block_size * 2];
-    let profiler = Profiler::new(1000);
-
     // 1. With Normalization enabled (GainStage & SoftClip)
     let fx_mask = dsp.effect_flags.load();
-    dsp.write_cpal_buffer(&mut output_data, block_size, 0.8, fx_mask, &profiler); // global_gain = 0.8
-                                                                                  // Soft clipping via tanh + global gain should smoothly compress
+    dsp.write_cpal_buffer(&mut output_data, block_size, 0.8, fx_mask); // global_gain = 0.8
+                                                                       // Soft clipping via tanh + global gain should smoothly compress
     assert!(output_data[0] < 1.0 && output_data[0] > 0.0);
     assert!(output_data[1] > -1.0 && output_data[1] < 0.0);
     assert!((output_data[0] - (1.5_f32 * 0.8).tanh()).abs() < 1e-3);
@@ -353,7 +347,7 @@ fn test_dsp_bypass_normalization() {
     // 2. With Normalization disabled
     dsp.effect_flags.set(AudioEffect::Normalization, false);
     let fx_mask_bypass = dsp.effect_flags.load();
-    dsp.write_cpal_buffer(&mut output_data, block_size, 0.8, fx_mask_bypass, &profiler);
+    dsp.write_cpal_buffer(&mut output_data, block_size, 0.8, fx_mask_bypass);
     // Normalization stage bypassed -> no global gain scaling, raw clamping to [-1.0, 1.0]
     assert_eq!(output_data[0], 1.0);
     assert_eq!(output_data[1], -1.0);
@@ -384,7 +378,6 @@ fn test_audio_effect_flags_set_all() {
 fn test_strict_event_tracking_and_latency() {
     use crate::audio_engine::effect_flags::AudioEffectFlags;
     use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType, Voice};
-    use crate::profiler::Profiler;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -442,8 +435,7 @@ fn test_strict_event_tracking_and_latency() {
     play_tx.send(req1).unwrap();
 
     // 2. Consume request
-    let profiler = Profiler::new(100);
-    dsp.consume_requests(block_size, &profiler);
+    dsp.consume_requests(block_size);
 
     // Check events popped from debug_rx
     let mut events = Vec::new();
@@ -488,7 +480,7 @@ fn test_strict_event_tracking_and_latency() {
     };
     play_tx.send(req2).unwrap();
 
-    dsp.consume_requests(block_size, &profiler);
+    dsp.consume_requests(block_size);
 
     events.clear();
     while let Ok(evt) = debug_rx.try_recv() {
@@ -515,7 +507,6 @@ fn test_strict_event_tracking_and_latency() {
 fn test_spatial_bus_rendering() {
     use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
     use crate::audio_engine::types::Voice;
-    use crate::profiler::Profiler;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -578,8 +569,7 @@ fn test_spatial_bus_rendering() {
     dsp.effect_flags.set(AudioEffect::SpatialBus, true);
     let fx_mask = dsp.effect_flags.load();
 
-    let profiler = Profiler::new(100);
-    dsp.process_dsp(block_size, fx_mask, &profiler);
+    dsp.process_dsp(block_size, fx_mask);
 
     // Right channel should be louder than left channel for a sound at (50, 0)
     let sample_l = dsp.acc[10][0];
@@ -594,7 +584,6 @@ fn test_spatial_bus_rendering() {
 fn test_spatial_bus_hrtf_rendering_left_right() {
     use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
     use crate::audio_engine::types::Voice;
-    use crate::profiler::Profiler;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -658,8 +647,7 @@ fn test_spatial_bus_hrtf_rendering_left_right() {
     dsp.effect_flags.set(AudioEffect::HrtfBus, true);
     let fx_mask = dsp.effect_flags.load();
 
-    let profiler = Profiler::new(100);
-    dsp.process_dsp(block_size, fx_mask, &profiler);
+    dsp.process_dsp(block_size, fx_mask);
 
     // Left ear should receive higher amplitude than right ear for sound at (-50, 0)
     let total_energy_l: f32 = dsp.acc.iter().map(|s| s[0].powi(2)).sum();
@@ -677,7 +665,6 @@ fn test_spatial_bus_hrtf_rendering_left_right() {
 fn test_spatial_bus_snr_quality() {
     use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
     use crate::audio_engine::types::Voice;
-    use crate::profiler::Profiler;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -749,9 +736,8 @@ fn test_spatial_bus_snr_quality() {
         pending_requests: Vec::new(),
     };
 
-    let profiler = Profiler::new(100);
     let fx_mask = dsp.effect_flags.load();
-    dsp.process_dsp(block_size, fx_mask, &profiler);
+    dsp.process_dsp(block_size, fx_mask);
 
     // Save initial output as reference for SNR comparison
     let ref_out = dsp.acc.clone();
@@ -788,7 +774,6 @@ fn test_spatial_bus_snr_quality() {
 fn test_sample_accurate_audio_scheduling() {
     use crate::audio_engine::effect_flags::AudioEffectFlags;
     use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType, Voice};
-    use crate::profiler::Profiler;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -870,11 +855,11 @@ fn test_sample_accurate_audio_scheduling() {
     };
     play_tx.send(req).unwrap();
 
-    let profiler = Profiler::new(10);
+    let stats = AudioRealtimeStats::new();
 
     // --- BLOC 0 : samples 0 à 256 ---
     let mut out_block_0 = vec![0.0f32; block_size * 2];
-    dsp.process_block(&mut out_block_0, 1.0, &profiler);
+    dsp.process_block(&mut out_block_0, 1.0, &stats);
 
     // Verify clock advanced
     assert_eq!(dsp.current_sample_clock, 256);
@@ -906,7 +891,7 @@ fn test_sample_accurate_audio_scheduling() {
 
     // --- BLOC 1 : samples 256 à 512 ---
     let mut out_block_1 = vec![0.0f32; block_size * 2];
-    dsp.process_block(&mut out_block_1, 1.0, &profiler);
+    dsp.process_block(&mut out_block_1, 1.0, &stats);
 
     assert_eq!(dsp.current_sample_clock, 512);
 
@@ -946,7 +931,7 @@ fn test_sample_accurate_audio_scheduling() {
     // --- BLOC 2 : samples 512 à 768 ---
     // The voice should continue playing seamlessly from sample 0 of block 2
     let mut out_block_2 = vec![0.0f32; block_size * 2];
-    dsp.process_block(&mut out_block_2, 1.0, &profiler);
+    dsp.process_block(&mut out_block_2, 1.0, &stats);
 
     let frames_2: Vec<[f32; 2]> = out_block_2.chunks_exact(2).map(|c| [c[0], c[1]]).collect();
     assert!(
@@ -959,7 +944,6 @@ fn test_sample_accurate_audio_scheduling() {
 fn test_overdue_scheduled_audio_discarded() {
     use crate::audio_engine::effect_flags::AudioEffectFlags;
     use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType, Voice};
-    use crate::profiler::Profiler;
     use std::sync::Arc;
     use std::time::{Duration, Instant};
 
@@ -1016,9 +1000,9 @@ fn test_overdue_scheduled_audio_discarded() {
     };
     play_tx.send(req).unwrap();
 
-    let profiler = Profiler::new(10);
+    let stats = AudioRealtimeStats::new();
     let mut out_buffer = vec![0.0f32; block_size * 2];
-    dsp.process_block(&mut out_buffer, 1.0, &profiler);
+    dsp.process_block(&mut out_buffer, 1.0, &stats);
 
     // Verify overdue request was dropped gracefully
     let mut events = Vec::new();

@@ -1,7 +1,7 @@
 use crate::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
+use crate::audio_engine::realtime_metrics::AudioRealtimeStats;
 use crate::audio_engine::types::{FireworksAudioConfig, PlayRequest, Voice};
 use crate::audio_engine::{load_audio, resample_linear, AudioBlock, AudioEngine, SafeWavWriter};
-use crate::profiler::Profiler;
 #[cfg(feature = "tracy")]
 use crate::tracy_zone;
 use crate::AudioEngineSettings;
@@ -79,6 +79,9 @@ pub struct FireworksAudio3D {
     debug_rx: crossbeam_channel::Receiver<crate::audio_engine::types::AudioDebugEvent>,
     debug_tx: crossbeam_channel::Sender<crate::audio_engine::types::AudioDebugEvent>,
     next_request_id: std::sync::atomic::AtomicU64,
+
+    /// Statistiques et métriques lock-free du callback audio temps réel
+    pub realtime_stats: Arc<AudioRealtimeStats>,
 }
 
 impl FireworksAudio3D {
@@ -169,6 +172,7 @@ impl FireworksAudio3D {
             debug_tx,
             debug_rx,
             next_request_id: std::sync::atomic::AtomicU64::new(1),
+            realtime_stats: Arc::new(AudioRealtimeStats::new()),
         })
     }
 
@@ -350,8 +354,8 @@ impl FireworksAudio3D {
         let block_size = self.block_size;
         let master_volume_clone = self.master_volume.clone();
         let running_pair_clone = self.running_pair.clone();
+        let realtime_stats_clone = self.realtime_stats.clone();
 
-        let profiler = Profiler::new(200);
         let _settings = self.settings.clone();
         let doppler_rx_clone = self.doppler_receiver.clone();
         let listener_pos_clone = self.listener_pos.clone();
@@ -414,6 +418,8 @@ impl FireworksAudio3D {
                 };
 
                 // 3. Lancement du Flux Audio
+                let stats = realtime_stats_clone.clone();
+                let stats_err = realtime_stats_clone.clone();
                 let stream = device
                     .build_output_stream(
                         &config,
@@ -449,9 +455,13 @@ impl FireworksAudio3D {
                             let cur_gain = f32::from_bits(
                                 master_volume_clone.load(std::sync::atomic::Ordering::Relaxed),
                             );
-                            dsp_processor.process_block(data, cur_gain, &profiler);
+                            dsp_processor.process_block(data, cur_gain, &stats);
                         },
-                        move |err| eprintln!("CPAL error: {:?}", err),
+                        move |_err| {
+                            stats_err
+                                .cpal_error_count
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        },
                         None,
                     )
                     .map_err(AudioThreadError::StreamBuildFailed)?;

@@ -42,3 +42,6 @@ pub mod config;
 pub use config::AudioConfig;
 
 pub mod constants;
+
+pub mod realtime_metrics;
+pub use realtime_metrics::AudioRealtimeStats;
