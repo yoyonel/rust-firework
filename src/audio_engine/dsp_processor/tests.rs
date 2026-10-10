@@ -771,6 +771,7 @@ fn test_spatial_bus_snr_quality() {
 }
 
 #[test]
+#[allow(clippy::all)]
 fn test_sample_accurate_audio_scheduling() {
     use crate::audio_engine::effect_flags::AudioEffectFlags;
     use crate::audio_engine::types::{AudioDebugEvent, AudioSoundType, Voice};

@@ -158,7 +158,9 @@ impl DspProcessor {
         let frames = data.len() / 2;
 
         if frames > self.acc.len() {
-            log::error!("Buffer under-allocated! Requested {} frames", frames);
+            stats
+                .buffer_under_allocated_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return;
         }
 
@@ -207,18 +209,15 @@ impl DspProcessor {
             );
 
             if elapsed_us > budget_us {
-                log::warn!(
-                    "⚠️ CPU Audio Underrun detected: block took {} us (budget: {} us)",
-                    elapsed_us,
-                    budget_us
-                );
-                if let Err(e) =
+                if let Err(_e) =
                     debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Underrun {
                         elapsed_us,
                         budget_us,
                     })
                 {
-                    log::error!("Failed to send Underrun event: {:?}", e);
+                    stats
+                        .underrun_send_error_count
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
             }
         }
@@ -488,11 +487,6 @@ impl DspProcessor {
         crate::tracy_zone!("audio::process_dsp_spatial_bus", 0xAA00FF);
 
         if frames > self.bus_w.len() || frames > self.bus_x.len() {
-            log::error!(
-                "Buffer bus_w/bus_x under-allocated! Requested {} frames, available {}",
-                frames,
-                self.bus_w.len()
-            );
             return;
         }
 

@@ -1,3 +1,5 @@
+#![allow(clippy::chunks_exact_to_as_chunks)]
+
 use fireworks_sim::audio_engine::effect_flags::AudioEffectFlags;
 use fireworks_sim::audio_engine::realtime_metrics::AudioRealtimeStats;
 use fireworks_sim::audio_engine::types::{AudioSoundType, Voice};
