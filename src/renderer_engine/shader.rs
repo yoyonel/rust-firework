@@ -58,6 +58,18 @@ pub unsafe fn compile_shader_program_from_files<P: AsRef<Path>>(
     compile_shader_program(&vertex_src, &fragment_src, &vs_label, &fs_label)
 }
 
+/// Compile un programme shader à partir de fichiers GLSL et retourne un wrapper RAII `GlProgram`.
+///
+/// # Safety
+/// Cette fonction est unsafe car elle interagit directement avec des pointeurs OpenGL.
+pub unsafe fn compile_gl_program_from_files<P: AsRef<Path>>(
+    vertex_path: P,
+    fragment_path: P,
+) -> GlProgram {
+    let raw = compile_shader_program_from_files(vertex_path, fragment_path);
+    GlProgram::from_raw(raw)
+}
+
 /// Tente de compiler un programme shader à partir de fichiers GLSL.
 /// Version sécurisée qui retourne un Result au lieu de paniquer.
 ///
@@ -120,6 +132,8 @@ pub unsafe fn try_compile_shader_program_from_files<P: AsRef<Path>>(
     try_compile_shader_program(&vertex_src, &fragment_src, &vs_label, &fs_label)
 }
 
+use crate::renderer_engine::gl_resource::{GlProgram, GlShader};
+
 /// Tente de compiler un programme shader à partir de sources.
 /// Version sécurisée qui retourne un Result au lieu de paniquer.
 ///
@@ -131,29 +145,32 @@ unsafe fn try_compile_shader_program(
     vs_label: &str,
     fs_label: &str,
 ) -> Result<u32, String> {
-    fn try_compile_shader(src: &str, ty: GLenum, label: &str) -> Result<u32, String> {
-        let shader = unsafe { gl::CreateShader(ty) };
+    fn try_compile_shader(src: &str, ty: GLenum, label: &str) -> Result<GlShader, String> {
+        let shader = GlShader::from_raw(unsafe { gl::CreateShader(ty) });
         unsafe {
-            crate::label_gl_object!(gl::SHADER, shader, label);
+            crate::label_gl_object!(gl::SHADER, shader.raw(), label);
         }
         let c_str = CString::new(src).map_err(|e| format!("CString error: {}", e))?;
 
         unsafe {
-            gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
-            gl::CompileShader(shader);
+            gl::ShaderSource(shader.raw(), 1, &c_str.as_ptr(), ptr::null());
+            gl::CompileShader(shader.raw());
 
             let mut success = gl::FALSE as GLint;
-            gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
+            gl::GetShaderiv(shader.raw(), gl::COMPILE_STATUS, &mut success);
             if success != gl::TRUE as GLint {
                 let mut len = 0;
-                gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
+                gl::GetShaderiv(shader.raw(), gl::INFO_LOG_LENGTH, &mut len);
                 let mut buf = Vec::with_capacity(len as usize);
-                gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
+                gl::GetShaderInfoLog(
+                    shader.raw(),
+                    len,
+                    ptr::null_mut(),
+                    buf.as_mut_ptr() as *mut _,
+                );
                 buf.set_len(len as usize);
                 let log_cow = String::from_utf8_lossy(&buf);
                 let log = log_cow.trim_matches(char::from(0));
-
-                gl::DeleteShader(shader);
 
                 let mut error_msg = format!("Shader compilation failed:\n{}", log);
                 if let Some((line, _col)) = parse_glsl_error_line(log) {
@@ -174,32 +191,31 @@ unsafe fn try_compile_shader_program(
     let vs = try_compile_shader(vertex_src, gl::VERTEX_SHADER, vs_label)?;
     let fs = try_compile_shader(fragment_src, gl::FRAGMENT_SHADER, fs_label)?;
 
-    let program = unsafe { gl::CreateProgram() };
+    let program = GlProgram::from_raw(unsafe { gl::CreateProgram() });
     unsafe {
-        gl::AttachShader(program, vs);
-        gl::AttachShader(program, fs);
-        gl::LinkProgram(program);
+        gl::AttachShader(program.raw(), vs.raw());
+        gl::AttachShader(program.raw(), fs.raw());
+        gl::LinkProgram(program.raw());
 
         let mut success = gl::FALSE as GLint;
-        gl::GetProgramiv(program, gl::LINK_STATUS, &mut success);
+        gl::GetProgramiv(program.raw(), gl::LINK_STATUS, &mut success);
         if success != gl::TRUE as GLint {
             let mut len = 0;
-            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
+            gl::GetProgramiv(program.raw(), gl::INFO_LOG_LENGTH, &mut len);
             let mut buf = Vec::with_capacity(len as usize);
-            gl::GetProgramInfoLog(program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
+            gl::GetProgramInfoLog(
+                program.raw(),
+                len,
+                ptr::null_mut(),
+                buf.as_mut_ptr() as *mut _,
+            );
             buf.set_len(len as usize);
             let log = String::from_utf8_lossy(&buf);
 
-            gl::DeleteShader(vs);
-            gl::DeleteShader(fs);
-            gl::DeleteProgram(program);
             return Err(format!("Shader link failed:\n{}", log));
         }
-
-        gl::DeleteShader(vs);
-        gl::DeleteShader(fs);
     }
-    Ok(program)
+    Ok(program.into_raw())
 }
 
 /// # Safety
@@ -210,22 +226,27 @@ pub unsafe fn compile_shader_program(
     vs_label: &str,
     fs_label: &str,
 ) -> u32 {
-    fn compile_shader(src: &str, ty: GLenum, label: &str) -> u32 {
-        let shader = unsafe { gl::CreateShader(ty) };
-        unsafe { crate::label_gl_object!(gl::SHADER, shader, label) };
+    fn compile_shader(src: &str, ty: GLenum, label: &str) -> GlShader {
+        let shader = GlShader::from_raw(unsafe { gl::CreateShader(ty) });
+        unsafe { crate::label_gl_object!(gl::SHADER, shader.raw(), label) };
 
         let c_str = CString::new(src).unwrap();
         unsafe {
-            gl::ShaderSource(shader, 1, &c_str.as_ptr(), ptr::null());
-            gl::CompileShader(shader);
+            gl::ShaderSource(shader.raw(), 1, &c_str.as_ptr(), ptr::null());
+            gl::CompileShader(shader.raw());
 
             let mut success = gl::FALSE as GLint;
-            gl::GetShaderiv(shader, gl::COMPILE_STATUS, &mut success);
+            gl::GetShaderiv(shader.raw(), gl::COMPILE_STATUS, &mut success);
             if success != gl::TRUE as GLint {
                 let mut len = 0;
-                gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
+                gl::GetShaderiv(shader.raw(), gl::INFO_LOG_LENGTH, &mut len);
                 let mut buf = Vec::with_capacity(len as usize);
-                gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
+                gl::GetShaderInfoLog(
+                    shader.raw(),
+                    len,
+                    ptr::null_mut(),
+                    buf.as_mut_ptr() as *mut _,
+                );
                 buf.set_len(len as usize);
                 let log = String::from_utf8_lossy(&buf);
 
@@ -245,28 +266,30 @@ pub unsafe fn compile_shader_program(
     let vs = compile_shader(vertex_src, gl::VERTEX_SHADER, vs_label);
     let fs = compile_shader(fragment_src, gl::FRAGMENT_SHADER, fs_label);
 
-    let program = unsafe { gl::CreateProgram() };
+    let program = GlProgram::from_raw(unsafe { gl::CreateProgram() });
     unsafe {
-        gl::AttachShader(program, vs);
-        gl::AttachShader(program, fs);
-        gl::LinkProgram(program);
+        gl::AttachShader(program.raw(), vs.raw());
+        gl::AttachShader(program.raw(), fs.raw());
+        gl::LinkProgram(program.raw());
 
         let mut success = gl::FALSE as GLint;
-        gl::GetProgramiv(program, gl::LINK_STATUS, &mut success);
+        gl::GetProgramiv(program.raw(), gl::LINK_STATUS, &mut success);
         if success != gl::TRUE as GLint {
             let mut len = 0;
-            gl::GetProgramiv(program, gl::INFO_LOG_LENGTH, &mut len);
+            gl::GetProgramiv(program.raw(), gl::INFO_LOG_LENGTH, &mut len);
             let mut buf = Vec::with_capacity(len as usize);
-            gl::GetProgramInfoLog(program, len, ptr::null_mut(), buf.as_mut_ptr() as *mut _);
+            gl::GetProgramInfoLog(
+                program.raw(),
+                len,
+                ptr::null_mut(),
+                buf.as_mut_ptr() as *mut _,
+            );
             buf.set_len(len as usize);
             let log = String::from_utf8_lossy(&buf);
             panic!("Shader link failed:\n{}", log);
         }
-
-        gl::DeleteShader(vs);
-        gl::DeleteShader(fs);
     }
-    program
+    program.into_raw()
 }
 
 /// Essaie d’extraire le numéro de ligne de l’erreur GLSL (ex: "0:12(105): ...")

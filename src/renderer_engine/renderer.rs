@@ -7,6 +7,7 @@ use log::info;
 use crate::gpu_profile_zone;
 use crate::physic_engine::config::PhysicConfig;
 use crate::renderer_engine::constants;
+use crate::renderer_engine::gl_resource::{GlBuffer, GlProgram, GlVao};
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
@@ -115,10 +116,10 @@ pub struct GlobalDataUBO {
 pub struct Renderer {
     config: crate::renderer_engine::RendererConfig,
     max_particles_on_gpu: usize,
-    ubo_global: u32,
-    ubo_lighting: u32,
-    sky_haze_program: u32,
-    dummy_vao: u32,
+    ubo_global: GlBuffer,
+    ubo_lighting: GlBuffer,
+    sky_haze_program: GlProgram,
+    dummy_vao: GlVao,
     loc_haze_intensity: i32,
     loc_haze_ambient_flash: i32,
     loc_haze_falloff: i32,
@@ -224,17 +225,19 @@ impl Renderer {
         }));
 
         // 🟢 Initialize UBO Global Buffer & Lighting UBO
-        let mut ubo_global = 0;
-        let mut ubo_lighting = 0;
-        let mut dummy_vao = 0;
+        let ubo_global;
+        let ubo_lighting;
+        let dummy_vao;
         let sky_haze_program;
         let loc_haze_intensity;
         let loc_haze_ambient_flash;
         let loc_haze_falloff;
 
         unsafe {
-            gl::GenBuffers(1, &mut ubo_global);
-            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_global);
+            let mut raw_ubo_global = 0;
+            gl::GenBuffers(1, &mut raw_ubo_global);
+            ubo_global = GlBuffer::from_raw(raw_ubo_global);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_global.raw());
             gl::BufferData(
                 gl::UNIFORM_BUFFER,
                 std::mem::size_of::<GlobalDataUBO>() as isize,
@@ -247,12 +250,14 @@ impl Renderer {
             gl::BindBufferBase(
                 gl::UNIFORM_BUFFER,
                 constants::GLOBAL_UBO_BINDING_INDEX,
-                ubo_global,
+                ubo_global.raw(),
             );
 
             // 🟢 Initialize UBO Lighting Buffer (std140, 544 bytes)
-            gl::GenBuffers(1, &mut ubo_lighting);
-            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_lighting);
+            let mut raw_ubo_lighting = 0;
+            gl::GenBuffers(1, &mut raw_ubo_lighting);
+            ubo_lighting = GlBuffer::from_raw(raw_ubo_lighting);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_lighting.raw());
             gl::BufferData(
                 gl::UNIFORM_BUFFER,
                 std::mem::size_of::<crate::renderer_engine::types::VolumetricLightingBlockGPU>()
@@ -265,40 +270,45 @@ impl Renderer {
             gl::BindBufferBase(
                 gl::UNIFORM_BUFFER,
                 constants::LIGHTING_UBO_BINDING_INDEX,
-                ubo_lighting,
+                ubo_lighting.raw(),
             );
 
             // 🟢 Initialize Sky Haze Atmosphere Shader & Dummy VAO
-            gl::GenVertexArrays(1, &mut dummy_vao);
+            let mut raw_dummy_vao = 0;
+            gl::GenVertexArrays(1, &mut raw_dummy_vao);
+            dummy_vao = GlVao::from_raw(raw_dummy_vao);
 
-            sky_haze_program = crate::renderer_engine::shader::compile_shader_program_from_files(
+            sky_haze_program = crate::renderer_engine::shader::compile_gl_program_from_files(
                 constants::SHADER_SKY_HAZE_VERTEX_PATH,
                 constants::SHADER_SKY_HAZE_FRAGMENT_PATH,
             );
 
-            let block_idx_global = gl::GetUniformBlockIndex(sky_haze_program, cstr!("GlobalData"));
+            let block_idx_global =
+                gl::GetUniformBlockIndex(sky_haze_program.raw(), cstr!("GlobalData"));
             if block_idx_global != gl::INVALID_INDEX {
                 gl::UniformBlockBinding(
-                    sky_haze_program,
+                    sky_haze_program.raw(),
                     block_idx_global,
                     constants::GLOBAL_UBO_BINDING_INDEX,
                 );
             }
 
             let block_idx_lighting =
-                gl::GetUniformBlockIndex(sky_haze_program, cstr!("LightingBlock"));
+                gl::GetUniformBlockIndex(sky_haze_program.raw(), cstr!("LightingBlock"));
             if block_idx_lighting != gl::INVALID_INDEX {
                 gl::UniformBlockBinding(
-                    sky_haze_program,
+                    sky_haze_program.raw(),
                     block_idx_lighting,
                     constants::LIGHTING_UBO_BINDING_INDEX,
                 );
             }
 
-            loc_haze_intensity = gl::GetUniformLocation(sky_haze_program, cstr!("u_HazeIntensity"));
+            loc_haze_intensity =
+                gl::GetUniformLocation(sky_haze_program.raw(), cstr!("u_HazeIntensity"));
             loc_haze_ambient_flash =
-                gl::GetUniformLocation(sky_haze_program, cstr!("u_AmbientFlash"));
-            loc_haze_falloff = gl::GetUniformLocation(sky_haze_program, cstr!("u_HazeFalloff"));
+                gl::GetUniformLocation(sky_haze_program.raw(), cstr!("u_AmbientFlash"));
+            loc_haze_falloff =
+                gl::GetUniformLocation(sky_haze_program.raw(), cstr!("u_HazeFalloff"));
         }
 
         Ok(Self {
@@ -496,7 +506,7 @@ impl Renderer {
             _padding: [0; 2],
         };
 
-        gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_lighting);
+        gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_lighting.raw());
         gl::BufferSubData(
             gl::UNIFORM_BUFFER,
             0,
@@ -507,7 +517,7 @@ impl Renderer {
         gl::BindBufferBase(
             gl::UNIFORM_BUFFER,
             constants::LIGHTING_UBO_BINDING_INDEX,
-            self.ubo_lighting,
+            self.ubo_lighting.raw(),
         );
     }
 
@@ -526,7 +536,7 @@ impl Renderer {
             scattering_intensity: 0.0,
             _padding: [0; 2],
         };
-        gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_lighting);
+        gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_lighting.raw());
         gl::BufferSubData(
             gl::UNIFORM_BUFFER,
             0,
@@ -537,7 +547,7 @@ impl Renderer {
         gl::BindBufferBase(
             gl::UNIFORM_BUFFER,
             constants::LIGHTING_UBO_BINDING_INDEX,
-            self.ubo_lighting,
+            self.ubo_lighting.raw(),
         );
     }
 
@@ -549,7 +559,7 @@ impl Renderer {
         gl::DepthMask(gl::FALSE);
         gl::Disable(gl::BLEND);
 
-        gl::UseProgram(self.sky_haze_program);
+        gl::UseProgram(self.sky_haze_program.raw());
         if self.loc_haze_intensity != -1 {
             gl::Uniform1f(self.loc_haze_intensity, self.config.sky_haze_intensity);
         }
@@ -563,7 +573,7 @@ impl Renderer {
             gl::Uniform1f(self.loc_haze_falloff, self.config.sky_haze_falloff);
         }
 
-        gl::BindVertexArray(self.dummy_vao);
+        gl::BindVertexArray(self.dummy_vao.raw());
         gl::DrawArrays(gl::TRIANGLES, 0, 3);
         gl::BindVertexArray(0);
 
@@ -788,7 +798,7 @@ impl RendererEngine for Renderer {
                     .map_or(1.0, |r| r.get_tex_ratio()),
                 u_bloom_intensity: self.bloom_pass.intensity,
             };
-            gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global.raw());
             gl::BufferSubData(
                 gl::UNIFORM_BUFFER,
                 0,
@@ -796,7 +806,7 @@ impl RendererEngine for Renderer {
                 &ubo_data as *const _ as *const _,
             );
 
-            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global);
+            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global.raw());
 
             let is_lighting_active = self.config.volumetric_lighting_enabled
                 && (self.config.smoke_lighting_enabled || self.config.sky_haze_enabled);
@@ -938,22 +948,10 @@ impl RendererEngine for Renderer {
                 cr.destroy();
             }
 
-            if self.ubo_global != 0 {
-                gl::DeleteBuffers(1, &self.ubo_global);
-                self.ubo_global = 0;
-            }
-            if self.ubo_lighting != 0 {
-                gl::DeleteBuffers(1, &self.ubo_lighting);
-                self.ubo_lighting = 0;
-            }
-            if self.dummy_vao != 0 {
-                gl::DeleteVertexArrays(1, &self.dummy_vao);
-                self.dummy_vao = 0;
-            }
-            if self.sky_haze_program != 0 {
-                gl::DeleteProgram(self.sky_haze_program);
-                self.sky_haze_program = 0;
-            }
+            self.ubo_global.reset(0);
+            self.ubo_lighting.reset(0);
+            self.dummy_vao.reset(0);
+            self.sky_haze_program.reset(0);
         }
     }
 
