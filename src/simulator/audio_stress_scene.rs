@@ -530,6 +530,55 @@ impl Default for AudioStressScene {
     }
 }
 
+/// Exécute le benchmark de stress audio en mode headless (zéro rendu GLFW/OpenGL, saturation des voix).
+pub fn run_headless_audio_stress(
+    duration_secs: u64,
+    audio_file_config: &crate::audio_engine::config::AudioConfig,
+    max_rockets: usize,
+) -> anyhow::Result<()> {
+    log::info!(
+        "🎧 [PERF MODE] Démarrage du stress-test audio pour {} secondes...",
+        duration_secs
+    );
+    log::info!("   (Zéro rendu GLFW/OpenGL, saturation des voix actives)");
+
+    use crate::audio_engine::FireworksAudio3D;
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    // 1. Initialisation du moteur audio (avec le nombre max de fusées de la physique)
+    let audio_config = audio_file_config.to_engine_config(max_rockets);
+    let mut audio_engine = FireworksAudio3D::new(audio_config)?;
+    audio_engine.start_audio_thread(None);
+
+    // 2. Boucle de stress-test dans le thread principal (simule 60 FPS de requêtes)
+    let start_time = Instant::now();
+    let dt = Duration::from_millis(16); // ~60 FPS
+    let mut angle = 0.0_f32;
+
+    while start_time.elapsed().as_secs() < duration_secs {
+        angle += 0.05;
+
+        // Simule des fusées en mouvement circulaire rapide autour de l'auditeur
+        for i in 0..8 {
+            let r = 50.0 + (i as f32 * 20.0);
+            let a = angle + (i as f32 * std::f32::consts::FRAC_PI_4);
+            let pos = glam::Vec2::new(a.cos() * r, a.sin() * r);
+
+            audio_engine.play_rocket(pos, 0.7);
+            if i % 4 == 0 {
+                audio_engine.play_explosion(pos, 1.0);
+            }
+        }
+
+        thread::sleep(dt);
+    }
+
+    audio_engine.stop_audio_thread();
+    log::info!("🏁 [PERF MODE] Stress-test terminé avec succès.");
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
