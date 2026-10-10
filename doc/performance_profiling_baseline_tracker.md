@@ -82,6 +82,8 @@ Ce registre centralise et pérennise l'historique complet des mesures de perform
 
 | Date | Jalon / Événement | Cible Matérielle | Tps Frame GPU | Tps Frame CPU | FPS Global | Notes Clés |
 | :--- | :--- | :--- | :---: | :---: | :---: | :--- |
+| **10/10/2026** | **Audit Piste 3 : Sky Haze Arithmétique & DrawBuffers** | Intel Iris Xe | **2.065 ms** | **0.72 ms** | **484.20 FPS** | ❌ **REJETÉ** (-0.38 % vs baseline 486.06 FPS). Mesa NIR abaisse déjà `exp` en `fexp2` ; reconfiguration `glDrawBuffers` induit un pipeline stall. Voir [`20261010_sky_haze_arithmetic_and_drawbuffers_optimization_report.md`](20261010_sky_haze_arithmetic_and_drawbuffers_optimization_report.md). |
+| **10/10/2026** | **Audit Piste 1 : Downsample Bloom 13-Tap Karis** | Intel Iris Xe | **2.330 ms** | **0.74 ms** | **429.26 FPS** | ❌ **REJETÉ** (-7.80 % vs baseline 5-tap 465.60 FPS). 13 lectures textures saturent la bande passante DDR5 UMA. Voir [`20261010_bloom_karis_downsample_benchmark_and_postmortem_report.md`](20261010_bloom_karis_downsample_benchmark_and_postmortem_report.md). |
 | **08/10/2026** | **Fusion Backlight MRT Single-Pass** | Intel Iris Xe | **1.711 ms** | **0.72 ms** | **584.46 FPS** | +31.60 FPS (+5.72 % vs baseline 552.86 FPS), suppression passe Smoke_Backlight_Mask. |
 | **07/10/2026** | **Audit Matériel iGPU & Real GPU Queries** | Intel Iris Xe | **1,63 ms** | **0,76 ms** | **~615** | GPU profiler activé (`feature = tracy`), bloom identifié à 51% GPU. |
 | **06/10/2026** | Volumetric Shading & Wrap Lighting | Intel Iris Xe | ~1,65 ms | ~0,80 ms | ~600 | Intégration LUT 2D Zero SQRT et wrap lighting fumée. |
