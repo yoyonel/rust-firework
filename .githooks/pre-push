@@ -1,0 +1,15 @@
+#!/bin/sh
+set -eu
+
+# 🔒 Anti-Leak Outgoing Commits Check
+PROHIBITED="letsignit|lsi|unowhy"
+
+REMOTE_TRACKING=$(git rev-parse --abbrev-ref --symbolic-full-name @{u} 2>/dev/null || echo "origin/develop")
+OFFENDING=$(git log "${REMOTE_TRACKING}..HEAD" --format='%h | %an <%ae>' 2>/dev/null | grep -iE "$PROHIBITED" || true)
+
+if [ -n "$OFFENDING" ]; then
+    echo "❌ ERREUR SÉCURITÉ : Des commits sortants contiennent une identité pro interdite :" >&2
+    echo "$OFFENDING" >&2
+    echo "👉 Push annulé. Veuillez modifier l'auteur des commits avant de pousser." >&2
+    exit 1
+fi
