@@ -22,3 +22,32 @@ use bytemuck::{Pod, Zeroable};
 
 unsafe impl Pod for Particle {}
 unsafe impl Zeroable for Particle {}
+
+const _: () = {
+    assert!(std::mem::size_of::<Particle>() == 48);
+    assert!(std::mem::offset_of!(Particle, pos) == 0);
+    assert!(std::mem::offset_of!(Particle, color) == 8);
+    assert!(std::mem::offset_of!(Particle, life) == 20);
+    assert!(std::mem::offset_of!(Particle, angle) == 32);
+    assert!(std::mem::offset_of!(Particle, vel) == 36); // ce que lit brightness aujourd'hui
+};
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_particle_memory_layout_and_offsets() {
+        assert_eq!(std::mem::size_of::<Particle>(), 48);
+        assert_eq!(std::mem::align_of::<Particle>(), 16);
+        assert_eq!(std::mem::offset_of!(Particle, pos), 0);
+        assert_eq!(std::mem::offset_of!(Particle, color), 8);
+        assert_eq!(std::mem::offset_of!(Particle, life), 20);
+        assert_eq!(std::mem::offset_of!(Particle, max_life), 24);
+        assert_eq!(std::mem::offset_of!(Particle, size), 28);
+        assert_eq!(std::mem::offset_of!(Particle, angle), 32);
+        assert_eq!(std::mem::offset_of!(Particle, vel), 36);
+        assert_eq!(std::mem::offset_of!(Particle, active), 44);
+        assert_eq!(std::mem::offset_of!(Particle, particle_type), 45);
+    }
+}

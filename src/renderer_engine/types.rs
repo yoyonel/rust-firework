@@ -69,6 +69,11 @@ pub struct ParticleGPU {
     pub brightness: f32,
 }
 
+const _: () = {
+    assert!(std::mem::size_of::<ParticleGPU>() == 40);
+    assert!(std::mem::offset_of!(ParticleGPU, brightness) == 36);
+};
+
 impl ParticleGPU {
     /// Configure les attributs de sommets (vertex attributes) pour OpenGL.
     ///
@@ -225,6 +230,22 @@ impl Default for VolumetricLightingBlockGPU {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_particle_gpu_memory_layout_and_offsets() {
+        assert_eq!(mem::size_of::<ParticleGPU>(), 40);
+        assert_eq!(mem::align_of::<ParticleGPU>(), 4);
+        assert_eq!(offset_of!(ParticleGPU, pos_x), 0);
+        assert_eq!(offset_of!(ParticleGPU, pos_y), 4);
+        assert_eq!(offset_of!(ParticleGPU, col_r), 8);
+        assert_eq!(offset_of!(ParticleGPU, col_g), 12);
+        assert_eq!(offset_of!(ParticleGPU, col_b), 16);
+        assert_eq!(offset_of!(ParticleGPU, life), 20);
+        assert_eq!(offset_of!(ParticleGPU, max_life), 24);
+        assert_eq!(offset_of!(ParticleGPU, size), 28);
+        assert_eq!(offset_of!(ParticleGPU, angle), 32);
+        assert_eq!(offset_of!(ParticleGPU, brightness), 36);
+    }
 
     #[test]
     fn test_volumetric_lighting_block_gpu_layout() {
