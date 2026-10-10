@@ -49,7 +49,7 @@ where
 
         if !self.console.open
             && !comparison_active
-            && !self.show_audio_diagnostic
+            && !self.audio_diagnostics.show_audio_diagnostic
             && !self.gui_settings.open
         {
             return;
@@ -143,7 +143,7 @@ where
         }
 
         // NOUVEAU: Fenêtre ImGui de diagnostic Audio (indépendante de la console, toggle via F3)
-        if self.show_audio_diagnostic {
+        if self.audio_diagnostics.show_audio_diagnostic {
             if self.audio_stress_scene.enabled {
                 self.audio_stress_scene
                     .build_imgui_window(ui, &self.audio_engine);
@@ -209,11 +209,11 @@ where
                 }
 
                 // ── Indicateur B: Labels flottants animés pour les évènements audio actifs ──
-                if self.show_audio_visual_overlay {
+                if self.audio_visual_debug.show_audio_visual_overlay {
                     let draw_list = ui.get_background_draw_list();
                     let win_h = ui.io().display_size[1];
 
-                    for evt in &self.audio_event_pool {
+                    for evt in &self.audio_visual_debug.audio_event_pool {
                         let t = (evt.age / evt.kind.ttl_secs()).clamp(0.0, 1.0);
                         // Fade: fast attack, smooth decay
                         let alpha = {
@@ -241,7 +241,7 @@ where
                 }
 
                 // ── Indicateur D: Badge ID persistant sur chaque fusée en vol ──
-                if self.show_audio_visual_overlay {
+                if self.audio_visual_debug.show_audio_visual_overlay {
                     let draw_list = ui.get_background_draw_list();
                     let win_h = ui.io().display_size[1];
                     let mut rocket_index = 0usize;
@@ -291,7 +291,7 @@ where
 
                         ui.checkbox(
                             "Afficher les indicateurs visuels (ondes/faisceaux/badges)",
-                            &mut self.show_audio_visual_overlay,
+                            &mut self.audio_visual_debug.show_audio_visual_overlay,
                         );
                         ui.separator();
 
@@ -299,49 +299,30 @@ where
                         ui_text!(
                             ui,
                             "Rockets: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
-                            self.audio_sent_rocket,
-                            self.audio_received_rocket,
-                            self.audio_played_rocket,
-                            self.audio_dropped_rocket,
-                            self.audio_completed_rocket
+                            self.audio_diagnostics.audio_sent_rocket,
+                            self.audio_diagnostics.audio_received_rocket,
+                            self.audio_diagnostics.audio_played_rocket,
+                            self.audio_diagnostics.audio_dropped_rocket,
+                            self.audio_diagnostics.audio_completed_rocket
                         );
 
                         ui_text!(
                             ui,
                             "Explosions: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
-                            self.audio_sent_explosion,
-                            self.audio_received_explosion,
-                            self.audio_played_explosion,
-                            self.audio_dropped_explosion,
-                            self.audio_completed_explosion
+                            self.audio_diagnostics.audio_sent_explosion,
+                            self.audio_diagnostics.audio_received_explosion,
+                            self.audio_diagnostics.audio_played_explosion,
+                            self.audio_diagnostics.audio_dropped_explosion,
+                            self.audio_diagnostics.audio_completed_explosion
                         );
 
                         ui.separator();
                         ui.text("=== LATENCY QUANTIFICATION ===");
 
-                        let avg_dispatch = if self.latency_dispatch_count > 0 {
-                            self.latency_dispatch_sum.as_secs_f64() * 1000.0 / self.latency_dispatch_count as f64
-                        } else {
-                            0.0
-                        };
-
-                        let avg_play = if self.latency_play_count > 0 {
-                            self.latency_play_sum.as_secs_f64() * 1000.0 / self.latency_play_count as f64
-                        } else {
-                            0.0
-                        };
-
-                        let avg_sync_launch = if self.sync_launch_count > 0 {
-                            self.sync_launch_sum / self.sync_launch_count as f64
-                        } else {
-                            0.0
-                        };
-
-                        let avg_sync_explosion = if self.sync_explosion_count > 0 {
-                            self.sync_explosion_sum / self.sync_explosion_count as f64
-                        } else {
-                            0.0
-                        };
+                        let avg_dispatch = self.audio_diagnostics.average_dispatch_latency_ms();
+                        let avg_play = self.audio_diagnostics.average_play_latency_ms();
+                        let (avg_sync_launch, avg_sync_explosion) =
+                            self.sync_telemetry.average_syncs();
 
                         ui_text!(ui, "Avg thread transit latency: {:.3} ms", avg_dispatch);
                         ui_text!(ui, "Avg render-to-audio-start latency: {:.3} ms", avg_play);
@@ -356,7 +337,7 @@ where
                         ui.same_line();
                         ui_text!(ui, "{:.2} ms", config.audio_launch_anticipation_ms);
                         ui.same_line();
-                        match self.launch_trend_dir {
+                        match self.sync_telemetry.launch_trend_dir {
                             1 => { ui_text_colored!(ui, [0.0, 1.0, 0.0, 1.0], " (⬆️ HAUSSE/UP)"); }      // Green
                             -1 => { ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], " (⬇️ BAISSE/DOWN)"); }   // Red
                             _ => { ui_text_colored!(ui, [0.7, 0.7, 0.7, 1.0], " (Stable)"); }           // Grey
@@ -366,14 +347,15 @@ where
                         ui.same_line();
                         ui_text!(ui, "{:.2} ms", config.audio_explosion_anticipation_ms);
                         ui.same_line();
-                        match self.launch_trend_dir {
+                        match self.sync_telemetry.launch_trend_dir {
                             1 => { ui_text_colored!(ui, [0.0, 1.0, 0.0, 1.0], " (⬆️ HAUSSE/UP)"); }      // Green
                             -1 => { ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], " (⬇️ BAISSE/DOWN)"); }   // Red
                             _ => { ui_text_colored!(ui, [0.7, 0.7, 0.7, 1.0], " (Stable)"); }           // Grey
                         }
 
                         // Warning indicator if anything dropped
-                        let total_dropped = self.audio_dropped_rocket + self.audio_dropped_explosion;
+                        let total_dropped = self.audio_diagnostics.audio_dropped_rocket
+                            + self.audio_diagnostics.audio_dropped_explosion;
                         if total_dropped > 0 {
                             ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], "⚠️ CRITICAL: {} SOUNDS DROPPED!", total_dropped);
                         } else {
@@ -386,7 +368,7 @@ where
                         ui.child_window("RecentLogChild")
                             .size([0.0, 180.0])
                             .build(|| {
-                                for r in self.audio_debug_records.iter().rev().take(15) {
+                                for r in self.audio_diagnostics.audio_debug_records.iter().rev().take(15) {
                                     let type_str = match r.sound_type {
                                         crate::audio_engine::types::AudioSoundType::Rocket => "ROCKET",
                                         crate::audio_engine::types::AudioSoundType::Explosion => "EXPLOSION",
@@ -443,8 +425,8 @@ where
                 &self.reload_shaders_requested,
                 &self.physic_reinit_requested,
                 &self.tonemapping_comparison_mode,
-                &mut self.show_audio_diagnostic,
-                &mut self.show_audio_visual_overlay,
+                &mut self.audio_diagnostics.show_audio_diagnostic,
+                &mut self.audio_visual_debug.show_audio_visual_overlay,
                 &mut self.audio_stress_scene,
                 self.window_size_f32,
                 is_fullscreen,
@@ -516,8 +498,8 @@ where
             self.gui_settings.save_session_state(
                 &self.audio_engine,
                 &self.physic_engine,
-                self.show_audio_diagnostic,
-                self.show_audio_visual_overlay,
+                self.audio_diagnostics.show_audio_diagnostic,
+                self.audio_visual_debug.show_audio_visual_overlay,
                 self.tonemapping_comparison_mode
                     .load(std::sync::atomic::Ordering::Relaxed),
                 self.window_engine.is_fullscreen(),
@@ -536,8 +518,8 @@ where
         if gui_reload {
             self.gui_settings.apply_session_to_audio(
                 &mut self.audio_engine,
-                &mut self.show_audio_diagnostic,
-                &mut self.show_audio_visual_overlay,
+                &mut self.audio_diagnostics.show_audio_diagnostic,
+                &mut self.audio_visual_debug.show_audio_visual_overlay,
             );
             let session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
                 crate::utils::config_path::get_gui_session_path(),

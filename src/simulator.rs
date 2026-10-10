@@ -1,6 +1,6 @@
 use crate::audio_engine::AudioEngine;
 use crate::physic_engine::{config::PhysicConfig, PhysicEngineFull};
-use crate::renderer_engine::utils::adaptative_sampler::{ascii_sample_timeline, AdaptiveSampler};
+use crate::renderer_engine::utils::adaptative_sampler::ascii_sample_timeline;
 use crate::renderer_engine::RendererEngine;
 use crate::window_engine::WindowEngine;
 use crate::{log_metrics_and_fps, profiler::Profiler};
@@ -46,8 +46,12 @@ pub mod audio_stress_scene;
 pub mod console_commands;
 pub mod events;
 pub mod gui_settings;
+pub mod telemetry;
 pub mod ui;
 pub use audio_stress_scene::{AudioStressScene, VirtualSource};
+pub use telemetry::{
+    AudioDiagnosticOverlay, AudioVisualDebugOverlay, FpsMetrics, SyncTelemetryTracker,
+};
 
 #[derive(Debug, Default, Clone)]
 pub struct SimConfig {
@@ -155,59 +159,21 @@ where
     pub render_alpha: f32,
     pub paused: bool,
     profiler: Profiler,
-    sampler: AdaptiveSampler,
-    sampled_fps: Vec<f32>,
-    fps_avg: f32,
-    fps_avg_iter: f32,
+    pub fps_metrics: FpsMetrics,
     last_log: Instant,
     first_frame: bool,
-    pub last_audio_debug_update: Instant,
-    pub show_audio_diagnostic: bool,
     pub gui_settings: crate::simulator::gui_settings::GuiSettings,
     pub engine_commands: Vec<crate::domain_contracts::EngineCommand>,
 
     // Tone mapping comparison
     pub tonemapping_comparison_mode: std::sync::Arc<std::sync::atomic::AtomicBool>,
 
-    // NOUVEAU: Métriques de synchronisation physique-audio
-    pub sync_launch_sum: f64,
-    pub sync_launch_count: u64,
-    pub sync_explosion_sum: f64,
-    pub sync_explosion_count: u64,
-    pub phys_launch_times: std::collections::HashMap<u64, std::time::Instant>,
-    pub phys_explosion_times: std::collections::HashMap<u64, std::time::Instant>,
-    pub audio_start_launch_times: std::collections::HashMap<u64, std::time::Instant>,
-    pub audio_start_explosion_times: std::collections::HashMap<u64, std::time::Instant>,
-
-    // NOUVEAU: Statistiques et tracking des requêtes audio
-    pub audio_debug_records:
-        std::collections::VecDeque<crate::audio_engine::types::AudioDebugRecord>,
-    pub audio_events_buf: Vec<crate::audio_engine::types::AudioDebugEvent>,
-    pub audio_sent_rocket: u64,
-    pub audio_received_rocket: u64,
-    pub audio_played_rocket: u64,
-    pub audio_dropped_rocket: u64,
-    pub audio_completed_rocket: u64,
-    pub audio_sent_explosion: u64,
-    pub audio_received_explosion: u64,
-    pub audio_played_explosion: u64,
-    pub audio_dropped_explosion: u64,
-    pub audio_completed_explosion: u64,
-
-    pub latency_dispatch_sum: std::time::Duration,
-    pub latency_dispatch_count: u64,
-    pub latency_play_sum: std::time::Duration,
-    pub latency_play_count: u64,
+    // Telemetry, diagnostics and metrics
+    pub sync_telemetry: SyncTelemetryTracker,
+    pub audio_diagnostics: AudioDiagnosticOverlay,
+    pub audio_visual_debug: AudioVisualDebugOverlay,
 
     pub audio_stress_scene: AudioStressScene,
-
-    pub launch_trend_dir: i32, // 1: augmentation, -1: diminution, 0: stable
-    pub explosion_trend_dir: i32, // 1: augmentation, -1: diminution, 0: stable
-
-    // NOUVEAU: Indicateurs visuels GPU des évènements audio (mode debug F3)
-    pub audio_event_renderer: Option<crate::renderer_engine::AudioEventRenderer>,
-    pub audio_event_pool: Vec<crate::renderer_engine::AudioEvent>,
-    pub show_audio_visual_overlay: bool,
 
     // Scratch persistent buffers for multi-substep event accumulation (0 heap allocs in update_simulation)
     pub accumulated_events: AccumulatedPhysicsEvents,
@@ -274,49 +240,22 @@ where
             render_alpha: 0.0,
             paused: false,
             profiler: Profiler::new(200),
-            sampler: AdaptiveSampler::new(std::time::Duration::from_secs(5), 200, 60.0),
-            sampled_fps: Vec::with_capacity(200),
-            fps_avg: 0.0,
-            fps_avg_iter: 0.0,
+            fps_metrics: FpsMetrics::new(),
             last_log: Instant::now(),
             first_frame: true,
-            last_audio_debug_update: Instant::now(),
-            show_audio_diagnostic: false,
             gui_settings: crate::simulator::gui_settings::GuiSettings::new(),
             engine_commands: Vec::with_capacity(64),
             tonemapping_comparison_mode: std::sync::Arc::new(std::sync::atomic::AtomicBool::new(
                 gui_session.tonemapping_comparison_mode,
             )),
-            sync_launch_sum: 0.0,
-            sync_launch_count: 0,
-            sync_explosion_sum: 0.0,
-            sync_explosion_count: 0,
-            phys_launch_times: std::collections::HashMap::new(),
-            phys_explosion_times: std::collections::HashMap::new(),
-            audio_start_launch_times: std::collections::HashMap::new(),
-            audio_start_explosion_times: std::collections::HashMap::new(),
-            audio_debug_records: std::collections::VecDeque::with_capacity(128),
-            audio_events_buf: Vec::with_capacity(2048),
-            audio_sent_rocket: 0,
-            audio_received_rocket: 0,
-            audio_played_rocket: 0,
-            audio_dropped_rocket: 0,
-            audio_completed_rocket: 0,
-            audio_sent_explosion: 0,
-            audio_received_explosion: 0,
-            audio_played_explosion: 0,
-            audio_dropped_explosion: 0,
-            audio_completed_explosion: 0,
-            latency_dispatch_sum: std::time::Duration::ZERO,
-            latency_dispatch_count: 0,
-            latency_play_sum: std::time::Duration::ZERO,
-            latency_play_count: 0,
+            sync_telemetry: SyncTelemetryTracker::new(),
+            audio_diagnostics: AudioDiagnosticOverlay::new(),
+            audio_visual_debug: AudioVisualDebugOverlay {
+                audio_event_renderer: None,
+                audio_event_pool: Vec::with_capacity(32),
+                show_audio_visual_overlay: true,
+            },
             audio_stress_scene: AudioStressScene::new(),
-            launch_trend_dir: 0,
-            explosion_trend_dir: 0,
-            audio_event_renderer: None,
-            audio_event_pool: Vec::with_capacity(32),
-            show_audio_visual_overlay: true,
             accumulated_events: AccumulatedPhysicsEvents::with_capacity(event_cap),
             config: SimConfig::default(),
             start_time: Instant::now(),
@@ -324,8 +263,8 @@ where
 
         sim.gui_settings.apply_session_to_audio(
             &mut sim.audio_engine,
-            &mut sim.show_audio_diagnostic,
-            &mut sim.show_audio_visual_overlay,
+            &mut sim.audio_diagnostics.show_audio_diagnostic,
+            &mut sim.audio_visual_debug.show_audio_visual_overlay,
         );
         sim.gui_settings
             .apply_session_to_physic(&mut sim.physic_engine);
@@ -346,8 +285,8 @@ where
         self.gui_settings.save_session_state(
             &self.audio_engine,
             &self.physic_engine,
-            self.show_audio_diagnostic,
-            self.show_audio_visual_overlay,
+            self.audio_diagnostics.show_audio_diagnostic,
+            self.audio_visual_debug.show_audio_visual_overlay,
             self.tonemapping_comparison_mode
                 .load(std::sync::atomic::Ordering::Relaxed),
             self.window_engine.is_fullscreen(),
@@ -368,7 +307,7 @@ where
     }
 
     pub fn enable_audio_stress_scene(&mut self, num_sources: usize, randomize_positions: bool) {
-        self.show_audio_diagnostic = true;
+        self.audio_diagnostics.show_audio_diagnostic = true;
         self.audio_stress_scene.enable(
             num_sources,
             randomize_positions,
@@ -399,7 +338,7 @@ where
         // Libérer explicitement le renderer GPU avant la destruction du contexte OpenGL.
         // Sans cela, le Drop de AudioEventRenderer appellerait gl::Delete* après que
         // GLFW ait détruit le contexte → segfault garanti.
-        self.audio_event_renderer = None;
+        self.audio_visual_debug.audio_event_renderer = None;
 
         Ok(())
     }
@@ -459,19 +398,19 @@ where
                     self.update_simulation(delta);
                 }
                 if !self.audio_stress_scene.enabled {
-                    if (self.console.open || self.show_audio_diagnostic)
-                        && self.last_audio_debug_update.elapsed()
+                    if (self.console.open || self.audio_diagnostics.show_audio_diagnostic)
+                        && self.audio_diagnostics.last_audio_debug_update.elapsed()
                             >= std::time::Duration::from_millis(16)
                     {
                         self.process_audio_debug_events();
-                        self.last_audio_debug_update = std::time::Instant::now();
-                    } else if self.last_audio_debug_update.elapsed()
+                        self.audio_diagnostics.last_audio_debug_update = std::time::Instant::now();
+                    } else if self.audio_diagnostics.last_audio_debug_update.elapsed()
                         >= std::time::Duration::from_millis(100)
                     {
-                        self.audio_events_buf.clear();
+                        self.audio_diagnostics.audio_events_buf.clear();
                         self.audio_engine
-                            .pop_debug_events(&mut self.audio_events_buf);
-                        self.last_audio_debug_update = std::time::Instant::now();
+                            .pop_debug_events(&mut self.audio_diagnostics.audio_events_buf);
+                        self.audio_diagnostics.last_audio_debug_update = std::time::Instant::now();
                     }
                 }
             }
@@ -511,7 +450,7 @@ where
                 delta,
                 self.window_size_f32,
                 &mut self.audio_engine,
-                &mut self.audio_events_buf,
+                &mut self.audio_diagnostics.audio_events_buf,
             );
             return;
         }
@@ -583,36 +522,38 @@ where
         }
 
         // NOUVEAU: Alimenter le pool d'indicateurs visuels audio (mode debug F3)
-        if self.show_audio_diagnostic && self.show_audio_visual_overlay {
+        if self.audio_diagnostics.show_audio_diagnostic
+            && self.audio_visual_debug.show_audio_visual_overlay
+        {
             // Injection des évènements anticipés dans le pool d'animation
             for &(_id, pos) in &self.accumulated_events.anticipated_launches {
-                self.audio_event_pool
-                    .push(crate::renderer_engine::AudioEvent::new(
+                self.audio_visual_debug
+                    .push_event(crate::renderer_engine::AudioEvent::new(
                         pos,
                         crate::renderer_engine::AudioEventKind::Launch,
                     ));
             }
             for &(_id, pos) in &self.accumulated_events.anticipated_explosions {
-                self.audio_event_pool
-                    .push(crate::renderer_engine::AudioEvent::new(
+                self.audio_visual_debug
+                    .push_event(crate::renderer_engine::AudioEvent::new(
                         pos,
                         crate::renderer_engine::AudioEventKind::Explosion,
                     ));
             }
             // Vieillissement + élagage des évènements expirés
-            self.audio_event_pool.retain_mut(|evt| {
+            self.audio_visual_debug.audio_event_pool.retain_mut(|evt| {
                 evt.age += delta;
                 !evt.is_expired()
             });
 
             // Limiter le nombre maximum d'événements pour éviter les baisses de FPS liées au fillrate
             const MAX_AUDIO_EVENTS: usize = 48;
-            if self.audio_event_pool.len() > MAX_AUDIO_EVENTS {
-                let to_remove = self.audio_event_pool.len() - MAX_AUDIO_EVENTS;
-                self.audio_event_pool.drain(0..to_remove);
+            if self.audio_visual_debug.audio_event_pool.len() > MAX_AUDIO_EVENTS {
+                let to_remove = self.audio_visual_debug.audio_event_pool.len() - MAX_AUDIO_EVENTS;
+                self.audio_visual_debug.audio_event_pool.drain(0..to_remove);
             }
-        } else if !self.audio_event_pool.is_empty() {
-            self.audio_event_pool.clear();
+        } else if !self.audio_visual_debug.audio_event_pool.is_empty() {
+            self.audio_visual_debug.audio_event_pool.clear();
         }
 
         tracy_zone_with_value!(
@@ -633,7 +574,7 @@ where
         new_val = new_val.clamp(0.0, 150.0);
 
         if (new_val - old_val).abs() > 0.001 {
-            self.launch_trend_dir = if new_val > old_val { 1 } else { -1 };
+            self.sync_telemetry.launch_trend_dir = if new_val > old_val { 1 } else { -1 };
             let current_explosion = self
                 .physic_engine
                 .get_config()
@@ -653,7 +594,7 @@ where
         new_val = new_val.clamp(0.0, 150.0);
 
         if (new_val - old_val).abs() > 0.001 {
-            self.explosion_trend_dir = if new_val > old_val { 1 } else { -1 };
+            self.sync_telemetry.explosion_trend_dir = if new_val > old_val { 1 } else { -1 };
             let current_launch = self.physic_engine.get_config().audio_launch_anticipation_ms;
             self.physic_engine
                 .update_anticipation_times(current_launch, new_val);
@@ -665,39 +606,19 @@ where
 
         // 1. Lancement physique/visuel
         for &id in new_rocket_ids {
-            if let Some(audio_start) = self.audio_start_launch_times.remove(&id) {
-                let diff_ms = if audio_start >= now {
-                    audio_start.duration_since(now).as_secs_f32() * 1000.0
-                } else {
-                    now.duration_since(audio_start).as_secs_f32() * -1000.0
-                };
-                self.sync_launch_sum += diff_ms as f64;
-                self.sync_launch_count += 1;
+            if let Some(diff_ms) = self.sync_telemetry.record_launch_physic(id, now) {
                 self.profiler.record_metric("sync_launch_ms", diff_ms);
-
                 // Ajustement dynamique basé sur l'erreur mesurée
                 self.adjust_launch_anticipation_ms(diff_ms);
-            } else {
-                self.phys_launch_times.insert(id, now);
             }
         }
 
         // 2. Explosion physique/visuelle
         for &id in triggered_explosion_ids {
-            if let Some(audio_start) = self.audio_start_explosion_times.remove(&id) {
-                let diff_ms = if audio_start >= now {
-                    audio_start.duration_since(now).as_secs_f32() * 1000.0
-                } else {
-                    now.duration_since(audio_start).as_secs_f32() * -1000.0
-                };
-                self.sync_explosion_sum += diff_ms as f64;
-                self.sync_explosion_count += 1;
+            if let Some(diff_ms) = self.sync_telemetry.record_explosion_physic(id, now) {
                 self.profiler.record_metric("sync_explosion_ms", diff_ms);
-
                 // Ajustement dynamique basé sur l'erreur mesurée
                 self.adjust_explosion_anticipation_ms(diff_ms);
-            } else {
-                self.phys_explosion_times.insert(id, now);
             }
         }
     }
@@ -732,15 +653,16 @@ where
         }
 
         // NOUVEAU: Indicateurs visuels GPU des évènements audio (anneau de propagation + beam)
-        if self.show_audio_diagnostic
-            && self.show_audio_visual_overlay
-            && !self.audio_event_pool.is_empty()
+        if self.audio_diagnostics.show_audio_diagnostic
+            && self.audio_visual_debug.show_audio_visual_overlay
+            && !self.audio_visual_debug.audio_event_pool.is_empty()
         {
             // Lazy-init du renderer (crée les VBO/VAO/shaders la première fois)
-            if self.audio_event_renderer.is_none() {
-                self.audio_event_renderer = Some(crate::renderer_engine::AudioEventRenderer::new());
+            if self.audio_visual_debug.audio_event_renderer.is_none() {
+                self.audio_visual_debug.audio_event_renderer =
+                    Some(crate::renderer_engine::AudioEventRenderer::new());
             }
-            if let Some(renderer) = &mut self.audio_event_renderer {
+            if let Some(renderer) = &mut self.audio_visual_debug.audio_event_renderer {
                 // Position du listener (bas-centre de l'écran en mode normal)
                 let listener = glam::Vec2::new(
                     self.window_size_f32.0 * 0.5,
@@ -748,8 +670,8 @@ where
                 );
                 // Construire le buffer GPU depuis le pool CPU (pile temporaire, zéro allocation)
                 let mut gpu_buf: Vec<crate::renderer_engine::AudioEventGPUData> =
-                    Vec::with_capacity(self.audio_event_pool.len());
-                for evt in &self.audio_event_pool {
+                    Vec::with_capacity(self.audio_visual_debug.audio_event_pool.len());
+                for evt in &self.audio_visual_debug.audio_event_pool {
                     gpu_buf.push(evt.to_gpu(listener));
                 }
                 unsafe {
@@ -768,17 +690,18 @@ where
 
         log_metrics_and_fps!(&self.profiler);
 
-        if !self.sampler.samples.is_empty() {
+        if !self.fps_metrics.sampler.samples.is_empty() {
             let avg_fps: f32 = self
+                .fps_metrics
                 .sampler
                 .samples
                 .iter()
                 .map(|(_, fps)| *fps)
                 .sum::<f32>()
-                / self.sampler.samples.len() as f32;
+                / self.fps_metrics.sampler.samples.len() as f32;
 
             let graph = ascii_sample_timeline(
-                &self.sampler.samples,
+                &self.fps_metrics.sampler.samples,
                 log_interval.as_secs_f32(),
                 50,
                 avg_fps,
@@ -788,14 +711,14 @@ where
             graph.lines().for_each(|line| info!("{}", line));
             info!(
                 "Samples: {} / {} | Moyenne FPS: {:.2}",
-                self.sampler.samples.len(),
-                self.sampler.target_samples,
+                self.fps_metrics.sampler.samples.len(),
+                self.fps_metrics.sampler.target_samples,
                 avg_fps
             );
 
-            self.sampler.reset();
-            info!("FPS moyen (EMA): {:.2}", self.fps_avg);
-            info!("FPS moyen (iter): {:.2}", self.fps_avg_iter);
+            self.fps_metrics.sampler.reset();
+            info!("FPS moyen (EMA): {:.2}", self.fps_metrics.fps_avg);
+            info!("FPS moyen (iter): {:.2}", self.fps_metrics.fps_avg_iter);
         }
 
         self.last_log = Instant::now();
@@ -915,18 +838,6 @@ where
 
     /// Helper pour obtenir les moyennes de synchronisation de debug (uniquement pour les tests)
     pub fn get_average_syncs_test_helper(&self) -> (f64, f64) {
-        let avg_launch_sync = if self.sync_launch_count > 0 {
-            self.sync_launch_sum / self.sync_launch_count as f64
-        } else {
-            0.0
-        };
-
-        let avg_explosion_sync = if self.sync_explosion_count > 0 {
-            self.sync_explosion_sum / self.sync_explosion_count as f64
-        } else {
-            0.0
-        };
-
-        (avg_launch_sync, avg_explosion_sync)
+        self.sync_telemetry.average_syncs()
     }
 }

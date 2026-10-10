@@ -137,7 +137,7 @@ fn test_audio_anticipation_feedback_loop() -> anyhow::Result<()> {
     let mut simulator = Simulator::new(renderer_engine, physic_engine, audio_engine, window_engine);
 
     // Activer l'affichage diagnostique pour que process_audio_debug_events soit appelé à chaque step
-    simulator.show_audio_diagnostic = true;
+    simulator.audio_diagnostics.show_audio_diagnostic = true;
 
     // Récupérer les valeurs d'anticipation initiales
     let initial_launch_anticip = simulator.get_physic_config().audio_launch_anticipation_ms;
@@ -174,7 +174,7 @@ fn test_audio_anticipation_feedback_loop() -> anyhow::Result<()> {
     );
     println!(
         "Launches tracked: {}, Explosions tracked: {}",
-        simulator.sync_launch_count, simulator.sync_explosion_count
+        simulator.sync_telemetry.sync_launch_count, simulator.sync_telemetry.sync_explosion_count
     );
 
     // 4. Vérifier que la boucle de rétroaction est active et a fait évoluer les paramètres de départ
