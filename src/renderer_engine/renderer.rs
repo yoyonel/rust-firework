@@ -699,23 +699,60 @@ impl Renderer {
             let nb;
             // Remplit le buffer GPU (Opération purement CPU, on utilise uniquement tracy)
             {
-                tracy_zone!("Renderer::fill_buffer", palette::ENV);
-                nb = renderer.fill_particle_data_direct(physic, alpha);
+                match renderer.particle_type() {
+                    Some(crate::physic_engine::ParticleType::Rocket) => {
+                        tracy_zone!("Renderer::fill_rockets", palette::ENV);
+                        nb = renderer.fill_particle_data_direct(physic, alpha);
+                    }
+                    Some(crate::physic_engine::ParticleType::Smoke) => {
+                        tracy_zone!("Renderer::fill_smoke", palette::ENV);
+                        nb = renderer.fill_particle_data_direct(physic, alpha);
+                    }
+                    _ => {
+                        tracy_zone!("Renderer::fill_sparks_trails", palette::ENV);
+                        nb = renderer.fill_particle_data_direct(physic, alpha);
+                    }
+                }
             }
 
             // Dessine les particules (Opération hautement GPU, on utilise le profiler complet)
             {
-                gpu_profile_zone!(
-                    11,
-                    "Renderer::Particles_with_Persistent_Buffer",
-                    palette::SHOCKWAVE,
-                    profiler
-                );
-                renderer.render_particles_with_persistent_buffer(
-                    nb,
-                    &mut active_shader,
-                    &mut active_texture,
-                );
+                match renderer.particle_type() {
+                    Some(crate::physic_engine::ParticleType::Rocket) => {
+                        gpu_profile_zone!(
+                            12,
+                            "Particles::Draw_Rockets",
+                            palette::MOTION_BLUR,
+                            profiler
+                        );
+                        renderer.render_particles_with_persistent_buffer(
+                            nb,
+                            &mut active_shader,
+                            &mut active_texture,
+                        );
+                    }
+                    Some(crate::physic_engine::ParticleType::Smoke) => {
+                        gpu_profile_zone!(13, "Particles::Draw_Smoke", palette::DOF, profiler);
+                        renderer.render_particles_with_persistent_buffer(
+                            nb,
+                            &mut active_shader,
+                            &mut active_texture,
+                        );
+                    }
+                    _ => {
+                        gpu_profile_zone!(
+                            11,
+                            "Particles::Draw_Sparks_Trails",
+                            palette::SHOCKWAVE,
+                            profiler
+                        );
+                        renderer.render_particles_with_persistent_buffer(
+                            nb,
+                            &mut active_shader,
+                            &mut active_texture,
+                        );
+                    }
+                }
             }
 
             total_particles += nb;
