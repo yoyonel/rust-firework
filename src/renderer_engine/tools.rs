@@ -1,13 +1,11 @@
 // use gl::types::*;
 use gl::types::*;
 use log::{debug, info, warn};
-use std::collections::HashSet;
 use std::ffi::CStr;
 use std::os::raw::c_void;
 use std::sync::Mutex;
 
 lazy_static::lazy_static! {
-    static ref LOGGED_IDS: Mutex<HashSet<u32>> = Mutex::new(HashSet::new());
     static ref MESSAGE_COUNT: Mutex<std::collections::HashMap<u32, u32>> = Mutex::new(std::collections::HashMap::new());
 }
 
@@ -84,13 +82,6 @@ extern "system" fn gl_debug_callback(
     if severity == gl::DEBUG_SEVERITY_NOTIFICATION {
         return; // ignore notifications
     }
-
-    // Ne logue qu’une fois par ID
-    let mut logged = LOGGED_IDS.lock().unwrap();
-    if logged.contains(&id) {
-        return;
-    }
-    logged.insert(id);
 
     let src_str = match source {
         gl::DEBUG_SOURCE_API => "API",
@@ -269,19 +260,13 @@ mod tests {
             std::ptr::null_mut(),
         );
 
-        // Check if it's in LOGGED_IDS
-        {
-            let logged = LOGGED_IDS.lock().unwrap();
-            assert!(logged.contains(&id));
-        }
-
-        // Check MESSAGE_COUNT
+        // Check MESSAGE_COUNT is 1
         {
             let counts = MESSAGE_COUNT.lock().unwrap();
             assert_eq!(counts.get(&id), Some(&1));
         }
 
-        // Second call - should return early due to deduplication
+        // Second call - count increments to 2
         gl_debug_callback(
             gl::DEBUG_SOURCE_APPLICATION,
             gl::DEBUG_TYPE_ERROR,
@@ -292,10 +277,10 @@ mod tests {
             std::ptr::null_mut(),
         );
 
-        // Check MESSAGE_COUNT again - should still be 1
+        // Check MESSAGE_COUNT is now 2
         {
             let counts = MESSAGE_COUNT.lock().unwrap();
-            assert_eq!(counts.get(&id), Some(&1));
+            assert_eq!(counts.get(&id), Some(&2));
         }
     }
 
@@ -335,8 +320,8 @@ mod tests {
                 msg.as_ptr(),
                 std::ptr::null_mut(),
             );
-            let logged = LOGGED_IDS.lock().unwrap();
-            assert!(logged.contains(&id));
+            let counts = MESSAGE_COUNT.lock().unwrap();
+            assert_eq!(counts.get(&id), Some(&1));
         }
     }
 }

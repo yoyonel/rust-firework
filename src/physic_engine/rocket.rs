@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::physic_engine::{
     config::PhysicConfig,
     explosion_shape::{ExplosionShape, ImageShape},
-    particle::Particle,
+    particle::{Particle, ParticleVertexCore},
     particles_pools::{ParticlesPool, ParticlesPoolsForRockets, PoolKind},
     ParticleType,
 };
@@ -229,6 +229,9 @@ impl Rocket {
 
     #[inline(always)]
     fn update_movement(&mut self, dt: f32, gravity: Vec2) {
+        if self.exploded {
+            return;
+        }
         self.vel += gravity * dt;
         self.pos += self.vel * dt;
     }
@@ -293,14 +296,16 @@ impl Rocket {
             let new_pos = self.last_trail_pos * (1.0 - t_step) + self.pos * t_step;
             if self.trail_active_count < slice.len() {
                 slice[self.trail_active_count] = Particle {
-                    pos: new_pos,
+                    core: ParticleVertexCore {
+                        pos: new_pos,
+                        color: self.color,
+                        life: crate::physic_engine::constants::TRAIL_PARTICLE_LIFE,
+                        max_life: crate::physic_engine::constants::TRAIL_PARTICLE_LIFE,
+                        size: crate::physic_engine::constants::TRAIL_PARTICLE_SIZE,
+                        angle: 0.0,
+                    },
                     vel: Vec2::ZERO,
-                    color: self.color,
-                    life: crate::physic_engine::constants::TRAIL_PARTICLE_LIFE,
-                    max_life: crate::physic_engine::constants::TRAIL_PARTICLE_LIFE,
-                    size: crate::physic_engine::constants::TRAIL_PARTICLE_SIZE,
                     active: true,
-                    angle: 0.0,
                     particle_type: ParticleType::Trail,
                 };
                 self.trail_active_count += 1;
@@ -326,8 +331,8 @@ impl Rocket {
         let active_slice = &mut slice[..active_count];
         for p in active_slice.iter_mut() {
             p.vel.y += gravity.y * dt;
-            p.pos.y += p.vel.y * dt;
-            p.life -= dt;
+            p.core.pos.y += p.vel.y * dt;
+            p.core.life -= dt;
         }
 
         // Phase 2 : Swap-and-Pop O(1) ultra-rapide (hors SIMD hotloop)
@@ -355,8 +360,8 @@ impl Rocket {
             let active_slice = &mut slice[..active_count];
             for p in active_slice.iter_mut() {
                 p.vel.y += gravity.y * dt;
-                p.pos += p.vel * dt;
-                p.life -= dt;
+                p.core.pos += p.vel * dt;
+                p.core.life -= dt;
             }
 
             // Phase 2: Swap-and-Pop
@@ -406,14 +411,16 @@ impl Rocket {
             let life = self.rng.random_range(0.75..1.5);
 
             *p = Particle {
-                pos: self.pos,
+                core: ParticleVertexCore {
+                    pos: self.pos,
+                    color: self.color,
+                    life,
+                    max_life: life,
+                    size: self.rng.random_range(3.0..6.0),
+                    angle,
+                },
                 vel: Vec2::from_angle(angle) * speed,
-                color: self.color,
-                life,
-                max_life: life,
-                size: self.rng.random_range(3.0..6.0),
                 active: true,
-                angle,
                 particle_type: ParticleType::Explosion,
             };
         }
@@ -470,14 +477,16 @@ impl Rocket {
             let angle = 0.0;
 
             *p = Particle {
-                pos: self.pos,
+                core: ParticleVertexCore {
+                    pos: self.pos,
+                    color: self.color,
+                    life: flight_time,
+                    max_life: flight_time,
+                    size: self.rng.random_range(3.0..6.0),
+                    angle,
+                },
                 vel: final_velocity,
-                color: self.color,
-                life: flight_time,
-                max_life: flight_time,
-                size: self.rng.random_range(3.0..6.0),
                 active: true,
-                angle,
                 particle_type: ParticleType::Explosion,
             };
         }
@@ -535,15 +544,17 @@ impl Rocket {
         };
 
         self.head = Particle {
-            pos: self.pos,
+            core: ParticleVertexCore {
+                pos: self.pos,
+                color: self.color,
+                life: 1.0,
+                max_life: 1.0,
+                size: 2.0,
+                // FIXME: angle n'est vraiment utilisé que pour les têtes de fusée (pas pour les trails ou explosions)
+                angle,
+            },
             vel: self.vel,
-            color: self.color,
-            life: 1.0,
-            max_life: 1.0,
-            size: 2.0,
             active: true,
-            // FIXME: angle n'est vraiment utilisé que pour les têtes de fusée (pas pour les trails ou explosions)
-            angle,
             particle_type: ParticleType::Rocket,
         };
     }
@@ -553,7 +564,7 @@ impl Rocket {
 fn apply_swap_and_pop(slice: &mut [Particle], active_count: &mut usize) {
     let mut i = 0;
     while i < *active_count {
-        if slice[i].life <= 0.0 {
+        if slice[i].core.life <= 0.0 {
             slice[i].active = false;
             *active_count -= 1;
             let last = *active_count;
@@ -617,5 +628,26 @@ mod tests {
             expected_boosted_displacement,
             diff
         );
+    }
+
+    #[test]
+    fn test_rocket_pos_frozen_after_explosion() {
+        let mut rng = rand::rng();
+        let mut rocket = Rocket::new(&mut rng);
+        rocket.active = true;
+        rocket.exploded = true;
+        rocket.pos = Vec2::new(150.0, 300.0);
+        rocket.vel = Vec2::new(10.0, -20.0);
+
+        let mut particles_pools = ParticlesPoolsForRockets::new(100, 100, 100);
+        let config = PhysicConfig::default();
+        let explosion_shape = ExplosionShape::default();
+
+        // Calling update multiple times should not change rocket.pos
+        rocket.update(0.1, &mut particles_pools, &config, &explosion_shape);
+        assert_eq!(rocket.pos, Vec2::new(150.0, 300.0));
+
+        rocket.update(0.5, &mut particles_pools, &config, &explosion_shape);
+        assert_eq!(rocket.pos, Vec2::new(150.0, 300.0));
     }
 }

@@ -43,16 +43,13 @@ where
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
 
-        let dummy_check = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let _ = self.window_engine.get_imgui_system_mut();
-        }));
-        if dummy_check.is_err() {
+        if !self.window_engine.has_imgui() {
             return; // Skip ImGui rendering when using dummy window engine in tests
         }
 
         if !self.console.open
             && !comparison_active
-            && !self.show_audio_diagnostic
+            && !self.audio_diagnostics.show_audio_diagnostic
             && !self.gui_settings.open
         {
             return;
@@ -114,6 +111,26 @@ where
 
         let mut commands = std::mem::take(&mut self.engine_commands);
 
+        // Draw pause indicator (top-right foreground overlay)
+        if self.paused {
+            let draw_list = ui.get_foreground_draw_list();
+            let label = "⏸️  SIMULATION PAUSED (<SPACE> to resume)";
+            let text_size = ui.calc_text_size(label);
+            let pad = 8.0;
+            let x = ui.io().display_size[0] - text_size[0] - pad * 2.0 - 20.0;
+            let y = 20.0;
+            draw_list
+                .add_rect(
+                    [x, y],
+                    [x + text_size[0] + pad * 2.0, y + text_size[1] + pad * 2.0],
+                    [0.0, 0.0, 0.0, 0.8],
+                )
+                .rounding(6.0)
+                .filled(true)
+                .build();
+            draw_list.add_text([x + pad, y + pad], [1.0, 0.85, 0.2, 1.0], label);
+        }
+
         // Draw console (foreground)
         if self.console.open {
             self.console.draw(
@@ -126,7 +143,7 @@ where
         }
 
         // NOUVEAU: Fenêtre ImGui de diagnostic Audio (indépendante de la console, toggle via F3)
-        if self.show_audio_diagnostic {
+        if self.audio_diagnostics.show_audio_diagnostic {
             if self.audio_stress_scene.enabled {
                 self.audio_stress_scene
                     .build_imgui_window(ui, &self.audio_engine);
@@ -192,11 +209,11 @@ where
                 }
 
                 // ── Indicateur B: Labels flottants animés pour les évènements audio actifs ──
-                if self.show_audio_visual_overlay {
+                if self.audio_visual_debug.show_audio_visual_overlay {
                     let draw_list = ui.get_background_draw_list();
                     let win_h = ui.io().display_size[1];
 
-                    for evt in &self.audio_event_pool {
+                    for evt in &self.audio_visual_debug.audio_event_pool {
                         let t = (evt.age / evt.kind.ttl_secs()).clamp(0.0, 1.0);
                         // Fade: fast attack, smooth decay
                         let alpha = {
@@ -224,7 +241,7 @@ where
                 }
 
                 // ── Indicateur D: Badge ID persistant sur chaque fusée en vol ──
-                if self.show_audio_visual_overlay {
+                if self.audio_visual_debug.show_audio_visual_overlay {
                     let draw_list = ui.get_background_draw_list();
                     let win_h = ui.io().display_size[1];
                     let mut rocket_index = 0usize;
@@ -232,8 +249,8 @@ where
                         &mut |p: &crate::physic_engine::Particle| {
                             rocket_index += 1;
                             // Physics Y is bottom-up; flip to ImGui screen coords (top-down).
-                            let badge_x = p.pos.x + 10.0;
-                            let badge_y = win_h - p.pos.y - 14.0;
+                            let badge_x = p.core.pos.x + 10.0;
+                            let badge_y = win_h - p.core.pos.y - 14.0;
                             // Small dark badge background
                             draw_list
                                 .add_rect(
@@ -274,7 +291,7 @@ where
 
                         ui.checkbox(
                             "Afficher les indicateurs visuels (ondes/faisceaux/badges)",
-                            &mut self.show_audio_visual_overlay,
+                            &mut self.audio_visual_debug.show_audio_visual_overlay,
                         );
                         ui.separator();
 
@@ -282,49 +299,30 @@ where
                         ui_text!(
                             ui,
                             "Rockets: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
-                            self.audio_sent_rocket,
-                            self.audio_received_rocket,
-                            self.audio_played_rocket,
-                            self.audio_dropped_rocket,
-                            self.audio_completed_rocket
+                            self.audio_diagnostics.audio_sent_rocket,
+                            self.audio_diagnostics.audio_received_rocket,
+                            self.audio_diagnostics.audio_played_rocket,
+                            self.audio_diagnostics.audio_dropped_rocket,
+                            self.audio_diagnostics.audio_completed_rocket
                         );
 
                         ui_text!(
                             ui,
                             "Explosions: Sent: {}, Received: {}, Played: {}, Dropped: {}, Completed: {}",
-                            self.audio_sent_explosion,
-                            self.audio_received_explosion,
-                            self.audio_played_explosion,
-                            self.audio_dropped_explosion,
-                            self.audio_completed_explosion
+                            self.audio_diagnostics.audio_sent_explosion,
+                            self.audio_diagnostics.audio_received_explosion,
+                            self.audio_diagnostics.audio_played_explosion,
+                            self.audio_diagnostics.audio_dropped_explosion,
+                            self.audio_diagnostics.audio_completed_explosion
                         );
 
                         ui.separator();
                         ui.text("=== LATENCY QUANTIFICATION ===");
 
-                        let avg_dispatch = if self.latency_dispatch_count > 0 {
-                            self.latency_dispatch_sum.as_secs_f64() * 1000.0 / self.latency_dispatch_count as f64
-                        } else {
-                            0.0
-                        };
-
-                        let avg_play = if self.latency_play_count > 0 {
-                            self.latency_play_sum.as_secs_f64() * 1000.0 / self.latency_play_count as f64
-                        } else {
-                            0.0
-                        };
-
-                        let avg_sync_launch = if self.sync_launch_count > 0 {
-                            self.sync_launch_sum / self.sync_launch_count as f64
-                        } else {
-                            0.0
-                        };
-
-                        let avg_sync_explosion = if self.sync_explosion_count > 0 {
-                            self.sync_explosion_sum / self.sync_explosion_count as f64
-                        } else {
-                            0.0
-                        };
+                        let avg_dispatch = self.audio_diagnostics.average_dispatch_latency_ms();
+                        let avg_play = self.audio_diagnostics.average_play_latency_ms();
+                        let (avg_sync_launch, avg_sync_explosion) =
+                            self.sync_telemetry.average_syncs();
 
                         ui_text!(ui, "Avg thread transit latency: {:.3} ms", avg_dispatch);
                         ui_text!(ui, "Avg render-to-audio-start latency: {:.3} ms", avg_play);
@@ -339,7 +337,7 @@ where
                         ui.same_line();
                         ui_text!(ui, "{:.2} ms", config.audio_launch_anticipation_ms);
                         ui.same_line();
-                        match self.launch_trend_dir {
+                        match self.sync_telemetry.launch_trend_dir {
                             1 => { ui_text_colored!(ui, [0.0, 1.0, 0.0, 1.0], " (⬆️ HAUSSE/UP)"); }      // Green
                             -1 => { ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], " (⬇️ BAISSE/DOWN)"); }   // Red
                             _ => { ui_text_colored!(ui, [0.7, 0.7, 0.7, 1.0], " (Stable)"); }           // Grey
@@ -349,14 +347,15 @@ where
                         ui.same_line();
                         ui_text!(ui, "{:.2} ms", config.audio_explosion_anticipation_ms);
                         ui.same_line();
-                        match self.launch_trend_dir {
+                        match self.sync_telemetry.launch_trend_dir {
                             1 => { ui_text_colored!(ui, [0.0, 1.0, 0.0, 1.0], " (⬆️ HAUSSE/UP)"); }      // Green
                             -1 => { ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], " (⬇️ BAISSE/DOWN)"); }   // Red
                             _ => { ui_text_colored!(ui, [0.7, 0.7, 0.7, 1.0], " (Stable)"); }           // Grey
                         }
 
                         // Warning indicator if anything dropped
-                        let total_dropped = self.audio_dropped_rocket + self.audio_dropped_explosion;
+                        let total_dropped = self.audio_diagnostics.audio_dropped_rocket
+                            + self.audio_diagnostics.audio_dropped_explosion;
                         if total_dropped > 0 {
                             ui_text_colored!(ui, [1.0, 0.0, 0.0, 1.0], "⚠️ CRITICAL: {} SOUNDS DROPPED!", total_dropped);
                         } else {
@@ -369,7 +368,7 @@ where
                         ui.child_window("RecentLogChild")
                             .size([0.0, 180.0])
                             .build(|| {
-                                for r in self.audio_debug_records.iter().rev().take(15) {
+                                for r in self.audio_diagnostics.audio_debug_records.iter().rev().take(15) {
                                     let type_str = match r.sound_type {
                                         crate::audio_engine::types::AudioSoundType::Rocket => "ROCKET",
                                         crate::audio_engine::types::AudioSoundType::Explosion => "EXPLOSION",
@@ -426,8 +425,8 @@ where
                 &self.reload_shaders_requested,
                 &self.physic_reinit_requested,
                 &self.tonemapping_comparison_mode,
-                &mut self.show_audio_diagnostic,
-                &mut self.show_audio_visual_overlay,
+                &mut self.audio_diagnostics.show_audio_diagnostic,
+                &mut self.audio_visual_debug.show_audio_visual_overlay,
                 &mut self.audio_stress_scene,
                 self.window_size_f32,
                 is_fullscreen,
@@ -459,6 +458,8 @@ where
         let mut gui_save = false;
         let mut gui_reload = false;
         let mut rocket_cursor_change: Option<bool> = None;
+        let mut toggle_pause = false;
+        let mut set_pause: Option<bool> = None;
 
         self.engine_commands.retain(|cmd| match cmd {
             crate::domain_contracts::EngineCommand::Gui(gui_cmd) => {
@@ -467,6 +468,12 @@ where
                     crate::domain_contracts::GuiCommand::ReloadSession => gui_reload = true,
                     crate::domain_contracts::GuiCommand::SetRocketCursor(enabled) => {
                         rocket_cursor_change = Some(*enabled);
+                    }
+                    crate::domain_contracts::GuiCommand::TogglePause => {
+                        toggle_pause = true;
+                    }
+                    crate::domain_contracts::GuiCommand::SetPause(paused) => {
+                        set_pause = Some(*paused);
                     }
                 }
                 false
@@ -478,12 +485,21 @@ where
             self.set_rocket_cursor(enabled);
         }
 
+        if toggle_pause {
+            self.toggle_pause();
+        }
+        if let Some(p) = set_pause {
+            if self.paused != p {
+                self.toggle_pause();
+            }
+        }
+
         if gui_save {
             self.gui_settings.save_session_state(
                 &self.audio_engine,
                 &self.physic_engine,
-                self.show_audio_diagnostic,
-                self.show_audio_visual_overlay,
+                self.audio_diagnostics.show_audio_diagnostic,
+                self.audio_visual_debug.show_audio_visual_overlay,
                 self.tonemapping_comparison_mode
                     .load(std::sync::atomic::Ordering::Relaxed),
                 self.window_engine.is_fullscreen(),
@@ -502,8 +518,8 @@ where
         if gui_reload {
             self.gui_settings.apply_session_to_audio(
                 &mut self.audio_engine,
-                &mut self.show_audio_diagnostic,
-                &mut self.show_audio_visual_overlay,
+                &mut self.audio_diagnostics.show_audio_diagnostic,
+                &mut self.audio_visual_debug.show_audio_visual_overlay,
             );
             let session = crate::simulator::gui_settings::GuiSessionState::load_from_file(
                 crate::utils::config_path::get_gui_session_path(),

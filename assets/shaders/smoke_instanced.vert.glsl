@@ -17,6 +17,8 @@ out float vAlpha;
 out float vIntensity;
 out vec3 vColor;
 out float vNormalizedAge;
+out vec2 vWorldPos;
+out vec3 vScatteredLight;
 
 layout (std140) uniform GlobalData {
     vec2 uSize;
@@ -24,7 +26,38 @@ layout (std140) uniform GlobalData {
     float uBloomIntensity;
 };
 
+struct PointLight {
+    vec4 position_radius; // xyz = world pos, w = radius
+    vec4 color_intensity; // rgb = color, w = intensity
+};
+
+layout (std140) uniform LightingBlock {
+    PointLight u_Lights[16];
+    vec4 u_AmbientLight; // rgb = ambient tint, a = global flash intensity
+    int u_NumActiveLights;
+    float u_ScatteringIntensity;
+};
+
+uniform int u_RenderMask;
+uniform int u_UseLut;
+uniform float u_WrapRelief;
+uniform sampler2D u_LightFalloffLut;
+
 void main() {
+    // 1. Early clipping for dead or fully transparent particles (hardware rasterizer bypass)
+    if (aAlpha <= 0.001 || aIntensity <= 0.001 || aScale <= 0.001) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+
+    // 2. Early screen-space frustum culling: reject particles completely outside viewport
+    float margin = aScale * 1.2;
+    if (aPosition.x < -margin || aPosition.x > uSize.x + margin ||
+        aPosition.y < -margin || aPosition.y > uSize.y + margin) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+    }
+
     vAlpha = aAlpha;
     vIntensity = aIntensity;
     vColor = aColor;
@@ -43,6 +76,71 @@ void main() {
 
     // Translate to world space
     vec2 worldPos = aPosition.xy + rotatedQuad;
+    vWorldPos = worldPos;
+
+    // Unit radial outward normal of the smoke puff corner for 3D volumetric wrap shading (0.70710678 = 1/sqrt(2))
+    vec2 puffNormal = rot * (aQuad * 0.70710678);
+
+    // 2. Per-vertex volumetric in-scattering (computed at vertex stage, bypassed during mask pass)
+    vec3 scatteredLight = vec3(0.0);
+    if (u_RenderMask == 0 && u_ScatteringIntensity > 0.001) {
+        // Subtle distant atmospheric flash only (2% max) to avoid bleaching entire screen trails
+        scatteredLight = (u_AmbientLight.rgb + vec3(u_AmbientLight.a)) * 0.02;
+        if (u_UseLut != 0) {
+            for (int i = 0; i < u_NumActiveLights; ++i) {
+                vec2 lightPos = u_Lights[i].position_radius.xy;
+                float invRadius = u_Lights[i].position_radius.z;
+                float radius = u_Lights[i].position_radius.w;
+                vec2 toLight = lightPos - worldPos;
+                float distSq = dot(toLight, toLight);
+
+                if (distSq < radius * radius) {
+                    vec2 lutUV = toLight * (0.5 * invRadius) + 0.5;
+                    float falloff = textureLod(u_LightFalloffLut, lutUV, 0.0).r;
+
+                    vec3 lightCol = u_Lights[i].color_intensity.rgb;
+                    float intensity = u_Lights[i].color_intensity.w;
+
+                    // 3D Spherical Volume Shading
+                    float invDist = inversesqrt(max(0.00001, distSq));
+                    vec2 lightDir = toLight * invDist;
+                    float NdotL = dot(puffNormal, lightDir);
+                    float wrapShading = clamp(NdotL * u_WrapRelief + (1.0 - u_WrapRelief), 0.3, 1.0);
+
+                    scatteredLight += lightCol * (intensity * falloff * wrapShading * u_ScatteringIntensity);
+                }
+            }
+        } else {
+            for (int i = 0; i < u_NumActiveLights; ++i) {
+                vec2 lightPos = u_Lights[i].position_radius.xy;
+                float invRadius = u_Lights[i].position_radius.z;
+                float radius = u_Lights[i].position_radius.w;
+                vec2 toLight = lightPos - worldPos;
+                float distSq = dot(toLight, toLight);
+                float radiusSq = radius * radius;
+
+                if (distSq < radiusSq) {
+                    // Fast zero-division lighting using single-cycle rsq (inversesqrt)
+                    float invDist = inversesqrt(max(0.00001, distSq));
+                    float dist = distSq * invDist;
+                    float atten = clamp(1.0 - (dist * invRadius), 0.0, 1.0);
+                    atten = atten * atten; // Smooth quadratic falloff
+
+                    vec3 lightCol = u_Lights[i].color_intensity.rgb;
+                    float intensity = u_Lights[i].color_intensity.w;
+
+                    // 3D Spherical Volume Shading & Mie Forward Scattering
+                    vec2 lightDir = toLight * invDist;
+                    float NdotL = dot(puffNormal, lightDir);
+                    float wrapShading = clamp(NdotL * u_WrapRelief + (1.0 - u_WrapRelief), 0.3, 1.0);
+                    float phase = wrapShading * (1.0 + 0.25 * atten);
+
+                    scatteredLight += lightCol * (intensity * atten * phase * u_ScatteringIntensity);
+                }
+            }
+        }
+    }
+    vScatteredLight = scatteredLight;
 
     // Screen clip-space transform (-1.0 to 1.0)
     float x = (worldPos.x / uSize.x) * 2.0 - 1.0;

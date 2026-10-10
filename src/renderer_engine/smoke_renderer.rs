@@ -4,6 +4,7 @@ use std::mem;
 
 use crate::cstr;
 use crate::physic_engine::PhysicEngineIterator;
+use crate::renderer_engine::gl_resource::{GlBuffer, GlProgram, GlTexture, GlVao};
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::utils::human_bytes::HumanBytes;
@@ -32,13 +33,13 @@ unsafe impl bytemuck::Pod for SmokeInstanceGPU {}
 unsafe impl bytemuck::Zeroable for SmokeInstanceGPU {}
 
 pub struct SmokeRenderer {
-    vaos: [u32; 3],
-    vbo_particles: u32,
-    vbo_quad: u32,
+    vaos: [GlVao; 3],
+    vbo_particles: GlBuffer,
+    vbo_quad: GlBuffer,
 
     mapped_ptr: *mut SmokeInstanceGPU,
 
-    shader_program: u32,
+    shader_program: GlProgram,
     loc_smoke_tex: i32,
     loc_flow_map: i32,
     loc_noise_tex: i32,
@@ -48,18 +49,30 @@ pub struct SmokeRenderer {
     loc_erosion_scale: i32,
     loc_erosion_edge_width: i32,
     loc_erosion_edge_color: i32,
+    loc_render_mask: i32,
     flow_distortion_strength: f32,
     flow_animation_speed: f32,
     erosion_enabled: bool,
     erosion_scale: f32,
     erosion_edge_width: f32,
     erosion_edge_color: [f32; 3],
-    texture_id: u32,
-    flow_map_texture_id: u32,
-    noise_texture_id: u32,
+    texture_id: GlTexture,
+    flow_map_texture_id: GlTexture,
+    noise_texture_id: GlTexture,
     tex_ratio: f32,
 
     max_smoke_particles: usize,
+
+    smoke_lighting_enabled: bool,
+    smoke_scattering_intensity: f32,
+    smoke_ambient_flash: f32,
+    smoke_lighting_lut_enabled: bool,
+    smoke_wrap_relief: f32,
+    pub backlight_enabled: bool,
+    light_falloff_lut_texture_id: GlTexture,
+    loc_light_falloff_lut: i32,
+    loc_use_lut: i32,
+    loc_wrap_relief: i32,
 
     // Triple buffering
     current_frame: usize,
@@ -75,40 +88,66 @@ impl SmokeRenderer {
     ) -> Self {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
+        let shader_program = GlProgram::from_raw(shader_program);
 
         let loc_smoke_tex =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_SmokeTexture")) };
-        let loc_flow_map = unsafe { gl::GetUniformLocation(shader_program, cstr!("u_FlowMap")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_SmokeTexture")) };
+        let loc_flow_map =
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_FlowMap")) };
         let loc_noise_tex =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_NoiseTexture")) };
-        let loc_flow_distortion_strength =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_FlowDistortionStrength")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_NoiseTexture")) };
+        let loc_flow_distortion_strength = unsafe {
+            gl::GetUniformLocation(shader_program.raw(), cstr!("u_FlowDistortionStrength"))
+        };
         let loc_flow_animation_speed =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_FlowAnimationSpeed")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_FlowAnimationSpeed")) };
         let loc_erosion_enabled =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEnabled")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionEnabled")) };
         let loc_erosion_scale =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionScale")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionScale")) };
         let loc_erosion_edge_width =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeWidth")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionEdgeWidth")) };
         let loc_erosion_edge_color =
-            unsafe { gl::GetUniformLocation(shader_program, cstr!("u_ErosionEdgeColor")) };
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_ErosionEdgeColor")) };
+        let loc_render_mask =
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_RenderMask")) };
+        let loc_light_falloff_lut =
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_LightFalloffLut")) };
+        let loc_use_lut =
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_UseLut")) };
+        let loc_wrap_relief =
+            unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("u_WrapRelief")) };
 
         let texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(sprite_tex);
+        let texture_id = GlTexture::from_raw(texture_id);
         let tex_width = sprite_tex.width;
         let tex_height = sprite_tex.height;
         let flow_map_texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(flow_tex);
+        let flow_map_texture_id = GlTexture::from_raw(flow_map_texture_id);
         let noise_texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(noise_tex);
+        let noise_texture_id = GlTexture::from_raw(noise_texture_id);
+        let light_falloff_lut_texture_id =
+            unsafe { Self::generate_light_falloff_lut(constants::SMOKE_LIGHTING_LUT_RESOLUTION) };
 
         unsafe {
-            gl::UseProgram(shader_program);
+            gl::UseProgram(shader_program.raw());
 
-            let block_idx = gl::GetUniformBlockIndex(shader_program, cstr!("GlobalData"));
+            let block_idx = gl::GetUniformBlockIndex(shader_program.raw(), cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
-                gl::UniformBlockBinding(shader_program, block_idx, 0);
+                gl::UniformBlockBinding(shader_program.raw(), block_idx, 0);
+            }
+
+            let lighting_block_idx =
+                gl::GetUniformBlockIndex(shader_program.raw(), cstr!("LightingBlock"));
+            if lighting_block_idx != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(
+                    shader_program.raw(),
+                    lighting_block_idx,
+                    constants::LIGHTING_UBO_BINDING_INDEX,
+                );
             }
 
             if loc_smoke_tex != -1 {
@@ -120,14 +159,18 @@ impl SmokeRenderer {
             if loc_noise_tex != -1 {
                 gl::Uniform1i(loc_noise_tex, 2);
             }
+            if loc_light_falloff_lut != -1 {
+                gl::Uniform1i(
+                    loc_light_falloff_lut,
+                    constants::SMOKE_LIGHTING_LUT_TEXTURE_UNIT as i32,
+                );
+            }
 
-            label_gl_object!(gl::PROGRAM, shader_program, "Shader_SmokeInstanced");
-            label_gl_object!(gl::TEXTURE, texture_id, "Tex_Smoke_Sprite");
-            label_gl_object!(gl::TEXTURE, flow_map_texture_id, "Tex_Smoke_FlowMap");
-            label_gl_object!(gl::TEXTURE, noise_texture_id, "Tex_Noise_Dissolve");
-        }
+            label_gl_object!(gl::PROGRAM, shader_program.raw(), "Shader_SmokeInstanced");
+            label_gl_object!(gl::TEXTURE, texture_id.raw(), "Tex_Smoke_Sprite");
+            label_gl_object!(gl::TEXTURE, flow_map_texture_id.raw(), "Tex_Smoke_FlowMap");
+            label_gl_object!(gl::TEXTURE, noise_texture_id.raw(), "Tex_Noise_Dissolve");
 
-        unsafe {
             let (vaos, vbo_quad, vbo_particles, mapped_ptr, _buffer_size) =
                 Self::setup_gpu_buffers(max_smoke_particles);
 
@@ -146,6 +189,10 @@ impl SmokeRenderer {
                 loc_erosion_scale,
                 loc_erosion_edge_width,
                 loc_erosion_edge_color,
+                loc_render_mask,
+                loc_light_falloff_lut,
+                loc_use_lut,
+                loc_wrap_relief,
                 flow_distortion_strength:
                     crate::physic_engine::constants::DEFAULT_FLOW_DISTORTION_STRENGTH,
                 flow_animation_speed: crate::physic_engine::constants::DEFAULT_FLOW_ANIMATION_SPEED,
@@ -158,8 +205,15 @@ impl SmokeRenderer {
                 texture_id,
                 flow_map_texture_id,
                 noise_texture_id,
+                light_falloff_lut_texture_id,
                 tex_ratio: tex_width as f32 / tex_height as f32,
                 max_smoke_particles,
+                smoke_lighting_enabled: constants::DEFAULT_SMOKE_LIGHTING_ENABLED,
+                smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
+                smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
+                smoke_lighting_lut_enabled: constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED,
+                smoke_wrap_relief: constants::DEFAULT_SMOKE_WRAP_RELIEF,
+                backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
                 current_frame: 0,
                 fences: [None, None, None],
             }
@@ -167,23 +221,94 @@ impl SmokeRenderer {
     }
 
     unsafe fn release_buffers(&mut self) {
-        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+        if !self.mapped_ptr.is_null() && self.vbo_particles.raw() != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::UnmapBuffer(gl::ARRAY_BUFFER);
             self.mapped_ptr = std::ptr::null_mut();
         }
-        if self.vaos[0] != 0 {
-            gl::DeleteVertexArrays(3, self.vaos.as_ptr());
-            self.vaos = [0; 3];
+        for vao in self.vaos.iter_mut() {
+            vao.reset(0);
         }
-        if self.vbo_particles != 0 {
-            gl::DeleteBuffers(1, &self.vbo_particles);
-            self.vbo_particles = 0;
+        self.vbo_particles.reset(0);
+        self.vbo_quad.reset(0);
+    }
+
+    /// Génère la texture 2D R16F contenant la LUT de falloff quadratique et diffusion Mie (Zero SQRT).
+    ///
+    /// # Safety
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
+    pub unsafe fn generate_light_falloff_lut(resolution: usize) -> GlTexture {
+        let mut tex_id = 0;
+        gl::GenTextures(1, &mut tex_id);
+        gl::BindTexture(gl::TEXTURE_2D, tex_id);
+
+        let mut data = Vec::with_capacity(resolution * resolution);
+        let n = resolution as f32;
+        let anisotropy = constants::SMOKE_LIGHTING_ANISOTROPY_COEFF;
+
+        for j in 0..resolution {
+            let v = (j as f32 + 0.5) / n;
+            let y = (v - 0.5) * 2.0;
+            for i in 0..resolution {
+                let u = (i as f32 + 0.5) / n;
+                let x = (u - 0.5) * 2.0;
+
+                let dist_sq = x * x + y * y;
+                if dist_sq < 1.0 {
+                    let dist = dist_sq.sqrt();
+                    let atten = (1.0 - dist) * (1.0 - dist);
+                    let cos_theta = if dist > 0.0001 { y / dist } else { 0.0 };
+                    let phase = 1.0 + anisotropy * cos_theta;
+                    data.push(atten * phase);
+                } else {
+                    data.push(0.0);
+                }
+            }
         }
-        if self.vbo_quad != 0 {
-            gl::DeleteBuffers(1, &self.vbo_quad);
-            self.vbo_quad = 0;
-        }
+
+        gl::TexImage2D(
+            gl::TEXTURE_2D,
+            0,
+            gl::R16F as i32,
+            resolution as i32,
+            resolution as i32,
+            0,
+            gl::RED,
+            gl::FLOAT,
+            data.as_ptr() as *const _,
+        );
+
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MIN_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(gl::TEXTURE_2D, gl::TEXTURE_MAG_FILTER, gl::LINEAR as i32);
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_S,
+            gl::CLAMP_TO_BORDER as i32,
+        );
+        gl::TexParameteri(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_WRAP_T,
+            gl::CLAMP_TO_BORDER as i32,
+        );
+        let border_color = constants::SMOKE_LIGHTING_LUT_BORDER_COLOR;
+        gl::TexParameterfv(
+            gl::TEXTURE_2D,
+            gl::TEXTURE_BORDER_COLOR,
+            border_color.as_ptr(),
+        );
+
+        label_gl_object!(gl::TEXTURE, tex_id, "Tex_Smoke_LightFalloffLut");
+        GlTexture::from_raw(tex_id)
+    }
+
+    /// Régénère la LUT de falloff et diffusion lumineuse.
+    ///
+    /// # Safety
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide et actif.
+    pub unsafe fn rebake_smoke_lighting_lut(&mut self) {
+        self.light_falloff_lut_texture_id =
+            Self::generate_light_falloff_lut(constants::SMOKE_LIGHTING_LUT_RESOLUTION);
+        debug!("SmokeRenderer: Light Falloff LUT rebaked successfully.");
     }
 
     /// Recrée les buffers GPU avec une nouvelle taille maximale.
@@ -260,7 +385,7 @@ impl SmokeRenderer {
         if count > 0 {
             let write_size = (count * mem::size_of::<SmokeInstanceGPU>()) as isize;
             let offset_bytes = (offset * mem::size_of::<SmokeInstanceGPU>()) as isize;
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, offset_bytes, write_size);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
@@ -286,36 +411,63 @@ impl SmokeRenderer {
 
         push_debug_group!(31, "Draw Instanced Smoke");
 
-        // 1. Enable Alpha Blending for soft particle dissipation
+        // 1. Enable Blending
         gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
         // 2. Disable Depth Writing to prevent Z-fighting and quad intersection artifacts
         gl::DepthMask(gl::FALSE);
 
-        // 3. Only write to Color Attachment 0 (Scene), disable writes to Attachment 1 (Bloom)
-        gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
-        gl::ColorMaski(1, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+        // 3. Configure DrawBuffers, ColorMasks and separate Blending per buffer (MRT single-pass)
+        let has_backlight = self.backlight_enabled;
+        if has_backlight {
+            let draw_buffers = [
+                gl::COLOR_ATTACHMENT0,
+                gl::COLOR_ATTACHMENT1,
+                gl::COLOR_ATTACHMENT2,
+            ];
+            gl::DrawBuffers(3, draw_buffers.as_ptr());
+            gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+            gl::ColorMaski(1, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE); // Smoke emits zero bloom
+            gl::ColorMaski(2, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
 
-        if *active_shader != self.shader_program {
-            gl::UseProgram(self.shader_program);
-            *active_shader = self.shader_program;
+            if gl::BlendFunci::is_loaded() {
+                gl::BlendFunci(0, gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+                gl::BlendFunci(2, gl::ONE, gl::ONE);
+            } else {
+                gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+            }
+        } else {
+            let draw_buffers = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+            gl::DrawBuffers(2, draw_buffers.as_ptr());
+            gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+            gl::ColorMaski(1, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+            gl::ColorMaski(2, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
         }
 
-        gl::BindVertexArray(self.vaos[self.current_frame]);
+        if *active_shader != self.shader_program.raw() {
+            gl::UseProgram(self.shader_program.raw());
+            *active_shader = self.shader_program.raw();
+        }
+
+        gl::BindVertexArray(self.vaos[self.current_frame].raw());
 
         // Bind Texture Unit 0: Smoke Texture
         gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-        *active_texture = self.texture_id;
+        gl::BindTexture(gl::TEXTURE_2D, self.texture_id.raw());
+        *active_texture = self.texture_id.raw();
 
         // Bind Texture Unit 1: Flow Map Texture
         gl::ActiveTexture(gl::TEXTURE1);
-        gl::BindTexture(gl::TEXTURE_2D, self.flow_map_texture_id);
+        gl::BindTexture(gl::TEXTURE_2D, self.flow_map_texture_id.raw());
 
         // Bind Texture Unit 2: Noise Dissolve Texture
         gl::ActiveTexture(gl::TEXTURE2);
-        gl::BindTexture(gl::TEXTURE_2D, self.noise_texture_id);
+        gl::BindTexture(gl::TEXTURE_2D, self.noise_texture_id.raw());
+
+        // Bind Texture Unit 3: Light Falloff LUT (Zero SQRT)
+        gl::ActiveTexture(gl::TEXTURE0 + constants::SMOKE_LIGHTING_LUT_TEXTURE_UNIT);
+        gl::BindTexture(gl::TEXTURE_2D, self.light_falloff_lut_texture_id.raw());
 
         if self.loc_flow_distortion_strength != -1 {
             gl::Uniform1f(
@@ -348,11 +500,35 @@ impl SmokeRenderer {
             );
         }
 
+        if self.loc_render_mask != -1 {
+            gl::Uniform1i(self.loc_render_mask, 0);
+        }
+
+        if self.loc_use_lut != -1 {
+            gl::Uniform1i(
+                self.loc_use_lut,
+                if self.smoke_lighting_lut_enabled {
+                    1
+                } else {
+                    0
+                },
+            );
+        }
+
+        if self.loc_wrap_relief != -1 {
+            gl::Uniform1f(self.loc_wrap_relief, self.smoke_wrap_relief);
+        }
+
         gl::DrawArraysInstanced(gl::TRIANGLE_FAN, 0, 10, count as i32);
 
-        // Restore depth write and color mask for attachment 1
+        // Restore draw buffers, depth write, color masks and default blending
         gl::DepthMask(gl::TRUE);
+        let default_draw_buffers = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+        gl::DrawBuffers(2, default_draw_buffers.as_ptr());
+        gl::ColorMaski(0, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
         gl::ColorMaski(1, gl::TRUE, gl::TRUE, gl::TRUE, gl::TRUE);
+        gl::ColorMaski(2, gl::FALSE, gl::FALSE, gl::FALSE, gl::FALSE);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
         pop_debug_group!();
 
@@ -363,6 +539,25 @@ impl SmokeRenderer {
         self.fences[self.current_frame] = Some(sync);
 
         self.current_frame = (self.current_frame + 1) % 3;
+    }
+
+    pub fn set_backlight_enabled(&mut self, enabled: bool) {
+        self.backlight_enabled = enabled;
+    }
+
+    /// Dessine le masque alpha de fumée pour la backlight écran (§4.1 ADR).
+    ///
+    /// # Safety
+    /// L'appelant doit s'assurer que le contexte OpenGL est valide.
+    pub unsafe fn render_smoke_mask(
+        &mut self,
+        _count: usize,
+        _mask_fbo: u32,
+        _mask_width: i32,
+        _mask_height: i32,
+    ) {
+        // No-op : en mode MRT Single-Pass, le masque de rétroéclairage
+        // est écrit directement dans Attachment 2 pendant render_smoke_instanced.
     }
 
     /// Libère les ressources GPU (VAO, VBO, shaders, textures).
@@ -376,22 +571,11 @@ impl SmokeRenderer {
             }
         }
         self.release_buffers();
-        if self.texture_id != 0 {
-            gl::DeleteTextures(1, &self.texture_id);
-            self.texture_id = 0;
-        }
-        if self.flow_map_texture_id != 0 {
-            gl::DeleteTextures(1, &self.flow_map_texture_id);
-            self.flow_map_texture_id = 0;
-        }
-        if self.noise_texture_id != 0 {
-            gl::DeleteTextures(1, &self.noise_texture_id);
-            self.noise_texture_id = 0;
-        }
-        if self.shader_program != 0 {
-            gl::DeleteProgram(self.shader_program);
-            self.shader_program = 0;
-        }
+        self.texture_id.reset(0);
+        self.flow_map_texture_id.reset(0);
+        self.noise_texture_id.reset(0);
+        self.light_falloff_lut_texture_id.reset(0);
+        self.shader_program.reset(0);
         debug!("SmokeRenderer GPU resources released.");
     }
 
@@ -405,32 +589,46 @@ impl SmokeRenderer {
 
         match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
             Ok(new_program) => {
-                if self.shader_program != 0 {
-                    gl::DeleteProgram(self.shader_program);
-                }
-                self.shader_program = new_program;
+                self.shader_program.reset(new_program);
                 self.loc_smoke_tex =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_SmokeTexture"));
-                self.loc_flow_map = gl::GetUniformLocation(self.shader_program, cstr!("u_FlowMap"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_SmokeTexture"));
+                self.loc_flow_map =
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_FlowMap"));
                 self.loc_noise_tex =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_NoiseTexture"));
-                self.loc_flow_distortion_strength =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_FlowDistortionStrength"));
-                self.loc_flow_animation_speed =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_FlowAnimationSpeed"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_NoiseTexture"));
+                self.loc_flow_distortion_strength = gl::GetUniformLocation(
+                    self.shader_program.raw(),
+                    cstr!("u_FlowDistortionStrength"),
+                );
+                self.loc_flow_animation_speed = gl::GetUniformLocation(
+                    self.shader_program.raw(),
+                    cstr!("u_FlowAnimationSpeed"),
+                );
                 self.loc_erosion_enabled =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEnabled"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionEnabled"));
                 self.loc_erosion_scale =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionScale"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionScale"));
                 self.loc_erosion_edge_width =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEdgeWidth"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionEdgeWidth"));
                 self.loc_erosion_edge_color =
-                    gl::GetUniformLocation(self.shader_program, cstr!("u_ErosionEdgeColor"));
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_ErosionEdgeColor"));
+                self.loc_render_mask =
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_RenderMask"));
 
-                gl::UseProgram(self.shader_program);
-                let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
+                gl::UseProgram(self.shader_program.raw());
+                let block_idx =
+                    gl::GetUniformBlockIndex(self.shader_program.raw(), cstr!("GlobalData"));
                 if block_idx != gl::INVALID_INDEX {
-                    gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                    gl::UniformBlockBinding(self.shader_program.raw(), block_idx, 0);
+                }
+                let lighting_block_idx =
+                    gl::GetUniformBlockIndex(self.shader_program.raw(), cstr!("LightingBlock"));
+                if lighting_block_idx != gl::INVALID_INDEX {
+                    gl::UniformBlockBinding(
+                        self.shader_program.raw(),
+                        lighting_block_idx,
+                        constants::LIGHTING_UBO_BINDING_INDEX,
+                    );
                 }
                 if self.loc_smoke_tex != -1 {
                     gl::Uniform1i(self.loc_smoke_tex, 0);
@@ -441,8 +639,25 @@ impl SmokeRenderer {
                 if self.loc_noise_tex != -1 {
                     gl::Uniform1i(self.loc_noise_tex, 2);
                 }
+                self.loc_light_falloff_lut =
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_LightFalloffLut"));
+                self.loc_use_lut =
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_UseLut"));
+                self.loc_wrap_relief =
+                    gl::GetUniformLocation(self.shader_program.raw(), cstr!("u_WrapRelief"));
+                if self.loc_light_falloff_lut != -1 {
+                    gl::Uniform1i(
+                        self.loc_light_falloff_lut,
+                        constants::SMOKE_LIGHTING_LUT_TEXTURE_UNIT as i32,
+                    );
+                }
+                self.rebake_smoke_lighting_lut();
 
-                label_gl_object!(gl::PROGRAM, self.shader_program, "Shader_SmokeInstanced");
+                label_gl_object!(
+                    gl::PROGRAM,
+                    self.shader_program.raw(),
+                    "Shader_SmokeInstanced"
+                );
                 info!("✅ Smoke instanced shaders reloaded successfully");
                 Ok(())
             }
@@ -455,9 +670,9 @@ impl SmokeRenderer {
 
     unsafe fn setup_gpu_buffers(
         max_smoke_particles: usize,
-    ) -> ([u32; 3], u32, u32, *mut SmokeInstanceGPU, isize) {
-        let mut vaos = [0u32; 3];
-        let (mut vbo_quad, mut vbo_particles) = (0u32, 0u32);
+    ) -> ([GlVao; 3], GlBuffer, GlBuffer, *mut SmokeInstanceGPU, isize) {
+        let mut raw_vaos = [0u32; 3];
+        let (mut raw_vbo_quad, mut raw_vbo_particles) = (0u32, 0u32);
 
         const OCTAGON_VERTICES: [f32; 20] = [
             0.0, 0.0, // Center vertex for TRIANGLE_FAN
@@ -466,8 +681,8 @@ impl SmokeRenderer {
             0.0, // Close fan
         ];
 
-        gl::GenBuffers(1, &mut vbo_quad);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+        gl::GenBuffers(1, &mut raw_vbo_quad);
+        gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_quad);
         gl::BufferData(
             gl::ARRAY_BUFFER,
             (OCTAGON_VERTICES.len() * mem::size_of::<f32>()) as isize,
@@ -475,8 +690,8 @@ impl SmokeRenderer {
             gl::STATIC_DRAW,
         );
 
-        gl::GenBuffers(1, &mut vbo_particles);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+        gl::GenBuffers(1, &mut raw_vbo_particles);
+        gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_particles);
 
         let buffer_size = (3 * max_smoke_particles * mem::size_of::<SmokeInstanceGPU>()) as isize;
         info!(
@@ -499,12 +714,12 @@ impl SmokeRenderer {
             gl::MAP_WRITE_BIT | gl::MAP_PERSISTENT_BIT | gl::MAP_FLUSH_EXPLICIT_BIT,
         ) as *mut SmokeInstanceGPU;
 
-        gl::GenVertexArrays(3, vaos.as_mut_ptr());
-        for (frame, &vao) in vaos.iter().enumerate() {
+        gl::GenVertexArrays(3, raw_vaos.as_mut_ptr());
+        for (frame, &vao) in raw_vaos.iter().enumerate() {
             gl::BindVertexArray(vao);
 
             // Attrib 0: Quad vertices (vec2)
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+            gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_quad);
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(
                 0,
@@ -517,7 +732,7 @@ impl SmokeRenderer {
             gl::VertexAttribDivisor(0, 0);
 
             // Instanced attributes
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+            gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_particles);
             let base_offset =
                 (frame * max_smoke_particles * mem::size_of::<SmokeInstanceGPU>()) as isize;
             let stride = mem::size_of::<SmokeInstanceGPU>() as i32;
@@ -609,13 +824,24 @@ impl SmokeRenderer {
 
         gl::BindVertexArray(0);
 
-        for (frame, &vao) in vaos.iter().enumerate() {
+        for (frame, &vao) in raw_vaos.iter().enumerate() {
             label_gl_object!(gl::VERTEX_ARRAY, vao, &format!("VAO_Smoke_Frame_{}", frame));
         }
-        label_gl_object!(gl::BUFFER, vbo_quad, "VBO_Smoke_Static_Quad");
-        label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Smoke_Instance_Data");
+        label_gl_object!(gl::BUFFER, raw_vbo_quad, "VBO_Smoke_Static_Quad");
+        label_gl_object!(gl::BUFFER, raw_vbo_particles, "VBO_Smoke_Instance_Data");
 
-        (vaos, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
+        let vaos = [
+            GlVao::from_raw(raw_vaos[0]),
+            GlVao::from_raw(raw_vaos[1]),
+            GlVao::from_raw(raw_vaos[2]),
+        ];
+        (
+            vaos,
+            GlBuffer::from_raw(raw_vbo_quad),
+            GlBuffer::from_raw(raw_vbo_particles),
+            mapped_ptr,
+            buffer_size,
+        )
     }
 }
 
@@ -641,12 +867,22 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
         self.render_smoke_with_persistent_buffer(count, active_shader, active_texture);
     }
 
+    unsafe fn render_smoke_mask(
+        &mut self,
+        count: usize,
+        mask_fbo: u32,
+        mask_width: i32,
+        mask_height: i32,
+    ) {
+        self.render_smoke_mask(count, mask_fbo, mask_width, mask_height);
+    }
+
     fn get_shader_program(&self) -> u32 {
-        self.shader_program
+        self.shader_program.raw()
     }
 
     fn get_texture_id(&self) -> u32 {
-        self.texture_id
+        self.texture_id.raw()
     }
 
     fn get_tex_ratio(&self) -> f32 {
@@ -659,6 +895,25 @@ impl ParticleGraphicsRenderer for SmokeRenderer {
 
     fn render_order(&self) -> u32 {
         10
+    }
+
+    fn set_smoke_lighting(
+        &mut self,
+        enabled: bool,
+        intensity: f32,
+        ambient_flash: f32,
+        use_lut: bool,
+        wrap_relief: f32,
+    ) {
+        self.smoke_lighting_enabled = enabled;
+        self.smoke_scattering_intensity = intensity;
+        self.smoke_ambient_flash = ambient_flash;
+        self.smoke_lighting_lut_enabled = use_lut;
+        self.smoke_wrap_relief = wrap_relief;
+    }
+
+    fn set_backlight_enabled(&mut self, enabled: bool) {
+        self.backlight_enabled = enabled;
     }
 
     unsafe fn reload_shaders(&mut self) -> Result<(), String> {
@@ -675,5 +930,109 @@ impl Drop for SmokeRenderer {
         unsafe {
             self.close();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn analytic_falloff(x: f32, y: f32) -> f32 {
+        let dist_sq = x * x + y * y;
+        if dist_sq < 1.0 {
+            let dist = dist_sq.sqrt();
+            let atten = (1.0 - dist) * (1.0 - dist);
+            let cos_theta = if dist > 0.0001 { y / dist } else { 0.0 };
+            let phase = 1.0 + constants::SMOKE_LIGHTING_ANISOTROPY_COEFF * cos_theta;
+            atten * phase
+        } else {
+            0.0
+        }
+    }
+
+    fn sample_lut_cpu(lut: &[f32], res: usize, u: f32, v: f32) -> f32 {
+        if !(0.0..=1.0).contains(&u) || !(0.0..=1.0).contains(&v) {
+            return 0.0;
+        }
+        let n = res as f32;
+        let x = u * n - 0.5;
+        let y = v * n - 0.5;
+        let i0 = (x.floor() as isize).clamp(0, res as isize - 1) as usize;
+        let i1 = (i0 + 1).min(res - 1);
+        let j0 = (y.floor() as isize).clamp(0, res as isize - 1) as usize;
+        let j1 = (j0 + 1).min(res - 1);
+
+        let fx = (x - x.floor()).clamp(0.0, 1.0);
+        let fy = (y - y.floor()).clamp(0.0, 1.0);
+
+        let s00 = lut[j0 * res + i0];
+        let s10 = lut[j0 * res + i1];
+        let s01 = lut[j1 * res + i0];
+        let s11 = lut[j1 * res + i1];
+
+        let top = s00 * (1.0 - fx) + s10 * fx;
+        let bot = s01 * (1.0 - fx) + s11 * fx;
+        top * (1.0 - fy) + bot * fy
+    }
+
+    #[test]
+    fn test_smoke_lighting_lut_mathematical_precision() {
+        let res = constants::SMOKE_LIGHTING_LUT_RESOLUTION;
+        let n = res as f32;
+        let anisotropy = constants::SMOKE_LIGHTING_ANISOTROPY_COEFF;
+        let mut lut = Vec::with_capacity(res * res);
+
+        for j in 0..res {
+            let v = (j as f32 + 0.5) / n;
+            let y = (v - 0.5) * 2.0;
+            for i in 0..res {
+                let u = (i as f32 + 0.5) / n;
+                let x = (u - 0.5) * 2.0;
+                let dist_sq = x * x + y * y;
+                if dist_sq < 1.0 {
+                    let dist = dist_sq.sqrt();
+                    let atten = (1.0 - dist) * (1.0 - dist);
+                    let cos_theta = if dist > 0.0001 { y / dist } else { 0.0 };
+                    let phase = 1.0 + anisotropy * cos_theta;
+                    lut.push(atten * phase);
+                } else {
+                    lut.push(0.0);
+                }
+            }
+        }
+
+        // 1. Center test: origin should have falloff ~= 1.0 (within 1.5% due to 256x256 texel centers)
+        let center_sample = sample_lut_cpu(&lut, res, 0.5, 0.5);
+        assert!((center_sample - 1.0).abs() < 0.015);
+
+        // 2. Far out of bounds: outside quad should be exactly 0.0
+        assert_eq!(sample_lut_cpu(&lut, res, -0.2, 0.5), 0.0);
+        assert_eq!(sample_lut_cpu(&lut, res, 1.2, 0.5), 0.0);
+
+        // 3. Dense grid parity test: max absolute error < 0.008 over 10,000 points
+        let steps = 100;
+        let mut max_err: f32 = 0.0;
+        for sy in 0..=steps {
+            let y = -1.1 + (2.2 * sy as f32 / steps as f32);
+            for sx in 0..=steps {
+                let x = -1.1 + (2.2 * sx as f32 / steps as f32);
+                let analytic = analytic_falloff(x, y);
+
+                let u = x * 0.5 + 0.5;
+                let v = y * 0.5 + 0.5;
+                let lut_val = sample_lut_cpu(&lut, res, u, v);
+
+                let err = (analytic - lut_val).abs();
+                if err > max_err {
+                    max_err = err;
+                }
+            }
+        }
+
+        assert!(
+            max_err < 0.015,
+            "LUT maximum discrepancy vs analytic formula was {:.5}, expected < 0.015",
+            max_err
+        );
     }
 }

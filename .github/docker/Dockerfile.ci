@@ -105,10 +105,11 @@ RUN curl -sL https://github.com/go-task/task/releases/download/v3.50.0/task_linu
     curl -sL https://github.com/taiki-e/cargo-llvm-cov/releases/download/v0.6.16/cargo-llvm-cov-x86_64-unknown-linux-musl.tar.gz | tar -xz -C /usr/local/bin && \
     curl -sL https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz | tar -xz --strip-components=1 -C /usr/local/bin "cargo-deny-0.20.2-x86_64-unknown-linux-musl/cargo-deny" && \
     curl -sSL "https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz" | tar -xz -C /usr/local/bin && \
+    curl -sSL "https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz" | tar -xz -C /usr/local/bin vale && \
     mkdir -p /opt/renderdoc && \
     curl -sSL https://renderdoc.org/stable/1.45/renderdoc_1.45.tar.gz | tar -xz -C /opt/renderdoc --strip-components=1 && \
     ln -sf /opt/renderdoc/bin/renderdoccmd /usr/local/bin/renderdoccmd && \
-    chmod +x /usr/local/bin/task /usr/local/bin/sccache /usr/local/bin/cargo-llvm-cov /usr/local/bin/cargo-deny /usr/local/bin/mdbook && \
+    chmod +x /usr/local/bin/task /usr/local/bin/sccache /usr/local/bin/cargo-llvm-cov /usr/local/bin/cargo-deny /usr/local/bin/mdbook /usr/local/bin/vale && \
     rm -rf /tmp/*
 
 # 5. Copy Tracy CLI tools from Stage 1

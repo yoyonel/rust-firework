@@ -49,6 +49,33 @@ pub trait ParticleGraphicsRenderer {
     /// Définit les bascules de visibilité pour les sous-types de particules (ex: trails, explosions).
     fn set_visibility(&mut self, _render_trails: bool, _render_explosions: bool) {}
 
+    /// Définit les paramètres d'éclairage volumétrique pour la fumée.
+    fn set_smoke_lighting(
+        &mut self,
+        _enabled: bool,
+        _intensity: f32,
+        _ambient_flash: f32,
+        _use_lut: bool,
+        _wrap_relief: f32,
+    ) {
+    }
+
+    /// Définit si le rétroéclairage écran (Screen-Space Backlight) est actif pour ce renderer.
+    fn set_backlight_enabled(&mut self, _enabled: bool) {}
+
+    /// Dessine le masque alpha de la fumée pour le rétro-éclairage écran (Screen-Space Backlight).
+    ///
+    /// # Safety
+    /// Cette fonction est unsafe car elle manipule directement des ressources OpenGL.
+    unsafe fn render_smoke_mask(
+        &mut self,
+        _count: usize,
+        _mask_fbo: u32,
+        _mask_width: i32,
+        _mask_height: i32,
+    ) {
+    }
+
     /// Retourne l'ordre de priorité de rendu (pass order) pour trier les passes.
     fn render_order(&self) -> u32 {
         0

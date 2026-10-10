@@ -19,7 +19,33 @@ pub fn render_renderer_settings_tab(
     let cfg = state.config();
 
     // GUI_PERSIST: renderer.config
+    let mut vol_lighting = cfg.volumetric_lighting_enabled;
     ui.spacing();
+    if ui.checkbox(
+        "Enable Volumetric Lighting (`renderer.lighting`)",
+        &mut vol_lighting,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingEnabled(vol_lighting),
+        ));
+    }
+    ui.same_line();
+    if ui.small_button(if vol_lighting {
+        "Disable##top_vol_toggle"
+    } else {
+        "Enable##top_vol_toggle"
+    }) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingEnabled(!vol_lighting),
+        ));
+    }
+    if !vol_lighting {
+        ui.same_line();
+        ui.text_colored(COLOR_TEXT_MUTED, "(All volumetric lighting disabled)");
+    }
+
+    ui.spacing();
+    ui.separator();
     ui.text_colored(COLOR_HEADER, "=== SHADER & CONFIG ACTIONS ===");
 
     if ui.button("[RELOAD] Reload Shaders (`renderer.reload_shaders`)") {
@@ -165,6 +191,72 @@ pub fn render_renderer_settings_tab(
 
     ui.spacing();
     ui.separator();
+    ui.text_colored(
+        COLOR_HEADER,
+        "=== POST-PROCESS DITHER (`renderer.dither.*`) ===",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Dither Defaults") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetDitherDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut dither_enabled = cfg.dither_enabled;
+    if ui.checkbox(
+        "Enable Anti-Banding Dither (`renderer.dither.enable` / `disable`)",
+        &mut dither_enabled,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherEnabled(
+            dither_enabled,
+        )));
+    }
+    ui.same_line();
+    if ui.small_button(if dither_enabled {
+        "A/B: Toggle OFF"
+    } else {
+        "A/B: Toggle ON"
+    }) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherEnabled(
+            !dither_enabled,
+        )));
+    }
+
+    let mut dither_strength = cfg.dither_strength;
+    if ui.slider(
+        "Strength / Amplitude (`renderer.dither.strength`)",
+        renderer_constants::SLIDER_DITHER_STRENGTH_MIN,
+        renderer_constants::SLIDER_DITHER_STRENGTH_MAX,
+        &mut dither_strength,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            dither_strength,
+        )));
+    }
+    ui.same_line();
+    ui.text_colored(COLOR_TEXT_HINT, "Presets:");
+    ui.same_line();
+    if ui.small_button("Subtle (0.6)") {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            renderer_constants::DITHER_PRESET_SUBTLE,
+        )));
+    }
+    ui.same_line();
+    if ui.small_button("Strong (1.5)") {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            renderer_constants::DITHER_PRESET_STRONG,
+        )));
+    }
+    ui.same_line();
+    if ui.small_button("Exaggerated (3.0)") {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetDitherStrength(
+            renderer_constants::DITHER_PRESET_EXAGGERATED,
+        )));
+    }
+
+    ui.spacing();
+    ui.separator();
     ui.text_colored(COLOR_HEADER, "=== BLOOM PIPELINE (`renderer.bloom.*`) ===");
     ui.same_line();
     if ui.small_button("Reset Bloom Defaults") {
@@ -248,6 +340,355 @@ pub fn render_renderer_settings_tab(
     ) {
         cmd_queue.push(EngineCommand::Renderer(
             RendererCommand::SetBloomBlurMethod(methods[sel_method].1),
+        ));
+    }
+
+    ui.spacing();
+    ui.separator();
+    ui.text_colored(COLOR_HEADER, "=== VOLUMETRIC LIGHTING SYSTEM ===");
+
+    if !vol_lighting {
+        ui.text_colored(
+            COLOR_TEXT_MUTED,
+            "Volumetric lighting is disabled globally.",
+        );
+        ui.same_line();
+        if ui.small_button("Enable##vol_enable_section") {
+            cmd_queue.push(EngineCommand::Renderer(
+                RendererCommand::SetVolumetricLightingEnabled(true),
+            ));
+        }
+        return;
+    }
+
+    ui.same_line();
+    if ui.small_button("Disable##vol_disable_section") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingEnabled(false),
+        ));
+    }
+
+    let item_w = ui.current_font_size() * 14.0;
+
+    ui.spacing();
+    ui.text_colored(
+        COLOR_HEADER,
+        "--- Temporal Stabilization & Spectral Afterglow (§5 ADR) ---",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Realism Defaults##reset_vol_realism") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetVolumetricRealismDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut afterglow_enabled = cfg.spectral_afterglow_enabled;
+    if ui.checkbox(
+        "Enable Spectral Afterglow (`renderer.afterglow.enable` / `disable`)",
+        &mut afterglow_enabled,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSpectralAfterglowEnabled(afterglow_enabled),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut afterglow_decay = cfg.spectral_afterglow_decay;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Spectral Afterglow Decay (`renderer.afterglow.decay`)",
+        renderer_constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MIN,
+        renderer_constants::SLIDER_SPECTRAL_AFTERGLOW_DECAY_MAX,
+        &mut afterglow_decay,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSpectralAfterglowDecay(afterglow_decay),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut hysteresis = cfg.volumetric_lighting_hysteresis_enabled;
+    if ui.checkbox(
+        "Eviction Hysteresis 1.2x (`renderer.lighting.hysteresis`)",
+        &mut hysteresis,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingHysteresisEnabled(hysteresis),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut fade_in = cfg.volumetric_lighting_fade_in_ms;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Fade-in Duration (`renderer.lighting.fade_in`)",
+        renderer_constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_FADE_IN_MS_MAX,
+        &mut fade_in,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingFadeInMs(fade_in),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut light_radius = cfg.volumetric_lighting_radius;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Light Radius px (`renderer.lighting.radius`)",
+        renderer_constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_LIGHT_RADIUS_MAX,
+        &mut light_radius,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingRadius(light_radius),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut decay_rate = cfg.volumetric_lighting_decay_rate;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Decay Rate (`renderer.lighting.decay_rate`)",
+        renderer_constants::SLIDER_VOLUMETRIC_DECAY_RATE_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_DECAY_RATE_MAX,
+        &mut decay_rate,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingDecayRate(decay_rate),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut radius_expansion = cfg.volumetric_lighting_radius_expansion;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Radius Expansion (`renderer.lighting.radius_expansion`)",
+        renderer_constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_RADIUS_EXPANSION_MAX,
+        &mut radius_expansion,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingRadiusExpansion(radius_expansion),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut flash_cap = cfg.volumetric_lighting_flash_max_cap;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Flash Max Cap (`renderer.lighting.flash_max_cap`)",
+        renderer_constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MIN,
+        renderer_constants::SLIDER_VOLUMETRIC_FLASH_MAX_CAP_MAX,
+        &mut flash_cap,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingFlashMaxCap(flash_cap),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut debug_footprints = cfg.volumetric_lighting_debug;
+    if ui.checkbox(
+        "Debug Footprints Wireframe (`renderer.lighting.debug`)",
+        &mut debug_footprints,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetVolumetricLightingDebug(debug_footprints),
+        ));
+    }
+
+    ui.spacing();
+    ui.text_colored(COLOR_HEADER, "--- Volumetric Smoke In-Scattering ---");
+    ui.same_line();
+    if ui.small_button("Reset Lighting Defaults##reset_smoke_lighting") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetSmokeLightingDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut smoke_lighting = cfg.smoke_lighting_enabled;
+    if ui.checkbox(
+        "Enable Volumetric Smoke Lighting (`renderer.smoke_lighting`)",
+        &mut smoke_lighting,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeLightingEnabled(smoke_lighting),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut use_lut = cfg.smoke_lighting_lut_enabled;
+    if ui.checkbox(
+        "Precomputed Falloff LUT [Zero SQRT] (`renderer.smoke_lighting.lut`)",
+        &mut use_lut,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeLightingLutEnabled(use_lut),
+        ));
+    }
+    ui.same_line();
+    if ui.small_button("Re-bake LUT##rebake_smoke_lighting_lut") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::RebakeSmokeLightingLut,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut scattering = cfg.smoke_scattering_intensity;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "In-Scattering Intensity (`renderer.smoke_scattering`)",
+        0.0,
+        5.0,
+        &mut scattering,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeScatteringIntensity(scattering),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut flash = cfg.smoke_ambient_flash;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Ambient Flash Intensity (`renderer.smoke_ambient_flash`)",
+        0.0,
+        1.5,
+        &mut flash,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeAmbientFlash(flash),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut wrap_relief = cfg.smoke_wrap_relief;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "3D Volume Relief / Wrap (`renderer.smoke_wrap_relief`)",
+        renderer_constants::SLIDER_SMOKE_WRAP_RELIEF_MIN,
+        renderer_constants::SLIDER_SMOKE_WRAP_RELIEF_MAX,
+        &mut wrap_relief,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSmokeWrapRelief(wrap_relief),
+        ));
+    }
+
+    ui.spacing();
+    ui.separator();
+    ui.text_colored(
+        COLOR_HEADER,
+        "=== ATMOSPHERIC SKY HAZE (GLOBAL PARTICIPATING MEDIA) ===",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Sky Haze Defaults##reset_sky_haze") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetSkyHazeDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut sky_haze = cfg.sky_haze_enabled;
+    if ui.checkbox(
+        "Enable Atmospheric Sky Haze (`renderer.sky_haze`)",
+        &mut sky_haze,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetSkyHazeEnabled(
+            sky_haze,
+        )));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut haze_intensity = cfg.sky_haze_intensity;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Sky Haze Intensity (`renderer.sky_haze_intensity`)",
+        0.0,
+        3.0,
+        &mut haze_intensity,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSkyHazeIntensity(haze_intensity),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut haze_flash = cfg.sky_haze_ambient_flash;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Sky Ambient Flash (`renderer.sky_haze_ambient_flash`)",
+        0.0,
+        1.5,
+        &mut haze_flash,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetSkyHazeAmbientFlash(haze_flash),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut haze_falloff = cfg.sky_haze_falloff;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Atmospheric Falloff (`renderer.sky_haze.falloff`)",
+        renderer_constants::SLIDER_SKY_HAZE_FALLOFF_MIN,
+        renderer_constants::SLIDER_SKY_HAZE_FALLOFF_MAX,
+        &mut haze_falloff,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(RendererCommand::SetSkyHazeFalloff(
+            haze_falloff,
+        )));
+    }
+
+    ui.spacing();
+    ui.separator();
+    ui.text_colored(
+        COLOR_HEADER,
+        "=== SCREEN-SPACE BACKLIGHT (`renderer.backlight.*`) ===",
+    );
+    ui.same_line();
+    if ui.small_button("Reset Backlight Defaults##reset_backlight") {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::ResetBacklightDefaults,
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut backlight_enabled = cfg.backlight_enabled;
+    if ui.checkbox(
+        "Enable Smoke Backlight (`renderer.backlight.enable` / `disable`)",
+        &mut backlight_enabled,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetBacklightEnabled(backlight_enabled),
+        ));
+    }
+    ui.same_line();
+    if ui.small_button(if backlight_enabled {
+        "A/B: Toggle OFF##ab_backlight"
+    } else {
+        "A/B: Toggle ON##ab_backlight"
+    }) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetBacklightEnabled(!backlight_enabled),
+        ));
+    }
+
+    // GUI_PERSIST: renderer.config
+    let mut backlight_strength = cfg.backlight_strength;
+    ui.set_next_item_width(item_w);
+    if ui.slider(
+        "Backlight Strength (`renderer.backlight.strength`)",
+        renderer_constants::SLIDER_BACKLIGHT_STRENGTH_MIN,
+        renderer_constants::SLIDER_BACKLIGHT_STRENGTH_MAX,
+        &mut backlight_strength,
+    ) {
+        cmd_queue.push(EngineCommand::Renderer(
+            RendererCommand::SetBacklightStrength(backlight_strength),
         ));
     }
 }

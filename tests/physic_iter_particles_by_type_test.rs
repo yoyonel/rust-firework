@@ -234,7 +234,7 @@ fn test_regression_rocket_particles_visible() {
     // Vérifier que les particules ont des positions valides (non nulles)
     for (i, p) in rocket_particles.iter().enumerate() {
         assert!(
-            p.pos.x != 0.0 || p.pos.y != 0.0,
+            p.core.pos.x != 0.0 || p.core.pos.y != 0.0,
             "Particule {} devrait avoir une position non nulle",
             i
         );
@@ -289,7 +289,7 @@ fn test_slice_iteration_equivalence() {
     assert_eq!(legacy_particles.len(), slice_particles.len());
     for (i, (p_leg, p_slice)) in legacy_particles.iter().zip(&slice_particles).enumerate() {
         assert_eq!(
-            p_leg.pos, p_slice.pos,
+            p_leg.core.pos, p_slice.core.pos,
             "Position mismatch at particle {}",
             i
         );
@@ -310,7 +310,11 @@ fn test_slice_iteration_equivalence() {
 
         assert_eq!(leg.len(), slc.len(), "Count mismatch for {:?}", pt);
         for (i, (p1, p2)) in leg.iter().zip(&slc).enumerate() {
-            assert_eq!(p1.pos, p2.pos, "Pos mismatch for {:?} at index {}", pt, i);
+            assert_eq!(
+                p1.core.pos, p2.core.pos,
+                "Pos mismatch for {:?} at index {}",
+                pt, i
+            );
         }
     }
 

@@ -1,4 +1,5 @@
 use super::{BloomPass, BlurMethod, CellRect};
+use crate::renderer_engine::gl_resource::GlTexture;
 use crate::{pop_debug_group, push_debug_group};
 use gl::types::*;
 use log::info;
@@ -6,7 +7,7 @@ use log::info;
 impl BloomPass {
     /// Returns the handle to the HDR scene FBO
     pub fn hdr_fbo(&self) -> GLuint {
-        self.hdr_fbo
+        self.hdr_fbo.raw()
     }
 
     /// Begins rendering to the HDR framebuffer
@@ -14,8 +15,20 @@ impl BloomPass {
     /// # Safety
     /// This function is unsafe because it calls OpenGL functions directly and changes framebuffer bindings.
     pub unsafe fn begin_scene(&self) {
-        gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo);
+        gl::BindFramebuffer(gl::FRAMEBUFFER, self.hdr_fbo.raw());
+        // Clear all 3 MRT attachments (Scene, Brightness, SmokeMask) simultaneously
+        let all_attachments = [
+            gl::COLOR_ATTACHMENT0,
+            gl::COLOR_ATTACHMENT1,
+            gl::COLOR_ATTACHMENT2,
+        ];
+        gl::DrawBuffers(3, all_attachments.as_ptr());
+        gl::ClearColor(0.0, 0.0, 0.0, 0.0);
         gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+        // Reset default active draw buffers to Scene (0) and Brightness (1)
+        let default_attachments = [gl::COLOR_ATTACHMENT0, gl::COLOR_ATTACHMENT1];
+        gl::DrawBuffers(2, default_attachments.as_ptr());
     }
 
     /// Ends scene rendering and applies bloom post-processing
@@ -28,7 +41,7 @@ impl BloomPass {
         gl::Disable(gl::BLEND);
 
         // Bind the dummy VAO once for all fullscreen passes (AZDO VAO caching)
-        gl::BindVertexArray(self.dummy_vao);
+        gl::BindVertexArray(self.dummy_vao.raw());
 
         // 2. Blur passes - method selection
         push_debug_group!(1, "PostFX: Bloom Blur Chain");
@@ -46,17 +59,39 @@ impl BloomPass {
         // 3. Final composition (blend scene + bloom)
         push_debug_group!(2, "PostFX: ToneMapping & Composition");
         gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
-        gl::UseProgram(self.composition_shader);
+        gl::UseProgram(self.composition_shader.raw());
 
         // Bind scene texture
         gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture);
+        gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture.raw());
 
         // Bind bloom texture (result of blur in ping_pong_textures[0])
         gl::ActiveTexture(gl::TEXTURE1);
-        gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
+        gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0].raw());
+
+        // Bind smoke mask texture (Screen-Space Backlight)
+        gl::ActiveTexture(gl::TEXTURE2);
+        gl::BindTexture(gl::TEXTURE_2D, self.smoke_mask_texture.raw());
 
         gl::Uniform1i(self.loc_tone_mapping_mode, self.tone_mapping_mode as i32);
+        if self.loc_dither_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_dither_enabled,
+                if self.dither_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_dither_strength != -1 {
+            gl::Uniform1f(self.loc_dither_strength, self.dither_strength);
+        }
+        if self.loc_backlight_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_backlight_enabled,
+                if self.backlight_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_backlight_strength != -1 {
+            gl::Uniform1f(self.loc_backlight_strength, self.backlight_strength);
+        }
 
         self.render_fullscreen_quad();
         pop_debug_group!();
@@ -83,7 +118,7 @@ impl BloomPass {
         gl::Disable(gl::BLEND);
 
         // Bind the dummy VAO once for all fullscreen passes (AZDO VAO caching)
-        gl::BindVertexArray(self.dummy_vao);
+        gl::BindVertexArray(self.dummy_vao.raw());
 
         push_debug_group!(3, "PostFX: Comparison Mode");
         // Apply blur first (same as normal rendering)
@@ -96,16 +131,42 @@ impl BloomPass {
         gl::Viewport(0, 0, self.width, self.height);
 
         // Step 1: Render to comparison FBO with MRT to generate all 5 tone mappings
-        gl::BindFramebuffer(gl::FRAMEBUFFER, self.comparison_fbo);
-        gl::UseProgram(self.comparison_shader);
+        gl::BindFramebuffer(gl::FRAMEBUFFER, self.comparison_fbo.raw());
+        gl::UseProgram(self.comparison_shader.raw());
 
         // Bind scene texture
         gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture);
+        gl::BindTexture(gl::TEXTURE_2D, self.hdr_texture.raw());
 
         // Bind bloom texture
         gl::ActiveTexture(gl::TEXTURE1);
-        gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0]);
+        gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[0].raw());
+
+        // Bind smoke mask texture (Screen-Space Backlight)
+        gl::ActiveTexture(gl::TEXTURE2);
+        gl::BindTexture(gl::TEXTURE_2D, self.smoke_mask_texture.raw());
+
+        if self.loc_comparison_dither_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_comparison_dither_enabled,
+                if self.dither_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_comparison_dither_strength != -1 {
+            gl::Uniform1f(self.loc_comparison_dither_strength, self.dither_strength);
+        }
+        if self.loc_comparison_backlight_enabled != -1 {
+            gl::Uniform1i(
+                self.loc_comparison_backlight_enabled,
+                if self.backlight_enabled { 1 } else { 0 },
+            );
+        }
+        if self.loc_comparison_backlight_strength != -1 {
+            gl::Uniform1f(
+                self.loc_comparison_backlight_strength,
+                self.backlight_strength,
+            );
+        }
 
         self.render_fullscreen_quad();
 
@@ -114,7 +175,7 @@ impl BloomPass {
         gl::Clear(gl::COLOR_BUFFER_BIT);
 
         // Use passthrough shader to display textures as-is (already tone-mapped)
-        gl::UseProgram(self.passthrough_shader);
+        gl::UseProgram(self.passthrough_shader.raw());
 
         // Grid layout: 2 columns, 3 rows
         let cols = 2;
@@ -122,7 +183,7 @@ impl BloomPass {
         let cell_width = self.width as f32 / cols as f32;
         let cell_height = self.height as f32 / rows as f32;
 
-        for (i, &tex_id) in self.comparison_textures.iter().enumerate() {
+        for (i, tex) in self.comparison_textures.iter().enumerate() {
             let col = i % cols;
             let row = i / cols;
 
@@ -151,7 +212,7 @@ impl BloomPass {
 
             // Bind the comparison texture
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, tex_id);
+            gl::BindTexture(gl::TEXTURE_2D, tex.raw());
 
             // Render fullscreen quad for this viewport
             self.render_fullscreen_quad();
@@ -170,7 +231,7 @@ impl BloomPass {
         gl::Enable(gl::BLEND);
     }
 
-    pub fn get_comparison_textures(&self) -> &[GLuint; 5] {
+    pub fn get_comparison_textures(&self) -> &[GlTexture; 5] {
         &self.comparison_textures
     }
 
@@ -204,12 +265,12 @@ impl BloomPass {
     pub(crate) unsafe fn apply_gaussian_blur(&self) {
         gl::Viewport(0, 0, self.blur_width, self.blur_height);
 
-        gl::UseProgram(self.blur_shader);
+        gl::UseProgram(self.blur_shader.raw());
 
         // Première passe : bright_texture -> ping_pong[1]
-        gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[1]);
+        gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[1].raw());
         gl::ActiveTexture(gl::TEXTURE0);
-        gl::BindTexture(gl::TEXTURE_2D, self.bright_texture);
+        gl::BindTexture(gl::TEXTURE_2D, self.bright_texture.raw());
         gl::Uniform2f(self.loc_blur_direction, 1.0, 0.0);
         self.render_fullscreen_quad();
 
@@ -219,9 +280,9 @@ impl BloomPass {
             let read_idx = if horizontal { 1 } else { 0 };
             let write_idx = 1 - read_idx;
 
-            gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[write_idx]);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[write_idx].raw());
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[read_idx]);
+            gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[read_idx].raw());
             gl::Uniform2f(
                 self.loc_blur_direction,
                 if horizontal { 0.0 } else { 1.0 },
@@ -238,16 +299,16 @@ impl BloomPass {
         let half_pixel_y = 0.5 / self.blur_height as f32;
 
         // Downsample passes (3 iterations: bright -> 0, 0 -> 1, 1 -> 0)
-        gl::UseProgram(self.kawase_downsample_shader);
+        gl::UseProgram(self.kawase_downsample_shader.raw());
 
         for i in 0..3 {
             let source_texture = if i == 0 {
-                self.bright_texture
+                self.bright_texture.raw()
             } else {
-                self.ping_pong_textures[(i - 1) % 2]
+                self.ping_pong_textures[(i - 1) % 2].raw()
             };
 
-            let target_fbo = self.ping_pong_fbo[i % 2];
+            let target_fbo = self.ping_pong_fbo[i % 2].raw();
 
             gl::BindFramebuffer(gl::FRAMEBUFFER, target_fbo);
             gl::ActiveTexture(gl::TEXTURE0);
@@ -258,15 +319,15 @@ impl BloomPass {
         }
 
         // Upsample passes (4 iterations to land result cleanly in ping_pong_textures[0])
-        gl::UseProgram(self.kawase_upsample_shader);
+        gl::UseProgram(self.kawase_upsample_shader.raw());
 
         for i in 0..4 {
             let source_idx = i % 2;
             let target_idx = (i + 1) % 2;
 
-            gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[target_idx]);
+            gl::BindFramebuffer(gl::FRAMEBUFFER, self.ping_pong_fbo[target_idx].raw());
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[source_idx]);
+            gl::BindTexture(gl::TEXTURE_2D, self.ping_pong_textures[source_idx].raw());
             gl::Uniform2f(self.loc_kawase_up_halfpixel, half_pixel_x, half_pixel_y);
 
             self.render_fullscreen_quad();
@@ -293,85 +354,43 @@ impl BloomPass {
         self.width = width;
         self.height = height;
 
-        // Delete old framebuffers
-        gl::DeleteFramebuffers(1, &self.hdr_fbo);
-        gl::DeleteTextures(1, &self.hdr_texture);
-        gl::DeleteTextures(1, &self.bright_texture);
-        gl::DeleteRenderbuffers(1, &self.hdr_depth_rbo);
-        gl::DeleteFramebuffers(2, self.ping_pong_fbo.as_ptr());
-        gl::DeleteTextures(2, self.ping_pong_textures.as_ptr());
-
         // Recreate with new size
-        let new_bloom = Self::new(width, height).expect("Failed to recreate bloom framebuffers");
+        let mut new_bloom =
+            Self::new(width, height).expect("Failed to recreate bloom framebuffers");
 
-        // Copy configuration
-        self.hdr_fbo = new_bloom.hdr_fbo;
-        self.hdr_texture = new_bloom.hdr_texture;
-        self.bright_texture = new_bloom.bright_texture;
-        self.hdr_depth_rbo = new_bloom.hdr_depth_rbo;
-        self.ping_pong_fbo = new_bloom.ping_pong_fbo;
-        self.ping_pong_textures = new_bloom.ping_pong_textures;
+        // Steal newly created FBOs and textures from new_bloom via std::mem::take
+        // The old resources in `self` are dropped and freed via RAII upon assignment.
+        self.hdr_fbo = std::mem::take(&mut new_bloom.hdr_fbo);
+        self.hdr_texture = std::mem::take(&mut new_bloom.hdr_texture);
+        self.bright_texture = std::mem::take(&mut new_bloom.bright_texture);
+        self.hdr_depth_rbo = std::mem::take(&mut new_bloom.hdr_depth_rbo);
+        self.ping_pong_fbo = [
+            std::mem::take(&mut new_bloom.ping_pong_fbo[0]),
+            std::mem::take(&mut new_bloom.ping_pong_fbo[1]),
+        ];
+        self.ping_pong_textures = [
+            std::mem::take(&mut new_bloom.ping_pong_textures[0]),
+            std::mem::take(&mut new_bloom.ping_pong_textures[1]),
+        ];
+        self.smoke_mask_fbo = std::mem::take(&mut new_bloom.smoke_mask_fbo);
+        self.smoke_mask_texture = std::mem::take(&mut new_bloom.smoke_mask_texture);
+        self.comparison_fbo = std::mem::take(&mut new_bloom.comparison_fbo);
+        self.comparison_textures = [
+            std::mem::take(&mut new_bloom.comparison_textures[0]),
+            std::mem::take(&mut new_bloom.comparison_textures[1]),
+            std::mem::take(&mut new_bloom.comparison_textures[2]),
+            std::mem::take(&mut new_bloom.comparison_textures[3]),
+            std::mem::take(&mut new_bloom.comparison_textures[4]),
+        ];
+        self.mask_width = new_bloom.mask_width;
+        self.mask_height = new_bloom.mask_height;
 
         // Update blur dimensions
         self.blur_width = new_bloom.blur_width;
         self.blur_height = new_bloom.blur_height;
         // downsample_factor remains unchanged (user setting)
 
-        // Copy uniform locations (shaders are not recreated here, but we copy from new_bloom which has them)
-        // Wait, new_bloom creates NEW shaders. We want to KEEP existing shaders to avoid recompiling if not needed.
-        // But BloomPass::new compiles shaders.
-        // The original code says: "Don't recreate shaders, keep existing ones".
-        // So we should NOT overwrite self.blur_shader etc.
-        // And thus we should NOT overwrite uniform locations either.
-        // The original code did `std::mem::forget(new_bloom)` but only copied FBOs/textures.
-        // Correct logic: we keep our current shaders and locations.
-        // We just need to ensure new_bloom doesn't delete the shaders we want to keep?
-        // Actually new_bloom creates NEW shaders. If we drop new_bloom, it might delete them?
-        // BloomPass::drop calls close() which deletes shaders.
-        // So we MUST take ownership of new_bloom's resources or let them be deleted.
-        // But we want to KEEP *our* old shaders.
-        // So we should delete new_bloom's shaders immediately since we won't use them.
-        gl::DeleteProgram(new_bloom.blur_shader);
-        gl::DeleteProgram(new_bloom.composition_shader);
-        gl::DeleteVertexArrays(1, &new_bloom.dummy_vao);
-
-        // We only take the FBOs/textures from new_bloom
-        // And we prevent new_bloom from deleting them when dropped
-        // But we manually deleted its shaders above.
-        // To be safe, let's just forget new_bloom entirely, but we need to know that we took its FBOs.
-        // The original code was:
-        // self.hdr_fbo = new_bloom.hdr_fbo; ...
-        // std::mem::forget(new_bloom);
-        // This leaks the shaders created by new_bloom! That's a bug in the original code too.
-        // But for now, let's stick to the task: updating uniform locations.
-        // Since we keep OLD shaders, the OLD locations are still valid.
-        // So we don't need to update locations here.
-
-        // However, I need to make sure I don't introduce a compile error by not copying the new fields if I used struct update syntax.
-        // I am assigning fields manually.
-        // So I don't need to do anything here for locations if I keep old shaders.
-
-        // Wait, the previous code was:
-        // self.hdr_fbo = new_bloom.hdr_fbo;
-        // ...
-        // std::mem::forget(new_bloom);
-
-        // If I added fields to the struct, I don't need to update this method unless I'm constructing Self here?
-        // I am NOT constructing Self here, I am mutating &mut self.
-        // So this method is fine as is, EXCEPT that `new_bloom` now has the extra fields, so `BloomPass::new` return type changed (which I handled).
-        // But `new_bloom` instance has shaders that will be leaked if I `forget` it.
-        // I should probably fix the leak, but maybe out of scope?
-        // Let's just leave it as is for now to minimize risk, but I need to make sure I didn't break anything.
-        // The `resize` method logic:
-        // 1. Delete old FBOs/textures
-        // 2. Create new BloomPass (compiles shaders, creates FBOs)
-        // 3. Steal FBOs/textures from new BloomPass
-        // 4. Forget new BloomPass (LEAKING shaders!)
-
-        // I will just leave this file alone for this step since I'm not changing how resize works,
-        // and the locations are tied to the shaders which are preserved.
-
-        // Don't recreate shaders, keep existing ones
-        std::mem::forget(new_bloom);
+        // Notice: `new_bloom` drops naturally here at scope exit.
+        // Its temporary shaders and dummy_vao are freed by RAII Drop, eliminating the historical shader leak.
     }
 }

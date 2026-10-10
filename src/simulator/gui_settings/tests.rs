@@ -566,6 +566,220 @@ fn test_ui_state_feedback_loop_renderer() {
         crate::renderer_engine::config::BlurMethod::Kawase,
         "Renderer bloom_blur_method"
     );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetDitherEnabled(false)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().dither_enabled,
+        false,
+        "Renderer dither_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetDitherStrength(1.75)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().dither_strength,
+        1.75,
+        "Renderer dither_strength"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingEnabled(false)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_enabled,
+        false,
+        "Renderer volumetric_lighting_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingHysteresisEnabled(
+            false
+        )),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_hysteresis_enabled,
+        false,
+        "Renderer volumetric_lighting_hysteresis_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingFadeInMs(120.0)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_fade_in_ms,
+        120.0,
+        "Renderer volumetric_lighting_fade_in_ms"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingRadius(220.0)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_radius,
+        220.0,
+        "Renderer volumetric_lighting_radius"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingDecayRate(0.91)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_decay_rate,
+        0.91,
+        "Renderer volumetric_lighting_decay_rate"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingRadiusExpansion(1.005)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_radius_expansion,
+        1.005,
+        "Renderer volumetric_lighting_radius_expansion"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingFlashMaxCap(0.60)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_flash_max_cap,
+        0.60,
+        "Renderer volumetric_lighting_flash_max_cap"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetVolumetricLightingDebug(true)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .volumetric_lighting_debug,
+        true,
+        "Renderer volumetric_lighting_debug"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSkyHazeFalloff(5.5)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().sky_haze_falloff,
+        5.5,
+        "Renderer sky_haze_falloff"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetBacklightEnabled(false)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().backlight_enabled,
+        false,
+        "Renderer backlight_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetBacklightStrength(2.25)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .backlight_strength,
+        2.25,
+        "Renderer backlight_strength"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSmokeLightingLutEnabled(false)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .smoke_lighting_lut_enabled,
+        false,
+        "Renderer smoke_lighting_lut_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSmokeWrapRelief(0.42)),
+        |h: &TestHarness| h.renderer_config.read().unwrap().config().smoke_wrap_relief,
+        0.42,
+        "Renderer smoke_wrap_relief"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSpectralAfterglowEnabled(false)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_enabled,
+        false,
+        "Renderer spectral_afterglow_enabled"
+    );
+    test_reflection!(
+        h,
+        EngineCommand::Renderer(RendererCommand::SetSpectralAfterglowDecay(0.92)),
+        |h: &TestHarness| h
+            .renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_decay,
+        0.92,
+        "Renderer spectral_afterglow_decay"
+    );
+
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::SetSmokeWrapRelief(0.85),
+    ));
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::SetSpectralAfterglowEnabled(false),
+    ));
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::SetSpectralAfterglowDecay(0.70),
+    ));
+    h.dispatch(EngineCommand::Renderer(
+        RendererCommand::ResetVolumetricRealismDefaults,
+    ));
+    assert_eq!(
+        h.renderer_config.read().unwrap().config().smoke_wrap_relief,
+        crate::renderer_engine::constants::DEFAULT_SMOKE_WRAP_RELIEF
+    );
+    assert_eq!(
+        h.renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_enabled,
+        crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_ENABLED
+    );
+    assert_eq!(
+        h.renderer_config
+            .read()
+            .unwrap()
+            .config()
+            .spectral_afterglow_decay,
+        crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY
+    );
 }
 
 #[test]

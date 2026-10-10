@@ -185,12 +185,7 @@ pub struct FireworksAudioConfig {
 // NOUVEAU : Types pour le Debug Audio
 // =========================================
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum AudioSoundType {
-    #[default]
-    Rocket,
-    Explosion,
-}
+pub use crate::domain_contracts::{AudioDebugEvent, AudioSoundType};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AudioPlayStatus {
@@ -199,43 +194,6 @@ pub enum AudioPlayStatus {
     Playing,
     Dropped,
     Completed,
-}
-
-#[derive(Debug, Clone)]
-pub enum AudioDebugEvent {
-    Sent {
-        request_id: u64,
-        sound_type: AudioSoundType,
-        entity_id: u64,
-        sent_at: Instant,
-    },
-    Received {
-        request_id: u64,
-        received_at: Instant,
-    },
-    Started {
-        request_id: u64,
-        started_at: Instant,
-        voice_index: usize,
-    },
-    Dropped {
-        request_id: u64,
-        dropped_at: Instant,
-        reason: &'static str,
-    },
-    Completed {
-        request_id: u64,
-        completed_at: Instant,
-    },
-    Underrun {
-        elapsed_us: u64,
-        budget_us: u64,
-    },
-    BlockProcessed {
-        elapsed_us: u64,
-        budget_us: u64,
-        active_voices: usize,
-    },
 }
 
 #[derive(Debug, Clone)]

@@ -21,5 +21,8 @@ where
         self.register_renderer_base_commands();
         self.register_bloom_commands();
         self.register_tonemapping_commands();
+        self.register_dither_commands();
+        self.register_backlight_commands();
+        self.register_volumetric_realism_commands();
     }
 }

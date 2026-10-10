@@ -77,8 +77,8 @@ fn test_audio_queue_saturation_1000_requests_non_blocking() {
 #[test]
 fn test_dsp_drain_saturated_queue_no_leak_and_no_nan() {
     use fireworks_sim::audio_engine::dsp_processor::DspProcessor;
+    use fireworks_sim::audio_engine::realtime_metrics::AudioRealtimeStats;
     use fireworks_sim::audio_engine::types::Voice;
-    use fireworks_sim::profiler::Profiler;
     use std::sync::atomic::AtomicU64;
     use std::sync::Arc;
 
@@ -143,12 +143,12 @@ fn test_dsp_drain_saturated_queue_no_leak_and_no_nan() {
         let _ = play_tx.send(req);
     }
 
-    let profiler = Profiler::new(10);
+    let stats = AudioRealtimeStats::new();
     let mut output_buffer = vec![0.0f32; block_size * 2];
 
     // Traiter plusieurs blocs pour drainer toutes les requêtes
     for _ in 0..20 {
-        dsp.process_block(&mut output_buffer, 1.0, &profiler);
+        dsp.process_block(&mut output_buffer, 1.0, &stats);
 
         // Vérifier l'absence totale de NaN ou Inf
         for &sample in &output_buffer {

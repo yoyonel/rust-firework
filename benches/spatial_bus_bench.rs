@@ -1,8 +1,8 @@
 use criterion::{black_box, criterion_group, BenchmarkId, Criterion, Throughput};
 use fireworks_sim::audio_engine::dsp_processor::DspProcessor;
 use fireworks_sim::audio_engine::effect_flags::{AudioEffect, AudioEffectFlags};
+use fireworks_sim::audio_engine::realtime_metrics::AudioRealtimeStats;
 use fireworks_sim::audio_engine::types::{AudioSoundType, Voice};
-use fireworks_sim::profiler::Profiler;
 use fireworks_sim::AudioEngineSettings;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -37,6 +37,7 @@ fn create_bench_dsp(n_voices: usize, block_size: usize, enable_spatial_bus: bool
         .enumerate()
         .map(|(i, pos)| Voice {
             id: i as u64 + 1,
+            start_offset: 0,
             active: true,
             data: Some(source_arc.clone()),
             pos: (i * 37) as f64 % 40000.0,
@@ -90,6 +91,9 @@ fn create_bench_dsp(n_voices: usize, block_size: usize, enable_spatial_bus: bool
             block_size,
         ),
         debug_tx: None,
+        current_sample_clock: 0,
+        sample_clock: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0)),
+        pending_requests: Vec::new(),
     }
 }
 
@@ -109,10 +113,10 @@ fn bench_legacy_vs_spatial_bus(c: &mut Criterion) {
             &n_voices,
             |b, &v_count| {
                 let mut dsp = create_bench_dsp(v_count, block_size, false);
-                let profiler = Profiler::new(100);
+                let stats = AudioRealtimeStats::new();
                 let mut out_buf = vec![0.0f32; block_size * 2];
                 b.iter(|| {
-                    dsp.process_block(&mut out_buf, 1.0, &profiler);
+                    dsp.process_block(&mut out_buf, 1.0, &stats);
                     black_box(&out_buf);
                 });
             },
@@ -124,10 +128,10 @@ fn bench_legacy_vs_spatial_bus(c: &mut Criterion) {
             &n_voices,
             |b, &v_count| {
                 let mut dsp = create_bench_dsp(v_count, block_size, true);
-                let profiler = Profiler::new(100);
+                let stats = AudioRealtimeStats::new();
                 let mut out_buf = vec![0.0f32; block_size * 2];
                 b.iter(|| {
-                    dsp.process_block(&mut out_buf, 1.0, &profiler);
+                    dsp.process_block(&mut out_buf, 1.0, &stats);
                     black_box(&out_buf);
                 });
             },
@@ -166,14 +170,14 @@ fn print_summary_table() {
         let mut legacy_times = Vec::with_capacity(passes);
         for _ in 0..passes {
             let mut dsp_legacy = create_bench_dsp(n_voices, block_size, false);
-            let profiler = Profiler::new(10);
+            let stats = AudioRealtimeStats::new();
             let mut out_buf = vec![0.0f32; block_size * 2];
             for _ in 0..100 {
-                dsp_legacy.process_block(&mut out_buf, 1.0, &profiler);
+                dsp_legacy.process_block(&mut out_buf, 1.0, &stats);
             }
             let start = Instant::now();
             for _ in 0..iterations {
-                dsp_legacy.process_block(&mut out_buf, 1.0, &profiler);
+                dsp_legacy.process_block(&mut out_buf, 1.0, &stats);
                 black_box(&out_buf);
             }
             legacy_times.push(start.elapsed() / iterations as u32);
@@ -185,14 +189,14 @@ fn print_summary_table() {
         let mut bus_times = Vec::with_capacity(passes);
         for _ in 0..passes {
             let mut dsp_bus = create_bench_dsp(n_voices, block_size, true);
-            let profiler = Profiler::new(10);
+            let stats = AudioRealtimeStats::new();
             let mut out_buf = vec![0.0f32; block_size * 2];
             for _ in 0..100 {
-                dsp_bus.process_block(&mut out_buf, 1.0, &profiler);
+                dsp_bus.process_block(&mut out_buf, 1.0, &stats);
             }
             let start = Instant::now();
             for _ in 0..iterations {
-                dsp_bus.process_block(&mut out_buf, 1.0, &profiler);
+                dsp_bus.process_block(&mut out_buf, 1.0, &stats);
                 black_box(&out_buf);
             }
             bus_times.push(start.elapsed() / iterations as u32);

@@ -12,6 +12,7 @@
 ///   line VBO instead.
 /// - 2 draw calls per frame regardless of the number of active events.
 use crate::renderer_engine::constants;
+use crate::renderer_engine::gl_resource::{GlBuffer, GlProgram, GlVao};
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use std::ptr;
 
@@ -117,20 +118,20 @@ impl AudioEvent {
 // ── Renderer ─────────────────────────────────────────────────────────────────
 
 pub struct AudioEventRenderer {
-    shader_program: u32,
+    shader_program: GlProgram,
     /// Cached location of the `uMode` uniform (0=ring, 1=beam).
     umode_loc: i32,
 
     // Ripple rings: instanced quad (TRIANGLE_STRIP, 4 verts)
-    vao_rings: u32,
-    vbo_quad: u32,
+    vao_rings: GlVao,
+    vbo_quad: GlBuffer,
 
     // Beam lines: instanced line (GL_LINES, 2 verts per instance)
-    vao_beams: u32,
-    vbo_line: u32,
+    vao_beams: GlVao,
+    vbo_line: GlBuffer,
 
     // Shared per-instance buffer (STREAM_DRAW, updated every frame)
-    vbo_instances: u32,
+    vbo_instances: GlBuffer,
 }
 
 impl Default for AudioEventRenderer {
@@ -146,19 +147,21 @@ impl AudioEventRenderer {
                 constants::SHADER_AUDIO_EVENT_VERTEX_PATH,
                 constants::SHADER_AUDIO_EVENT_FRAGMENT_PATH,
             );
+            let shader_program = GlProgram::from_raw(shader_program);
 
             // Bind shared GlobalData UBO to binding point (same as particles)
-            let block_idx = gl::GetUniformBlockIndex(shader_program, crate::cstr!("GlobalData"));
+            let block_idx =
+                gl::GetUniformBlockIndex(shader_program.raw(), crate::cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
                 gl::UniformBlockBinding(
-                    shader_program,
+                    shader_program.raw(),
                     block_idx,
                     constants::GLOBAL_UBO_BINDING_INDEX,
                 );
             }
 
             // Cache the uMode uniform location (set per-draw-pass to 0=ring or 1=beam)
-            let umode_loc = gl::GetUniformLocation(shader_program, crate::cstr!("uMode"));
+            let umode_loc = gl::GetUniformLocation(shader_program.raw(), crate::cstr!("uMode"));
 
             // ── Static geometry buffers ───────────────────────────────────
 
@@ -170,20 +173,26 @@ impl AudioEventRenderer {
             // uses aQuad.x to lerp between aPos and aListener.
             const LINE: [f32; 4] = [0.0, 0.0, 1.0, 0.0];
 
-            let mut vao_rings = 0u32;
-            let mut vao_beams = 0u32;
-            let mut vbo_quad = 0u32;
-            let mut vbo_line = 0u32;
-            let mut vbo_instances = 0u32;
+            let mut raw_vao_rings = 0u32;
+            let mut raw_vao_beams = 0u32;
+            let mut raw_vbo_quad = 0u32;
+            let mut raw_vbo_line = 0u32;
+            let mut raw_vbo_instances = 0u32;
 
-            gl::GenVertexArrays(1, &mut vao_rings);
-            gl::GenVertexArrays(1, &mut vao_beams);
-            gl::GenBuffers(1, &mut vbo_quad);
-            gl::GenBuffers(1, &mut vbo_line);
-            gl::GenBuffers(1, &mut vbo_instances);
+            gl::GenVertexArrays(1, &mut raw_vao_rings);
+            gl::GenVertexArrays(1, &mut raw_vao_beams);
+            gl::GenBuffers(1, &mut raw_vbo_quad);
+            gl::GenBuffers(1, &mut raw_vbo_line);
+            gl::GenBuffers(1, &mut raw_vbo_instances);
+
+            let vao_rings = GlVao::from_raw(raw_vao_rings);
+            let vao_beams = GlVao::from_raw(raw_vao_beams);
+            let vbo_quad = GlBuffer::from_raw(raw_vbo_quad);
+            let vbo_line = GlBuffer::from_raw(raw_vbo_line);
+            let vbo_instances = GlBuffer::from_raw(raw_vbo_instances);
 
             // Upload static geometry
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad.raw());
             gl::BufferData(
                 gl::ARRAY_BUFFER,
                 (QUAD.len() * 4) as isize,
@@ -191,7 +200,7 @@ impl AudioEventRenderer {
                 gl::STATIC_DRAW,
             );
 
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_line);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_line.raw());
             gl::BufferData(
                 gl::ARRAY_BUFFER,
                 (LINE.len() * 4) as isize,
@@ -202,27 +211,27 @@ impl AudioEventRenderer {
             let stride = AudioEventGPUData::STRIDE;
 
             // ── VAO: ripple rings ─────────────────────────────────────────
-            gl::BindVertexArray(vao_rings);
+            gl::BindVertexArray(vao_rings.raw());
 
             // attr 0: quad vertex position (vec2) — from static vbo_quad
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad.raw());
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
 
             // Instance attrs from vbo_instances
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_instances);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_instances.raw());
             Self::setup_instance_attribs(stride);
 
             // ── VAO: beam lines ───────────────────────────────────────────
-            gl::BindVertexArray(vao_beams);
+            gl::BindVertexArray(vao_beams.raw());
 
             // attr 0: line vertex position (vec2) — x encodes [0,1] lerp
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_line);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_line.raw());
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(0, 2, gl::FLOAT, gl::FALSE, 0, ptr::null());
 
             // Same instance attrs
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_instances);
+            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_instances.raw());
             Self::setup_instance_attribs(stride);
 
             gl::BindVertexArray(0);
@@ -329,10 +338,10 @@ impl AudioEventRenderer {
         gl::Enable(gl::BLEND);
         gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
 
-        gl::UseProgram(self.shader_program);
+        gl::UseProgram(self.shader_program.raw());
 
         // ── Upload instance data (one STREAM_DRAW per frame) ─────────────
-        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_instances);
+        gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_instances.raw());
         gl::BufferData(
             gl::ARRAY_BUFFER,
             std::mem::size_of_val(instances) as isize,
@@ -342,12 +351,12 @@ impl AudioEventRenderer {
 
         // ── Pass 1: ripple rings (TRIANGLE_STRIP quads) ───────────────────
         gl::Uniform1i(self.umode_loc, 0); // ring mode
-        gl::BindVertexArray(self.vao_rings);
+        gl::BindVertexArray(self.vao_rings.raw());
         gl::DrawArraysInstanced(gl::TRIANGLE_STRIP, 0, 4, instances.len() as i32);
 
         // ── Pass 2: beam lines (GL_LINES, 2 verts per instance) ──────────
         gl::Uniform1i(self.umode_loc, 1); // beam mode
-        gl::BindVertexArray(self.vao_beams);
+        gl::BindVertexArray(self.vao_beams.raw());
         gl::DrawArraysInstanced(gl::LINES, 0, 2, instances.len() as i32);
 
         // ── Restore state ─────────────────────────────────────────────────
@@ -367,27 +376,12 @@ impl AudioEventRenderer {
     }
 
     pub fn destroy(&mut self) {
-        unsafe {
-            for vao in [self.vao_rings, self.vao_beams] {
-                if vao != 0 {
-                    gl::DeleteVertexArrays(1, &vao);
-                }
-            }
-            for vbo in [self.vbo_quad, self.vbo_line, self.vbo_instances] {
-                if vbo != 0 {
-                    gl::DeleteBuffers(1, &vbo);
-                }
-            }
-            if self.shader_program != 0 {
-                gl::DeleteProgram(self.shader_program);
-                self.shader_program = 0;
-            }
-        }
-        self.vao_rings = 0;
-        self.vao_beams = 0;
-        self.vbo_quad = 0;
-        self.vbo_line = 0;
-        self.vbo_instances = 0;
+        self.vao_rings.reset(0);
+        self.vao_beams.reset(0);
+        self.vbo_quad.reset(0);
+        self.vbo_line.reset(0);
+        self.vbo_instances.reset(0);
+        self.shader_program.reset(0);
     }
 }
 

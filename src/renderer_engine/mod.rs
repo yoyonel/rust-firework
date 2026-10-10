@@ -40,3 +40,8 @@ pub mod audio_event_renderer;
 pub use self::audio_event_renderer::{
     AudioEvent, AudioEventGPUData, AudioEventKind, AudioEventRenderer,
 };
+
+pub mod gl_resource;
+pub use self::gl_resource::{
+    GlBuffer, GlFbo, GlProgram, GlRenderbuffer, GlShader, GlTexture, GlVao,
+};

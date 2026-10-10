@@ -54,6 +54,7 @@ pub struct GuiSettings {
     pub smoke_preview_rocket_color: [f32; 3],
     pub smoke_preview_simulated_speed: f32,
     pub smoke_preview_simulated_angle_offset: f32,
+    pub smoke_preview: Option<crate::renderer_engine::smoke_preview::SmokePreviewRenderer>,
 }
 
 impl Default for GuiSettings {
@@ -84,6 +85,7 @@ impl GuiSettings {
             smoke_preview_rocket_color: session.smoke_preview_rocket_color,
             smoke_preview_simulated_speed: session.smoke_preview_simulated_speed,
             smoke_preview_simulated_angle_offset: session.smoke_preview_simulated_angle_offset,
+            smoke_preview: None,
         };
         // Sync static AtomicBool and viewport transform atomics from persisted session state
         smoke::SHOW_GEOMETRY_TRIMMING.store(
@@ -468,6 +470,7 @@ impl GuiSettings {
                                 ui,
                                 physic_engine,
                                 cmd_queue,
+                                &mut self.smoke_preview,
                                 &mut self.smoke_preview_max_zoom,
                                 &mut self.smoke_preview_rocket_color,
                                 &mut self.smoke_preview_simulated_speed,
@@ -647,6 +650,118 @@ impl GuiSettings {
                             }
                             crate::domain_contracts::RendererCommand::SetBloomBlurMethod(m) => {
                                 c.bloom_blur_method = m;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingEnabled(enabled) => {
+                                c.volumetric_lighting_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSmokeLightingEnabled(enabled) => {
+                                c.smoke_lighting_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSmokeLightingLutEnabled(enabled) => {
+                                c.smoke_lighting_lut_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::RebakeSmokeLightingLut => {
+                                reload_shaders_requested.store(true, Ordering::Relaxed);
+                            }
+                            crate::domain_contracts::RendererCommand::SetSmokeScatteringIntensity(intensity) => {
+                                c.smoke_scattering_intensity = intensity;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSmokeAmbientFlash(flash) => {
+                                c.smoke_ambient_flash = flash;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetSmokeLightingDefaults => {
+                                c.smoke_lighting_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_SMOKE_LIGHTING_ENABLED;
+                                c.smoke_lighting_lut_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED;
+                                c.smoke_scattering_intensity =
+                                    crate::renderer_engine::constants::DEFAULT_SMOKE_SCATTERING_INTENSITY;
+                                c.smoke_ambient_flash =
+                                    crate::renderer_engine::constants::DEFAULT_SMOKE_AMBIENT_FLASH;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSkyHazeEnabled(enabled) => {
+                                c.sky_haze_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSkyHazeIntensity(intensity) => {
+                                c.sky_haze_intensity = intensity;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSkyHazeAmbientFlash(flash) => {
+                                c.sky_haze_ambient_flash = flash;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetSkyHazeDefaults => {
+                                c.sky_haze_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_SKY_HAZE_ENABLED;
+                                c.sky_haze_intensity =
+                                    crate::renderer_engine::constants::DEFAULT_SKY_HAZE_INTENSITY;
+                                c.sky_haze_ambient_flash =
+                                    crate::renderer_engine::constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH;
+                                c.sky_haze_falloff =
+                                    crate::renderer_engine::constants::DEFAULT_SKY_HAZE_FALLOFF;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSkyHazeFalloff(falloff) => {
+                                c.sky_haze_falloff = falloff;
+                            }
+                            crate::domain_contracts::RendererCommand::SetDitherEnabled(enabled) => {
+                                c.dither_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetDitherStrength(strength) => {
+                                c.dither_strength = strength;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetDitherDefaults => {
+                                c.dither_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_DITHER_ENABLED;
+                                c.dither_strength =
+                                    crate::renderer_engine::constants::DEFAULT_DITHER_STRENGTH;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingHysteresisEnabled(enabled) => {
+                                c.volumetric_lighting_hysteresis_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingFadeInMs(fade_ms) => {
+                                c.volumetric_lighting_fade_in_ms = fade_ms;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingRadius(radius) => {
+                                c.volumetric_lighting_radius = radius;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingDecayRate(decay) => {
+                                c.volumetric_lighting_decay_rate = decay;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingRadiusExpansion(expansion) => {
+                                c.volumetric_lighting_radius_expansion = expansion;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingFlashMaxCap(cap) => {
+                                c.volumetric_lighting_flash_max_cap = cap;
+                            }
+                            crate::domain_contracts::RendererCommand::SetVolumetricLightingDebug(debug) => {
+                                c.volumetric_lighting_debug = debug;
+                            }
+                            crate::domain_contracts::RendererCommand::SetBacklightEnabled(enabled) => {
+                                c.backlight_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetBacklightStrength(strength) => {
+                                c.backlight_strength = strength;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetBacklightDefaults => {
+                                c.backlight_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_BACKLIGHT_ENABLED;
+                                c.backlight_strength =
+                                    crate::renderer_engine::constants::DEFAULT_BACKLIGHT_STRENGTH;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSmokeWrapRelief(relief) => {
+                                c.smoke_wrap_relief = relief;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSpectralAfterglowEnabled(enabled) => {
+                                c.spectral_afterglow_enabled = enabled;
+                            }
+                            crate::domain_contracts::RendererCommand::SetSpectralAfterglowDecay(decay) => {
+                                c.spectral_afterglow_decay = decay;
+                            }
+                            crate::domain_contracts::RendererCommand::ResetVolumetricRealismDefaults => {
+                                c.smoke_wrap_relief =
+                                    crate::renderer_engine::constants::DEFAULT_SMOKE_WRAP_RELIEF;
+                                c.spectral_afterglow_enabled =
+                                    crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_ENABLED;
+                                c.spectral_afterglow_decay =
+                                    crate::renderer_engine::constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY;
                             }
                         }
                     }

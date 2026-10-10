@@ -35,6 +35,9 @@ pub trait PhysicEngineIterator {
     /// Applique une fonction sur chaque tête de fusée active non explosée.
     fn for_each_active_head_not_exploded(&self, f: &mut dyn FnMut(&Particle));
 
+    /// Applique une fonction sur chaque fusée active (en vol ou en cours d'explosion).
+    fn for_each_active_rocket(&self, _f: &mut dyn FnMut(&crate::physic_engine::rocket::Rocket)) {}
+
     /// Applique une fonction sur chaque particule active d'un type spécifique.
     fn for_each_particle_of_type(&self, particle_type: ParticleType, f: &mut dyn FnMut(&Particle)) {
         self.for_each_particle_slice_of_type(particle_type, &mut |slice| {
@@ -185,3 +188,64 @@ pub trait PhysicEngine {
 }
 
 pub trait PhysicEngineFull: PhysicEngine + PhysicEngineIterator {}
+
+impl<T: PhysicEngine> crate::domain_contracts::PhysicStateReader for T {
+    #[inline(always)]
+    fn gravity(&self) -> f32 {
+        self.get_pending_config().gravity
+    }
+    #[inline(always)]
+    fn drag(&self) -> f32 {
+        0.0
+    }
+    #[inline(always)]
+    fn max_particles(&self) -> u32 {
+        self.get_pending_config().max_rockets as u32
+    }
+    #[inline(always)]
+    fn explosion_force(&self) -> f32 {
+        self.get_pending_config().explosion_max_vel
+    }
+    #[inline(always)]
+    fn explosion_shape(&self) -> &crate::domain_contracts::ExplosionShape {
+        self.get_explosion_shape()
+    }
+}
+
+impl<T: PhysicEngine> crate::domain_contracts::SmokeStateReader for T {
+    #[inline(always)]
+    fn density(&self) -> f32 {
+        self.get_pending_config().smoke_intensity
+    }
+    #[inline(always)]
+    fn dissipation(&self) -> f32 {
+        self.get_pending_config().smoke_fade_duration
+    }
+    #[inline(always)]
+    fn wind(&self) -> [f32; 2] {
+        [0.0, 0.0]
+    }
+    #[inline(always)]
+    fn config(&self) -> crate::domain_contracts::PhysicConfigSnapshot {
+        self.get_pending_config().into()
+    }
+}
+
+impl crate::domain_contracts::SmokeStateReader for crate::physic_engine::config::PhysicConfig {
+    #[inline(always)]
+    fn density(&self) -> f32 {
+        self.smoke_intensity
+    }
+    #[inline(always)]
+    fn dissipation(&self) -> f32 {
+        self.smoke_fade_duration
+    }
+    #[inline(always)]
+    fn wind(&self) -> [f32; 2] {
+        [0.0, 0.0]
+    }
+    #[inline(always)]
+    fn config(&self) -> crate::domain_contracts::PhysicConfigSnapshot {
+        self.into()
+    }
+}

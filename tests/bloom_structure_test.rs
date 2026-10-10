@@ -12,15 +12,14 @@ mod tests {
         assert_eq!(std::mem::size_of::<ParticleGPU>(), 40);
 
         let p = ParticleGPU {
-            pos_x: 1.0,
-            pos_y: 2.0,
-            col_r: 0.1,
-            col_g: 0.2,
-            col_b: 0.3,
-            life: 1.0,
-            max_life: 2.0,
-            size: 5.0,
-            angle: 0.0,
+            core: fireworks_sim::physic_engine::ParticleVertexCore {
+                pos: glam::Vec2::new(1.0, 2.0),
+                color: glam::Vec3::new(0.1, 0.2, 0.3),
+                life: 1.0,
+                max_life: 2.0,
+                size: 5.0,
+                angle: 0.0,
+            },
             brightness: 1.5,
         };
 

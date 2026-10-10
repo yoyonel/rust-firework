@@ -1,6 +1,7 @@
 use gl::types::*;
-use memoffset::offset_of;
 use std::mem;
+
+pub use crate::physic_engine::particle::ParticleVertexCore;
 
 /// Structure envoyée au GPU représentant une particule.
 ///
@@ -28,46 +29,32 @@ use std::mem;
 /// | Location | Type   | Champs                     |
 /// |:---------:|:-------|:---------------------------|
 /// |:---------:|:-------|----------------------------|
-/// | `0`       | `vec2` | `pos_x`, `pos_y`          |
-/// | `1`       | `vec3` | `col_r`, `col_g`, `col_b` |
-/// | `2`       | `float`| `life`                    |
-/// | `3`       | `float`| `max_life`                |
-/// | `4`       | `float`| `size`                    |
-/// | `5`       | `float`| `angle`                   |
+/// | `0`       | `vec2` | `core.pos`                 |
+/// | `1`       | `vec3` | `core.color`               |
+/// | `2`       | `vec4` | `life, max_life, size, angle` |
+/// | `3`       | `float`| `brightness`               |
 #[repr(C)] // garantit un layout C-compatible pour l’envoi GPU
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct ParticleGPU {
-    /// Position horizontale de la particule.
-    pub pos_x: f32,
-
-    /// Position verticale de la particule.
-    pub pos_y: f32,
-
-    /// Composante rouge de la couleur.
-    pub col_r: f32,
-
-    /// Composante verte de la couleur.
-    pub col_g: f32,
-
-    /// Composante bleue de la couleur.
-    pub col_b: f32,
-
-    /// Durée de vie actuelle de la particule.
-    pub life: f32,
-
-    /// Durée de vie maximale (utilisée pour normaliser l’animation).
-    pub max_life: f32,
-
-    /// Taille de la particule à l’écran.
-    pub size: f32,
-
-    /// Angle de rotation de la particule.
-    pub angle: f32,
+    /// Données communes au CPU et au GPU (36 octets).
+    pub core: ParticleVertexCore,
 
     /// Multiplicateur de luminosité pour HDR (1.0 = normal, >1.0 = bloom).
     /// Calculé côté CPU basé sur la vitesse/accélération de la particule.
     pub brightness: f32,
 }
+
+const _: () = {
+    assert!(std::mem::size_of::<ParticleGPU>() == 40);
+    assert!(std::mem::offset_of!(ParticleGPU, core) == 0);
+    assert!(std::mem::offset_of!(ParticleGPU, core.pos) == 0);
+    assert!(std::mem::offset_of!(ParticleGPU, core.color) == 8);
+    assert!(std::mem::offset_of!(ParticleGPU, core.life) == 20);
+    assert!(std::mem::offset_of!(ParticleGPU, core.max_life) == 24);
+    assert!(std::mem::offset_of!(ParticleGPU, core.size) == 28);
+    assert!(std::mem::offset_of!(ParticleGPU, core.angle) == 32);
+    assert!(std::mem::offset_of!(ParticleGPU, brightness) == 36);
+};
 
 impl ParticleGPU {
     /// Configure les attributs de sommets (vertex attributes) pour OpenGL.
@@ -87,7 +74,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, pos_x) as *const _,
+                std::mem::offset_of!(Self, core.pos) as *const _,
             );
             gl::EnableVertexAttribArray(0);
 
@@ -98,7 +85,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, col_r) as *const _,
+                std::mem::offset_of!(Self, core.color) as *const _,
             );
             gl::EnableVertexAttribArray(1);
 
@@ -109,7 +96,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, life) as *const _,
+                std::mem::offset_of!(Self, core.life) as *const _,
             );
             gl::EnableVertexAttribArray(2);
 
@@ -120,7 +107,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, brightness) as *const _,
+                std::mem::offset_of!(Self, brightness) as *const _,
             );
             gl::EnableVertexAttribArray(3);
         }
@@ -137,7 +124,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, pos_x) as *const _,
+                std::mem::offset_of!(Self, core.pos) as *const _,
             );
             gl::EnableVertexAttribArray(1);
             gl::VertexAttribDivisor(1, 1); // 🔑 une fois par particule
@@ -149,7 +136,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, col_r) as *const _,
+                std::mem::offset_of!(Self, core.color) as *const _,
             );
             gl::EnableVertexAttribArray(2);
             gl::VertexAttribDivisor(2, 1);
@@ -161,22 +148,89 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, life) as *const _,
+                std::mem::offset_of!(Self, core.life) as *const _,
             );
             gl::EnableVertexAttribArray(3);
             gl::VertexAttribDivisor(3, 1);
 
-            // layout(location = 4) : brightness (multiplicateur HDR)
+            // layout(location = 4) : brightness (float)
             gl::VertexAttribPointer(
                 4,
                 1,
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, brightness) as *const _,
+                std::mem::offset_of!(Self, brightness) as *const _,
             );
             gl::EnableVertexAttribArray(4);
             gl::VertexAttribDivisor(4, 1);
         }
+    }
+}
+
+/// Point light representation sent to GPU for volumetric smoke in-scattering.
+/// Memory layout: position_radius (16 bytes) + color_intensity (16 bytes) = 32 bytes (std140 compatible).
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PointLightGPU {
+    pub position_radius: [f32; 4], // xyz: world position, w: effective radius
+    pub color_intensity: [f32; 4], // rgb: light color, w: light intensity
+}
+
+unsafe impl bytemuck::Pod for PointLightGPU {}
+unsafe impl bytemuck::Zeroable for PointLightGPU {}
+
+/// std140 uniform block for volumetric lighting.
+/// Total size: 16 * 32 (512) + 16 (ambient) + 4 (num_active) + 4 (intensity) + 8 (padding) = 544 bytes.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct VolumetricLightingBlockGPU {
+    pub lights: [PointLightGPU; crate::renderer_engine::constants::MAX_VOLUMETRIC_LIGHTS],
+    pub ambient_light: [f32; 4],
+    pub num_active_lights: i32,
+    pub scattering_intensity: f32,
+    pub _padding: [i32; 2],
+}
+
+unsafe impl bytemuck::Pod for VolumetricLightingBlockGPU {}
+unsafe impl bytemuck::Zeroable for VolumetricLightingBlockGPU {}
+
+impl Default for VolumetricLightingBlockGPU {
+    fn default() -> Self {
+        Self {
+            lights: [PointLightGPU::default();
+                crate::renderer_engine::constants::MAX_VOLUMETRIC_LIGHTS],
+            ambient_light: [0.08, 0.08, 0.10, 0.0],
+            num_active_lights: 0,
+            scattering_intensity:
+                crate::renderer_engine::constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
+            _padding: [0; 2],
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_particle_gpu_memory_layout_and_offsets() {
+        assert_eq!(mem::size_of::<ParticleGPU>(), 40);
+        assert_eq!(mem::align_of::<ParticleGPU>(), 4);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core), 0);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.pos), 0);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.color), 8);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.life), 20);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.max_life), 24);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.size), 28);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.angle), 32);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, brightness), 36);
+    }
+
+    #[test]
+    fn test_volumetric_lighting_block_gpu_layout() {
+        assert_eq!(mem::size_of::<PointLightGPU>(), 32);
+        assert_eq!(mem::size_of::<VolumetricLightingBlockGPU>(), 544);
+        assert_eq!(mem::size_of::<VolumetricLightingBlockGPU>() % 16, 0);
     }
 }

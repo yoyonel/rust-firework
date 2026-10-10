@@ -21,7 +21,7 @@ fn run_simulation(seed: u64, frames: u64, dt: f32) -> f32 {
 
     let mut hash_sum = 0.0;
     engine.for_each_active_particle(&mut |p: &Particle| {
-        hash_sum += p.pos.x + p.pos.y + p.vel.x + p.vel.y + p.life;
+        hash_sum += p.core.pos.x + p.core.pos.y + p.vel.x + p.vel.y + p.core.life;
     });
 
     hash_sum

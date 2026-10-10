@@ -9,20 +9,7 @@ use glam::Vec2;
 use rand::Rng;
 use std::path::Path;
 
-/// Configuration d'une forme d'explosion
-#[derive(Debug, Clone, Default, PartialEq)]
-pub enum ExplosionShape {
-    /// Explosion sphérique classique (directions aléatoires uniformes)
-    #[default]
-    Spherical,
-    /// Explosion basée sur une image N&B unique
-    Image(ImageShape),
-    /// Plusieurs images avec des poids (probabilités) respectifs
-    MultiImage {
-        shapes: Vec<(ImageShape, f32)>,
-        total_weight: f32,
-    },
-}
+pub use crate::domain_contracts::{ExplosionShape, ImageShape};
 
 impl ExplosionShape {
     /// Retourne une forme d'image échantillonnée aléatoirement selon les poids,
@@ -51,22 +38,6 @@ impl ExplosionShape {
             }
         }
     }
-}
-
-/// Forme d'explosion basée sur une image noir & blanc.
-///
-/// Les pixels blancs (ou non-noirs) de l'image sont échantillonnés pour
-/// définir les positions cibles des particules d'explosion.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ImageShape {
-    pub file_stem: String,
-    /// Points échantillonnés, normalisés dans l'espace [-0.5, 0.5] x [-0.5, 0.5]
-    /// Le centre de l'image correspond à (0, 0)
-    pub sampled_points: Vec<Vec2>,
-    /// Échelle pour mapper les coordonnées normalisées vers l'espace monde (en pixels)
-    pub scale: f32,
-    /// Temps de vol pour que les particules atteignent leur destination (en secondes)
-    pub flight_time: f32,
 }
 
 impl ImageShape {

@@ -1,6 +1,7 @@
 use log::{debug, info};
 
 use crate::physic_engine::PhysicEngineIterator;
+use crate::renderer_engine::gl_resource::{GlBuffer, GlProgram, GlVao};
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::renderer_engine::types::ParticleGPU;
 use crate::utils::human_bytes::HumanBytes;
@@ -18,13 +19,13 @@ const VERTEX_SHADER_PATH: &str = constants::SHADER_POINT_VERTEX_PATH;
 const FRAGMENT_SHADER_PATH: &str = constants::SHADER_POINT_FRAGMENT_PATH;
 
 pub struct RendererGraphics {
-    pub vao: u32,
-    pub vbo_particles: u32,
+    pub vao: GlVao,
+    pub vbo_particles: GlBuffer,
 
     pub mapped_ptr: *mut ParticleGPU,
 
     // Shader
-    pub shader_program: u32,
+    pub shader_program: GlProgram,
 
     pub max_particles_on_gpu: usize,
 
@@ -40,12 +41,13 @@ impl RendererGraphics {
     pub fn new(max_particles_on_gpu: usize) -> Self {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
+        let shader_program = GlProgram::from_raw(shader_program);
 
         // Bind uniform block "GlobalData" to binding point 0
         unsafe {
-            let block_idx = gl::GetUniformBlockIndex(shader_program, cstr!("GlobalData"));
+            let block_idx = gl::GetUniformBlockIndex(shader_program.raw(), cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
-                gl::UniformBlockBinding(shader_program, block_idx, 0);
+                gl::UniformBlockBinding(shader_program.raw(), block_idx, 0);
             }
         }
 
@@ -55,9 +57,9 @@ impl RendererGraphics {
                 RendererGraphics::setup_gpu_buffers(max_particles_on_gpu);
 
             // 🏷️ Rendre tes ressources visibles dans RenderDoc
-            label_gl_object!(gl::PROGRAM, shader_program, "Shader_PointRendering");
-            label_gl_object!(gl::VERTEX_ARRAY, vao, "VAO_Particules_Base");
-            label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Particules_Data");
+            label_gl_object!(gl::PROGRAM, shader_program.raw(), "Shader_PointRendering");
+            label_gl_object!(gl::VERTEX_ARRAY, vao.raw(), "VAO_Particules_Base");
+            label_gl_object!(gl::BUFFER, vbo_particles.raw(), "VBO_Particules_Data");
 
             Self {
                 vao,
@@ -75,16 +77,16 @@ impl RendererGraphics {
 
     unsafe fn setup_gpu_buffers(
         max_particles_on_gpu: usize,
-    ) -> (u32, u32, *mut ParticleGPU, isize) {
-        let (mut vao, mut vbo_particles) = (0u32, 0u32);
+    ) -> (GlVao, GlBuffer, *mut ParticleGPU, isize) {
+        let (mut raw_vao, mut raw_vbo_particles) = (0u32, 0u32);
 
         // === VAO ===
-        gl::GenVertexArrays(1, &mut vao);
-        gl::BindVertexArray(vao);
+        gl::GenVertexArrays(1, &mut raw_vao);
+        gl::BindVertexArray(raw_vao);
 
         // === 2️⃣ Particules persistantes ===
-        gl::GenBuffers(1, &mut vbo_particles);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+        gl::GenBuffers(1, &mut raw_vbo_particles);
+        gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_particles);
 
         let buffer_size = (3 * max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
         info!(
@@ -114,10 +116,15 @@ impl RendererGraphics {
         // === Nettoyage ===
         gl::BindVertexArray(0);
 
-        label_gl_object!(gl::VERTEX_ARRAY, vao, "VAO_Points");
-        label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Points_Data");
+        label_gl_object!(gl::VERTEX_ARRAY, raw_vao, "VAO_Points");
+        label_gl_object!(gl::BUFFER, raw_vbo_particles, "VBO_Points_Data");
 
-        (vao, vbo_particles, mapped_ptr, buffer_size)
+        (
+            GlVao::from_raw(raw_vao),
+            GlBuffer::from_raw(raw_vbo_particles),
+            mapped_ptr,
+            buffer_size,
+        )
     }
 
     /// Libère le mapping persistant du VBO particules, puis supprime le VAO et le VBO.
@@ -135,19 +142,13 @@ impl RendererGraphics {
     unsafe fn release_particle_buffers(&mut self) {
         // Unmap the persistent buffer BEFORE deleting it (required by OpenGL spec /
         // ARB_buffer_storage): deleting a mapped buffer is undefined behavior.
-        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+        if !self.mapped_ptr.is_null() && self.vbo_particles.raw() != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::UnmapBuffer(gl::ARRAY_BUFFER);
             self.mapped_ptr = std::ptr::null_mut();
         }
-        if self.vao != 0 {
-            gl::DeleteVertexArrays(1, &self.vao);
-            self.vao = 0;
-        }
-        if self.vbo_particles != 0 {
-            gl::DeleteBuffers(1, &self.vbo_particles);
-            self.vbo_particles = 0;
-        }
+        self.vao.reset(0);
+        self.vbo_particles.reset(0);
     }
 
     /// Recrée les buffers GPU avec une nouvelle taille maximale.
@@ -226,22 +227,21 @@ impl RendererGraphics {
                     }
                 };
                 if visible && count < self.max_particles_on_gpu {
-                    // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
-                    let src_ptr =
-                        p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
-                    let mut gpu_p = *src_ptr;
+                    // ⏱️ Piste 3 : Fast Copy ParticleVertexCore (Layout parfait 36 octets)
+                    let mut core = p.core;
 
                     if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
-                        gpu_p.pos_x -= p.vel.x * factor;
-                        gpu_p.pos_y -= p.vel.y * factor;
+                        core.pos -= p.vel * factor;
                     }
 
                     // Assigne la luminosité calculée (x^4 via multiplication rapide sans libm powi)
-                    let l = p.life / p.max_life.max(0.0001);
+                    let l = core.life / core.max_life.max(0.0001);
                     let l2 = l * l;
-                    gpu_p.brightness = l2 * l2;
 
-                    gpu_slice[count] = gpu_p;
+                    gpu_slice[count] = ParticleGPU {
+                        core,
+                        brightness: l2 * l2,
+                    };
                     count += 1;
                 }
             }
@@ -251,7 +251,7 @@ impl RendererGraphics {
         if count > 0 {
             let write_size = (count * std::mem::size_of::<ParticleGPU>()) as isize;
             let offset_bytes = (offset * std::mem::size_of::<ParticleGPU>()) as isize;
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, offset_bytes, write_size);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
@@ -301,13 +301,13 @@ impl RendererGraphics {
         gl::DepthMask(gl::FALSE);
 
         // Active le shader de rendu des particules (seulement s'il n'est pas déjà actif)
-        if *active_shader != self.shader_program {
-            gl::UseProgram(self.shader_program);
-            *active_shader = self.shader_program;
+        if *active_shader != self.shader_program.raw() {
+            gl::UseProgram(self.shader_program.raw());
+            *active_shader = self.shader_program.raw();
         }
 
         // Lie le VAO correspondant aux particules
-        gl::BindVertexArray(self.vao);
+        gl::BindVertexArray(self.vao.raw());
 
         // Dessine les particules sous forme de points en décalant l'index de départ selon la section courante
         let first_vertex = (self.current_frame * self.max_particles_on_gpu) as i32;
@@ -346,10 +346,7 @@ impl RendererGraphics {
         // Libérer les buffers particules (unmap + delete) via la fonction partagée
         self.release_particle_buffers();
 
-        if self.shader_program != 0 {
-            gl::DeleteProgram(self.shader_program);
-            self.shader_program = 0;
-        }
+        self.shader_program.reset(0);
         debug!("Graphic Engine for Points Rendering closed and reset.");
     }
 
@@ -364,18 +361,14 @@ impl RendererGraphics {
 
         match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
             Ok(new_program) => {
-                // Supprimer l'ancien programme shader
-                if self.shader_program != 0 {
-                    gl::DeleteProgram(self.shader_program);
-                }
-
-                // Utiliser le nouveau programme
-                self.shader_program = new_program;
+                // Utiliser le nouveau programme (l'ancien est détruit par reset)
+                self.shader_program.reset(new_program);
 
                 // Lier le block uniform "GlobalData" au binding point 0
-                let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
+                let block_idx =
+                    gl::GetUniformBlockIndex(self.shader_program.raw(), cstr!("GlobalData"));
                 if block_idx != gl::INVALID_INDEX {
-                    gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                    gl::UniformBlockBinding(self.shader_program.raw(), block_idx, 0);
                 }
 
                 info!("Point rendering shaders reloaded successfully");
@@ -413,7 +406,7 @@ impl ParticleGraphicsRenderer for RendererGraphics {
     }
 
     fn get_shader_program(&self) -> u32 {
-        self.shader_program
+        self.shader_program.raw()
     }
 
     fn get_texture_id(&self) -> u32 {

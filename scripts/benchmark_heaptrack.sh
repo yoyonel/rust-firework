@@ -13,10 +13,14 @@ export LD_LIBRARY_PATH="$PWD/target/release:${LD_LIBRARY_PATH:-}"
 TMP_DIR=$(mktemp -d)
 export TMP_DIR
 
-# Nettoyage automatique du TMP_DIR à la sortie
-trap 'rm -rf "$TMP_DIR"' EXIT
+# Nettoyage automatique du TMP_DIR et des processus orphelins à la sortie
+cleanup() {
+	rm -rf "$TMP_DIR"
+	pkill -f "./target/release/fireworks_sim" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
 
-env TMP_DIR="$TMP_DIR" heaptrack --record-only ./target/release/fireworks_sim
+env TMP_DIR="$TMP_DIR" heaptrack --record-only ./target/release/fireworks_sim "${@:---max-frames 300 --timeout-secs 5}"
 
 HT_FILE=$(find . -maxdepth 1 -name "heaptrack.fireworks_sim.*.zst" | head -n 1)
 if [ -n "$HT_FILE" ] && [ -f "$HT_FILE" ]; then

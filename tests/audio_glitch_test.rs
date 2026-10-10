@@ -1,6 +1,8 @@
+#![allow(clippy::chunks_exact_to_as_chunks)]
+
 use fireworks_sim::audio_engine::effect_flags::AudioEffectFlags;
+use fireworks_sim::audio_engine::realtime_metrics::AudioRealtimeStats;
 use fireworks_sim::audio_engine::types::{AudioSoundType, Voice};
-use fireworks_sim::profiler::Profiler;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -96,13 +98,13 @@ fn test_dsp_no_glitches_under_normal_play() {
     };
     play_tx.send(req).unwrap();
 
-    let profiler = Profiler::new(10);
+    let stats = AudioRealtimeStats::new();
     let mut recorded_output = Vec::new();
 
     // Simule 20 blocs audio
     for _ in 0..20 {
         let mut buffer = vec![0.0f32; block_size * 2];
-        dsp.process_block(&mut buffer, 1.0, &profiler);
+        dsp.process_block(&mut buffer, 1.0, &stats);
         for frame in buffer.chunks_exact(2) {
             recorded_output.push([frame[0], frame[1]]);
         }
@@ -180,12 +182,12 @@ fn test_dsp_voice_stealing_glitch_limit() {
         })
         .unwrap();
 
-    let profiler = Profiler::new(10);
+    let stats = AudioRealtimeStats::new();
     let mut recorded_output = Vec::new();
 
     // Rendre un premier bloc
     let mut buffer = vec![0.0f32; block_size * 2];
-    dsp.process_block(&mut buffer, 1.0, &profiler);
+    dsp.process_block(&mut buffer, 1.0, &stats);
     for frame in buffer.chunks_exact(2) {
         recorded_output.push([frame[0], frame[1]]);
     }
@@ -210,7 +212,7 @@ fn test_dsp_voice_stealing_glitch_limit() {
 
     // Rendre le deuxième bloc (le vol a lieu ici)
     let mut buffer2 = vec![0.0f32; block_size * 2];
-    dsp.process_block(&mut buffer2, 1.0, &profiler);
+    dsp.process_block(&mut buffer2, 1.0, &stats);
     for frame in buffer2.chunks_exact(2) {
         recorded_output.push([frame[0], frame[1]]);
     }
@@ -278,13 +280,13 @@ fn test_block_processing_budget() {
         pending_requests: Vec::new(),
     };
 
-    let profiler = Profiler::new(10);
+    let stats = AudioRealtimeStats::new();
     let mut buffer = vec![0.0f32; block_size * 2];
 
     // Mesure le temps nécessaire pour calculer un bloc de 64 échantillons sous charge maximale
     let start = Instant::now();
     for _ in 0..100 {
-        dsp.process_block(&mut buffer, 1.0, &profiler);
+        dsp.process_block(&mut buffer, 1.0, &stats);
     }
     let duration = start.elapsed() / 100;
 

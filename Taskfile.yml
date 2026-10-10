@@ -209,6 +209,7 @@ tasks:
   # 🧪 TESTS & QUALITÉ
   # =========================================
   test:all:
+    aliases: [test]
     desc: "Lancement des tests unitaires"
     cmds:
       - echo "▶️  Lancement des tests unitaires..."
@@ -313,6 +314,7 @@ tasks:
         fi
 
   lint:all:
+    aliases: [lint]
     desc: "Vérification complète du code (fmt + clippy + python-lint + doc-lint)"
     deps: [lint:fmt, lint:clippy, lint:python, doc:lint]
 
@@ -330,6 +332,7 @@ tasks:
   # ⏱️ BENCHMARKS (Criterion.rs)
   # =========================================
   bench:all:
+    aliases: [bench]
     desc: "Lance tous les benchmarks Criterion (DSP + Binaural)"
     cmds:
       - echo "⏱️  Lancement de tous les benchmarks..."
@@ -418,6 +421,7 @@ tasks:
         fi
         echo "📊 Démarrage du serveur HTTP sur {{.URL}}"
         echo "   (Ctrl+C pour arrêter)"
+        trap "kill \$SERVER_PID 2>/dev/null || true" EXIT INT TERM
         cd "{{.CRITERION_DIR}}" && python3 -m http.server {{.PORT}} &
         SERVER_PID=$!
         sleep 0.5
@@ -438,7 +442,7 @@ tasks:
     desc: "Run Heaptrack memory allocation analysis"
     deps: [build:release]
     cmds:
-      - ./scripts/benchmark_heaptrack.sh
+      - ./scripts/benchmark_heaptrack.sh {{.CLI_ARGS}}
 
   profile:vtune:hotspots:
     desc: "Run Intel VTune CPU Hotspots analysis (Top 15 time-consuming functions)"
@@ -470,8 +474,16 @@ tasks:
         if ! command -v vale &>/dev/null && [ ! -f bin/vale ]; then
           echo "📥 Téléchargement de Vale CLI..."
           mkdir -p bin
-          curl -sSL https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz | tar -xzC bin vale
-          echo "✅ Vale CLI installé dans ./bin/vale"
+          TMP_TGZ=$(mktemp)
+          if curl -fSL --retry 3 --connect-timeout 10 --max-time 60 "https://github.com/errata-ai/vale/releases/download/v3.0.0/vale_3.0.0_Linux_64-bit.tar.gz" -o "$TMP_TGZ"; then
+            tar -xzf "$TMP_TGZ" -C bin vale && chmod +x bin/vale
+            rm -f "$TMP_TGZ"
+            echo "✅ Vale CLI installé dans ./bin/vale"
+          else
+            rm -f "$TMP_TGZ"
+            echo "⚠️ Échec téléchargement Vale CLI"
+            exit 1
+          fi
         fi
     status:
       - "test -f bin/vale || command -v vale"
@@ -486,11 +498,18 @@ tasks:
   doc:serve:
     desc: "Lance un serveur web local de documentation avec rechargement automatique (Ctrl+C pour arrêter)"
     vars:
-      PORT: "3000"
-      URL: "http://localhost:3000"
+      PORT: '{{.PORT | default ""}}'
     cmds:
-      - echo "📊 Démarrage du serveur mdBook sur {{.URL}}..."
-      - mdbook serve --port {{.PORT}} --open
+      - |
+        PORT="{{.PORT}}"
+        if [ -z "$PORT" ]; then
+          PORT=3000
+          while ss -tlpn 2>/dev/null | grep -q ":$PORT "; do
+            PORT=$((PORT + 1))
+          done
+        fi
+        echo "📊 Démarrage du serveur mdBook sur http://localhost:$PORT..."
+        mdbook serve --port "$PORT" --open
 
   doc:clean:
     desc: "Nettoie les fichiers de documentation compilés"
@@ -508,6 +527,7 @@ tasks:
 
 
   clean:all:
+    aliases: [clean]
     desc: "Nettoyage des artefacts"
     cmds:
       - echo "🧹 Nettoyage des artefacts..."
@@ -567,11 +587,11 @@ tasks:
       - echo "🚀 Lancement du simulateur en tâche de fond et capture Tracy (5s)..."
       - |
         bash -c '
-          vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim > /tmp/sim.log 2>&1 &
+          vblank_mode=0 __GL_SYNC_TO_VBLANK=0 ./scripts/run_gl_smart.sh ./target/release/fireworks_sim --deterministic-seed 42 --fixed-dt 0.016666 --disable-audio > /tmp/sim.log 2>&1 &
           SIM_PID=$!
           sleep 2
           echo "📊 Lancement de la capture Tracy (5s)..."
-          TRACY_CAP="${TRACY_CAPTURE_BIN:-$(command -v tracy-capture 2>/dev/null || echo /usr/local/bin/tracy-capture)}"
+          TRACY_CAP="${TRACY_CAPTURE_BIN:-$([ -x /home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture ] && echo /home/latty/Prog/__PERSO__/suckless-ogl/deps/tracy/capture/build/tracy-capture || command -v tracy-capture 2>/dev/null || echo /usr/local/bin/tracy-capture)}"
           "$TRACY_CAP" -f -o /tmp/fireworks.tracy -s 5
           echo "🧹 Arrêt du simulateur..."
           kill $SIM_PID 2>/dev/null || true
@@ -581,7 +601,7 @@ tasks:
         '
 
   bench:tracy-ratios:
-    desc: "Capture une trace Tracy et audite la dérive des ratios relatifs de temps de rendu par rapport à la baseline develop"
+    desc: "Capture une trace Tracy et audite en local la dérive des ratios relatifs de temps de rendu par rapport à la baseline develop"
     deps: [tracy:capture-headless]
     cmds:
       - ./scripts/analyze_tracy_ratios.sh /tmp/fireworks.tracy benches/baselines/tracy_ratios_develop.csv compare

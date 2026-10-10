@@ -1,20 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
-pub enum BlurMethod {
-    Gaussian = 0,
-    Kawase = 1,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
-pub enum ToneMappingMode {
-    Reinhard = 0,
-    ReinhardExtended = 1,
-    ACES = 2,
-    Uncharted2 = 3,
-    AgX = 4,
-    KhronosPBR = 5,
-}
+pub use crate::domain_contracts::{BlurMethod, ToneMappingMode};
 
 #[derive(Debug, Deserialize, Serialize, Clone, Copy, PartialEq)]
 pub struct RendererConfig {
@@ -34,10 +20,152 @@ pub struct RendererConfig {
     pub render_trails: bool,
     #[serde(default = "default_true")]
     pub render_explosions: bool,
+
+    // Master Volumetric Lighting Toggle
+    #[serde(default = "default_true")]
+    pub volumetric_lighting_enabled: bool,
+
+    // Volumetric Smoke Lighting (Participating Media)
+    #[serde(default = "default_true")]
+    pub smoke_lighting_enabled: bool,
+    #[serde(default = "default_smoke_scattering_intensity")]
+    pub smoke_scattering_intensity: f32,
+    #[serde(default = "default_smoke_ambient_flash")]
+    pub smoke_ambient_flash: f32,
+
+    // Volumetric Smoke Lighting Precomputed LUT (§Phase 1 Zero SQRT)
+    #[serde(default = "default_smoke_lighting_lut_enabled")]
+    pub smoke_lighting_lut_enabled: bool,
+
+    // Atmospheric Sky Haze (Background Participating Media)
+    #[serde(default = "default_true")]
+    pub sky_haze_enabled: bool,
+    #[serde(default = "default_sky_haze_intensity")]
+    pub sky_haze_intensity: f32,
+    #[serde(default = "default_sky_haze_ambient_flash")]
+    pub sky_haze_ambient_flash: f32,
+
+    // Post-Process Dither Anti-Banding (Interleaved Gradient Noise)
+    #[serde(default = "default_dither_enabled")]
+    pub dither_enabled: bool,
+    #[serde(default = "default_dither_strength")]
+    pub dither_strength: f32,
+
+    // Volumetric Lighting Temporal Stabilization (§5 ADR)
+    #[serde(default = "default_volumetric_lighting_hysteresis_enabled")]
+    pub volumetric_lighting_hysteresis_enabled: bool,
+    #[serde(default = "default_volumetric_lighting_fade_in_ms")]
+    pub volumetric_lighting_fade_in_ms: f32,
+    #[serde(default = "default_volumetric_lighting_radius")]
+    pub volumetric_lighting_radius: f32,
+    #[serde(default = "default_volumetric_lighting_decay_rate")]
+    pub volumetric_lighting_decay_rate: f32,
+    #[serde(default = "default_volumetric_lighting_radius_expansion")]
+    pub volumetric_lighting_radius_expansion: f32,
+    #[serde(default = "default_volumetric_lighting_flash_max_cap")]
+    pub volumetric_lighting_flash_max_cap: f32,
+    #[serde(default = "default_volumetric_lighting_debug")]
+    pub volumetric_lighting_debug: bool,
+
+    // Atmospheric Sky Haze (§4.2 ADR)
+    #[serde(default = "default_sky_haze_falloff")]
+    pub sky_haze_falloff: f32,
+
+    // Screen-Space Smoke Backlight (§4.1 ADR)
+    #[serde(default = "default_backlight_enabled")]
+    pub backlight_enabled: bool,
+    #[serde(default = "default_backlight_strength")]
+    pub backlight_strength: f32,
+
+    // Volumetric Smoke 3D Wrap Relief
+    #[serde(default = "default_smoke_wrap_relief")]
+    pub smoke_wrap_relief: f32,
+
+    // Spectral Afterglow (§4.4 ADR)
+    #[serde(default = "default_true")]
+    pub spectral_afterglow_enabled: bool,
+    #[serde(default = "default_spectral_afterglow_decay")]
+    pub spectral_afterglow_decay: f32,
 }
 
 fn default_true() -> bool {
     true
+}
+
+fn default_smoke_scattering_intensity() -> f32 {
+    constants::DEFAULT_SMOKE_SCATTERING_INTENSITY
+}
+
+fn default_smoke_ambient_flash() -> f32 {
+    constants::DEFAULT_SMOKE_AMBIENT_FLASH
+}
+
+fn default_smoke_lighting_lut_enabled() -> bool {
+    constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED
+}
+
+fn default_sky_haze_intensity() -> f32 {
+    constants::DEFAULT_SKY_HAZE_INTENSITY
+}
+
+fn default_sky_haze_ambient_flash() -> f32 {
+    constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH
+}
+
+fn default_dither_enabled() -> bool {
+    constants::DEFAULT_DITHER_ENABLED
+}
+
+fn default_dither_strength() -> f32 {
+    constants::DEFAULT_DITHER_STRENGTH
+}
+
+fn default_volumetric_lighting_hysteresis_enabled() -> bool {
+    constants::DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED
+}
+
+fn default_volumetric_lighting_fade_in_ms() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
+}
+
+fn default_volumetric_lighting_radius() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS
+}
+
+fn default_volumetric_lighting_decay_rate() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE
+}
+
+fn default_volumetric_lighting_radius_expansion() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION
+}
+
+fn default_volumetric_lighting_flash_max_cap() -> f32 {
+    constants::DEFAULT_VOLUMETRIC_FLASH_MAX_CAP
+}
+
+fn default_volumetric_lighting_debug() -> bool {
+    constants::DEFAULT_VOLUMETRIC_LIGHTING_DEBUG
+}
+
+fn default_sky_haze_falloff() -> f32 {
+    constants::DEFAULT_SKY_HAZE_FALLOFF
+}
+
+fn default_backlight_enabled() -> bool {
+    constants::DEFAULT_BACKLIGHT_ENABLED
+}
+
+fn default_backlight_strength() -> f32 {
+    constants::DEFAULT_BACKLIGHT_STRENGTH
+}
+
+fn default_smoke_wrap_relief() -> f32 {
+    constants::DEFAULT_SMOKE_WRAP_RELIEF
+}
+
+fn default_spectral_afterglow_decay() -> f32 {
+    constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY
 }
 
 use crate::renderer_engine::constants;
@@ -55,6 +183,31 @@ impl Default for RendererConfig {
             render_smoke: true,
             render_trails: true,
             render_explosions: true,
+            volumetric_lighting_enabled: constants::DEFAULT_VOLUMETRIC_LIGHTING_ENABLED,
+            smoke_lighting_enabled: constants::DEFAULT_SMOKE_LIGHTING_ENABLED,
+            smoke_scattering_intensity: constants::DEFAULT_SMOKE_SCATTERING_INTENSITY,
+            smoke_ambient_flash: constants::DEFAULT_SMOKE_AMBIENT_FLASH,
+            smoke_lighting_lut_enabled: constants::DEFAULT_SMOKE_LIGHTING_LUT_ENABLED,
+            sky_haze_enabled: constants::DEFAULT_SKY_HAZE_ENABLED,
+            sky_haze_intensity: constants::DEFAULT_SKY_HAZE_INTENSITY,
+            sky_haze_ambient_flash: constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH,
+            sky_haze_falloff: constants::DEFAULT_SKY_HAZE_FALLOFF,
+            dither_enabled: constants::DEFAULT_DITHER_ENABLED,
+            dither_strength: constants::DEFAULT_DITHER_STRENGTH,
+            volumetric_lighting_hysteresis_enabled:
+                constants::DEFAULT_VOLUMETRIC_LIGHTING_HYSTERESIS_ENABLED,
+            volumetric_lighting_fade_in_ms: constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS,
+            volumetric_lighting_radius: constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS,
+            volumetric_lighting_decay_rate: constants::DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE,
+            volumetric_lighting_radius_expansion:
+                constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION,
+            volumetric_lighting_flash_max_cap: constants::DEFAULT_VOLUMETRIC_FLASH_MAX_CAP,
+            volumetric_lighting_debug: constants::DEFAULT_VOLUMETRIC_LIGHTING_DEBUG,
+            backlight_enabled: constants::DEFAULT_BACKLIGHT_ENABLED,
+            backlight_strength: constants::DEFAULT_BACKLIGHT_STRENGTH,
+            smoke_wrap_relief: constants::DEFAULT_SMOKE_WRAP_RELIEF,
+            spectral_afterglow_enabled: constants::DEFAULT_SPECTRAL_AFTERGLOW_ENABLED,
+            spectral_afterglow_decay: constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY,
         }
     }
 }
@@ -76,6 +229,69 @@ impl RendererConfig {
     }
 }
 
+impl From<&RendererConfig> for crate::domain_contracts::RendererConfigSnapshot {
+    fn from(c: &RendererConfig) -> Self {
+        Self {
+            bloom_enabled: c.bloom_enabled,
+            bloom_intensity: c.bloom_intensity,
+            bloom_iterations: c.bloom_iterations,
+            bloom_downsample: c.bloom_downsample,
+            bloom_blur_method: c.bloom_blur_method,
+            tone_mapping_mode: c.tone_mapping_mode,
+            render_rockets: c.render_rockets,
+            render_smoke: c.render_smoke,
+            render_trails: c.render_trails,
+            render_explosions: c.render_explosions,
+            volumetric_lighting_enabled: c.volumetric_lighting_enabled,
+            smoke_lighting_enabled: c.smoke_lighting_enabled,
+            smoke_scattering_intensity: c.smoke_scattering_intensity,
+            smoke_ambient_flash: c.smoke_ambient_flash,
+            smoke_lighting_lut_enabled: c.smoke_lighting_lut_enabled,
+            sky_haze_enabled: c.sky_haze_enabled,
+            sky_haze_intensity: c.sky_haze_intensity,
+            sky_haze_ambient_flash: c.sky_haze_ambient_flash,
+            sky_haze_falloff: c.sky_haze_falloff,
+            dither_enabled: c.dither_enabled,
+            dither_strength: c.dither_strength,
+            volumetric_lighting_hysteresis_enabled: c.volumetric_lighting_hysteresis_enabled,
+            volumetric_lighting_fade_in_ms: c.volumetric_lighting_fade_in_ms,
+            volumetric_lighting_radius: c.volumetric_lighting_radius,
+            volumetric_lighting_decay_rate: c.volumetric_lighting_decay_rate,
+            volumetric_lighting_radius_expansion: c.volumetric_lighting_radius_expansion,
+            volumetric_lighting_flash_max_cap: c.volumetric_lighting_flash_max_cap,
+            volumetric_lighting_debug: c.volumetric_lighting_debug,
+            backlight_enabled: c.backlight_enabled,
+            backlight_strength: c.backlight_strength,
+            smoke_wrap_relief: c.smoke_wrap_relief,
+            spectral_afterglow_enabled: c.spectral_afterglow_enabled,
+            spectral_afterglow_decay: c.spectral_afterglow_decay,
+        }
+    }
+}
+
+impl crate::domain_contracts::RendererStateReader for RendererConfig {
+    #[inline(always)]
+    fn bloom_intensity(&self) -> f32 {
+        self.bloom_intensity
+    }
+    #[inline(always)]
+    fn exposure(&self) -> f32 {
+        1.0
+    }
+    #[inline(always)]
+    fn is_wireframe(&self) -> bool {
+        false
+    }
+    #[inline(always)]
+    fn vsync_enabled(&self) -> bool {
+        true
+    }
+    #[inline(always)]
+    fn config(&self) -> crate::domain_contracts::RendererConfigSnapshot {
+        self.into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -94,6 +310,64 @@ mod tests {
         assert!(config.render_smoke);
         assert!(config.render_trails);
         assert!(config.render_explosions);
+        assert!(config.volumetric_lighting_enabled);
+        assert!(config.smoke_lighting_enabled);
+        assert!(config.smoke_lighting_lut_enabled);
+        assert_eq!(
+            config.smoke_scattering_intensity,
+            constants::DEFAULT_SMOKE_SCATTERING_INTENSITY
+        );
+        assert_eq!(
+            config.smoke_ambient_flash,
+            constants::DEFAULT_SMOKE_AMBIENT_FLASH
+        );
+        assert!(config.sky_haze_enabled);
+        assert_eq!(
+            config.sky_haze_intensity,
+            constants::DEFAULT_SKY_HAZE_INTENSITY
+        );
+        assert_eq!(
+            config.sky_haze_ambient_flash,
+            constants::DEFAULT_SKY_HAZE_AMBIENT_FLASH
+        );
+        assert_eq!(config.sky_haze_falloff, constants::DEFAULT_SKY_HAZE_FALLOFF);
+        assert!(config.dither_enabled);
+        assert_eq!(config.dither_strength, constants::DEFAULT_DITHER_STRENGTH);
+        assert!(config.volumetric_lighting_hysteresis_enabled);
+        assert_eq!(
+            config.volumetric_lighting_fade_in_ms,
+            constants::DEFAULT_VOLUMETRIC_LIGHTING_FADE_IN_MS
+        );
+        assert_eq!(
+            config.volumetric_lighting_radius,
+            constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS
+        );
+        assert_eq!(
+            config.volumetric_lighting_decay_rate,
+            constants::DEFAULT_VOLUMETRIC_LIGHT_DECAY_RATE
+        );
+        assert_eq!(
+            config.volumetric_lighting_radius_expansion,
+            constants::DEFAULT_VOLUMETRIC_LIGHT_RADIUS_EXPANSION
+        );
+        assert_eq!(
+            config.volumetric_lighting_flash_max_cap,
+            constants::DEFAULT_VOLUMETRIC_FLASH_MAX_CAP
+        );
+        assert!(config.backlight_enabled);
+        assert_eq!(
+            config.backlight_strength,
+            constants::DEFAULT_BACKLIGHT_STRENGTH
+        );
+        assert_eq!(
+            config.smoke_wrap_relief,
+            constants::DEFAULT_SMOKE_WRAP_RELIEF
+        );
+        assert!(config.spectral_afterglow_enabled);
+        assert_eq!(
+            config.spectral_afterglow_decay,
+            constants::DEFAULT_SPECTRAL_AFTERGLOW_DECAY
+        );
     }
 
     #[test]
@@ -112,6 +386,29 @@ mod tests {
             render_smoke: true,
             render_trails: false,
             render_explosions: true,
+            volumetric_lighting_enabled: false,
+            smoke_lighting_enabled: false,
+            smoke_lighting_lut_enabled: false,
+            smoke_scattering_intensity: 2.5,
+            smoke_ambient_flash: 0.8,
+            sky_haze_enabled: false,
+            sky_haze_intensity: 1.2,
+            sky_haze_ambient_flash: 0.5,
+            sky_haze_falloff: 5.5,
+            dither_enabled: false,
+            dither_strength: 0.85,
+            volumetric_lighting_hysteresis_enabled: false,
+            volumetric_lighting_fade_in_ms: 75.0,
+            volumetric_lighting_radius: 220.0,
+            volumetric_lighting_decay_rate: 0.91,
+            volumetric_lighting_radius_expansion: 1.005,
+            volumetric_lighting_flash_max_cap: 0.60,
+            volumetric_lighting_debug: true,
+            backlight_enabled: false,
+            backlight_strength: 2.1,
+            smoke_wrap_relief: 0.55,
+            spectral_afterglow_enabled: false,
+            spectral_afterglow_decay: 0.95,
         };
 
         config.save_to_file(file_path)?;
@@ -127,7 +424,59 @@ mod tests {
         assert!(loaded.render_smoke);
         assert!(!loaded.render_trails);
         assert!(loaded.render_explosions);
-
+        assert!(!loaded.volumetric_lighting_enabled);
+        assert!(!loaded.smoke_lighting_enabled);
+        assert!(!loaded.smoke_lighting_lut_enabled);
+        assert_eq!(
+            loaded.smoke_scattering_intensity,
+            config.smoke_scattering_intensity
+        );
+        assert_eq!(loaded.smoke_ambient_flash, config.smoke_ambient_flash);
+        assert!(!loaded.sky_haze_enabled);
+        assert_eq!(loaded.sky_haze_intensity, config.sky_haze_intensity);
+        assert_eq!(loaded.sky_haze_ambient_flash, config.sky_haze_ambient_flash);
+        assert_eq!(loaded.sky_haze_falloff, config.sky_haze_falloff);
+        assert_eq!(loaded.dither_enabled, config.dither_enabled);
+        assert_eq!(loaded.dither_strength, config.dither_strength);
+        assert_eq!(
+            loaded.volumetric_lighting_hysteresis_enabled,
+            config.volumetric_lighting_hysteresis_enabled
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_fade_in_ms,
+            config.volumetric_lighting_fade_in_ms
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_radius,
+            config.volumetric_lighting_radius
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_decay_rate,
+            config.volumetric_lighting_decay_rate
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_radius_expansion,
+            config.volumetric_lighting_radius_expansion
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_flash_max_cap,
+            config.volumetric_lighting_flash_max_cap
+        );
+        assert_eq!(
+            loaded.volumetric_lighting_debug,
+            config.volumetric_lighting_debug
+        );
+        assert_eq!(loaded.backlight_enabled, config.backlight_enabled);
+        assert_eq!(loaded.backlight_strength, config.backlight_strength);
+        assert_eq!(loaded.smoke_wrap_relief, config.smoke_wrap_relief);
+        assert_eq!(
+            loaded.spectral_afterglow_enabled,
+            config.spectral_afterglow_enabled
+        );
+        assert_eq!(
+            loaded.spectral_afterglow_decay,
+            config.spectral_afterglow_decay
+        );
         Ok(())
     }
 

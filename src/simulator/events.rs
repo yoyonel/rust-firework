@@ -16,11 +16,11 @@ where
     W: WindowEngine,
 {
     pub(crate) fn process_audio_debug_events(&mut self) {
-        self.audio_events_buf.clear();
+        self.audio_diagnostics.audio_events_buf.clear();
         self.audio_engine
-            .pop_debug_events(&mut self.audio_events_buf);
+            .pop_debug_events(&mut self.audio_diagnostics.audio_events_buf);
 
-        let mut events = std::mem::take(&mut self.audio_events_buf);
+        let mut events = std::mem::take(&mut self.audio_diagnostics.audio_events_buf);
         for evt in events.drain(..) {
             match evt {
                 crate::audio_engine::types::AudioDebugEvent::Sent {
@@ -29,7 +29,7 @@ where
                     entity_id,
                     sent_at,
                 } => {
-                    self.audio_debug_records.push_back(
+                    self.audio_diagnostics.push_record(
                         crate::audio_engine::types::AudioDebugRecord {
                             request_id,
                             sound_type,
@@ -44,15 +44,12 @@ where
                             drop_reason: None,
                         },
                     );
-                    if self.audio_debug_records.len() > 100 {
-                        self.audio_debug_records.pop_front();
-                    }
                     match sound_type {
                         crate::audio_engine::types::AudioSoundType::Rocket => {
-                            self.audio_sent_rocket += 1;
+                            self.audio_diagnostics.audio_sent_rocket += 1;
                         }
                         crate::audio_engine::types::AudioSoundType::Explosion => {
-                            self.audio_sent_explosion += 1;
+                            self.audio_diagnostics.audio_sent_explosion += 1;
                         }
                     }
                 }
@@ -60,7 +57,8 @@ where
                     request_id,
                     received_at,
                 } => {
-                    if let Some(rec) = self
+                    let info = if let Some(rec) = self
+                        .audio_diagnostics
                         .audio_debug_records
                         .iter_mut()
                         .find(|r| r.request_id == request_id)
@@ -68,14 +66,18 @@ where
                         rec.received_at = Some(received_at);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Received;
                         let latency = received_at.duration_since(rec.sent_at);
-                        self.latency_dispatch_sum += latency;
-                        self.latency_dispatch_count += 1;
-                        match rec.sound_type {
+                        Some((rec.sound_type, latency))
+                    } else {
+                        None
+                    };
+                    if let Some((sound_type, latency)) = info {
+                        self.audio_diagnostics.record_dispatch_latency(latency);
+                        match sound_type {
                             crate::audio_engine::types::AudioSoundType::Rocket => {
-                                self.audio_received_rocket += 1;
+                                self.audio_diagnostics.audio_received_rocket += 1;
                             }
                             crate::audio_engine::types::AudioSoundType::Explosion => {
-                                self.audio_received_explosion += 1;
+                                self.audio_diagnostics.audio_received_explosion += 1;
                             }
                         }
                     }
@@ -85,7 +87,8 @@ where
                     started_at,
                     voice_index,
                 } => {
-                    if let Some(rec) = self
+                    let info = if let Some(rec) = self
+                        .audio_diagnostics
                         .audio_debug_records
                         .iter_mut()
                         .find(|r| r.request_id == request_id)
@@ -94,54 +97,35 @@ where
                         rec.voice_index = Some(voice_index);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Playing;
                         let latency = started_at.duration_since(rec.sent_at);
-                        self.latency_play_sum += latency;
-                        self.latency_play_count += 1;
-                        match rec.sound_type {
+                        Some((rec.sound_type, rec.entity_id, latency))
+                    } else {
+                        None
+                    };
+                    if let Some((sound_type, entity_id, latency)) = info {
+                        self.audio_diagnostics.record_play_latency(latency);
+                        match sound_type {
                             crate::audio_engine::types::AudioSoundType::Rocket => {
-                                self.audio_played_rocket += 1;
+                                self.audio_diagnostics.audio_played_rocket += 1;
                                 // Sync metrics calculation for Rocket launch
-                                if let Some(spawn_time) =
-                                    self.phys_launch_times.remove(&rec.entity_id)
+                                if let Some(diff_ms) = self
+                                    .sync_telemetry
+                                    .record_audio_started_launch(entity_id, started_at)
                                 {
-                                    let diff_ms = if started_at >= spawn_time {
-                                        started_at.duration_since(spawn_time).as_secs_f32() * 1000.0
-                                    } else {
-                                        spawn_time.duration_since(started_at).as_secs_f32()
-                                            * -1000.0
-                                    };
-                                    self.sync_launch_sum += diff_ms as f64;
-                                    self.sync_launch_count += 1;
                                     self.profiler.record_metric("sync_launch_ms", diff_ms);
-
                                     // Ajustement dynamique
                                     self.adjust_launch_anticipation_ms(diff_ms);
-                                } else {
-                                    self.audio_start_launch_times
-                                        .insert(rec.entity_id, started_at);
                                 }
                             }
                             crate::audio_engine::types::AudioSoundType::Explosion => {
-                                self.audio_played_explosion += 1;
+                                self.audio_diagnostics.audio_played_explosion += 1;
                                 // Sync metrics calculation for Explosion
-                                if let Some(explode_time) =
-                                    self.phys_explosion_times.remove(&rec.entity_id)
+                                if let Some(diff_ms) = self
+                                    .sync_telemetry
+                                    .record_audio_started_explosion(entity_id, started_at)
                                 {
-                                    let diff_ms = if started_at >= explode_time {
-                                        started_at.duration_since(explode_time).as_secs_f32()
-                                            * 1000.0
-                                    } else {
-                                        explode_time.duration_since(started_at).as_secs_f32()
-                                            * -1000.0
-                                    };
-                                    self.sync_explosion_sum += diff_ms as f64;
-                                    self.sync_explosion_count += 1;
                                     self.profiler.record_metric("sync_explosion_ms", diff_ms);
-
                                     // Ajustement dynamique
                                     self.adjust_explosion_anticipation_ms(diff_ms);
-                                } else {
-                                    self.audio_start_explosion_times
-                                        .insert(rec.entity_id, started_at);
                                 }
                             }
                         }
@@ -152,7 +136,8 @@ where
                     dropped_at,
                     reason,
                 } => {
-                    if let Some(rec) = self
+                    let info = if let Some(rec) = self
+                        .audio_diagnostics
                         .audio_debug_records
                         .iter_mut()
                         .find(|r| r.request_id == request_id)
@@ -160,26 +145,27 @@ where
                         rec.dropped_at = Some(dropped_at);
                         rec.drop_reason = Some(reason);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Dropped;
-
+                        Some((rec.sound_type, rec.entity_id))
+                    } else {
+                        None
+                    };
+                    if let Some((sound_type, entity_id)) = info {
                         // Avoid memory leaks in tracking tables if sound is dropped
-                        self.phys_launch_times.remove(&rec.entity_id);
-                        self.phys_explosion_times.remove(&rec.entity_id);
-                        self.audio_start_launch_times.remove(&rec.entity_id);
-                        self.audio_start_explosion_times.remove(&rec.entity_id);
+                        self.sync_telemetry.purge_dropped(entity_id);
 
-                        match rec.sound_type {
+                        match sound_type {
                             crate::audio_engine::types::AudioSoundType::Rocket => {
-                                self.audio_dropped_rocket += 1;
+                                self.audio_diagnostics.audio_dropped_rocket += 1;
                             }
                             crate::audio_engine::types::AudioSoundType::Explosion => {
-                                self.audio_dropped_explosion += 1;
+                                self.audio_diagnostics.audio_dropped_explosion += 1;
                             }
                         }
                         log::warn!(
                             "⚠️ AUDIO DROPPED: request #{} ({:?}) for entity {} was dropped: {}",
                             request_id,
-                            rec.sound_type,
-                            rec.entity_id,
+                            sound_type,
+                            entity_id,
                             reason
                         );
                     }
@@ -188,19 +174,25 @@ where
                     request_id,
                     completed_at,
                 } => {
-                    if let Some(rec) = self
+                    let sound_type = if let Some(rec) = self
+                        .audio_diagnostics
                         .audio_debug_records
                         .iter_mut()
                         .find(|r| r.request_id == request_id)
                     {
                         rec.completed_at = Some(completed_at);
                         rec.status = crate::audio_engine::types::AudioPlayStatus::Completed;
-                        match rec.sound_type {
+                        Some(rec.sound_type)
+                    } else {
+                        None
+                    };
+                    if let Some(sound_type) = sound_type {
+                        match sound_type {
                             crate::audio_engine::types::AudioSoundType::Rocket => {
-                                self.audio_completed_rocket += 1;
+                                self.audio_diagnostics.audio_completed_rocket += 1;
                             }
                             crate::audio_engine::types::AudioSoundType::Explosion => {
-                                self.audio_completed_explosion += 1;
+                                self.audio_diagnostics.audio_completed_explosion += 1;
                             }
                         }
                     }
@@ -208,7 +200,7 @@ where
                 _ => {}
             }
         }
-        self.audio_events_buf = events;
+        self.audio_diagnostics.audio_events_buf = events;
     }
 
     pub(crate) fn handle_window_events(&mut self) -> (bool, bool) {
@@ -224,6 +216,17 @@ where
                 glfw::WindowEvent::Key(Key::Escape, _, Action::Press, _) => {
                     self.window_engine.set_should_close(true);
                 }
+                glfw::WindowEvent::Key(Key::Space, _, Action::Press, _) if !self.console.open => {
+                    let imgui_capturing = self
+                        .window_engine
+                        .get_imgui_system_mut()
+                        .context
+                        .io()
+                        .want_capture_keyboard;
+                    if !imgui_capturing {
+                        self.toggle_pause();
+                    }
+                }
                 glfw::WindowEvent::Key(Key::R, _, Action::Press, _) if !self.console.open => {
                     reload_config = true;
                 }
@@ -234,7 +237,8 @@ where
                     self.toggle_fullscreen();
                 }
                 glfw::WindowEvent::Key(Key::F3, _, Action::Press, _) => {
-                    self.show_audio_diagnostic = !self.show_audio_diagnostic;
+                    self.audio_diagnostics.show_audio_diagnostic =
+                        !self.audio_diagnostics.show_audio_diagnostic;
                     self.update_cursor_mode();
                 }
                 glfw::WindowEvent::Key(Key::F4, _, Action::Press, _) => {
@@ -254,7 +258,7 @@ where
             );
 
             if self.console.open
-                || self.show_audio_diagnostic
+                || self.audio_diagnostics.show_audio_diagnostic
                 || self.gui_settings.open
                 || !is_key_event
             {
@@ -345,7 +349,7 @@ where
     pub(crate) fn update_cursor_mode(&mut self) {
         let cursor_mode = if self.window_engine.is_rocket_cursor_enabled()
             || self.console.open
-            || self.show_audio_diagnostic
+            || self.audio_diagnostics.show_audio_diagnostic
             || self.gui_settings.open
         {
             glfw::CursorMode::Normal
@@ -396,6 +400,9 @@ where
             .tonemapping_comparison_mode
             .load(std::sync::atomic::Ordering::Relaxed);
         self.renderer_engine.bloom_pass_mut().comparison_mode = comparison_active;
+
+        // Sync simulation pause state to renderer to freeze lighting evolution during pause
+        self.renderer_engine.set_simulation_paused(self.paused);
     }
 
     pub(crate) fn update_frame_timing(&mut self) -> f32 {
@@ -407,16 +414,17 @@ where
         // Instant FPS for sampling
         let fps = if delta > 0.0 { 1.0 / delta } else { 0.0 };
 
-        if self.sampler.should_sample(delta) {
-            self.sampled_fps.push(fps);
+        if self.fps_metrics.sampler.should_sample(delta) {
+            self.fps_metrics.sampled_fps.push(fps);
         }
 
         // Calculate averages
         let alpha = 0.15;
-        self.fps_avg = alpha * fps + (1.0 - alpha) * self.fps_avg;
+        self.fps_metrics.fps_avg = alpha * fps + (1.0 - alpha) * self.fps_metrics.fps_avg;
 
         let n_frames = 100;
-        self.fps_avg_iter = (self.fps_avg_iter * (n_frames - 1) as f32 + fps) / n_frames as f32;
+        self.fps_metrics.fps_avg_iter =
+            (self.fps_metrics.fps_avg_iter * (n_frames - 1) as f32 + fps) / n_frames as f32;
 
         delta
     }

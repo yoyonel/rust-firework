@@ -14,4 +14,9 @@ pub trait RendererEngine {
     fn sync_bloom_config(&mut self, _config: &RendererConfig) {
         // Default: no-op for test mocks
     }
+
+    /// Synchronizes physics/simulation paused state to freeze lighting evolution during pause
+    fn set_simulation_paused(&mut self, _paused: bool) {
+        // Default: no-op for test mocks
+    }
 }

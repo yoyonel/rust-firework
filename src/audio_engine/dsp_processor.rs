@@ -1,10 +1,8 @@
-// Dans src/audio_engine/dsp_processor.rs
-
 use crate::audio_engine::constants;
 use crate::audio_engine::effect_flags::{fx_enabled, AudioEffect, AudioEffectFlags};
+use crate::audio_engine::realtime_metrics::AudioRealtimeStats;
 use crate::audio_engine::types::{PlayRequest, Voice};
 use crate::audio_engine::{AudioBlock, DopplerEvent, SafeWavWriter};
-use crate::profiler::Profiler;
 use crate::AudioEngineSettings;
 use crossbeam_channel::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
@@ -150,13 +148,19 @@ fn fast_tanh(x: f32) -> f32 {
 impl DspProcessor {
     /// Point d'entrée principal du callback CPAL
     #[inline(always)]
-    pub fn process_block(&mut self, data: &mut [f32], global_gain: f32, profiler: &Profiler) {
+    pub fn process_block(
+        &mut self,
+        data: &mut [f32],
+        global_gain: f32,
+        stats: &AudioRealtimeStats,
+    ) {
         let start_time = Instant::now();
-        let _audio_frame_guard = profiler.measure("audio_frame");
         let frames = data.len() / 2;
 
         if frames > self.acc.len() {
-            log::error!("Buffer under-allocated! Requested {} frames", frames);
+            stats
+                .buffer_under_allocated_count
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             return;
         }
 
@@ -168,22 +172,20 @@ impl DspProcessor {
         self.acc[..frames].fill([0.0; 2]);
 
         // 2. Traitements Lock-Free
-        self.consume_requests(frames, profiler);
-        self.process_doppler(fx_mask, profiler);
+        self.consume_requests(frames);
+        self.process_doppler(fx_mask);
 
         // 3. Rendu DSP (Isolé dans Hotspot via #[inline(never)])
-        self.process_dsp(frames, fx_mask, profiler);
+        self.process_dsp(frames, fx_mask);
 
         // 3.5. Réverbération spatiale globale O(1) sur le bus accumulé
         if fx_enabled(fx_mask, AudioEffect::SpatialReverb) {
-            let _reverb_guard = profiler.measure("spatial_reverb");
             self.spatial_reverb.process_block(&mut self.acc, frames);
         }
 
         // 4. Finalisation et monitoring (Soft clipping isolé dans Hotspot)
-        self.write_cpal_buffer(data, frames, global_gain, fx_mask, profiler);
-        self.export_wav(data, frames);
-        self.log_metrics(profiler);
+        self.write_cpal_buffer(data, frames, global_gain, fx_mask);
+        self.export_wav(data, frames, stats);
 
         self.current_sample_clock += frames as u64;
         self.sample_clock.store(
@@ -193,9 +195,11 @@ impl DspProcessor {
 
         let elapsed_us = start_time.elapsed().as_micros() as u64;
         let budget_us = ((frames as f64 / self.sample_rate as f64) * 1_000_000.0) as u64;
+        let active_voices = self.voices.iter().filter(|v| v.active).count();
+
+        stats.record_block(elapsed_us, budget_us, active_voices);
 
         if let Some(debug_tx) = &self.debug_tx {
-            let active_voices = self.voices.iter().filter(|v| v.active).count();
             let _ = debug_tx.try_send(
                 crate::audio_engine::types::AudioDebugEvent::BlockProcessed {
                     elapsed_us,
@@ -205,25 +209,22 @@ impl DspProcessor {
             );
 
             if elapsed_us > budget_us {
-                log::warn!(
-                    "⚠️ CPU Audio Underrun detected: block took {} us (budget: {} us)",
-                    elapsed_us,
-                    budget_us
-                );
-                if let Err(e) =
+                if let Err(_e) =
                     debug_tx.try_send(crate::audio_engine::types::AudioDebugEvent::Underrun {
                         elapsed_us,
                         budget_us,
                     })
                 {
-                    log::error!("Failed to send Underrun event: {:?}", e);
+                    stats
+                        .underrun_send_error_count
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 }
             }
         }
     }
 
     #[inline(always)]
-    pub fn consume_requests(&mut self, frames: usize, profiler: &Profiler) {
+    pub fn consume_requests(&mut self, frames: usize) {
         crate::tracy_zone!("audio::consume_requests", 0x00FF00);
 
         let fx_mask = self.effect_flags.load();
@@ -308,12 +309,10 @@ impl DspProcessor {
                 start_offset,
                 fx_mask,
                 listener_pos,
-                profiler,
             );
         }
 
         let nb_actives_voices = self.voices.iter().filter(|v| v.active).count();
-        profiler.record_metric("nb_actives_voices", nb_actives_voices);
         crate::tracy_plot!("Audio: Active Voices", nb_actives_voices as f64);
     }
 
@@ -328,7 +327,6 @@ impl DspProcessor {
         start_offset: usize,
         fx_mask: u32,
         listener_pos: glam::Vec2,
-        profiler: &Profiler,
     ) {
         let mut selected_voice_idx = None;
         let mut steal_reason = None;
@@ -401,7 +399,6 @@ impl DspProcessor {
             v.start_offset = start_offset;
             let now = Instant::now();
             let latency = now.duration_since(req.sent_at);
-            profiler.record_metric("audio latency", latency);
             crate::tracy_plot!("Audio: Latency (ms)", latency.as_secs_f64() * 1000.0);
 
             if let Some(debug_tx) = debug_tx {
@@ -425,7 +422,7 @@ impl DspProcessor {
     }
 
     #[inline(always)]
-    fn process_doppler(&mut self, fx_mask: u32, profiler: &Profiler) {
+    fn process_doppler(&mut self, fx_mask: u32) {
         // Court-circuit si le Doppler est désactivé globalement
         if !fx_enabled(fx_mask, AudioEffect::Doppler) {
             // Remise à 1.0 du taux de lecture pour les voix dynamiques, pour éviter
@@ -467,7 +464,6 @@ impl DspProcessor {
                     crate::tracy_plot!("Audio: Doppler Rate (alpha)", v.playback_rate as f64);
                 }
             }
-            profiler.record_metric("doppler_events", events_received_in_block);
             crate::tracy_plot!(
                 "Audio: Doppler Events/Block",
                 events_received_in_block as f64
@@ -476,27 +472,21 @@ impl DspProcessor {
     }
 
     #[inline(always)]
-    fn process_dsp(&mut self, frames: usize, fx_mask: u32, profiler: &Profiler) {
+    fn process_dsp(&mut self, frames: usize, fx_mask: u32) {
         if fx_enabled(fx_mask, AudioEffect::SpatialBus) {
-            self.process_dsp_spatial_bus(frames, fx_mask, profiler);
+            self.process_dsp_spatial_bus(frames, fx_mask);
         } else {
-            self.process_dsp_legacy(frames, fx_mask, profiler);
+            self.process_dsp_legacy(frames, fx_mask);
         }
     }
 
     /// 🎯 BOÎTE HOTSPOT 1B : Rendu ultra-rapide par Bus Spatial 2D (Ambisonics 2D / Harmoniques Circulaires W, X, Y)
     /// Pré-accumule les sources dans un bus 3 canaux ultra-léger (3 mults/sample) avant de décoder une seule fois en Stéréo.
     #[inline(never)]
-    fn process_dsp_spatial_bus(&mut self, frames: usize, fx_mask: u32, profiler: &Profiler) {
-        let _guard = profiler.measure("process_active_voices_bus");
+    fn process_dsp_spatial_bus(&mut self, frames: usize, fx_mask: u32) {
         crate::tracy_zone!("audio::process_dsp_spatial_bus", 0xAA00FF);
 
         if frames > self.bus_w.len() || frames > self.bus_x.len() {
-            log::error!(
-                "Buffer bus_w/bus_x under-allocated! Requested {} frames, available {}",
-                frames,
-                self.bus_w.len()
-            );
             return;
         }
 
@@ -655,7 +645,6 @@ impl DspProcessor {
 
         // Décodage final du Bus Spatial (W, X) vers la sortie Stéréo (L, R)
         if fx_enabled(fx_mask, AudioEffect::HrtfBus) {
-            let _hrtf_guard = profiler.measure("hrtf_bus_convolver");
             self.hrtf_convolver
                 .process_bus(bus_w_slice, bus_x_slice, &mut self.acc, frames);
         } else {
@@ -673,8 +662,7 @@ impl DspProcessor {
     /// 🎯 BOÎTE HOTSPOT 1A : Traitement DSP classique legacy par bloc et par voix (LERP + 3D Binaural)
     /// L'annotation #[inline(never)] garantit que ce bloc sera visible individuellement dans perf.
     #[inline(never)]
-    fn process_dsp_legacy(&mut self, frames: usize, fx_mask: u32, profiler: &Profiler) {
-        let _guard = profiler.measure("process_active_voices");
+    fn process_dsp_legacy(&mut self, frames: usize, fx_mask: u32) {
         crate::tracy_zone!("audio::process_dsp", 0xAA00FF);
 
         for v in self.voices.iter_mut() {
@@ -823,56 +811,58 @@ impl DspProcessor {
         frames: usize,
         global_gain: f32,
         fx_mask: u32,
-        profiler: &Profiler,
     ) {
-        profiler.profile_block("write_cpal_buffer", || {
-            crate::tracy_zone!("audio::soft_clipping", 0xFF5500);
-            let acc_slice = &self.acc[..frames];
-            let data_slice = &mut data[..frames * 2];
+        crate::tracy_zone!("audio::soft_clipping", 0xFF5500);
+        let acc_slice = &self.acc[..frames];
+        let data_slice = &mut data[..frames * 2];
 
-            if fx_enabled(fx_mask, AudioEffect::Normalization) {
-                // Saturation douce via fast_tanh polynomial Padé (évite tout appel libc::tanhf)
-                for i in 0..frames {
-                    let sample = acc_slice[i];
-                    data_slice[2 * i] = fast_tanh(sample[0] * global_gain);
-                    data_slice[2 * i + 1] = fast_tanh(sample[1] * global_gain);
-                }
-            } else {
-                // Bypass : pas de gain global, clampage linéaire simple [-1.0, 1.0]
-                for i in 0..frames {
-                    let sample = acc_slice[i];
-                    data_slice[2 * i] = sample[0].clamp(-1.0, 1.0);
-                    data_slice[2 * i + 1] = sample[1].clamp(-1.0, 1.0);
-                }
+        if fx_enabled(fx_mask, AudioEffect::Normalization) {
+            // Saturation douce via fast_tanh polynomial Padé (évite tout appel libc::tanhf)
+            for i in 0..frames {
+                let sample = acc_slice[i];
+                data_slice[2 * i] = fast_tanh(sample[0] * global_gain);
+                data_slice[2 * i + 1] = fast_tanh(sample[1] * global_gain);
             }
-        });
+        } else {
+            // Bypass : pas de gain global, clampage linéaire simple [-1.0, 1.0]
+            for i in 0..frames {
+                let sample = acc_slice[i];
+                data_slice[2 * i] = sample[0].clamp(-1.0, 1.0);
+                data_slice[2 * i + 1] = sample[1].clamp(-1.0, 1.0);
+            }
+        }
     }
 
     #[inline(always)]
-    fn export_wav(&mut self, data: &[f32], frames: usize) {
+    fn export_wav(&mut self, data: &[f32], frames: usize, stats: &AudioRealtimeStats) {
         if let Some(writer_arc) = &self.export_writer {
             self.export_buffer.clear();
             for i in 0..frames {
                 self.export_buffer.push([data[2 * i], data[2 * i + 1]]);
             }
 
+            let frames_vec = std::mem::take(&mut self.export_buffer);
             let block = AudioBlock {
                 index: self.block_index,
-                frames: self.export_buffer.clone(),
+                frames: frames_vec,
             };
             self.block_index += 1;
 
             if let Ok(writer) = writer_arc.try_lock() {
-                writer.push_block(block);
+                if !writer.try_push_block(block) {
+                    stats
+                        .dropped_blocks
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+                self.export_buffer = writer
+                    .try_recycle_buffer()
+                    .unwrap_or_else(|| Vec::with_capacity(frames));
+            } else {
+                stats
+                    .dropped_blocks
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                self.export_buffer = Vec::with_capacity(frames);
             }
-        }
-    }
-
-    #[inline(always)]
-    fn log_metrics(&mut self, profiler: &Profiler) {
-        if self.last_log.elapsed() >= self.log_interval {
-            crate::log_metrics!(profiler);
-            self.last_log = Instant::now();
         }
     }
 }

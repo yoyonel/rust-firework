@@ -2,6 +2,7 @@ use log::{debug, info};
 
 use crate::cstr;
 use crate::physic_engine::{ParticleType, PhysicEngineIterator};
+use crate::renderer_engine::gl_resource::{GlBuffer, GlProgram, GlTexture, GlVao};
 use crate::renderer_engine::shader::compile_shader_program_from_files;
 use crate::renderer_engine::types::ParticleGPU;
 use crate::utils::human_bytes::HumanBytes;
@@ -13,16 +14,16 @@ const VERTEX_SHADER_PATH: &str = constants::SHADER_INSTANCED_QUAD_VERTEX_PATH;
 const FRAGMENT_SHADER_PATH: &str = constants::SHADER_INSTANCED_QUAD_FRAGMENT_PATH;
 
 pub struct RendererGraphicsInstanced {
-    vaos: [u32; 3],
-    vbo_particles: u32,
-    vbo_quad: u32,
+    vaos: [GlVao; 3],
+    vbo_particles: GlBuffer,
+    vbo_quad: GlBuffer,
 
     mapped_ptr: *mut ParticleGPU,
 
-    shader_program: u32,
+    shader_program: GlProgram,
     // Shader
     loc_tex: i32,
-    texture_id: u32,
+    texture_id: GlTexture,
     tex_ratio: f32, // Stocke le ratio de texture pour le reload
 
     max_particles_on_gpu: usize,
@@ -43,26 +44,28 @@ impl RendererGraphicsInstanced {
     ) -> Self {
         let shader_program =
             unsafe { compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) };
+        let shader_program = GlProgram::from_raw(shader_program);
 
-        let loc_tex = unsafe { gl::GetUniformLocation(shader_program, cstr!("uTexture")) };
+        let loc_tex = unsafe { gl::GetUniformLocation(shader_program.raw(), cstr!("uTexture")) };
 
         let texture_id =
             crate::renderer_engine::utils::texture::create_gl_texture_from_data(texture_data);
+        let texture_id = GlTexture::from_raw(texture_id);
         let tex_width = texture_data.width;
         let tex_height = texture_data.height;
         unsafe {
-            gl::UseProgram(shader_program);
+            gl::UseProgram(shader_program.raw());
 
             // Lier le block uniform "GlobalData" au binding point 0
-            let block_idx = gl::GetUniformBlockIndex(shader_program, cstr!("GlobalData"));
+            let block_idx = gl::GetUniformBlockIndex(shader_program.raw(), cstr!("GlobalData"));
             if block_idx != gl::INVALID_INDEX {
-                gl::UniformBlockBinding(shader_program, block_idx, 0);
+                gl::UniformBlockBinding(shader_program.raw(), block_idx, 0);
             }
 
             gl::Uniform1i(loc_tex, 0);
 
-            label_gl_object!(gl::PROGRAM, shader_program, "Shader_InstancedQuad");
-            label_gl_object!(gl::TEXTURE, texture_id, "Tex_Rocket_Sprite");
+            label_gl_object!(gl::PROGRAM, shader_program.raw(), "Shader_InstancedQuad");
+            label_gl_object!(gl::TEXTURE, texture_id.raw(), "Tex_Rocket_Sprite");
         }
 
         // VAO/VBO setup
@@ -105,23 +108,16 @@ impl RendererGraphicsInstanced {
         // Unmap the persistent buffer BEFORE deleting it (required by OpenGL spec /
         // ARB_buffer_storage): deleting a mapped buffer is undefined behavior.
         // Note: vbo_quad is a static (non-mapped) buffer; no unmap needed for it.
-        if !self.mapped_ptr.is_null() && self.vbo_particles != 0 {
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+        if !self.mapped_ptr.is_null() && self.vbo_particles.raw() != 0 {
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::UnmapBuffer(gl::ARRAY_BUFFER);
             self.mapped_ptr = std::ptr::null_mut();
         }
-        if self.vaos[0] != 0 {
-            gl::DeleteVertexArrays(3, self.vaos.as_ptr());
-            self.vaos = [0; 3];
+        for vao in self.vaos.iter_mut() {
+            vao.reset(0);
         }
-        if self.vbo_particles != 0 {
-            gl::DeleteBuffers(1, &self.vbo_particles);
-            self.vbo_particles = 0;
-        }
-        if self.vbo_quad != 0 {
-            gl::DeleteBuffers(1, &self.vbo_quad);
-            self.vbo_quad = 0;
-        }
+        self.vbo_particles.reset(0);
+        self.vbo_quad.reset(0);
     }
 
     /// Recrée les buffers GPU avec une nouvelle taille maximale.
@@ -205,19 +201,17 @@ impl RendererGraphicsInstanced {
         physic.for_each_particle_slice_of_type(self.particle_type, &mut |slice| {
             for p in slice {
                 if count < self.max_particles_on_gpu {
-                    // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
-                    let src_ptr =
-                        p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
-                    let mut gpu_p = *src_ptr;
+                    // ⏱️ Piste 3 : Fast Copy ParticleVertexCore (Layout parfait 36 octets)
+                    let mut core = p.core;
 
                     if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
-                        gpu_p.pos_x -= p.vel.x * factor;
-                        gpu_p.pos_y -= p.vel.y * factor;
+                        core.pos -= p.vel * factor;
                     }
 
-                    gpu_p.brightness = 0.0; // Bloom disabled for rockets
-
-                    gpu_slice[count] = gpu_p;
+                    gpu_slice[count] = ParticleGPU {
+                        core,
+                        brightness: 0.0, // Bloom disabled for rockets
+                    };
                     count += 1;
                 }
             }
@@ -227,7 +221,7 @@ impl RendererGraphicsInstanced {
         if count > 0 {
             let write_size = (count * std::mem::size_of::<ParticleGPU>()) as isize;
             let offset_bytes = (offset * std::mem::size_of::<ParticleGPU>()) as isize;
-            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles);
+            gl::BindBuffer(gl::ARRAY_BUFFER, self.vbo_particles.raw());
             gl::FlushMappedBufferRange(gl::ARRAY_BUFFER, offset_bytes, write_size);
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
@@ -279,19 +273,19 @@ impl RendererGraphicsInstanced {
         gl::DepthMask(gl::FALSE);
 
         // Active le shader de rendu des particules (seulement s'il n'est pas déjà actif)
-        if *active_shader != self.shader_program {
-            gl::UseProgram(self.shader_program);
-            *active_shader = self.shader_program;
+        if *active_shader != self.shader_program.raw() {
+            gl::UseProgram(self.shader_program.raw());
+            *active_shader = self.shader_program.raw();
         }
 
         // Lie le VAO correspondant à la frame courante (tous les attributs et offsets y sont pré-configurés !)
-        gl::BindVertexArray(self.vaos[self.current_frame]);
+        gl::BindVertexArray(self.vaos[self.current_frame].raw());
 
         // Active la texture (seulement si elle n'est pas déjà active)
-        if *active_texture != self.texture_id {
+        if *active_texture != self.texture_id.raw() {
             gl::ActiveTexture(gl::TEXTURE0);
-            gl::BindTexture(gl::TEXTURE_2D, self.texture_id);
-            *active_texture = self.texture_id;
+            gl::BindTexture(gl::TEXTURE_2D, self.texture_id.raw());
+            *active_texture = self.texture_id.raw();
         }
 
         // Dessiner le quad
@@ -329,14 +323,8 @@ impl RendererGraphicsInstanced {
         // Libérer les buffers particules (unmap + delete) via la fonction partagée
         self.release_particle_buffers();
 
-        if self.texture_id != 0 {
-            gl::DeleteTextures(1, &self.texture_id);
-            self.texture_id = 0;
-        }
-        if self.shader_program != 0 {
-            gl::DeleteProgram(self.shader_program);
-            self.shader_program = 0;
-        }
+        self.texture_id.reset(0);
+        self.shader_program.reset(0);
         debug!("Graphic Engine for Instanced Rendering closed and reset.");
     }
 
@@ -351,27 +339,28 @@ impl RendererGraphicsInstanced {
 
         match try_compile_shader_program_from_files(VERTEX_SHADER_PATH, FRAGMENT_SHADER_PATH) {
             Ok(new_program) => {
-                // Supprimer l'ancien programme shader
-                if self.shader_program != 0 {
-                    gl::DeleteProgram(self.shader_program);
-                }
-
-                // Utiliser le nouveau programme
-                self.shader_program = new_program;
+                // Supprimer l'ancien programme shader via RAII (GlProgram::reset effectue
+                // if self.shader_program != 0 { gl::DeleteProgram(...) })
+                self.shader_program.reset(new_program);
 
                 // Mettre à jour les uniform locations
-                self.loc_tex = gl::GetUniformLocation(self.shader_program, cstr!("uTexture"));
+                self.loc_tex = gl::GetUniformLocation(self.shader_program.raw(), cstr!("uTexture"));
 
-                gl::UseProgram(self.shader_program);
+                gl::UseProgram(self.shader_program.raw());
                 // Lier le block uniform "GlobalData" au binding point 0
-                let block_idx = gl::GetUniformBlockIndex(self.shader_program, cstr!("GlobalData"));
+                let block_idx =
+                    gl::GetUniformBlockIndex(self.shader_program.raw(), cstr!("GlobalData"));
                 if block_idx != gl::INVALID_INDEX {
-                    gl::UniformBlockBinding(self.shader_program, block_idx, 0);
+                    gl::UniformBlockBinding(self.shader_program.raw(), block_idx, 0);
                 }
 
                 gl::Uniform1i(self.loc_tex, 0);
 
-                label_gl_object!(gl::PROGRAM, self.shader_program, "Shader_InstancedQuad");
+                label_gl_object!(
+                    gl::PROGRAM,
+                    self.shader_program.raw(),
+                    "Shader_InstancedQuad"
+                );
 
                 info!("✅ Instanced textured quad shaders reloaded successfully");
                 Ok(())
@@ -387,9 +376,9 @@ impl RendererGraphicsInstanced {
     }
     unsafe fn setup_gpu_buffers(
         max_particles_on_gpu: usize,
-    ) -> ([u32; 3], u32, u32, *mut ParticleGPU, isize) {
-        let mut vaos = [0u32; 3];
-        let (mut vbo_quad, mut vbo_particles) = (0u32, 0u32);
+    ) -> ([GlVao; 3], GlBuffer, GlBuffer, *mut ParticleGPU, isize) {
+        let mut raw_vaos = [0u32; 3];
+        let (mut raw_vbo_quad, mut raw_vbo_particles) = (0u32, 0u32);
 
         // === VBOs ===
         const QUAD_VERTICES: [f32; 8] = [
@@ -399,8 +388,8 @@ impl RendererGraphicsInstanced {
             1.0, 1.0, // top-right
         ];
 
-        gl::GenBuffers(1, &mut vbo_quad);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+        gl::GenBuffers(1, &mut raw_vbo_quad);
+        gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_quad);
         gl::BufferData(
             gl::ARRAY_BUFFER,
             (QUAD_VERTICES.len() * std::mem::size_of::<f32>()) as isize,
@@ -408,8 +397,8 @@ impl RendererGraphicsInstanced {
             gl::STATIC_DRAW,
         );
 
-        gl::GenBuffers(1, &mut vbo_particles);
-        gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+        gl::GenBuffers(1, &mut raw_vbo_particles);
+        gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_particles);
 
         let buffer_size = (3 * max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
         info!(
@@ -435,12 +424,12 @@ impl RendererGraphicsInstanced {
         ) as *mut ParticleGPU;
 
         // === VAO Setup for each frame in the triple buffer ===
-        gl::GenVertexArrays(3, vaos.as_mut_ptr());
-        for (frame, &vao) in vaos.iter().enumerate() {
+        gl::GenVertexArrays(3, raw_vaos.as_mut_ptr());
+        for (frame, &vao) in raw_vaos.iter().enumerate() {
             gl::BindVertexArray(vao);
 
             // 1️⃣ QuadVertexAttribPointer unité statique
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_quad);
+            gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_quad);
             gl::EnableVertexAttribArray(0);
             gl::VertexAttribPointer(
                 0,
@@ -453,7 +442,7 @@ impl RendererGraphicsInstanced {
             gl::VertexAttribDivisor(0, 0); // par sommet
 
             // 2️⃣ Particules instanciées (avec offset correspondant à la section triple-buffering)
-            gl::BindBuffer(gl::ARRAY_BUFFER, vbo_particles);
+            gl::BindBuffer(gl::ARRAY_BUFFER, raw_vbo_particles);
             let base_offset =
                 (frame * max_particles_on_gpu * std::mem::size_of::<ParticleGPU>()) as isize;
             let stride = std::mem::size_of::<ParticleGPU>() as i32;
@@ -465,7 +454,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, pos_x) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, core.pos) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(1);
             gl::VertexAttribDivisor(1, 1);
@@ -477,7 +466,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, col_r) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, core.color) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(2);
             gl::VertexAttribDivisor(2, 1);
@@ -489,7 +478,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, life) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, core.life) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(3);
             gl::VertexAttribDivisor(3, 1);
@@ -501,7 +490,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, brightness) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, brightness) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(4);
             gl::VertexAttribDivisor(4, 1);
@@ -509,17 +498,28 @@ impl RendererGraphicsInstanced {
 
         gl::BindVertexArray(0);
 
-        for (frame, &vao) in vaos.iter().enumerate() {
+        for (frame, &vao) in raw_vaos.iter().enumerate() {
             label_gl_object!(
                 gl::VERTEX_ARRAY,
                 vao,
                 &format!("VAO_Instanced_Quads_Frame_{}", frame)
             );
         }
-        label_gl_object!(gl::BUFFER, vbo_quad, "VBO_Static_Quad");
-        label_gl_object!(gl::BUFFER, vbo_particles, "VBO_Instanced_Data");
+        label_gl_object!(gl::BUFFER, raw_vbo_quad, "VBO_Static_Quad");
+        label_gl_object!(gl::BUFFER, raw_vbo_particles, "VBO_Instanced_Data");
 
-        (vaos, vbo_quad, vbo_particles, mapped_ptr, buffer_size)
+        let vaos = [
+            GlVao::from_raw(raw_vaos[0]),
+            GlVao::from_raw(raw_vaos[1]),
+            GlVao::from_raw(raw_vaos[2]),
+        ];
+        (
+            vaos,
+            GlBuffer::from_raw(raw_vbo_quad),
+            GlBuffer::from_raw(raw_vbo_particles),
+            mapped_ptr,
+            buffer_size,
+        )
     }
 }
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
@@ -547,11 +547,11 @@ impl ParticleGraphicsRenderer for RendererGraphicsInstanced {
     }
 
     fn get_shader_program(&self) -> u32 {
-        self.shader_program
+        self.shader_program.raw()
     }
 
     fn get_texture_id(&self) -> u32 {
-        self.texture_id
+        self.texture_id.raw()
     }
 
     fn get_tex_ratio(&self) -> f32 {

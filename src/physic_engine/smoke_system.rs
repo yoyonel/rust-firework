@@ -1,4 +1,8 @@
-use crate::physic_engine::{config::PhysicConfig, particle::Particle, ParticleType};
+use crate::physic_engine::{
+    config::PhysicConfig,
+    particle::{Particle, ParticleVertexCore},
+    ParticleType,
+};
 use glam::{Vec2, Vec3 as Color};
 use rand::Rng;
 
@@ -107,12 +111,14 @@ impl Default for SmokeParticle {
 impl SmokeParticle {
     pub fn to_particle(&self) -> Particle {
         Particle {
-            pos: self.pos,
-            color: self.color,
-            life: (1.0 - self.lifecycle.progress()) * self.lifecycle.max_life,
-            max_life: self.lifecycle.max_life,
-            size: self.sizing.current_size,
-            angle: self.rotation,
+            core: ParticleVertexCore {
+                pos: self.pos,
+                color: self.color,
+                life: (1.0 - self.lifecycle.progress()) * self.lifecycle.max_life,
+                max_life: self.lifecycle.max_life,
+                size: self.sizing.current_size,
+                angle: self.rotation,
+            },
             vel: self.vel,
             active: self.active,
             particle_type: ParticleType::Smoke,

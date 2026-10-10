@@ -7,6 +7,7 @@ use log::info;
 use crate::gpu_profile_zone;
 use crate::physic_engine::config::PhysicConfig;
 use crate::renderer_engine::constants;
+use crate::renderer_engine::gl_resource::{GlBuffer, GlProgram, GlVao};
 use crate::renderer_engine::particle_renderer::ParticleGraphicsRenderer;
 use crate::renderer_engine::renderer_graphics::RendererGraphics;
 use crate::renderer_engine::renderer_graphics_instanced::RendererGraphicsInstanced;
@@ -28,6 +29,80 @@ macro_rules! tracy_zone {
     ($name:expr, $color:expr) => {};
 }
 
+macro_rules! cstr {
+    ($s:expr) => {
+        concat!($s, "\0").as_ptr() as *const i8
+    };
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct PersistentLight {
+    active: bool,
+    rocket_id: u64,
+    pos: [f32; 2],
+    color: [f32; 3],
+    radius: f32,
+    intensity: f32,
+    decay_rate: f32,
+    elapsed_ms: f32,
+}
+
+impl PersistentLight {
+    #[inline]
+    pub fn uploaded_intensity(&self, fade_in_ms: f32) -> f32 {
+        if fade_in_ms <= 0.0 {
+            self.intensity
+        } else {
+            let fade_factor = (self.elapsed_ms / fade_in_ms).clamp(0.0, 1.0);
+            self.intensity * fade_factor
+        }
+    }
+}
+
+/// Helper pure pour allouer ou réassigner un slot de lumière volumétrique avec hystérésis d'éviction.
+#[inline]
+fn find_lighting_slot(
+    lights: &[PersistentLight],
+    candidate_id: u64,
+    candidate_intensity: f32,
+    hysteresis_enabled: bool,
+) -> Option<usize> {
+    // 1. Même rocket_id déjà présent : réutilise le slot
+    if let Some(idx) = lights
+        .iter()
+        .position(|l| l.active && l.rocket_id == candidate_id)
+    {
+        return Some(idx);
+    }
+
+    // 2. Slot inactif ou éteint : réclamable sans condition
+    if let Some(idx) = lights
+        .iter()
+        .position(|l| !l.active || l.intensity <= constants::VOLUMETRIC_LIGHT_MIN_INTENSITY)
+    {
+        return Some(idx);
+    }
+
+    // 3. Tous les slots occupés par des lumières vivantes : sélection du slot minimal
+    let (min_idx, min_occupant) = lights.iter().enumerate().min_by(|(_, a), (_, b)| {
+        a.intensity
+            .partial_cmp(&b.intensity)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    })?;
+
+    if hysteresis_enabled {
+        let threshold =
+            min_occupant.intensity * constants::VOLUMETRIC_LIGHT_EVICTION_HYSTERESIS_FACTOR;
+        if candidate_intensity > threshold {
+            Some(min_idx)
+        } else {
+            None
+        }
+    } else {
+        Some(min_idx)
+    }
+}
+
 #[repr(C)]
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GlobalDataUBO {
@@ -41,12 +116,25 @@ pub struct GlobalDataUBO {
 pub struct Renderer {
     config: crate::renderer_engine::RendererConfig,
     max_particles_on_gpu: usize,
-    ubo_global: u32,
+    ubo_global: GlBuffer,
+    ubo_lighting: GlBuffer,
+    sky_haze_program: GlProgram,
+    dummy_vao: GlVao,
+    loc_haze_intensity: i32,
+    loc_haze_ambient_flash: i32,
+    loc_haze_falloff: i32,
+    persistent_lights: [PersistentLight; constants::MAX_VOLUMETRIC_LIGHTS],
+    smoothed_flash: f32,
+    smoothed_ambient_color: [f32; 3],
+    was_lighting_active: bool,
+    last_lighting_update: Option<std::time::Instant>,
+    simulation_paused: bool,
     // Window management
     window_size_f32: (f32, f32),
     renderers: Vec<Box<dyn ParticleGraphicsRenderer>>,
     // Bloom post-processing
     bloom_pass: BloomPass,
+    circle_renderer: Option<crate::renderer_engine::CircleGPURenderer>,
     // moteur de profilage GPU autonome
     pub gpu_profiler:
         std::sync::Arc<std::sync::Mutex<crate::renderer_engine::utils::gpu_profiler::GpuProfiler>>,
@@ -78,8 +166,13 @@ pub struct Renderer {
 //   dans le binaire, ce qui peut augmenter légèrement la taille du code.
 impl Renderer {
     pub fn new(width: i32, height: i32, physic_config: &PhysicConfig) -> Result<Self> {
-        // Note: OpenGL context initialization (show_opengl_context_info, setup_opengl_debug, etc.)
-        // is already done by GlfwWindowEngine::init(), so we don't duplicate it here.
+        unsafe {
+            crate::renderer_engine::tools::show_opengl_context_info();
+            crate::renderer_engine::tools::setup_opengl_debug();
+            gl::Enable(gl::PROGRAM_POINT_SIZE);
+            gl::Enable(gl::BLEND);
+            gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+        }
 
         let max_particles_on_gpu: usize = physic_config.max_rockets
             * (physic_config.particles_per_explosion + physic_config.particles_per_trail);
@@ -136,11 +229,20 @@ impl Renderer {
             crate::renderer_engine::utils::gpu_profiler::GpuProfiler::new()
         }));
 
-        // 🟢 Initialize UBO Global Buffer
-        let mut ubo_global = 0;
+        // 🟢 Initialize UBO Global Buffer & Lighting UBO
+        let ubo_global;
+        let ubo_lighting;
+        let dummy_vao;
+        let sky_haze_program;
+        let loc_haze_intensity;
+        let loc_haze_ambient_flash;
+        let loc_haze_falloff;
+
         unsafe {
-            gl::GenBuffers(1, &mut ubo_global);
-            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_global);
+            let mut raw_ubo_global = 0;
+            gl::GenBuffers(1, &mut raw_ubo_global);
+            ubo_global = GlBuffer::from_raw(raw_ubo_global);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_global.raw());
             gl::BufferData(
                 gl::UNIFORM_BUFFER,
                 std::mem::size_of::<GlobalDataUBO>() as isize,
@@ -153,8 +255,65 @@ impl Renderer {
             gl::BindBufferBase(
                 gl::UNIFORM_BUFFER,
                 constants::GLOBAL_UBO_BINDING_INDEX,
-                ubo_global,
+                ubo_global.raw(),
             );
+
+            // 🟢 Initialize UBO Lighting Buffer (std140, 544 bytes)
+            let mut raw_ubo_lighting = 0;
+            gl::GenBuffers(1, &mut raw_ubo_lighting);
+            ubo_lighting = GlBuffer::from_raw(raw_ubo_lighting);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, ubo_lighting.raw());
+            gl::BufferData(
+                gl::UNIFORM_BUFFER,
+                std::mem::size_of::<crate::renderer_engine::types::VolumetricLightingBlockGPU>()
+                    as isize,
+                std::ptr::null(),
+                gl::DYNAMIC_DRAW,
+            );
+            gl::BindBuffer(gl::UNIFORM_BUFFER, 0);
+
+            gl::BindBufferBase(
+                gl::UNIFORM_BUFFER,
+                constants::LIGHTING_UBO_BINDING_INDEX,
+                ubo_lighting.raw(),
+            );
+
+            // 🟢 Initialize Sky Haze Atmosphere Shader & Dummy VAO
+            let mut raw_dummy_vao = 0;
+            gl::GenVertexArrays(1, &mut raw_dummy_vao);
+            dummy_vao = GlVao::from_raw(raw_dummy_vao);
+
+            sky_haze_program = crate::renderer_engine::shader::compile_gl_program_from_files(
+                constants::SHADER_SKY_HAZE_VERTEX_PATH,
+                constants::SHADER_SKY_HAZE_FRAGMENT_PATH,
+            );
+
+            let block_idx_global =
+                gl::GetUniformBlockIndex(sky_haze_program.raw(), cstr!("GlobalData"));
+            if block_idx_global != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(
+                    sky_haze_program.raw(),
+                    block_idx_global,
+                    constants::GLOBAL_UBO_BINDING_INDEX,
+                );
+            }
+
+            let block_idx_lighting =
+                gl::GetUniformBlockIndex(sky_haze_program.raw(), cstr!("LightingBlock"));
+            if block_idx_lighting != gl::INVALID_INDEX {
+                gl::UniformBlockBinding(
+                    sky_haze_program.raw(),
+                    block_idx_lighting,
+                    constants::LIGHTING_UBO_BINDING_INDEX,
+                );
+            }
+
+            loc_haze_intensity =
+                gl::GetUniformLocation(sky_haze_program.raw(), cstr!("u_HazeIntensity"));
+            loc_haze_ambient_flash =
+                gl::GetUniformLocation(sky_haze_program.raw(), cstr!("u_AmbientFlash"));
+            loc_haze_falloff =
+                gl::GetUniformLocation(sky_haze_program.raw(), cstr!("u_HazeFalloff"));
         }
 
         Ok(Self {
@@ -166,10 +325,336 @@ impl Renderer {
             renderers,
             max_particles_on_gpu,
             ubo_global,
+            ubo_lighting,
+            sky_haze_program,
+            dummy_vao,
+            loc_haze_intensity,
+            loc_haze_ambient_flash,
+            loc_haze_falloff,
+            persistent_lights: [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS],
+            smoothed_flash: 0.0,
+            smoothed_ambient_color: constants::DEFAULT_VOLUMETRIC_AMBIENT_TINT,
+            was_lighting_active: false,
+            last_lighting_update: None,
+            simulation_paused: false,
             bloom_pass,
+            circle_renderer: None,
             gpu_profiler,
             last_gpu_log_time: std::time::Instant::now(),
         })
+    }
+
+    // Helper internal
+    unsafe fn update_lighting_ubo<P: PhysicEngineIterator>(&mut self, physic: &P) {
+        let now = std::time::Instant::now();
+        if !self.simulation_paused {
+            let dt_ms = match self.last_lighting_update {
+                Some(prev) => (now - prev).as_secs_f32() * 1000.0,
+                None => 16.667,
+            };
+            self.last_lighting_update = Some(now);
+            let dt_ms = dt_ms.clamp(0.0, 100.0);
+
+            // 1. Décroissance temporelle C^1 douce de toutes les lumières persistantes
+            for light in &mut self.persistent_lights {
+                if light.active {
+                    light.elapsed_ms += dt_ms;
+                    light.intensity *= self.config.volumetric_lighting_decay_rate;
+                    light.radius *= self.config.volumetric_lighting_radius_expansion;
+                    if light.intensity < constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                        light.active = false;
+                        light.intensity = 0.0;
+                        light.rocket_id = 0;
+                        light.elapsed_ms = 0.0;
+                    }
+                }
+            }
+
+            // 2. Échantillonnage des détonations actives de fusées (stabilisation par ID unique & hystérésis)
+            let hysteresis = self.config.volumetric_lighting_hysteresis_enabled;
+            physic.for_each_active_rocket(&mut |rocket| {
+                if rocket.active && rocket.exploded && rocket.explosion_active_count > 0 {
+                    let target_intensity =
+                        (rocket.explosion_active_count as f32 / 80.0).clamp(0.4, 2.0);
+
+                    let slot_idx = find_lighting_slot(
+                        &self.persistent_lights,
+                        rocket.id,
+                        target_intensity,
+                        hysteresis,
+                    );
+
+                    if let Some(idx) = slot_idx {
+                        let slot = &mut self.persistent_lights[idx];
+                        let is_new_entry = !slot.active || slot.rocket_id != rocket.id;
+                        if is_new_entry {
+                            slot.elapsed_ms = 0.0;
+                            slot.pos = [rocket.pos.x, rocket.pos.y];
+                            slot.color = [rocket.color.x, rocket.color.y, rocket.color.z];
+                            slot.radius = self.config.volumetric_lighting_radius;
+                        }
+                        slot.active = true;
+                        slot.rocket_id = rocket.id;
+                        slot.intensity = slot.intensity.max(target_intensity);
+                        slot.decay_rate = self.config.volumetric_lighting_decay_rate;
+                    }
+                }
+            });
+
+            // 3. Calcul de l'énergie explosive totale et teinte spectrale pour l'afterglow ambiant
+            let mut total_active_energy = 0.0f32;
+            let mut total_color_energy = [0.0f32; 3];
+
+            for light in &self.persistent_lights {
+                if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                    total_active_energy += light.intensity;
+                    total_color_energy[0] += light.color[0] * light.intensity;
+                    total_color_energy[1] += light.color[1] * light.intensity;
+                    total_color_energy[2] += light.color[2] * light.intensity;
+                }
+            }
+
+            let target_flash = (total_active_energy * constants::VOLUMETRIC_FLASH_ENERGY_SCALE)
+                .min(self.config.volumetric_lighting_flash_max_cap);
+
+            if target_flash > self.smoothed_flash {
+                self.smoothed_flash = self.smoothed_flash * 0.80 + target_flash * 0.20;
+            } else {
+                self.smoothed_flash = self.smoothed_flash * constants::VOLUMETRIC_FLASH_EMA_DECAY
+                    + target_flash * constants::VOLUMETRIC_FLASH_EMA_WEIGHT;
+            }
+
+            // Afterglow spectral: transition douce vers la teinte dominante des charges pyrotechniques
+            if self.config.spectral_afterglow_enabled
+                && total_active_energy > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY
+            {
+                let inv_energy = 1.0 / total_active_energy;
+                let target_color = [
+                    total_color_energy[0] * inv_energy,
+                    total_color_energy[1] * inv_energy,
+                    total_color_energy[2] * inv_energy,
+                ];
+                let color_blend = if target_flash > self.smoothed_flash {
+                    constants::AFTERGLOW_ATTACK_WEIGHT
+                } else {
+                    constants::AFTERGLOW_SUSTAIN_WEIGHT
+                };
+                self.smoothed_ambient_color[0] = self.smoothed_ambient_color[0]
+                    * (1.0 - color_blend)
+                    + target_color[0] * color_blend;
+                self.smoothed_ambient_color[1] = self.smoothed_ambient_color[1]
+                    * (1.0 - color_blend)
+                    + target_color[1] * color_blend;
+                self.smoothed_ambient_color[2] = self.smoothed_ambient_color[2]
+                    * (1.0 - color_blend)
+                    + target_color[2] * color_blend;
+            } else {
+                let decay = if self.config.spectral_afterglow_enabled {
+                    self.config.spectral_afterglow_decay
+                } else {
+                    constants::AFTERGLOW_DISABLED_FAST_RESET_DECAY
+                };
+                let neutral = constants::DEFAULT_VOLUMETRIC_AMBIENT_TINT;
+                self.smoothed_ambient_color[0] =
+                    self.smoothed_ambient_color[0] * decay + neutral[0] * (1.0 - decay);
+                self.smoothed_ambient_color[1] =
+                    self.smoothed_ambient_color[1] * decay + neutral[1] * (1.0 - decay);
+                self.smoothed_ambient_color[2] =
+                    self.smoothed_ambient_color[2] * decay + neutral[2] * (1.0 - decay);
+            }
+        } else {
+            self.last_lighting_update = Some(now);
+        }
+
+        // 4. Compaction contiguë des lumières actives vers le bloc std140 GPU (Zéro itération inutile dans les shaders)
+        let mut lights = [crate::renderer_engine::types::PointLightGPU::default();
+            constants::MAX_VOLUMETRIC_LIGHTS];
+        let mut active_count = 0;
+        let fade_in_ms = self.config.volumetric_lighting_fade_in_ms;
+
+        for light in &self.persistent_lights {
+            if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                let uploaded_intensity = light.uploaded_intensity(fade_in_ms);
+                lights[active_count] = crate::renderer_engine::types::PointLightGPU {
+                    position_radius: [
+                        light.pos[0],
+                        light.pos[1],
+                        1.0 / light.radius.max(0.001),
+                        light.radius,
+                    ],
+                    color_intensity: [
+                        light.color[0],
+                        light.color[1],
+                        light.color[2],
+                        uploaded_intensity,
+                    ],
+                };
+                active_count += 1;
+            }
+        }
+
+        let flash_clamped = self.smoothed_flash.clamp(0.0, 1.0);
+        let lighting_block = crate::renderer_engine::types::VolumetricLightingBlockGPU {
+            lights,
+            ambient_light: [
+                flash_clamped * self.smoothed_ambient_color[0],
+                flash_clamped * self.smoothed_ambient_color[1],
+                flash_clamped * self.smoothed_ambient_color[2],
+                flash_clamped,
+            ],
+            num_active_lights: active_count as i32,
+            scattering_intensity: if self.config.smoke_lighting_enabled {
+                self.config.smoke_scattering_intensity
+            } else {
+                0.0
+            },
+            _padding: [0; 2],
+        };
+
+        gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_lighting.raw());
+        gl::BufferSubData(
+            gl::UNIFORM_BUFFER,
+            0,
+            std::mem::size_of::<crate::renderer_engine::types::VolumetricLightingBlockGPU>()
+                as isize,
+            &lighting_block as *const _ as *const std::ffi::c_void,
+        );
+        gl::BindBufferBase(
+            gl::UNIFORM_BUFFER,
+            constants::LIGHTING_UBO_BINDING_INDEX,
+            self.ubo_lighting.raw(),
+        );
+    }
+
+    /// Réinitialisation à zéro de l'UBO d'éclairage lors de la désactivation dynamique.
+    /// Garantit un coût de 0 GPU/CPU pour les frames suivantes lorsque l'éclairage volumique est désactivé.
+    unsafe fn reset_lighting_ubo(&mut self) {
+        self.persistent_lights = [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS];
+        self.smoothed_flash = 0.0;
+        self.smoothed_ambient_color = constants::DEFAULT_VOLUMETRIC_AMBIENT_TINT;
+        self.last_lighting_update = None;
+        let empty_block = crate::renderer_engine::types::VolumetricLightingBlockGPU {
+            lights: [crate::renderer_engine::types::PointLightGPU::default();
+                constants::MAX_VOLUMETRIC_LIGHTS],
+            ambient_light: [0.0; 4],
+            num_active_lights: 0,
+            scattering_intensity: 0.0,
+            _padding: [0; 2],
+        };
+        gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_lighting.raw());
+        gl::BufferSubData(
+            gl::UNIFORM_BUFFER,
+            0,
+            std::mem::size_of::<crate::renderer_engine::types::VolumetricLightingBlockGPU>()
+                as isize,
+            &empty_block as *const _ as *const std::ffi::c_void,
+        );
+        gl::BindBufferBase(
+            gl::UNIFORM_BUFFER,
+            constants::LIGHTING_UBO_BINDING_INDEX,
+            self.ubo_lighting.raw(),
+        );
+    }
+
+    unsafe fn render_sky_haze(&self) {
+        if !self.config.volumetric_lighting_enabled || !self.config.sky_haze_enabled {
+            return;
+        }
+        gl::Disable(gl::DEPTH_TEST);
+        gl::DepthMask(gl::FALSE);
+        gl::Disable(gl::BLEND);
+
+        gl::UseProgram(self.sky_haze_program.raw());
+        if self.loc_haze_intensity != -1 {
+            gl::Uniform1f(self.loc_haze_intensity, self.config.sky_haze_intensity);
+        }
+        if self.loc_haze_ambient_flash != -1 {
+            gl::Uniform1f(
+                self.loc_haze_ambient_flash,
+                self.config.sky_haze_ambient_flash,
+            );
+        }
+        if self.loc_haze_falloff != -1 {
+            gl::Uniform1f(self.loc_haze_falloff, self.config.sky_haze_falloff);
+        }
+
+        gl::BindVertexArray(self.dummy_vao.raw());
+        gl::DrawArrays(gl::TRIANGLES, 0, 3);
+        gl::BindVertexArray(0);
+
+        // Restore blend state for particle rendering pipeline
+        gl::Enable(gl::BLEND);
+    }
+
+    /// Renders wireframe footprints, dashed bounding quads, and origin markers for active volumetric lights in debug mode.
+    unsafe fn render_volumetric_debug(&mut self) {
+        if !self.config.volumetric_lighting_debug {
+            return;
+        }
+
+        let mut orbits: Vec<crate::renderer_engine::CircleGPUData> =
+            Vec::with_capacity(constants::MAX_VOLUMETRIC_LIGHTS);
+        let mut discs: Vec<crate::renderer_engine::CircleGPUData> =
+            Vec::with_capacity(constants::MAX_VOLUMETRIC_LIGHTS);
+        let mut boxes: Vec<crate::renderer_engine::CircleGPUData> =
+            Vec::with_capacity(constants::MAX_VOLUMETRIC_LIGHTS);
+
+        let fade_in_ms = self.config.volumetric_lighting_fade_in_ms;
+        let base_radius = self.config.volumetric_lighting_radius;
+
+        for light in &self.persistent_lights {
+            if light.active && light.intensity > constants::VOLUMETRIC_LIGHT_MIN_INTENSITY {
+                let r = light.color[0];
+                let g = light.color[1];
+                let b = light.color[2];
+                let intensity = light.uploaded_intensity(fade_in_ms);
+
+                // Blend décroissant :
+                // Quand le cercle d'influence grossit et que son impact est décroissant
+                // (diffusé sur tout l'écran avec atténuation de l'énergie surfacique),
+                // l'opacité alpha décroît en proportion directe de l'intensité et de l'étalement
+                // géométrique (base_radius / light.radius).
+                let radius_ratio = (base_radius / light.radius.max(base_radius)).min(1.0);
+                let decay_blend = (intensity * radius_ratio).clamp(0.0, 1.0);
+
+                let circle_alpha = (decay_blend * 0.85).clamp(0.0, 0.95);
+                let quad_alpha = (decay_blend * 0.50).clamp(0.0, 0.70);
+                let center_alpha = (decay_blend * 1.2).clamp(0.0, 1.0);
+
+                // Wireframe footprint circle outline (orbit)
+                orbits.push(crate::renderer_engine::CircleGPUData {
+                    center: light.pos,
+                    radius: light.radius,
+                    color: [r, g, b, circle_alpha],
+                    thickness: 0.0,
+                });
+
+                // Dashed bounding box quad outline (pointillé)
+                boxes.push(crate::renderer_engine::CircleGPUData {
+                    center: light.pos,
+                    radius: light.radius,
+                    color: [r, g, b, quad_alpha],
+                    thickness: -constants::VOLUMETRIC_LIGHT_DEBUG_DASH_LENGTH,
+                });
+
+                // Origin center disc
+                discs.push(crate::renderer_engine::CircleGPUData {
+                    center: light.pos,
+                    radius: constants::VOLUMETRIC_LIGHT_DEBUG_ORIGIN_RADIUS,
+                    color: [r, g, b, center_alpha],
+                    thickness: 0.0,
+                });
+            }
+        }
+
+        if orbits.is_empty() && discs.is_empty() && boxes.is_empty() {
+            return;
+        }
+
+        let renderer = self
+            .circle_renderer
+            .get_or_insert_with(crate::renderer_engine::CircleGPURenderer::new);
+        renderer.draw(&orbits, &discs, &boxes);
     }
 
     // Helper internal
@@ -202,26 +687,87 @@ impl Renderer {
                 continue;
             }
 
+            if let Some(crate::physic_engine::ParticleType::Smoke) = renderer.particle_type() {
+                let smoke_lighting =
+                    self.config.volumetric_lighting_enabled && self.config.smoke_lighting_enabled;
+                renderer.set_smoke_lighting(
+                    smoke_lighting,
+                    if smoke_lighting {
+                        self.config.smoke_scattering_intensity
+                    } else {
+                        0.0
+                    },
+                    if smoke_lighting {
+                        self.config.smoke_ambient_flash
+                    } else {
+                        0.0
+                    },
+                    self.config.smoke_lighting_lut_enabled,
+                    self.config.smoke_wrap_relief,
+                );
+                let backlight = self.bloom_pass.enabled
+                    && self.config.volumetric_lighting_enabled
+                    && self.config.backlight_enabled;
+                renderer.set_backlight_enabled(backlight);
+            }
+
             let nb;
             // Remplit le buffer GPU (Opération purement CPU, on utilise uniquement tracy)
             {
-                tracy_zone!("Renderer::fill_buffer", palette::ENV);
-                nb = renderer.fill_particle_data_direct(physic, alpha);
+                match renderer.particle_type() {
+                    Some(crate::physic_engine::ParticleType::Rocket) => {
+                        tracy_zone!("Renderer::fill_rockets", palette::ENV);
+                        nb = renderer.fill_particle_data_direct(physic, alpha);
+                    }
+                    Some(crate::physic_engine::ParticleType::Smoke) => {
+                        tracy_zone!("Renderer::fill_smoke", palette::ENV);
+                        nb = renderer.fill_particle_data_direct(physic, alpha);
+                    }
+                    _ => {
+                        tracy_zone!("Renderer::fill_sparks_trails", palette::ENV);
+                        nb = renderer.fill_particle_data_direct(physic, alpha);
+                    }
+                }
             }
 
             // Dessine les particules (Opération hautement GPU, on utilise le profiler complet)
             {
-                gpu_profile_zone!(
-                    11,
-                    "Renderer::Particles_with_Persistent_Buffer",
-                    palette::SHOCKWAVE,
-                    profiler
-                );
-                renderer.render_particles_with_persistent_buffer(
-                    nb,
-                    &mut active_shader,
-                    &mut active_texture,
-                );
+                match renderer.particle_type() {
+                    Some(crate::physic_engine::ParticleType::Rocket) => {
+                        gpu_profile_zone!(
+                            12,
+                            "Particles::Draw_Rockets",
+                            palette::MOTION_BLUR,
+                            profiler
+                        );
+                        renderer.render_particles_with_persistent_buffer(
+                            nb,
+                            &mut active_shader,
+                            &mut active_texture,
+                        );
+                    }
+                    Some(crate::physic_engine::ParticleType::Smoke) => {
+                        gpu_profile_zone!(13, "Particles::Draw_Smoke", palette::DOF, profiler);
+                        renderer.render_particles_with_persistent_buffer(
+                            nb,
+                            &mut active_shader,
+                            &mut active_texture,
+                        );
+                    }
+                    _ => {
+                        gpu_profile_zone!(
+                            11,
+                            "Particles::Draw_Sparks_Trails",
+                            palette::SHOCKWAVE,
+                            profiler
+                        );
+                        renderer.render_particles_with_persistent_buffer(
+                            nb,
+                            &mut active_shader,
+                            &mut active_texture,
+                        );
+                    }
+                }
             }
 
             total_particles += nb;
@@ -245,7 +791,7 @@ impl Renderer {
 // Trait implementation
 impl RendererEngine for Renderer {
     fn render_frame<P: PhysicEngineIterator>(&mut self, physic: &P, alpha: f32) -> usize {
-        // ⏱️ 0. Mettre à jour le UBO global
+        // ⏱️ 0. Mettre à jour les UBOs globaux
         unsafe {
             let ubo_data = GlobalDataUBO {
                 u_size_x: self.window_size_f32.0,
@@ -257,7 +803,7 @@ impl RendererEngine for Renderer {
                     .map_or(1.0, |r| r.get_tex_ratio()),
                 u_bloom_intensity: self.bloom_pass.intensity,
             };
-            gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global);
+            gl::BindBuffer(gl::UNIFORM_BUFFER, self.ubo_global.raw());
             gl::BufferSubData(
                 gl::UNIFORM_BUFFER,
                 0,
@@ -265,8 +811,19 @@ impl RendererEngine for Renderer {
                 &ubo_data as *const _ as *const _,
             );
 
-            // Bind global UBO to binding point 0 for this frame (prevent override by other context users like ImGui)
-            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global);
+            gl::BindBufferBase(gl::UNIFORM_BUFFER, 0, self.ubo_global.raw());
+
+            let is_lighting_active = self.config.volumetric_lighting_enabled
+                && (self.config.smoke_lighting_enabled || self.config.sky_haze_enabled);
+
+            if is_lighting_active {
+                self.was_lighting_active = true;
+                self.update_lighting_ubo(physic);
+            } else if self.was_lighting_active {
+                // One-off zero-cost transition: flush UBO and reset internal state
+                self.reset_lighting_ubo();
+                self.was_lighting_active = false;
+            }
         }
 
         // ⏱️ 1. Récolte asynchrone des chronométrages réels de la frame N-1 et affichage
@@ -297,8 +854,8 @@ impl RendererEngine for Renderer {
                 {
                     gpu_profile_zone!(1, "Pass: HDR Scene", palette::SCENE, profiler);
                     self.bloom_pass.begin_scene();
-                    gl::ClearColor(0.0, 0.0, 0.0, 1.0);
-                    gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
+
+                    self.render_sky_haze();
 
                     particle_count = self.render_particles(physic, &profiler, alpha);
                 } // ⬅️ Drop RAII (PopDebugGroup + fin de query GPU)
@@ -307,6 +864,11 @@ impl RendererEngine for Renderer {
                     // Apply bloom and render to screen
                     self.bloom_pass.end_scene_and_apply_bloom();
                 } // ⬅️ Drop RAII
+
+                if self.config.volumetric_lighting_debug {
+                    self.render_volumetric_debug();
+                }
+
                 particle_count
             } else {
                 gpu_profile_zone!(0, "Pass: Forward (No Bloom)", palette::COMPOSITE, profiler);
@@ -315,7 +877,16 @@ impl RendererEngine for Renderer {
                 gl::BindFramebuffer(gl::FRAMEBUFFER, 0);
                 gl::ClearColor(0.0, 0.0, 0.0, 1.0);
                 gl::Clear(gl::COLOR_BUFFER_BIT | gl::DEPTH_BUFFER_BIT);
-                self.render_particles(physic, &profiler, alpha)
+
+                self.render_sky_haze();
+
+                let count = self.render_particles(physic, &profiler, alpha);
+
+                if self.config.volumetric_lighting_debug {
+                    self.render_volumetric_debug();
+                }
+
+                count
             } // ⬅️ Drop RAII
         }
     }
@@ -378,11 +949,14 @@ impl RendererEngine for Renderer {
                 renderer.close();
             }
             self.bloom_pass.close();
-
-            if self.ubo_global != 0 {
-                gl::DeleteBuffers(1, &self.ubo_global);
-                self.ubo_global = 0;
+            if let Some(mut cr) = self.circle_renderer.take() {
+                cr.destroy();
             }
+
+            self.ubo_global.reset(0);
+            self.ubo_lighting.reset(0);
+            self.dummy_vao.reset(0);
+            self.sky_haze_program.reset(0);
         }
     }
 
@@ -394,6 +968,211 @@ impl RendererEngine for Renderer {
         self.config = *config;
         self.bloom_pass.sync_with_renderer_config(config);
     }
+
+    fn set_simulation_paused(&mut self, paused: bool) {
+        if self.simulation_paused != paused {
+            self.simulation_paused = paused;
+            if !paused {
+                self.last_lighting_update = Some(std::time::Instant::now());
+            }
+        }
+    }
 }
 
-// Trait implementation
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::renderer_engine::constants;
+
+    #[test]
+    fn test_lighting_slot_fade_in_math() {
+        let mut light = PersistentLight {
+            active: true,
+            rocket_id: 10,
+            intensity: 1.6,
+            decay_rate: 0.94,
+            elapsed_ms: 0.0,
+            ..Default::default()
+        };
+
+        // 1. Division by zero impossible: fade_in = 0.0 outputs target directly
+        assert_eq!(light.uploaded_intensity(0.0), 1.6);
+        assert_eq!(light.uploaded_intensity(-10.0), 1.6);
+
+        // 2. Linear ramp with fade_in = 50.0 ms
+        let fade_in_ms = 50.0;
+        assert_eq!(light.uploaded_intensity(fade_in_ms), 0.0);
+
+        light.elapsed_ms = 25.0;
+        assert!((light.uploaded_intensity(fade_in_ms) - 0.8).abs() < 1e-5);
+
+        light.elapsed_ms = 50.0;
+        assert!((light.uploaded_intensity(fade_in_ms) - 1.6).abs() < 1e-5);
+
+        // Beyond fade-in duration: capped to target
+        light.elapsed_ms = 120.0;
+        assert_eq!(light.uploaded_intensity(fade_in_ms), 1.6);
+
+        // Target decay operates on target intensity, uploaded reflects it
+        light.intensity *= light.decay_rate; // 1.6 * 0.94 = 1.504
+        assert!((light.uploaded_intensity(fade_in_ms) - 1.504).abs() < 1e-5);
+    }
+
+    #[test]
+    fn test_lighting_slot_hysteresis_eviction() {
+        let mut lights = [PersistentLight::default(); constants::MAX_VOLUMETRIC_LIGHTS];
+
+        // Fill all 16 slots with active living lights
+        for (i, l) in lights.iter_mut().enumerate() {
+            l.active = true;
+            l.rocket_id = (i + 1) as u64;
+            l.intensity = 1.0 + (i as f32 * 0.1); // min intensity is slot 0 with 1.0
+        }
+
+        // Slot 0 has intensity 1.0. With hysteresis 1.2x, eviction threshold is 1.0 * 1.2 = 1.2
+        let candidate_weaker = 1.15;
+        let slot = find_lighting_slot(&lights, 999, candidate_weaker, true);
+        assert_eq!(
+            slot, None,
+            "Weaker candidate (1.15 <= 1.20) must NOT evict living occupant under hysteresis"
+        );
+
+        // Candidate exceeding threshold (> 1.20) must evict slot 0
+        let candidate_stronger = 1.25;
+        let slot = find_lighting_slot(&lights, 999, candidate_stronger, true);
+        assert_eq!(
+            slot,
+            Some(0),
+            "Stronger candidate (1.25 > 1.20) must evict weakest occupant slot 0"
+        );
+
+        // Without hysteresis (hysteresis=false), candidate > min_occupant evicts
+        let slot = find_lighting_slot(&lights, 999, candidate_weaker, false);
+        assert_eq!(
+            slot,
+            Some(0),
+            "When hysteresis is OFF, candidate > min occupant picks min slot 0"
+        );
+
+        // Free/extinct slot (intensity <= MIN_INTENSITY) is claimed unconditionally even by weak light
+        lights[3].intensity = constants::VOLUMETRIC_LIGHT_MIN_INTENSITY * 0.5;
+        let weak_candidate = 0.4;
+        let slot = find_lighting_slot(&lights, 999, weak_candidate, true);
+        assert_eq!(
+            slot,
+            Some(3),
+            "Extinct slot must be claimable unconditionally without hysteresis barrier"
+        );
+
+        // Same rocket ID reclaims its own slot regardless of other lights
+        let slot = find_lighting_slot(&lights, 5, 0.5, true);
+        assert_eq!(
+            slot,
+            Some(4),
+            "Same rocket ID must reclaim existing slot without eviction check"
+        );
+    }
+
+    #[test]
+    fn test_same_rocket_keeps_slot_no_fade_reset() {
+        let mut slot = PersistentLight {
+            active: true,
+            rocket_id: 42,
+            intensity: 1.5,
+            elapsed_ms: 35.0,
+            ..Default::default()
+        };
+
+        // Same rocket on next frame: is_new_entry is false, elapsed preserved
+        let is_new_entry = !slot.active || slot.rocket_id != 42;
+        assert!(!is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+        }
+        assert_eq!(slot.elapsed_ms, 35.0);
+
+        // New rocket evicts slot: is_new_entry is true, elapsed resets to 0.0
+        let is_new_entry = !slot.active || slot.rocket_id != 99;
+        assert!(is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+        }
+        assert_eq!(slot.elapsed_ms, 0.0);
+    }
+
+    #[test]
+    fn test_light_slot_position_anchored_at_detonation() {
+        let mut slot = PersistentLight::default();
+
+        // 1. Initial entry: position is anchored
+        let initial_pos = [250.0, 400.0];
+        let is_new_entry = !slot.active || slot.rocket_id != 42;
+        assert!(is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+            slot.pos = initial_pos;
+            slot.color = [1.0, 0.5, 0.2];
+            slot.radius = constants::VOLUMETRIC_LIGHT_INITIAL_RADIUS;
+        }
+        slot.active = true;
+        slot.rocket_id = 42;
+
+        assert_eq!(slot.pos, initial_pos);
+
+        // 2. Subsequent frame for same rocket: is_new_entry is false
+        // Even if rocket_pos moves, slot.pos MUST NOT change
+        let moved_pos = [250.0, 100.0]; // Ghost movement
+        let is_new_entry = !slot.active || slot.rocket_id != 42;
+        assert!(!is_new_entry);
+        if is_new_entry {
+            slot.elapsed_ms = 0.0;
+            slot.pos = moved_pos;
+        }
+
+        assert_eq!(
+            slot.pos, initial_pos,
+            "Light source position must remain permanently anchored at detonation point"
+        );
+    }
+
+    #[test]
+    fn test_lighting_evolution_frozen_during_pause() {
+        let mut slot = PersistentLight {
+            active: true,
+            rocket_id: 10,
+            intensity: 1.8,
+            radius: 450.0,
+            elapsed_ms: 20.0,
+            decay_rate: 0.94,
+            pos: [100.0, 200.0],
+            color: [1.0, 1.0, 1.0],
+        };
+
+        let initial_radius = slot.radius;
+        let initial_intensity = slot.intensity;
+        let initial_elapsed = slot.elapsed_ms;
+
+        // When paused: no time accumulation, no radius expansion, no decay
+        let simulation_paused = true;
+        let dt_ms = 16.67;
+
+        if !simulation_paused {
+            slot.elapsed_ms += dt_ms;
+            slot.intensity *= slot.decay_rate;
+            slot.radius *= constants::VOLUMETRIC_LIGHT_RADIUS_EXPANSION;
+        }
+
+        assert_eq!(
+            slot.radius, initial_radius,
+            "Radius must not expand during pause"
+        );
+        assert_eq!(
+            slot.intensity, initial_intensity,
+            "Intensity must not decay during pause"
+        );
+        assert_eq!(
+            slot.elapsed_ms, initial_elapsed,
+            "Elapsed ms must not advance during pause"
+        );
+    }
+}

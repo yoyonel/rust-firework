@@ -273,7 +273,7 @@ r*hs/
 /mdbook
 
 # Local Cargo configuration
-.cargo/config.toml
+.cargo/
 
 # ImGui & runtime configuration files
 imgui.ini

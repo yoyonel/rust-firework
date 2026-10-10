@@ -5,9 +5,12 @@ in float vAlpha;
 in float vIntensity;
 in vec3 vColor;
 in float vNormalizedAge;
+in vec2 vWorldPos;
+in vec3 vScatteredLight;
 
 layout(location = 0) out vec4 FragColor;
 layout(location = 1) out vec4 BrightColor;
+layout(location = 2) out vec4 SmokeMask;
 
 uniform sampler2D u_SmokeTexture;
 uniform sampler2D u_FlowMap;
@@ -21,20 +24,16 @@ uniform float u_ErosionScale;
 uniform float u_ErosionEdgeWidth;
 uniform vec3 u_ErosionEdgeColor;
 
+uniform int u_RenderMask;
+
+
 void main() {
-    // 1. Early discard for transparent or unlit instances
+    // 1. Early discard for transparent or unlit instances (safety fallback)
     if (vAlpha <= 0.001 || vIntensity <= 0.001) {
         discard;
     }
 
-    // 2. Early quad corner culling (radial mask r > 0.5)
-    // Eliminates fragment shading & texture lookups for quad corners (~21.5% fillrate saved)
-    vec2 centerOffset = vUV - vec2(0.5);
-    if (dot(centerOffset, centerOffset) > 0.25) {
-        discard;
-    }
-
-    // 3. Early Alpha Erosion / Dissolve Discard
+    // 2. Early Alpha Erosion / Dissolve Discard
     // Sample noise texture FIRST to immediately discard eroded fragments before sampling flow map or smoke texture
     float noiseVal = 1.0;
     float erosionThreshold = 0.0;
@@ -46,7 +45,7 @@ void main() {
         }
     }
 
-    // 4. Flow map distortion and smoke texture sampling
+    // 3. Flow map distortion and smoke texture sampling
     vec4 smokeTex;
     if (u_FlowDistortionStrength > 0.001) {
         vec2 flow = texture(u_FlowMap, vUV).rg * 2.0 - 1.0;
@@ -72,24 +71,39 @@ void main() {
         smokeTex = texture(u_SmokeTexture, vUV);
     }
 
-    // 5. Early alpha discard on smoke texture alpha
+    // 4. Early alpha discard on smoke texture alpha
     float finalAlpha = smokeTex.a * vAlpha;
     if (finalAlpha <= 0.001) {
         discard;
     }
 
-    vec3 finalColor = smokeTex.rgb * vColor;
-
-    // 6. Glowing burn edge effect along erosion seam (reusing noiseVal already sampled)
+    // 5. Glowing burn edge alpha boost along erosion seam (reusing noiseVal already sampled)
     if (u_ErosionEnabled && u_ErosionScale > 0.001) {
         if (noiseVal < erosionThreshold + u_ErosionEdgeWidth) {
-            float edgeFactor = (noiseVal - erosionThreshold) / max(0.0001, u_ErosionEdgeWidth);
-            finalColor = mix(u_ErosionEdgeColor, finalColor, edgeFactor);
             finalAlpha = min(1.0, finalAlpha * 1.5);
         }
     }
 
-    FragColor = vec4(finalColor * vIntensity, finalAlpha * vIntensity);
-    // Smoke is non-emissive volumetric dust; bright bloom attachment is zero
+    vec3 finalColor = smokeTex.rgb * vColor;
+
+    // Glowing burn edge color along erosion seam
+    if (u_ErosionEnabled && u_ErosionScale > 0.001) {
+        if (noiseVal < erosionThreshold + u_ErosionEdgeWidth) {
+            float edgeFactor = (noiseVal - erosionThreshold) / max(0.0001, u_ErosionEdgeWidth);
+            finalColor = mix(u_ErosionEdgeColor, finalColor, edgeFactor);
+        }
+    }
+
+    // 6. Volumetric In-Scattering (interpolated smoothly from vertices, zero per-pixel loop)
+    // Retains exact canonical soot modulation (factor 0.25, zero additive blowout)
+    finalColor += finalColor * clamp(vScatteredLight * 0.25, vec3(0.0), vec3(1.2));
+
+    float maskAlpha = finalAlpha * vIntensity;
+    FragColor = vec4(finalColor * vIntensity, maskAlpha);
+
+    // Smoke is non-emissive volumetric dust; keep bright bloom attachment zero to avoid blinding wash-out
     BrightColor = vec4(0.0, 0.0, 0.0, 0.0);
+
+    // Single-pass MRT: accumulate screen-space smoke backlight mask directly in Attachment 2
+    SmokeMask = vec4(maskAlpha, 0.0, 0.0, 1.0);
 }
