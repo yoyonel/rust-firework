@@ -76,9 +76,9 @@ fn bench_particle_update(c: &mut Criterion) {
                         let slice = pool.get_particles_mut(&r);
                         for p in slice.iter_mut() {
                             p.active = true;
-                            p.life = 2.0;
+                            p.core.life = 2.0;
                             p.vel = glam::Vec2::new(1.0, 5.0);
-                            p.pos = glam::Vec2::new(10.0, 10.0);
+                            p.core.pos = glam::Vec2::new(10.0, 10.0);
                         }
                         ranges.push(r);
                     }
@@ -93,9 +93,9 @@ fn bench_particle_update(c: &mut Criterion) {
                             continue;
                         }
                         p.vel.y += gravity.y * dt;
-                        p.pos += p.vel * dt;
-                        p.life -= dt;
-                        p.active = p.life > 0.0;
+                        p.core.pos += p.vel * dt;
+                        p.core.life -= dt;
+                        p.active = p.core.life > 0.0;
                     }
                 }
                 black_box(pool)

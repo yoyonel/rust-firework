@@ -16,7 +16,7 @@ pub mod particles_pools;
 pub use self::particles_pools::ParticlesPool;
 
 pub mod particle;
-pub use self::particle::Particle;
+pub use self::particle::{Particle, ParticleVertexCore};
 
 pub mod config;
 pub use self::config::PhysicConfig;

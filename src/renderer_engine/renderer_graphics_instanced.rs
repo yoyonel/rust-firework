@@ -205,19 +205,17 @@ impl RendererGraphicsInstanced {
         physic.for_each_particle_slice_of_type(self.particle_type, &mut |slice| {
             for p in slice {
                 if count < self.max_particles_on_gpu {
-                    // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
-                    let src_ptr =
-                        p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
-                    let mut gpu_p = *src_ptr;
+                    // ⏱️ Piste 3 : Fast Copy ParticleVertexCore (Layout parfait 36 octets)
+                    let mut core = p.core;
 
                     if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
-                        gpu_p.pos_x -= p.vel.x * factor;
-                        gpu_p.pos_y -= p.vel.y * factor;
+                        core.pos -= p.vel * factor;
                     }
 
-                    gpu_p.brightness = 0.0; // Bloom disabled for rockets
-
-                    gpu_slice[count] = gpu_p;
+                    gpu_slice[count] = ParticleGPU {
+                        core,
+                        brightness: 0.0, // Bloom disabled for rockets
+                    };
                     count += 1;
                 }
             }
@@ -465,7 +463,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, pos_x) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, core.pos) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(1);
             gl::VertexAttribDivisor(1, 1);
@@ -477,7 +475,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, col_r) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, core.color) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(2);
             gl::VertexAttribDivisor(2, 1);
@@ -489,7 +487,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, life) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, core.life) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(3);
             gl::VertexAttribDivisor(3, 1);
@@ -501,7 +499,7 @@ impl RendererGraphicsInstanced {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                (base_offset + memoffset::offset_of!(ParticleGPU, brightness) as isize) as *const _,
+                (base_offset + std::mem::offset_of!(ParticleGPU, brightness) as isize) as *const _,
             );
             gl::EnableVertexAttribArray(4);
             gl::VertexAttribDivisor(4, 1);

@@ -226,22 +226,21 @@ impl RendererGraphics {
                     }
                 };
                 if visible && count < self.max_particles_on_gpu {
-                    // ⏱️ Piste 3 : Fast Cast-Copy (Layout parfait)
-                    let src_ptr =
-                        p as *const crate::physic_engine::particle::Particle as *const ParticleGPU;
-                    let mut gpu_p = *src_ptr;
+                    // ⏱️ Piste 3 : Fast Copy ParticleVertexCore (Layout parfait 36 octets)
+                    let mut core = p.core;
 
                     if factor > crate::renderer_engine::constants::RENDER_INTERPOLATION_EPSILON {
-                        gpu_p.pos_x -= p.vel.x * factor;
-                        gpu_p.pos_y -= p.vel.y * factor;
+                        core.pos -= p.vel * factor;
                     }
 
                     // Assigne la luminosité calculée (x^4 via multiplication rapide sans libm powi)
-                    let l = p.life / p.max_life.max(0.0001);
+                    let l = core.life / core.max_life.max(0.0001);
                     let l2 = l * l;
-                    gpu_p.brightness = l2 * l2;
 
-                    gpu_slice[count] = gpu_p;
+                    gpu_slice[count] = ParticleGPU {
+                        core,
+                        brightness: l2 * l2,
+                    };
                     count += 1;
                 }
             }

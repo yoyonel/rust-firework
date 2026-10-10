@@ -94,10 +94,10 @@ fn test_smoke_particle_conversion_to_particle() {
 
     let converted = p.to_particle();
     assert_eq!(converted.particle_type, ParticleType::Smoke);
-    assert_eq!(converted.pos, Vec2::new(50.0, 150.0));
-    assert_eq!(converted.color, Color::new(0.9, 0.4, 0.1));
-    assert_eq!(converted.size, 12.0);
-    assert_eq!(converted.angle, 0.78);
+    assert_eq!(converted.core.pos, Vec2::new(50.0, 150.0));
+    assert_eq!(converted.core.color, Color::new(0.9, 0.4, 0.1));
+    assert_eq!(converted.core.size, 12.0);
+    assert_eq!(converted.core.angle, 0.78);
     assert!(converted.active);
 }
 
@@ -159,7 +159,7 @@ fn test_physic_engine_smoke_emission_at_rocket_base() {
     let mut positions = Vec::new();
     engine.for_each_particle_of_type(ParticleType::Smoke, &mut |p| {
         smoke_count += 1;
-        positions.push(p.pos);
+        positions.push(p.core.pos);
     });
 
     assert!(smoke_count > 0, "Active ascending rocket should emit smoke");

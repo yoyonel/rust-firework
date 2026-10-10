@@ -209,9 +209,9 @@ fn test_update_head_particle_position_matches_rocket() {
         let head = rocket.head_particle();
 
         // La position de la tête devrait correspondre à la position de la fusée
-        assert_eq!(head.pos, rocket.pos);
+        assert_eq!(head.core.pos, rocket.pos);
         assert_eq!(head.vel, rocket.vel);
-        assert_eq!(head.color, rocket.color);
+        assert_eq!(head.core.color, rocket.color);
         assert!(head.active);
     }
 }
@@ -235,7 +235,7 @@ fn test_update_head_particle_angle_calculation() {
     let head = rocket.head_particle();
 
     // L'angle devrait être défini (non NaN)
-    assert!(head.angle.is_finite(), "Angle should be finite");
+    assert!(head.core.angle.is_finite(), "Angle should be finite");
 }
 
 #[test]
@@ -247,7 +247,10 @@ fn test_update_head_particle_with_zero_velocity() {
     let head = rocket.head_particle();
 
     // L'angle devrait être 0.0 quand la vélocité est nulle
-    assert_eq!(head.angle, 0.0, "Angle should be 0.0 with zero velocity");
+    assert_eq!(
+        head.core.angle, 0.0,
+        "Angle should be 0.0 with zero velocity"
+    );
 }
 
 // ==================================

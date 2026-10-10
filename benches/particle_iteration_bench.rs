@@ -34,16 +34,16 @@ fn bench_particle_iteration(c: &mut Criterion) {
                     let mut count = 0;
                     engine.for_each_active_particle(&mut |p| {
                         if count < max_particles {
-                            let src_ptr = p as *const _ as *const ParticleGPU;
-                            let mut gpu_p = unsafe { *src_ptr };
+                            let mut core = p.core;
                             if factor > RENDER_INTERPOLATION_EPSILON {
-                                gpu_p.pos_x -= p.vel.x * factor;
-                                gpu_p.pos_y -= p.vel.y * factor;
+                                core.pos -= p.vel * factor;
                             }
-                            let l = p.life / p.max_life.max(0.0001);
+                            let l = core.life / core.max_life.max(0.0001);
                             let l2 = l * l;
-                            gpu_p.brightness = l2 * l2;
-                            gpu_slice[count] = gpu_p;
+                            gpu_slice[count] = ParticleGPU {
+                                core,
+                                brightness: l2 * l2,
+                            };
                             count += 1;
                         }
                     });
@@ -62,16 +62,16 @@ fn bench_particle_iteration(c: &mut Criterion) {
                     engine.for_each_active_particle_slice(&mut |slice| {
                         for p in slice {
                             if count < max_particles {
-                                let src_ptr = p as *const _ as *const ParticleGPU;
-                                let mut gpu_p = unsafe { *src_ptr };
+                                let mut core = p.core;
                                 if factor > RENDER_INTERPOLATION_EPSILON {
-                                    gpu_p.pos_x -= p.vel.x * factor;
-                                    gpu_p.pos_y -= p.vel.y * factor;
+                                    core.pos -= p.vel * factor;
                                 }
-                                let l = p.life / p.max_life.max(0.0001);
+                                let l = core.life / core.max_life.max(0.0001);
                                 let l2 = l * l;
-                                gpu_p.brightness = l2 * l2;
-                                gpu_slice[count] = gpu_p;
+                                gpu_slice[count] = ParticleGPU {
+                                    core,
+                                    brightness: l2 * l2,
+                                };
                                 count += 1;
                             }
                         }

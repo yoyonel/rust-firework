@@ -252,8 +252,8 @@ where
                         &mut |p: &crate::physic_engine::Particle| {
                             rocket_index += 1;
                             // Physics Y is bottom-up; flip to ImGui screen coords (top-down).
-                            let badge_x = p.pos.x + 10.0;
-                            let badge_y = win_h - p.pos.y - 14.0;
+                            let badge_x = p.core.pos.x + 10.0;
+                            let badge_y = win_h - p.core.pos.y - 14.0;
                             // Small dark badge background
                             draw_list
                                 .add_rect(

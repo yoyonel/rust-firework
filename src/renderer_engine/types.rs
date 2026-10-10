@@ -1,6 +1,7 @@
 use gl::types::*;
-use memoffset::offset_of;
 use std::mem;
+
+pub use crate::physic_engine::particle::ParticleVertexCore;
 
 /// Structure envoyée au GPU représentant une particule.
 ///
@@ -28,41 +29,15 @@ use std::mem;
 /// | Location | Type   | Champs                     |
 /// |:---------:|:-------|:---------------------------|
 /// |:---------:|:-------|----------------------------|
-/// | `0`       | `vec2` | `pos_x`, `pos_y`          |
-/// | `1`       | `vec3` | `col_r`, `col_g`, `col_b` |
-/// | `2`       | `float`| `life`                    |
-/// | `3`       | `float`| `max_life`                |
-/// | `4`       | `float`| `size`                    |
-/// | `5`       | `float`| `angle`                   |
+/// | `0`       | `vec2` | `core.pos`                 |
+/// | `1`       | `vec3` | `core.color`               |
+/// | `2`       | `vec4` | `life, max_life, size, angle` |
+/// | `3`       | `float`| `brightness`               |
 #[repr(C)] // garantit un layout C-compatible pour l’envoi GPU
-#[derive(Debug, Clone, Copy, Default)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct ParticleGPU {
-    /// Position horizontale de la particule.
-    pub pos_x: f32,
-
-    /// Position verticale de la particule.
-    pub pos_y: f32,
-
-    /// Composante rouge de la couleur.
-    pub col_r: f32,
-
-    /// Composante verte de la couleur.
-    pub col_g: f32,
-
-    /// Composante bleue de la couleur.
-    pub col_b: f32,
-
-    /// Durée de vie actuelle de la particule.
-    pub life: f32,
-
-    /// Durée de vie maximale (utilisée pour normaliser l’animation).
-    pub max_life: f32,
-
-    /// Taille de la particule à l’écran.
-    pub size: f32,
-
-    /// Angle de rotation de la particule.
-    pub angle: f32,
+    /// Données communes au CPU et au GPU (36 octets).
+    pub core: ParticleVertexCore,
 
     /// Multiplicateur de luminosité pour HDR (1.0 = normal, >1.0 = bloom).
     /// Calculé côté CPU basé sur la vitesse/accélération de la particule.
@@ -71,6 +46,13 @@ pub struct ParticleGPU {
 
 const _: () = {
     assert!(std::mem::size_of::<ParticleGPU>() == 40);
+    assert!(std::mem::offset_of!(ParticleGPU, core) == 0);
+    assert!(std::mem::offset_of!(ParticleGPU, core.pos) == 0);
+    assert!(std::mem::offset_of!(ParticleGPU, core.color) == 8);
+    assert!(std::mem::offset_of!(ParticleGPU, core.life) == 20);
+    assert!(std::mem::offset_of!(ParticleGPU, core.max_life) == 24);
+    assert!(std::mem::offset_of!(ParticleGPU, core.size) == 28);
+    assert!(std::mem::offset_of!(ParticleGPU, core.angle) == 32);
     assert!(std::mem::offset_of!(ParticleGPU, brightness) == 36);
 };
 
@@ -92,7 +74,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, pos_x) as *const _,
+                std::mem::offset_of!(Self, core.pos) as *const _,
             );
             gl::EnableVertexAttribArray(0);
 
@@ -103,7 +85,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, col_r) as *const _,
+                std::mem::offset_of!(Self, core.color) as *const _,
             );
             gl::EnableVertexAttribArray(1);
 
@@ -114,7 +96,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, life) as *const _,
+                std::mem::offset_of!(Self, core.life) as *const _,
             );
             gl::EnableVertexAttribArray(2);
 
@@ -125,7 +107,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, brightness) as *const _,
+                std::mem::offset_of!(Self, brightness) as *const _,
             );
             gl::EnableVertexAttribArray(3);
         }
@@ -142,7 +124,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, pos_x) as *const _,
+                std::mem::offset_of!(Self, core.pos) as *const _,
             );
             gl::EnableVertexAttribArray(1);
             gl::VertexAttribDivisor(1, 1); // 🔑 une fois par particule
@@ -154,7 +136,7 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, col_r) as *const _,
+                std::mem::offset_of!(Self, core.color) as *const _,
             );
             gl::EnableVertexAttribArray(2);
             gl::VertexAttribDivisor(2, 1);
@@ -166,19 +148,19 @@ impl ParticleGPU {
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, life) as *const _,
+                std::mem::offset_of!(Self, core.life) as *const _,
             );
             gl::EnableVertexAttribArray(3);
             gl::VertexAttribDivisor(3, 1);
 
-            // layout(location = 4) : brightness (multiplicateur HDR)
+            // layout(location = 4) : brightness (float)
             gl::VertexAttribPointer(
                 4,
                 1,
                 gl::FLOAT,
                 gl::FALSE,
                 stride,
-                offset_of!(Self, brightness) as *const _,
+                std::mem::offset_of!(Self, brightness) as *const _,
             );
             gl::EnableVertexAttribArray(4);
             gl::VertexAttribDivisor(4, 1);
@@ -235,16 +217,14 @@ mod tests {
     fn test_particle_gpu_memory_layout_and_offsets() {
         assert_eq!(mem::size_of::<ParticleGPU>(), 40);
         assert_eq!(mem::align_of::<ParticleGPU>(), 4);
-        assert_eq!(offset_of!(ParticleGPU, pos_x), 0);
-        assert_eq!(offset_of!(ParticleGPU, pos_y), 4);
-        assert_eq!(offset_of!(ParticleGPU, col_r), 8);
-        assert_eq!(offset_of!(ParticleGPU, col_g), 12);
-        assert_eq!(offset_of!(ParticleGPU, col_b), 16);
-        assert_eq!(offset_of!(ParticleGPU, life), 20);
-        assert_eq!(offset_of!(ParticleGPU, max_life), 24);
-        assert_eq!(offset_of!(ParticleGPU, size), 28);
-        assert_eq!(offset_of!(ParticleGPU, angle), 32);
-        assert_eq!(offset_of!(ParticleGPU, brightness), 36);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core), 0);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.pos), 0);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.color), 8);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.life), 20);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.max_life), 24);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.size), 28);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, core.angle), 32);
+        assert_eq!(std::mem::offset_of!(ParticleGPU, brightness), 36);
     }
 
     #[test]
