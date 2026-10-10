@@ -6,6 +6,7 @@
 - [Rapport de Refactoring des Namespaces Taskfile](20260814_taskfile_namespaces_refactoring_report.md)
 - [Rapport de Consolidation de Revue de Code Globale](20260929_code_review_consolidation_report.md)
 - [Rapport de Stabilisation Xvfb & Réparation CI/CD](20260930_xvfb_test_stability_report.md)
+- [Rapport Technique : Refactoring Architectural Global & Sûreté Temps Réel (Phases 0 à 3)](20261010_codebase_refactoring_phases_report.md)
 - [Audit & Validation d'Exécutabilité des Commandes (AGENTS.md)](20260805_agents_md_commands_audit_report.md)
 - [Guide des Tests Unitaires, Mocks & Couverture](20260730_unit_testing_and_coverage_guide.md)
 - [Refactoring SSOT & Éradication des Constantes Magiques](20260730_ssot_constants_structural_refactoring.md)
