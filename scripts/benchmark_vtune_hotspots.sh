@@ -17,19 +17,18 @@ if [ -f /opt/intel/oneapi/setvars.sh ]; then
 fi
 
 # 1. Collection
-sudo -E /opt/intel/oneapi/vtune/2026.4/bin64/vtune -collect hotspots -result-dir "$RES_DIR" env TMP_DIR=/tmp ./target/profiling/fireworks_sim --deterministic-seed 42 --timeout-secs 5 --fixed-dt 0.016666 --disable-audio
+vtune -collect hotspots -result-dir "$RES_DIR" env TMP_DIR=/tmp ./target/profiling/fireworks_sim --deterministic-seed 42 --timeout-secs 5 --fixed-dt 0.016666 --disable-audio || true
 
 # 2. Rendu de Rapport Lisible
 echo ""
 echo "=========================================================================="
 echo "📊 TOP 15 CPU HOTSPOTS (Les fonctions les plus lourdes en temps CPU pur)"
 echo "=========================================================================="
-# Extrait un tableau propre des 15 fonctions les plus coûteuses, avec demangling Rust.
-sudo -E /opt/intel/oneapi/vtune/2026.4/bin64/vtune -report hotspots -r "$RES_DIR" -format=text -limit=15 | grep -v "^vtune:" | rustfilt || true
+export PATH="$HOME/.cargo/bin:$PATH"
+if [ -d "$RES_DIR" ]; then
+    vtune -report hotspots -r "$RES_DIR" -format=text -limit=15 2>/dev/null | grep -v "^vtune:" | rustfilt || true
+fi
 
 echo ""
 echo "✅ Résultats détaillés enregistrés dans $RES_DIR"
 echo "👉 Pour explorer visuellement le code / assembleur : vtune-gui $RES_DIR"
-
-# 3. Correction des permissions pour l'interface graphique (vtune-gui)
-sudo chown -R "$USER":"$USER" "$RES_DIR"

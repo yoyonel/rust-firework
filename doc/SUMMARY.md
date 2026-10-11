@@ -57,6 +57,8 @@
 - [Rapport Technique : Fusion du Backlight Mask en MRT Single-Pass](20261007_mrt_single_pass_smoke_backlight_optimization_report.md)
 
 # ⏱️ Profilage & Performance
+- [Rapport de Validation de l'Outillage de Profilage & Benchmarks (11 Octobre 2026)](20261011_profiling_tooling_validation_report.md)
+- [Audit de Compatibilité ISO : Environnement Legacy (Debian 13 X11+Mate / Tools-on-Host)](20261011_legacy_debian_compatibility_audit.md)
 - [Registre de Suivi des Baselines de Performance & Profiling (SSOT)](performance_profiling_baseline_tracker.md)
 - [Rapport d'Investigation Technique : Dérive des Ratios Tracy Profiler en CI & Justification Exhaustive](20261006_ci_tracy_ratio_drift_investigation_report.md)
 - [Rapport de Profiling Matériel Intel Iris Xe (Tracy & GPU Profiler)](20261007_intel_iris_xe_tracy_profiling_audit_report.md)

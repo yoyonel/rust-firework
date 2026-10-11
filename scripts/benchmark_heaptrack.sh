@@ -20,9 +20,9 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-env TMP_DIR="$TMP_DIR" heaptrack --record-only ./target/release/fireworks_sim "${@:---max-frames 300 --timeout-secs 5}"
+env TMP_DIR="$TMP_DIR" timeout --preserve-status -k 1s 6s heaptrack --record-only ./target/release/fireworks_sim ${@:- --max-frames 300 --timeout-secs 5} || true
 
-HT_FILE=$(find . -maxdepth 1 -name "heaptrack.fireworks_sim.*.zst" | head -n 1)
+HT_FILE=$(ls -t heaptrack.fireworks_sim.*.zst 2>/dev/null | head -n 1)
 if [ -n "$HT_FILE" ] && [ -f "$HT_FILE" ]; then
 	echo "Analysis via heaptrack_print..."
 	mv "$HT_FILE" "$OUT_DIR/"
