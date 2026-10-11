@@ -17,19 +17,18 @@ if [ -f /opt/intel/oneapi/setvars.sh ]; then
 fi
 
 # 1. Collection
-sudo -E /opt/intel/oneapi/vtune/2026.4/bin64/vtune -collect threading -result-dir "$RES_DIR" env TMP_DIR=/tmp ./target/profiling/fireworks_sim --deterministic-seed 42 --timeout-secs 5 --fixed-dt 0.016666 --disable-audio
+vtune -collect threading -result-dir "$RES_DIR" env TMP_DIR=/tmp ./target/profiling/fireworks_sim --deterministic-seed 42 --timeout-secs 5 --fixed-dt 0.016666 --disable-audio || true
 
 # 2. Rendu de Rapport Lisible
 echo ""
 echo "=========================================================================="
 echo "🚧 TOP 15 WAITS & LOCKS (Où les threads s'endorment, attendent un Mutex)"
 echo "=========================================================================="
-# Affiche les fonctions ayant le plus de "Wait Time", avec demangling Rust.
-sudo -E /opt/intel/oneapi/vtune/2026.4/bin64/vtune -report hotspots -r "$RES_DIR" -format=text -limit=15 | grep -v "^vtune:" | rustfilt || true
+export PATH="$HOME/.cargo/bin:$PATH"
+if [ -d "$RES_DIR" ]; then
+    vtune -report hotspots -r "$RES_DIR" -format=text -limit=15 2>/dev/null | grep -v "^vtune:" | rustfilt || true
+fi
 
 echo ""
 echo "✅ Résultats détaillés enregistrés dans $RES_DIR"
 echo "👉 Pour voir la timeline des threads (Gantt) : vtune-gui $RES_DIR"
-
-# 3. Correction des permissions pour l'interface graphique (vtune-gui)
-sudo chown -R "$USER":"$USER" "$RES_DIR"

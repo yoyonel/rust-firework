@@ -7,11 +7,11 @@ vars:
   RENDERDOC_CAP_DIR: "/tmp"
   RENDERDOC_CAP_PREFIX: "{{.RENDERDOC_CAP_DIR}}/fireworks_renderdoc"
   DISTROBOX:
-    sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev --"; else echo ""; fi'
+    sh: 'if [ "$USE_DISTROBOX" = "1" ] && [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev --"; else echo ""; fi'
   CARGO: '{{.DISTROBOX}} cargo'
   COVERAGE_DIR: target/llvm-cov
   XVFB:
-    sh: 'if [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev -- xvfb-run -a"; elif command -v xvfb-run >/dev/null 2>&1; then echo "xvfb-run -a"; else echo ""; fi'
+    sh: 'if [ "$USE_DISTROBOX" = "1" ] && [ -z "$CONTAINER_ID" ] && command -v distrobox >/dev/null 2>&1 && distrobox list --no-color 2>/dev/null | grep -w "clang-dev" >/dev/null; then echo "distrobox enter clang-dev -- xvfb-run -a"; elif command -v xvfb-run >/dev/null 2>&1; then echo "xvfb-run -a"; else echo ""; fi'
   SKILLS_OUTPUT_DIR: '{{.HOME}}/.agents/skills'
   DOC_TEMPLATES_DIR: 'doc/ai_skills'
   VALE_BIN:
@@ -457,6 +457,20 @@ tasks:
     deps: [build:profiling]
     cmds:
       - ./scripts/benchmark_vtune_threading.sh
+
+  profile:flamegraph:
+    desc: "Generate CPU Flamegraph SVG for fireworks_sim"
+    deps: [build:release]
+    cmds:
+      - cargo flamegraph --bin fireworks_sim --output /tmp/flamegraph_rust.svg -- --timeout-secs 3 --max-frames 200
+      - echo "✓ Flamegraph généré dans /tmp/flamegraph_rust.svg"
+
+  profile:apitrace:
+    desc: "Capture OpenGL API calls via ApiTrace for fireworks_sim"
+    deps: [build:release]
+    cmds:
+      - timeout --preserve-status -k 1s 3s apitrace trace --api gl ./target/release/fireworks_sim || true
+      - echo "✓ Trace OpenGL capturée via apitrace"
 
   # =========================================
   # 📖 DOCUMENTATION (mdBook)
